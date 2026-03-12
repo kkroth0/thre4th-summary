@@ -112,8 +112,8 @@ export const VendorDataTable = ({ vendorData, getVendorLink }: VendorDataTablePr
                   <ArrowUpDown className="ml-2 h-4 w-4" />
                 </Button>
               </TableHead>
-              <TableHead>Key Findings</TableHead>
-              <TableHead className="w-[100px]">Link</TableHead>
+              <TableHead className="w-full">Detailed Analysis</TableHead>
+              <TableHead className="text-right">Link</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -127,10 +127,37 @@ export const VendorDataTable = ({ vendorData, getVendorLink }: VendorDataTablePr
                   <TableCell>
                     <Badge variant="secondary">{Object.keys(vendor.data).length}</Badge>
                   </TableCell>
-                  <TableCell className="max-w-md truncate text-sm text-muted-foreground">
-                    {vendor.error || Object.entries(vendor.data).slice(0, 2).map(([k, v]) => 
-                      `${k}: ${Array.isArray(v) ? v.join(", ") : v}`
-                    ).join(" | ") || "No data"}
+                  <TableCell className="w-full py-4">
+                    {(() => {
+                      if (vendor.error) return <span className="text-destructive font-medium">{vendor.error}</span>;
+                      if (!vendor.data || Object.keys(vendor.data).length === 0) return <span className="text-muted-foreground">No data available</span>;
+
+                      const renderValue = (val: any) => {
+                        if (Array.isArray(val)) return val.slice(0, 5).map(v => typeof v === 'object' ? v.engine || v.name || JSON.stringify(v) : v).join(", ");
+                        if (typeof val === 'object') return JSON.stringify(val).substring(0, 50);
+                        return String(val);
+                      };
+
+                      return (
+                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 w-full">
+                          {Object.entries(vendor.data)
+                            .filter(([k]) => k !== "Status" && k !== "Reports" && k !== "All Vendors" && k !== "Hostnames")
+                            .map(([key, val], idx) => {
+                              const valueStr = renderValue(val);
+                              if (!valueStr || valueStr === "None" || valueStr === "Unknown" || valueStr === "0") return null;
+
+                              return (
+                                <div key={idx} className="flex flex-col gap-1 p-2 rounded-md bg-muted/30 border border-transparent hover:border-border transition-colors">
+                                  <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">{key}</span>
+                                  <span className="text-sm font-medium text-foreground break-words line-clamp-2" title={valueStr}>
+                                    {valueStr}
+                                  </span>
+                                </div>
+                              );
+                            })}
+                        </div>
+                      );
+                    })()}
                   </TableCell>
                   <TableCell>
                     {link && (

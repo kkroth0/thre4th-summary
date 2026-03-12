@@ -95,6 +95,8 @@ const formatVendorData = (vendorName: string, data: any, query: string): any => 
                 "Country": abuseData.countryCode || "Unknown",
                 "Usage Type": abuseData.usageType || "Unknown",
                 "ISP": abuseData.isp || "Unknown",
+                "ASN": abuseData.asn || "Unknown",
+                "CIDR": abuseData.cidr || abuseData.network || "Unknown",
                 "Domain": abuseData.domain || "Unknown",
                 "Hostnames": abuseData.hostnames?.slice(0, 3).join(", ") || "None",
                 "Is Public": abuseData.isPublic ? "Yes" : "No",

@@ -6,7 +6,17 @@ import axios from 'axios';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
-dotenv.config();
+dotenv.config({ path: '../.env' });
+
+// Ensure VITE_ prefixed keys from frontend .env are available to backend
+Object.keys(process.env).forEach(key => {
+    if (key.startsWith('VITE_')) {
+        const standardKey = key.replace('VITE_', '');
+        if (!process.env[standardKey]) {
+            process.env[standardKey] = process.env[key];
+        }
+    }
+});
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -375,7 +385,7 @@ app.post('/api/ipgeo', async (req, res) => {
     if (queryType !== "ip") return res.json({ data: { "Status": "IP only" } });
 
     try {
-        const response = await axios.get(`http://ip-api.com/json/${query}?fields=status,country,regionName,city,isp,org,as,proxy,hosting`);
+        const response = await axios.get(`http://ip-api.com/json/${query}?fields=status,country,countryCode,regionName,city,isp,org,as,proxy,hosting`);
         res.json(response.data);
     } catch (error) {
         res.status(error.response?.status || 500).json({ error: error.message });

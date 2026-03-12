@@ -1,10 +1,18 @@
+
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ThreatBadge } from "./ThreatBadge";
-import { Copy, Download } from "lucide-react";
+import { Copy, Download, Info } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { VendorData } from "@/types/threat-intelligence";
 import { useLanguage } from "@/contexts/LanguageContext";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 
 interface ThreatSummaryProps {
   query: string;
@@ -76,14 +84,63 @@ export const ThreatSummary = ({ query, overallScore, threatLevel, totalVendors, 
           <div>
             <p className="text-sm text-muted-foreground mb-1">{t('query')}</p>
             <p className="font-mono font-semibold text-lg">{query}</p>
+            {(() => {
+              const abuseData = vendorData.find(v => v.name === "AbuseIPDB")?.data;
+              const hostnames = abuseData?.["Hostnames"];
+              const hostname = hostnames && hostnames !== "None" ? hostnames.split(",")[0] : null;
+
+              if (hostname) {
+                return (
+                  <p className="text-xs text-muted-foreground truncate max-w-[200px]" title={hostname}>
+                    {hostname}
+                  </p>
+                );
+              }
+              return null;
+            })()}
           </div>
           <div>
             <p className="text-sm text-muted-foreground mb-1">{t('overallScore')}</p>
             <p className="text-3xl font-bold">{overallScore}/100</p>
           </div>
-          <div>
-            <p className="text-sm text-muted-foreground mb-1">{t('threatLevel')}</p>
-            <ThreatBadge level={threatLevel} className="text-sm px-3 py-1" />
+          <div className="flex flex-col">
+          <div className="flex items-center gap-1">
+            <span className="text-sm text-muted-foreground">{t('threatLevel')}</span>
+            <Dialog>
+              <DialogTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-4 w-4 rounded-full text-muted-foreground hover:text-foreground">
+                  <Info className="h-3 w-3" />
+                  <span className="sr-only">How Scoring Works</span>
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-md">
+                <DialogHeader>
+                  <DialogTitle>{t('threatLevelScoringMethodology')}</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4 text-sm mt-4">
+                  <p>{t('threatEngineExplanation')}</p>
+                  
+                  <div className="space-y-2">
+                    <h4 className="font-semibold border-b pb-1">{t('primaryVendorWeights')}</h4>
+                    <ul className="space-y-1.5 list-disc pl-4 text-xs text-muted-foreground">
+                      <li><strong className="text-foreground">VirusTotal:</strong> {t('vtWeightDesc')}</li>
+                      <li><strong className="text-foreground">AbuseIPDB:</strong> {t('abuseIpdbWeightDesc')}</li>
+                    </ul>
+                  </div>
+
+                  <div className="space-y-2">
+                    <h4 className="font-semibold border-b pb-1">{t('scoringThresholds')}</h4>
+                    <ul className="space-y-1.5 list-disc pl-4 text-xs text-muted-foreground">
+                      <li><strong className="text-green-500">SAFE (0-30):</strong> {t('safeDesc')}</li>
+                      <li><strong className="text-orange-500">SUSPICIOUS (31-70):</strong> {t('suspiciousDesc')}</li>
+                      <li><strong className="text-red-500">MALICIOUS (71-100):</strong> {t('maliciousDesc')}</li>
+                    </ul>
+                  </div>
+                </div>
+              </DialogContent>
+            </Dialog>
+          </div>
+            <ThreatBadge level={threatLevel} className="text-sm px-3 py-1 mt-1 w-fit" />
           </div>
           <div>
             <p className="text-sm text-muted-foreground mb-1">{t('detections')}</p>

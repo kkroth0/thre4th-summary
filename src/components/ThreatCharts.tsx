@@ -12,106 +12,64 @@ interface ThreatChartsProps {
 export const ThreatCharts = ({ vendorData, detections, totalVendors }: ThreatChartsProps) => {
   const { t } = useLanguage();
 
-  // Threat Category Breakdown
-  const getCategoryBreakdown = () => {
-    const categories = {
-      Malware: 0,
-      Abuse: 0,
-      Phishing: 0,
-      Suspicious: 0,
-      Clean: 0
-    };
+  // Key Indicators (Vendor Specific)
+  const getKeyIndicators = () => {
+    const indicators: { type: string, value: string, source: string }[] = [];
+    
+    // Explicit VT Insights
+    const vt = vendorData.find(v => v.name === "VirusTotal")?.data;
+    if (vt && !vt.error && vt["Detection Rate"]) {
+      indicators.push({ type: "Detection Engine Hits", value: vt["Detection Rate"], source: "VirusTotal" });
+    }
 
+    // Explicit AbuseIPDB Insights
+    const abuse = vendorData.find(v => v.name === "AbuseIPDB")?.data;
+    if (abuse && !abuse.error) {
+      if (abuse["Abuse Confidence Score"]) indicators.push({ type: "Confidence Score", value: `${abuse["Abuse Confidence Score"]}%`, source: "AbuseIPDB" });
+      if (abuse["Total Reports"] && abuse["Total Reports"] > 0) indicators.push({ type: "Crowdsourced Reports", value: `${abuse["Total Reports"]} reports`, source: "AbuseIPDB" });
+      if (abuse["Tags"] && abuse["Tags"] !== "None") indicators.push({ type: "Behavior Tags", value: abuse["Tags"], source: "AbuseIPDB" });
+    }
+
+    // Explicit OTX Insights
+    const otx = vendorData.find(v => v.name === "AlienVault OTX")?.data;
+    if (otx && !otx.error && otx["Pulse Count"] && parseInt(otx["Pulse Count"]) > 0) {
+      indicators.push({ type: "Threat Intelligence Pulses", value: `${otx["Pulse Count"]} pulses active`, source: "AlienVault OTX" });
+    }
+    
+    // Fallback Prominent Open Ports
+    const ports = new Set<string>();
     vendorData.forEach(vendor => {
-      if (vendor.error || !vendor.data || Object.keys(vendor.data).length === 0) return;
-
-      const status = vendor.data["Status"]?.toLowerCase() || "";
-
-      // Categorize based on vendor and status
-      if (vendor.name === "VirusTotal" && vendor.data["Malicious"] && vendor.data["Malicious"] > 0) {
-        categories.Malware++;
-      } else if (vendor.name === "AbuseIPDB" && vendor.data["Abuse Confidence Score"]) {
-        const score = parseInt(vendor.data["Abuse Confidence Score"]);
-        if (score > 50) categories.Abuse++;
-        else categories.Clean++;
-      } else if ((vendor.name === "PhishTank" || vendor.name === "Google Safe Browsing" || vendor.name === "PhishStats")
-        && (status.includes("phishing") || status.includes("unsafe"))) {
-        categories.Phishing++;
-      } else if (vendor.name === "AlienVault OTX" && vendor.data["Pulse Count"] && !vendor.data["Pulse Count"].includes("0")) {
-        categories.Suspicious++;
-      } else if (status.includes("malicious") || status.includes("unsafe")) {
-        categories.Malware++;
-      } else if (status.includes("suspicious")) {
-        categories.Suspicious++;
-      } else if (status.includes("clean") || status.includes("safe") || status.includes("low risk")) {
-        categories.Clean++;
+      if (vendor.data && vendor.data["Open Ports"] && vendor.data["Open Ports"] !== "None") {
+        vendor.data["Open Ports"].split(", ").forEach((p: string) => ports.add(p));
       }
     });
 
-    return [
-      { name: t('malware'), value: categories.Malware, color: "#ef4444" },
-      { name: t('abuse'), value: categories.Abuse, color: "#f97316" },
-      { name: t('phishing'), value: categories.Phishing, color: "#eab308" },
-      { name: t('suspicious'), value: categories.Suspicious, color: "#3b82f6" },
-      { name: t('clean'), value: categories.Clean, color: "hsl(var(--primary))" },
-    ].filter(cat => cat.value > 0);
+    if (ports.size > 0 && indicators.length < 5) {
+      indicators.push({ type: "Open Ports Found", value: Array.from(ports).slice(0, 5).join(", "), source: "Multiple" });
+    }
+
+    return indicators;
   };
 
-  // Detection Timeline
-  const getDetectionTimeline = () => {
-    const timeline = {
-      "Recent (24h)": 0,
-      "This Week": 0,
-      "This Month": 0,
-      "Older": 0,
-      "Unknown": 0
-    };
+  // Geographic & Network Data
+  const getNetworkData = () => {
+    const data: Record<string, string> = {};
+    const ipGeo = vendorData.find(v => v.name === "IP Geolocation")?.data;
+    const vt = vendorData.find(v => v.name === "VirusTotal")?.data;
 
-    const now = Date.now();
-    const day = 24 * 60 * 60 * 1000;
-    const week = 7 * day;
-    const month = 30 * day;
+    if (ipGeo && !ipGeo.error) {
+      if (ipGeo["ISP"] && ipGeo["ISP"] !== "Unknown") data["ISP"] = ipGeo["ISP"];
+      if (ipGeo["Organization"] && ipGeo["Organization"] !== "Unknown") data["Organization"] = ipGeo["Organization"];
+      if (ipGeo["Country"] && ipGeo["Country"] !== "Unknown") data["Country"] = ipGeo["Country"];
+      if (ipGeo["Proxy/VPN"] && ipGeo["Proxy/VPN"] !== "No") data["Proxy/VPN"] = ipGeo["Proxy/VPN"];
+    }
 
-    vendorData.forEach(vendor => {
-      if (vendor.error || !vendor.data) {
-        timeline["Unknown"]++;
-        return;
-      }
+    if (vt && !vt.error) {
+      if (!data["ASN"] && vt["ASN"] && vt["ASN"] !== "Unknown") data["ASN"] = vt["ASN"];
+      if (!data["Network"] && vt["Network"] && vt["Network"] !== "Unknown") data["Network"] = vt["Network"];
+    }
 
-      let timestamp: number | null = null;
-
-      // Extract timestamp based on vendor
-      if (vendor.name === "VirusTotal" && vendor.data["Last Analysis"]) {
-        timestamp = new Date(vendor.data["Last Analysis"]).getTime();
-      } else if (vendor.name === "AbuseIPDB" && vendor.data["Last Report"]) {
-        timestamp = new Date(vendor.data["Last Report"]).getTime();
-      } else if (vendor.name === "AlienVault OTX") {
-        // OTX doesn't have clear timestamps in current format
-        timeline["Unknown"]++;
-        return;
-      } else if (vendor.data["Last Seen"]) {
-        timestamp = new Date(vendor.data["Last Seen"]).getTime();
-      }
-
-      if (!timestamp || isNaN(timestamp)) {
-        timeline["Unknown"]++;
-        return;
-      }
-
-      const age = now - timestamp;
-      if (age < day) timeline["Recent (24h)"]++;
-      else if (age < week) timeline["This Week"]++;
-      else if (age < month) timeline["This Month"]++;
-      else timeline["Older"]++;
-    });
-
-    return [
-      { name: t('recent24h'), value: timeline["Recent (24h)"], color: "#ef4444" },
-      { name: t('thisWeek'), value: timeline["This Week"], color: "#f97316" },
-      { name: t('thisMonth'), value: timeline["This Month"], color: "#eab308" },
-      { name: t('older'), value: timeline["Older"], color: "hsl(var(--primary))" },
-      { name: t('unknown'), value: timeline["Unknown"], color: "#6b7280" },
-    ].filter(t => t.value > 0);
+    return Object.keys(data).length > 0 ? data : { "Status": "No network data available" };
   };
 
   // Vendor Threat Scores
@@ -182,8 +140,8 @@ export const ThreatCharts = ({ vendorData, detections, totalVendors }: ThreatCha
     .sort((a, b) => b.score - a.score)
     .slice(0, 10);
 
-  const categoryData = getCategoryBreakdown();
-  const timelineData = getDetectionTimeline();
+  const indicators = getKeyIndicators();
+  const networkData = getNetworkData();
 
   const CustomTooltip = ({ active, payload, label }: any) => {
     if (active && payload && payload.length) {
@@ -201,49 +159,30 @@ export const ThreatCharts = ({ vendorData, detections, totalVendors }: ThreatCha
   return (
     <div className="grid gap-4 md:grid-cols-3 animate-fade-in">
       <Card className="p-6">
-        <h3 className="text-lg font-semibold mb-4">{t('threatCategories')}</h3>
-        <ResponsiveContainer width="100%" height={300}>
-          <PieChart>
-            <Pie
-              data={categoryData}
-              cx="50%"
-              cy="50%"
-              labelLine={false}
-              label={({ name, percent }) => percent > 0.05 ? `${name}: ${(percent * 100).toFixed(0)}%` : ''}
-              outerRadius={70}
-              fill="#8884d8"
-              dataKey="value"
-            >
-              {categoryData.map((entry, index) => (
-                <Cell key={`cell-${index}`} fill={entry.color} />
-              ))}
-            </Pie>
-            <Tooltip />
-          </PieChart>
-        </ResponsiveContainer>
+        <h3 className="text-lg font-semibold mb-4">Key Indicators</h3>
+        <div className="space-y-4 max-h-[300px] overflow-y-auto pr-2">
+          {indicators.length > 0 ? indicators.map((ind, idx) => (
+            <div key={idx} className="flex flex-col gap-1 border-b pb-3 last:border-0">
+              <span className="text-sm font-medium text-foreground">{ind.type}</span>
+              <span className="text-xs text-muted-foreground break-words">{ind.value}</span>
+              <span className="text-[10px] text-muted-foreground/70 uppercase">src: {ind.source}</span>
+            </div>
+          )) : (
+            <p className="text-sm text-muted-foreground">No prominent indicators detected.</p>
+          )}
+        </div>
       </Card>
 
       <Card className="p-6">
-        <h3 className="text-lg font-semibold mb-4">{t('detectionTimeline')}</h3>
-        <ResponsiveContainer width="100%" height={300}>
-          <PieChart>
-            <Pie
-              data={timelineData}
-              cx="50%"
-              cy="50%"
-              labelLine={false}
-              label={({ name, percent }) => percent > 0.05 ? `${name}: ${(percent * 100).toFixed(0)}%` : ''}
-              outerRadius={70}
-              fill="#8884d8"
-              dataKey="value"
-            >
-              {timelineData.map((entry, index) => (
-                <Cell key={`cell-${index}`} fill={entry.color} />
-              ))}
-            </Pie>
-            <Tooltip />
-          </PieChart>
-        </ResponsiveContainer>
+        <h3 className="text-lg font-semibold mb-4">Geographic & Network Data</h3>
+        <div className="flex flex-col text-sm w-full divide-y">
+          {Object.entries(networkData).map(([key, value]) => (
+            <div key={key} className="grid grid-cols-1 sm:grid-cols-[130px_1fr] py-3 items-start gap-1 sm:gap-4">
+              <span className="font-medium text-muted-foreground">{key}</span>
+              <span className="text-foreground font-medium break-words sm:text-right">{value}</span>
+            </div>
+          ))}
+        </div>
       </Card>
 
       <Card className="p-6">

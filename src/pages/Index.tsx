@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { Shield, AlertTriangle, Bug, FileSearch, Globe, Link as LinkIcon, Radar, Database, Eye, Search, BookOpen, Layers, LayoutGrid } from "lucide-react";
+import { Shield, AlertTriangle, Bug, FileSearch, Globe, Link as LinkIcon, Radar, Database, Eye, Search, BookOpen, Layers, LayoutGrid, CheckCircle2 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { ThreatSummary } from "@/components/ThreatSummary";
 import { VendorCard } from "@/components/VendorCard";
 import { VendorContent } from "@/components/VendorContent";
@@ -23,6 +24,8 @@ import { MultiIpSummary } from "@/components/MultiIpSummary";
 import { fetchThreatDataProgressive } from "@/services/threatApi";
 import { useToast } from "@/hooks/use-toast";
 import { ThreatIntelligenceResult } from "@/types/threat-intelligence";
+import jsPDF from "jspdf";
+import html2canvas from "html2canvas";
 
 interface SearchFormProps {
   query: string;
@@ -30,39 +33,67 @@ interface SearchFormProps {
   onSubmit: (e: React.FormEvent) => void;
   isLoading: boolean;
   className?: string;
-  mode: "single" | "multi";
 }
 
-const SearchForm = ({ query, setQuery, onSubmit, isLoading, className = "", mode }: SearchFormProps) => {
+const SearchForm = ({ query, setQuery, onSubmit, isLoading, className = "" }: SearchFormProps) => {
   const { t } = useLanguage();
 
+  const ipv4Regex = /\b(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\b/g;
+  const extractedIps = query ? Array.from(new Set(query.match(ipv4Regex) || [])) : [];
+
   return (
-    <form onSubmit={onSubmit} className={`w-full ${className}`}>
-      <div className={`flex gap-2 ${mode === "multi" ? "flex-col" : "flex-row"}`}>
-        {mode === "single" ? (
-          <Input
-            placeholder={t('searchPlaceholder')}
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            className="flex-1"
-          />
-        ) : (
-          <Textarea
-            placeholder="Enter multiple IPs (comma or newline separated, max 15)"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            className="flex-1 min-h-[120px] resize-y"
-          />
-        )}
-        <Button
-          type="submit"
-          disabled={isLoading}
-          className={mode === "multi" ? "self-end w-full sm:w-auto" : ""}
-        >
-          {isLoading ? t('analyzing') : <><Search className="mr-2 h-4 w-4" /> {t('analyze')}</>}
-        </Button>
-      </div>
-    </form>
+    <div className={`w-full ${className}`}>
+      <form onSubmit={onSubmit} className="w-full">
+        <div className="flex flex-col gap-3 relative">
+          <div className="relative group">
+            <Textarea
+              placeholder="Paste logs, IPs, domains, or hashes here (e.g. 8.8.8.8, malicious.com)..."
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              className="min-h-[140px] resize-y text-base p-4 bg-background/50 backdrop-blur-sm border-2 focus-visible:ring-primary/50 transition-all rounded-xl [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  onSubmit(e as any);
+                }
+              }}
+            />
+            {extractedIps.length > 0 && (
+              <div className="absolute top-4 right-4 max-w-[50%] flex flex-wrap justify-end gap-1.5 opacity-80 pointer-events-none">
+                {extractedIps.slice(0, 3).map(ip => (
+                  <Badge key={ip} variant="secondary" className="font-mono text-[10px] px-1.5 py-0 shadow-sm border-primary/20 bg-primary/5 text-primary">
+                    {ip}
+                  </Badge>
+                ))}
+                {extractedIps.length > 3 && (
+                  <Badge variant="outline" className="font-mono text-[10px] px-1.5 py-0 bg-background/80 shadow-sm backdrop-blur">
+                    +{extractedIps.length - 3} more
+                  </Badge>
+                )}
+              </div>
+            )}
+          </div>
+          
+          <div className="flex items-center justify-between mt-1">
+            <div className="flex items-center gap-2 text-xs text-muted-foreground/80 font-medium">
+              <CheckCircle2 className={`h-4 w-4 ${extractedIps.length > 0 ? "text-green-500" : "text-muted-foreground/40"}`} />
+              {extractedIps.length > 0 
+                ? `${extractedIps.length} target${extractedIps.length > 1 ? 's' : ''} parsed (max 35)` 
+                : "Awaiting valid IOCs..."}
+            </div>
+            
+            <Button
+              type="submit"
+              disabled={isLoading || extractedIps.length > 35 || (!query.trim())}
+              size="lg"
+              className="shadow-md hover:shadow-lg transition-all px-8 rounded-full font-semibold tracking-wide bg-gradient-to-r from-primary to-primary/80"
+            >
+              {isLoading ? t('analyzing') : <><Search className="mr-2 h-4 w-4" /> {t('analyze')}</>}
+            </Button>
+          </div>
+        </div>
+      </form>
+    </div>
   );
 };
 
@@ -85,13 +116,13 @@ const Index = () => {
   const [query, setQuery] = useState("");
   const [selectedVendors, setSelectedVendors] = useState<string[]>(ALL_VENDORS);
   const [history, setHistory] = useState<HistoryItem[]>([]);
-  const [searchMode, setSearchMode] = useState<"single" | "multi">("single");
 
   // Changed data to results array to support multi-IP
   const [results, setResults] = useState<ThreatIntelligenceResult[]>([]);
   const [activeTab, setActiveTab] = useState<string>("overview");
 
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [isExportingPDF, setIsExportingPDF] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [view, setView] = useState<"cards" | "table">("cards");
   const { toast } = useToast();
@@ -138,19 +169,27 @@ const Index = () => {
 
     let queries: string[] = [];
 
-    if (searchMode === "single") {
-      queries = [rawQuery];
+    // Extract IPv4 addresses using robust regex
+    const ipv4Regex = /\b(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\b/g;
+    const extractedIps = rawQuery.match(ipv4Regex);
+
+    if (extractedIps && extractedIps.length > 0) {
+      // De-duplicate extracted IPs
+      queries = Array.from(new Set(extractedIps));
     } else {
-      // Split by comma, newline, or space
+      // Fallback: Split by comma, newline, or space for domains/hashes
       queries = rawQuery.split(/[\s,]+/).filter(q => q.length > 0);
-      if (queries.length > 20) {
-        toast({
-          title: "Too many targets",
-          description: "Please enter a maximum of 15 IPs.",
-          variant: "destructive",
-        });
-        return;
-      }
+      // De-duplicate
+      queries = Array.from(new Set(queries));
+    }
+
+    if (queries.length > 35) {
+      toast({
+        title: "Too many targets",
+        description: "Please enter a maximum of 35 targets.",
+        variant: "destructive",
+      });
+      return;
     }
 
     // Validation
@@ -239,12 +278,187 @@ const Index = () => {
 
   const onPivot = (artifact: string) => {
     setQuery(artifact);
-    setSearchMode("single"); // Force single mode for pivot
     // Use a timeout to allow state update before triggering search
     setTimeout(() => {
       const form = document.querySelector('form');
       if (form) form.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
     }, 100);
+  };
+
+  const exportGlobalPDF = async () => {
+    if (results.length === 0) return;
+    setIsExportingPDF(true);
+    toast({
+      title: "Building Comprehensive Report",
+      description: "Generating multi-page PDF evidence. Please do not switch tabs...",
+    });
+
+    try {
+      const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = pdf.internal.pageSize.getHeight();
+      const margin = 10;
+      
+      const addHeader = (title: string, subtitle: string) => {
+        pdf.setFillColor(26, 26, 26);
+        pdf.rect(0, 0, pdfWidth, 40, 'F');
+        pdf.setTextColor(255, 255, 255);
+        pdf.setFontSize(24);
+        pdf.setFont("helvetica", "bold");
+        pdf.text("ThreatSumm4ry", 14, 20);
+        pdf.setFontSize(12);
+        pdf.setFont("helvetica", "normal");
+        pdf.text(title, 14, 30);
+        if (subtitle) {
+             pdf.text(subtitle, 14, 35);
+        }
+        pdf.text(new Date().toLocaleString(), pdfWidth - 14, 20, { align: "right" });
+        pdf.setTextColor(0, 0, 0);
+      };
+
+      // PAGE 1: SCORING METHODOLOGY
+      addHeader("HOW THREAT LEVEL IS SCORED", "Threat Level & Scoring Methodology");
+      let y = 55;
+      
+      pdf.setFontSize(11);
+      pdf.setFont("helvetica", "normal");
+      const p1 = pdf.splitTextToSize(t('threatEngineExplanation'), pdfWidth - 28);
+      pdf.text(p1, 14, y);
+      y += p1.length * 5 + 5;
+
+      pdf.setFontSize(12);
+      pdf.setFont("helvetica", "bold");
+      pdf.text(t('primaryVendorWeights'), 14, y);
+      y += 8;
+
+      pdf.setFontSize(10);
+      pdf.setFont("helvetica", "bold");
+      pdf.text("VirusTotal:", 14, y);
+      pdf.setFont("helvetica", "normal");
+      const vtDesc = pdf.splitTextToSize(t('vtWeightDesc'), pdfWidth - 45);
+      pdf.text(vtDesc, 40, y);
+      y += Math.max(1, vtDesc.length) * 5 + 3;
+
+      pdf.setFontSize(10);
+      pdf.setFont("helvetica", "bold");
+      pdf.text("AbuseIPDB:", 14, y);
+      pdf.setFont("helvetica", "normal");
+      const abDesc = pdf.splitTextToSize(t('abuseIpdbWeightDesc'), pdfWidth - 45);
+      pdf.text(abDesc, 40, y);
+      y += Math.max(1, abDesc.length) * 5 + 8;
+
+      pdf.setFontSize(12);
+      pdf.setFont("helvetica", "bold");
+      pdf.text(t('scoringThresholds'), 14, y);
+      y += 8;
+
+      const limits = [
+         { label: "SAFE (0-30):", text: t('safeDesc') },
+         { label: "SUSPICIOUS (31-70):", text: t('suspiciousDesc') },
+         { label: "MALICIOUS (71-100):", text: t('maliciousDesc') }
+      ];
+      limits.forEach(l => {
+         pdf.setFontSize(10);
+         pdf.setFont("helvetica", "bold");
+         pdf.text(l.label, 14, y);
+         pdf.setFont("helvetica", "normal");
+         const tDesc = pdf.splitTextToSize(l.text, pdfWidth - 65);
+         pdf.text(tDesc, 55, y);
+         y += Math.max(1, tDesc.length) * 5 + 3;
+      });
+
+      const originalTab = activeTab;
+
+      // PAGE 2: OVERVIEW TAB CAPTURE
+      if (results.length > 1) {
+          setActiveTab("overview");
+          await new Promise(r => setTimeout(r, 1000)); 
+          
+          const overviewTarget = document.getElementById(`pdf-export-overview`) as HTMLElement;
+          if (overviewTarget) {
+              pdf.addPage();
+              const canvas = await html2canvas(overviewTarget, {
+                scale: 2, useCORS: true, backgroundColor: "#121212", windowWidth: 1200
+              });
+              const imgData = canvas.toDataURL('image/png');
+              
+              const innerWidth = pdfWidth - (margin * 2);
+              const imgProps = pdf.getImageProperties(imgData);
+              const imgHeight = (imgProps.height * innerWidth) / imgProps.width;
+              let imgYOffset = 0;
+
+              while (imgYOffset < imgHeight) {
+                const availableHeight = pdfHeight - 45 - margin;
+                const drawY = 45 - imgYOffset;
+                pdf.addImage(imgData, 'PNG', margin, drawY, innerWidth, imgHeight);
+                addHeader("OVERVIEW PRINT EVIDENCE", "");
+                
+                imgYOffset += availableHeight;
+                if (imgYOffset < imgHeight) {
+                  pdf.addPage();
+                }
+              }
+          }
+      }
+
+      // SUBSEQUENT PAGES: INDIVIDUAL TARGET REPORTS
+      for (const res of results) {
+          setActiveTab(res.query);
+          await new Promise(r => setTimeout(r, 1200)); // allow charts to animate slightly
+          
+          let target = document.getElementById(`pdf-export-${res.query}`) as HTMLElement;
+          if (target) {
+              const actionsBar = target.querySelector('.flex-wrap.gap-2.animate-fade-in') as HTMLElement;
+              if (actionsBar) actionsBar.style.display = 'none';
+
+              const canvas = await html2canvas(target, {
+                  scale: 2, useCORS: true, backgroundColor: "#121212", windowWidth: 1200
+              });
+              
+              if (actionsBar) actionsBar.style.display = 'flex';
+
+              const imgData = canvas.toDataURL('image/png');
+              const innerWidth = pdfWidth - (margin * 2);
+              const imgProps = pdf.getImageProperties(imgData);
+              const imgHeight = (imgProps.height * innerWidth) / imgProps.width;
+              let imgYOffset = 0;
+              
+              pdf.addPage();
+
+              while (imgYOffset < imgHeight) {
+                  const availableHeight = pdfHeight - 45 - margin;
+                  const drawY = 45 - imgYOffset;
+                  pdf.addImage(imgData, 'PNG', margin, drawY, innerWidth, imgHeight);
+                  addHeader(`TARGET PRINT EVIDENCE: ${res.query}`, `Individual Analysis Report`);
+
+                  imgYOffset += availableHeight;
+                  if (imgYOffset < imgHeight) {
+                      pdf.addPage();
+                  }
+              }
+          }
+      }
+
+      setActiveTab(originalTab);
+      pdf.save(`Comprehensive_Threat_Report_${Date.now()}.pdf`);
+      
+      toast({
+        title: t('exportSuccess'),
+        description: t('pdfDownloaded'),
+      });
+
+    } catch (err) {
+       console.error("PDF generation failed:", err);
+       toast({ title: t('error'), description: "Report generation failed.", variant: "destructive" });
+    } finally {
+       setIsExportingPDF(false);
+    }
+  };
+
+  const handleReset = () => {
+    setQuery("");
+    setResults([]);
+    setError(null);
   };
 
   const generateVendorUrls = (searchQuery: string) => {
@@ -336,15 +550,22 @@ const Index = () => {
   if (results.length === 0 && !isAnalyzing) {
     return (
       <div className="min-h-screen bg-background flex flex-col">
-        <div className="absolute top-4 right-4 flex gap-2 animate-fade-in">
+        {/* Top Navigation / Action Bar */}
+        <div className="absolute top-4 right-4 md:top-6 md:right-8 flex items-center gap-3 animate-fade-in bg-background/80 backdrop-blur-md p-2 rounded-full border shadow-sm z-50">
           <Link to="/vendors">
-            <Button variant="outline" size="icon" title="Vendor Directory">
+            <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full hover:bg-muted font-medium" title="Vendor Directory">
               <BookOpen className="h-4 w-4" />
             </Button>
           </Link>
+          <Link to="/dnsbl">
+            <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full hover:bg-muted font-medium" title={t('dnsblCheck')}>
+              <Shield className="h-4 w-4" />
+            </Button>
+          </Link>
+          <div className="w-px h-4 bg-border mx-1" />
           <HistorySidebar
             history={history}
-            onSelect={(q) => { setQuery(q); setSearchMode("single"); setTimeout(() => document.querySelector('form')?.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true })), 100); }}
+            onSelect={(q) => { setQuery(q); setTimeout(() => document.querySelector('form')?.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true })), 100); }}
             onClear={() => { setHistory([]); localStorage.removeItem("searchHistory"); }}
           />
           <LanguageToggle />
@@ -354,7 +575,10 @@ const Index = () => {
         <div className="flex-1 flex flex-col items-center justify-center p-4">
           <div className="max-w-2xl w-full space-y-8 text-center">
             <div className="space-y-2 animate-fade-in">
-              <h1 className="text-4xl md:text-6xl font-bold tracking-tight bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">
+              <h1 
+                className="text-4xl md:text-6xl font-bold tracking-tight bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent cursor-pointer hover:opacity-80 transition-opacity"
+                onClick={handleReset}
+              >
                 {t('appName')}
               </h1>
               <p className="text-xl text-muted-foreground">
@@ -362,49 +586,13 @@ const Index = () => {
               </p>
             </div>
 
-            <div className="p-6 bg-card rounded-xl border shadow-sm hover:shadow-md transition-all duration-200 animate-fade-in">
-              <div className="flex flex-col sm:flex-row justify-center items-center gap-4 mb-6">
-                <div className="bg-muted p-1 rounded-lg inline-flex">
-                  <Button
-                    variant={searchMode === "single" ? "secondary" : "ghost"}
-                    size="sm"
-                    onClick={() => setSearchMode("single")}
-                    className={`gap-2 rounded-md transition-all ${searchMode === "single" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}
-                  >
-                    <Search className="h-4 w-4" /> Single Target
-                  </Button>
-                  <Button
-                    variant={searchMode === "multi" ? "secondary" : "ghost"}
-                    size="sm"
-                    onClick={() => setSearchMode("multi")}
-                    className={`gap-2 rounded-md transition-all ${searchMode === "multi" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}
-                  >
-                    <Layers className="h-4 w-4" /> Multi-Target
-                  </Button>
-                </div>
-
-                <div className="hidden sm:block w-px h-8 bg-border" />
-
-                <Link to="/dnsbl">
-                  <Button variant="outline" size="sm" className="gap-2 hover:bg-primary hover:text-primary-foreground transition-colors">
-                    <Shield className="h-4 w-4" />
-                    {t('dnsblCheck')}
-                  </Button>
-                </Link>
-              </div>
-
+            <div className="p-1 sm:p-2 animate-fade-in w-full">
               <SearchForm
                 query={query}
                 setQuery={setQuery}
                 onSubmit={handleSearch}
                 isLoading={isAnalyzing}
-                className="md:h-auto"
-                mode={searchMode}
               />
-              <div className="mt-4 flex items-center justify-center gap-2 text-sm text-muted-foreground">
-                <Shield className="h-4 w-4" />
-                <span>{searchMode === "single" ? t('inputRequired') : "Enter up to 5 targets"}</span>
-              </div>
             </div>
 
             <p className="text-sm text-muted-foreground animate-fade-in">
@@ -424,9 +612,13 @@ const Index = () => {
         <div className="max-w-7xl mx-auto space-y-6">
           {/* New Header Design */}
           <div className="flex flex-col gap-6 mb-8 animate-fade-in">
+            {/* Top Unified Header */}
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
               <div>
-                <h1 className="text-3xl font-bold tracking-tight bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">
+                <h1 
+                  className="text-3xl font-bold tracking-tight bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent cursor-pointer hover:opacity-80 transition-opacity"
+                  onClick={handleReset}
+                >
                   {t('appName')}
                 </h1>
                 <p className="text-sm text-muted-foreground mt-1">
@@ -434,67 +626,58 @@ const Index = () => {
                 </p>
               </div>
 
-              <div className="flex items-center gap-2 bg-muted/50 p-1 rounded-lg border">
+              {/* Centralized Navigation and Settings Actions */}
+              <div className="flex items-center flex-wrap gap-2 bg-muted/30 p-1.5 rounded-full border shadow-sm">
                 <Link to="/vendors">
-                  <Button variant="ghost" size="sm" className="gap-2 h-8 text-muted-foreground hover:text-foreground hover:bg-background shadow-none">
+                  <Button variant="ghost" size="sm" className="gap-2 h-8 rounded-full text-muted-foreground hover:text-foreground hover:bg-background">
                     <BookOpen className="h-4 w-4" />
-                    {t('vendors')}
+                    <span className="hidden sm:inline">{t('vendors')}</span>
                   </Button>
                 </Link>
-                <div className="w-px h-4 bg-border" />
                 <Link to="/dnsbl">
-                  <Button variant="ghost" size="sm" className="gap-2 h-8 text-muted-foreground hover:text-foreground hover:bg-background shadow-none">
+                  <Button variant="ghost" size="sm" className="gap-2 h-8 rounded-full text-muted-foreground hover:text-foreground hover:bg-background">
                     <Shield className="h-4 w-4" />
-                    {t('dnsblCheck')}
+                    <span className="hidden sm:inline">{t('dnsblCheck')}</span>
                   </Button>
                 </Link>
-              </div>
-            </div>
-
-            <div className="flex flex-col md:flex-row gap-4 items-start md:items-center justify-between bg-card p-4 rounded-xl border shadow-sm">
-              <div className="flex-1 w-full md:w-auto flex flex-col gap-2">
-                <div className="flex gap-2">
-                  <Button
-                    variant={searchMode === "single" ? "secondary" : "ghost"}
-                    size="sm"
-                    onClick={() => setSearchMode("single")}
-                    className="h-7 text-xs"
+                <div className="w-px h-4 bg-border mx-1" />
+                {results.length > 0 && (
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="gap-2 h-8 rounded-full border-primary/20 hover:bg-primary/10"
+                    onClick={exportGlobalPDF}
+                    disabled={isExportingPDF}
                   >
-                    Single
+                    <FileSearch className={`h-4 w-4 ${isExportingPDF ? "animate-pulse" : ""}`} />
+                    <span className="hidden sm:inline">{isExportingPDF ? "Building Report..." : "Global PDF Report"}</span>
                   </Button>
-                  <Button
-                    variant={searchMode === "multi" ? "secondary" : "ghost"}
-                    size="sm"
-                    onClick={() => setSearchMode("multi")}
-                    className="h-7 text-xs"
-                  >
-                    Multi
-                  </Button>
-                </div>
-                <SearchForm
-                  query={query}
-                  setQuery={setQuery}
-                  onSubmit={handleSearch}
-                  isLoading={isAnalyzing}
-                  className="w-full"
-                  mode={searchMode}
-                />
-              </div>
-
-              <div className="flex items-center gap-2 w-full md:w-auto justify-end">
-                <div className="h-8 w-px bg-border hidden md:block mx-2" />
+                )}
+                <div className="w-px h-4 bg-border mx-1" />
                 <VendorFilter
                   selectedVendors={selectedVendors}
                   onVendorsChange={setSelectedVendors}
                 />
                 <HistorySidebar
                   history={history}
-                  onSelect={(q) => { setQuery(q); setSearchMode("single"); setTimeout(() => document.querySelector('form')?.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true })), 100); }}
+                  onSelect={(q) => { setQuery(q); setTimeout(() => document.querySelector('form')?.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true })), 100); }}
                   onClear={() => { setHistory([]); localStorage.removeItem("searchHistory"); }}
                 />
+                <div className="w-px h-4 bg-border mx-1" />
                 <LanguageToggle />
                 <ThemeToggle />
               </div>
+            </div>
+
+            {/* In-page Re-search Bar */}
+            <div className="flex flex-col bg-card p-4 rounded-xl border shadow-sm">
+              <SearchForm
+                query={query}
+                setQuery={setQuery}
+                onSubmit={handleSearch}
+                isLoading={isAnalyzing}
+                className="w-full"
+              />
             </div>
           </div>
 
@@ -519,16 +702,19 @@ const Index = () => {
               </TabsList>
 
               <TabsContent value="overview" className="mt-6 animate-fade-in">
-                <MultiIpSummary
-                  results={results}
-                  onViewDetails={(q) => setActiveTab(q)}
-                />
+                <div id="pdf-export-overview" className="space-y-6">
+                  <MultiIpSummary
+                    results={results}
+                    onViewDetails={(q) => setActiveTab(q)}
+                  />
+                </div>
               </TabsContent>
 
               {results.map((data) => (
-                <TabsContent key={data.query} value={data.query} className="space-y-6 mt-6 animate-fade-in">
-                  <QuickActions
-                    data={data}
+                <TabsContent key={data.query} value={data.query} className="mt-6 animate-fade-in">
+                  <div id={`pdf-export-${data.query}`} className="space-y-6">
+                    <QuickActions
+                      data={data}
                     onRefresh={() => handleSearch()}
                     isLoading={isAnalyzing}
                     onCopyLinks={() => copyVendorLinks(data.query)}
@@ -556,12 +742,13 @@ const Index = () => {
 
                   {view === "table" ? (
                     <VendorDataTable
-                      vendorData={data.vendorData}
+                      vendorData={data.vendorData.filter(v => v.name !== "IP Geolocation")}
                       getVendorLink={getVendorLink}
                     />
                   ) : (
                     <div className="columns-1 md:columns-2 lg:columns-3 gap-4 space-y-4">
                       {data.vendorData
+                        .filter(v => v.name !== "IP Geolocation")
                         .sort((a, b) => {
                           // Define vendor importance tiers
                           const tier1 = ["VirusTotal", "AbuseIPDB"];
@@ -594,6 +781,7 @@ const Index = () => {
                         ))}
                     </div>
                   )}
+                  </div>
                 </TabsContent>
               ))}
             </Tabs>
