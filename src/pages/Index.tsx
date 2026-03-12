@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
+import { getFieldCategory } from "@/components/VendorDataTable";
 import { Shield, AlertTriangle, Bug, FileSearch, Globe, Link as LinkIcon, Radar, Database, Eye, Search, BookOpen, Layers, LayoutGrid, CheckCircle2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { ThreatSummary } from "@/components/ThreatSummary";
@@ -25,7 +26,7 @@ import { fetchThreatDataProgressive } from "@/services/threatApi";
 import { useToast } from "@/hooks/use-toast";
 import { ThreatIntelligenceResult } from "@/types/threat-intelligence";
 import jsPDF from "jspdf";
-import html2canvas from "html2canvas";
+import autoTable from "jspdf-autotable";
 
 interface SearchFormProps {
   query: string;
@@ -73,15 +74,15 @@ const SearchForm = ({ query, setQuery, onSubmit, isLoading, className = "" }: Se
               </div>
             )}
           </div>
-          
+
           <div className="flex items-center justify-between mt-1">
             <div className="flex items-center gap-2 text-xs text-muted-foreground/80 font-medium">
               <CheckCircle2 className={`h-4 w-4 ${extractedIps.length > 0 ? "text-green-500" : "text-muted-foreground/40"}`} />
-              {extractedIps.length > 0 
-                ? `${extractedIps.length} target${extractedIps.length > 1 ? 's' : ''} parsed (max 35)` 
+              {extractedIps.length > 0
+                ? `${extractedIps.length} target${extractedIps.length > 1 ? 's' : ''} parsed (max 35)`
                 : "Awaiting valid IOCs..."}
             </div>
-            
+
             <Button
               type="submit"
               disabled={isLoading || extractedIps.length > 35 || (!query.trim())}
@@ -290,168 +291,610 @@ const Index = () => {
     setIsExportingPDF(true);
     toast({
       title: "Building Comprehensive Report",
-      description: "Generating multi-page PDF evidence. Please do not switch tabs...",
+      description: "Generating professional SOC intelligence report...",
     });
 
     try {
-      const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = pdf.internal.pageSize.getHeight();
-      const margin = 10;
-      
-      const addHeader = (title: string, subtitle: string) => {
-        pdf.setFillColor(26, 26, 26);
-        pdf.rect(0, 0, pdfWidth, 40, 'F');
-        pdf.setTextColor(255, 255, 255);
-        pdf.setFontSize(24);
-        pdf.setFont("helvetica", "bold");
-        pdf.text("ThreatSumm4ry", 14, 20);
-        pdf.setFontSize(12);
-        pdf.setFont("helvetica", "normal");
-        pdf.text(title, 14, 30);
-        if (subtitle) {
-             pdf.text(subtitle, 14, 35);
-        }
-        pdf.text(new Date().toLocaleString(), pdfWidth - 14, 20, { align: "right" });
-        pdf.setTextColor(0, 0, 0);
+      const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+      const W = doc.internal.pageSize.getWidth();
+      const H = doc.internal.pageSize.getHeight();
+      const M = 14; // margin
+      const reportDate = new Date().toLocaleString();
+      const reportId = `TS-${Date.now().toString(36).toUpperCase()}`;
+
+      // ── Color Palette ──
+      const COLORS = {
+        headerBg: [18, 18, 18] as [number, number, number],
+        accent: [99, 102, 241] as [number, number, number],   // indigo
+        safe: [34, 197, 94] as [number, number, number],
+        suspicious: [245, 158, 11] as [number, number, number],
+        malicious: [239, 68, 68] as [number, number, number],
+        muted: [100, 116, 139] as [number, number, number],
+        tableBg: [30, 30, 30] as [number, number, number],
+        tableAlt: [38, 38, 38] as [number, number, number],
+        white: [255, 255, 255] as [number, number, number],
+        black: [0, 0, 0] as [number, number, number],
+        textPrimary: [226, 232, 240] as [number, number, number],
+        textSecondary: [148, 163, 184] as [number, number, number],
       };
 
-      // PAGE 1: SCORING METHODOLOGY
-      addHeader("HOW THREAT LEVEL IS SCORED", "Threat Level & Scoring Methodology");
-      let y = 55;
-      
-      pdf.setFontSize(11);
-      pdf.setFont("helvetica", "normal");
-      const p1 = pdf.splitTextToSize(t('threatEngineExplanation'), pdfWidth - 28);
-      pdf.text(p1, 14, y);
-      y += p1.length * 5 + 5;
+      const getThreatColor = (level: string): [number, number, number] => {
+        if (level === "malicious") return COLORS.malicious;
+        if (level === "suspicious") return COLORS.suspicious;
+        if (level === "safe") return COLORS.safe;
+        return COLORS.muted;
+      };
 
-      pdf.setFontSize(12);
-      pdf.setFont("helvetica", "bold");
-      pdf.text(t('primaryVendorWeights'), 14, y);
-      y += 8;
+      // ── Reusable Drawing Utilities ──
+      const drawPageHeader = (title: string, subtitle?: string) => {
+        doc.setFillColor(...COLORS.headerBg);
+        doc.rect(0, 0, W, 32, 'F');
+        // Accent stripe
+        doc.setFillColor(...COLORS.accent);
+        doc.rect(0, 32, W, 1.5, 'F');
+        // Logo text
+        doc.setTextColor(...COLORS.white);
+        doc.setFontSize(18);
+        doc.setFont("helvetica", "bold");
+        doc.text("THREATSUMM4RY", M, 14);
+        // Subtitle
+        doc.setFontSize(9);
+        doc.setFont("helvetica", "normal");
+        doc.setTextColor(...COLORS.textSecondary);
+        doc.text(title, M, 22);
+        if (subtitle) doc.text(subtitle, M, 27);
+        // Right-aligned metadata
+        doc.setFontSize(8);
+        doc.text(reportDate, W - M, 14, { align: "right" });
+        doc.text(`Report ID: ${reportId}`, W - M, 20, { align: "right" });
+        doc.setTextColor(...COLORS.black);
+      };
 
-      pdf.setFontSize(10);
-      pdf.setFont("helvetica", "bold");
-      pdf.text("VirusTotal:", 14, y);
-      pdf.setFont("helvetica", "normal");
-      const vtDesc = pdf.splitTextToSize(t('vtWeightDesc'), pdfWidth - 45);
-      pdf.text(vtDesc, 40, y);
-      y += Math.max(1, vtDesc.length) * 5 + 3;
+      const drawPageFooter = () => {
+        const pageCount = (doc as any).internal.getNumberOfPages();
+        for (let i = 1; i <= pageCount; i++) {
+          doc.setPage(i);
+          doc.setFillColor(...COLORS.headerBg);
+          doc.rect(0, H - 10, W, 10, 'F');
+          doc.setFontSize(7);
+          doc.setTextColor(...COLORS.textSecondary);
+          doc.text(`ThreatSumm4ry Intelligence Report`, M, H - 4);
+          doc.text(`Page ${i} of ${pageCount}`, W - M, H - 4, { align: "right" });
+        }
+      };
 
-      pdf.setFontSize(10);
-      pdf.setFont("helvetica", "bold");
-      pdf.text("AbuseIPDB:", 14, y);
-      pdf.setFont("helvetica", "normal");
-      const abDesc = pdf.splitTextToSize(t('abuseIpdbWeightDesc'), pdfWidth - 45);
-      pdf.text(abDesc, 40, y);
-      y += Math.max(1, abDesc.length) * 5 + 8;
+      const drawThreatPill = (x: number, y: number, level: string) => {
+        const color = getThreatColor(level);
+        const label = level.toUpperCase();
+        const pillW = doc.getTextWidth(label) + 8;
+        doc.setFillColor(...color);
+        doc.roundedRect(x, y - 4, pillW, 6, 2, 2, 'F');
+        doc.setTextColor(...COLORS.white);
+        doc.setFontSize(7);
+        doc.setFont("helvetica", "bold");
+        doc.text(label, x + 4, y);
+        doc.setTextColor(...COLORS.black);
+        return pillW;
+      };
 
-      pdf.setFontSize(12);
-      pdf.setFont("helvetica", "bold");
-      pdf.text(t('scoringThresholds'), 14, y);
-      y += 8;
+      const drawSectionTitle = (y: number, title: string): number => {
+        doc.setFillColor(...COLORS.accent);
+        doc.rect(M, y, 3, 7, 'F');
+        doc.setFontSize(12);
+        doc.setFont("helvetica", "bold");
+        doc.setTextColor(40, 40, 40);
+        doc.text(title, M + 6, y + 5.5);
+        doc.setTextColor(...COLORS.black);
+        return y + 12;
+      };
 
-      const limits = [
-         { label: "SAFE (0-30):", text: t('safeDesc') },
-         { label: "SUSPICIOUS (31-70):", text: t('suspiciousDesc') },
-         { label: "MALICIOUS (71-100):", text: t('maliciousDesc') }
+      // Helper: extract a specific vendor's data field
+      const getVendorField = (res: ThreatIntelligenceResult, vendorName: string, field: string): string => {
+        const vendor = res.vendorData.find(v => v.name === vendorName);
+        if (!vendor || vendor.error) return "N/A";
+        const val = vendor.data[field];
+        if (val === undefined || val === null) return "N/A";
+        if (Array.isArray(val)) return val.join(", ");
+        return String(val);
+      };
+
+      // Helper: extract hostname
+      const getHostname = (res: ThreatIntelligenceResult): string => {
+        const abuse = res.vendorData.find(v => v.name === "AbuseIPDB");
+        if (abuse?.data?.["Domain"]) return String(abuse.data["Domain"]);
+        const vt = res.vendorData.find(v => v.name === "VirusTotal");
+        if (vt?.data?.["Hostnames"]) {
+          const h = vt.data["Hostnames"];
+          return Array.isArray(h) ? h[0] || "N/A" : String(h);
+        }
+        return "N/A";
+      };
+
+      // ═══════════════════════════════════════════════
+      // PAGE 1: EXECUTIVE SUMMARY
+      // ═══════════════════════════════════════════════
+      drawPageHeader(`${results.length} IOC(s) Analisados`);
+      let y = 42;
+
+      // Summary stats bar
+      const safeCount = results.filter(r => r.threatLevel === "safe").length;
+      const suspCount = results.filter(r => r.threatLevel === "suspicious").length;
+      const malCount = results.filter(r => r.threatLevel === "malicious").length;
+
+      // Background Container
+      doc.setFillColor(245, 245, 245);
+      doc.roundedRect(M, y, W - M * 2, 18, 3, 3, 'F');
+
+      doc.setFontSize(9);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(60, 60, 60);
+      const statsY = y + 11;
+      doc.text(`Total IOCs: ${results.length}`, M + 6, statsY);
+      // --- DYNAMIC PILLS (RIGHT-ALIGNED) ---
+      const pillPadding = 6;
+      const pillGap = 4;
+      const pillHeight = 7;  // Slightly shorter for a cleaner look
+      const pillTopY = statsY - 4.8;
+
+      doc.setFontSize(7);
+
+      const pillData = [
+        { label: `MALICIOUS: ${malCount}`, color: COLORS.malicious },
+        { label: `SUSPICIOUS: ${suspCount}`, color: COLORS.suspicious },
+        { label: `SAFE: ${safeCount}`, color: COLORS.safe }
       ];
-      limits.forEach(l => {
-         pdf.setFontSize(10);
-         pdf.setFont("helvetica", "bold");
-         pdf.text(l.label, 14, y);
-         pdf.setFont("helvetica", "normal");
-         const tDesc = pdf.splitTextToSize(l.text, pdfWidth - 65);
-         pdf.text(tDesc, 55, y);
-         y += Math.max(1, tDesc.length) * 5 + 3;
+
+      // 1. Calculate total width of all pills to right-align them
+      const totalPillsWidth = pillData.reduce((acc, pill) => {
+        return acc + doc.getTextWidth(pill.label) + pillPadding + pillGap;
+      }, 0) - pillGap; // Subtract last gap
+
+      // 2. Set starting X to be near the right edge of the grey box
+      // (W - M) is the right edge of the container, - 6 for internal padding
+      let px = (W - M) - totalPillsWidth - 6;
+
+      pillData.forEach(pill => {
+        const textWidth = doc.getTextWidth(pill.label);
+        const pillWidth = textWidth + pillPadding;
+
+        // Draw Pill
+        doc.setFillColor(...pill.color);
+        doc.roundedRect(px, pillTopY, pillWidth, pillHeight, 2, 2, 'F');
+
+        // Draw Text
+        doc.setTextColor(255, 255, 255);
+        doc.text(pill.label, px + (pillPadding / 2), statsY);
+
+        px += pillWidth + pillGap;
       });
 
-      const originalTab = activeTab;
+      doc.setTextColor(...COLORS.black);
+      y += 24;
 
-      // PAGE 2: OVERVIEW TAB CAPTURE
-      if (results.length > 1) {
-          setActiveTab("overview");
-          await new Promise(r => setTimeout(r, 1000)); 
-          
-          const overviewTarget = document.getElementById(`pdf-export-overview`) as HTMLElement;
-          if (overviewTarget) {
-              pdf.addPage();
-              const canvas = await html2canvas(overviewTarget, {
-                scale: 2, useCORS: true, backgroundColor: "#121212", windowWidth: 1200
-              });
-              const imgData = canvas.toDataURL('image/png');
-              
-              const innerWidth = pdfWidth - (margin * 2);
-              const imgProps = pdf.getImageProperties(imgData);
-              const imgHeight = (imgProps.height * innerWidth) / imgProps.width;
-              let imgYOffset = 0;
+      // Executive Overview Table
+      y = drawSectionTitle(y, "IOC Overview");
 
-              while (imgYOffset < imgHeight) {
-                const availableHeight = pdfHeight - 45 - margin;
-                const drawY = 45 - imgYOffset;
-                pdf.addImage(imgData, 'PNG', margin, drawY, innerWidth, imgHeight);
-                addHeader("OVERVIEW PRINT EVIDENCE", "");
-                
-                imgYOffset += availableHeight;
-                if (imgYOffset < imgHeight) {
-                  pdf.addPage();
-                }
-              }
+      // Sort priority map
+      const threatPriority = { "malicious": 1, "suspicious": 2, "safe": 3 };
+
+      // Sort a copy of the results to avoid side-effects
+      const sortedResults = [...results].sort((a, b) => {
+        const pA = threatPriority[a.threatLevel.toLowerCase()] || 99;
+        const pB = threatPriority[b.threatLevel.toLowerCase()] || 99;
+        return pA - pB;
+      });
+
+      const overviewRows = sortedResults.map(r => [
+        r.query || 'N/A',
+        getHostname(r) || 'N/A',
+        (r.threatLevel || 'UNKNOWN').toUpperCase(),
+        `${r.overallScore ?? 0}/100`,
+        `${r.detections ?? 0}/${r.totalVendors ?? 0}`,
+        getVendorField(r, "VirusTotal", "Detection Rate") || '0/0',
+        getVendorField(r, "AbuseIPDB", "Abuse Confidence Score") || '0',
+      ]);
+
+      autoTable(doc, {
+        startY: y,
+        head: [['IOC Target', 'Hostname', 'Threat Level', 'Score', 'Detections', 'VT Rate', 'AbuseIPDB']],
+        body: overviewRows,
+        margin: { left: M, right: M },
+        styles: {
+          fontSize: 8,
+          cellPadding: 3,
+          textColor: [40, 40, 40],
+          lineColor: [220, 220, 220],
+          lineWidth: 0.2,
+        },
+        headStyles: {
+          fillColor: COLORS.headerBg,
+          textColor: COLORS.white,
+          fontStyle: 'bold',
+          fontSize: 7,
+        },
+        alternateRowStyles: {
+          fillColor: [248, 248, 248],
+        },
+        columnStyles: {
+          0: { fontStyle: 'bold', cellWidth: 32 },
+          2: { cellWidth: 22, halign: 'center' },
+          3: { cellWidth: 16, halign: 'center' },
+          4: { cellWidth: 20, halign: 'center' },
+        },
+        didDrawCell: (data) => {
+          // Draw Threat Level pills in column 2 (index 2)
+          if (data.section === 'body' && data.column.index === 2) {
+            // Safety check for cell text
+            const cellText = String(data.cell.raw || '');
+            const { x: cellX, y: cellY, width: cellW, height: cellH } = data.cell;
+
+            // 1. Wipe the existing text drawn by autoTable
+            const bgColor = data.row.index % 2 === 0 ? [255, 255, 255] : [248, 248, 248];
+            doc.setFillColor(...(bgColor as [number, number, number]));
+            doc.rect(cellX + 0.1, cellY + 0.1, cellW - 0.2, cellH - 0.2, 'F');
+
+            // 2. Draw the pill
+            const level = cellText.toLowerCase();
+            const color = getThreatColor(level);
+            const pillW = Math.min(cellW - 4, 20);
+            const pillX = cellX + (cellW - pillW) / 2;
+            const pillY = cellY + (cellH / 2) - 2.5;
+
+            doc.setFillColor(...color);
+            doc.roundedRect(pillX, pillY, pillW, 5, 1.5, 1.5, 'F');
+
+            // 3. Draw the text on top
+            doc.setTextColor(255, 255, 255);
+            doc.setFontSize(6);
+            doc.setFont("helvetica", "bold");
+            // Use align: 'center' to ensure it stays inside the pill
+            doc.text(cellText, cellX + cellW / 2, cellY + (cellH / 2) + 1, { align: 'center' });
+
+            // Reset state for next cells
+            doc.setTextColor(40, 40, 40);
           }
+        },
+      });
+
+      // ═══════════════════════════════════════════════
+      // PAGE 2: SCORING METHODOLOGY
+      // ═══════════════════════════════════════════════
+      doc.addPage();
+      drawPageHeader(t('threatLevelScoringMethodology'));
+      y = 42;
+
+      y = drawSectionTitle(y, t('threatLevelScoringMethodology'));
+
+      doc.setFontSize(9);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(60, 60, 60);
+      const introText = doc.splitTextToSize(t('threatEngineExplanation'), W - M * 2);
+      doc.text(introText, M, y);
+      y += introText.length * 4.5 + 6;
+
+      // Vendor weights table
+      y = drawSectionTitle(y, t('primaryVendorWeights'));
+
+      autoTable(doc, {
+        startY: y,
+        head: [['Vendor', 'Weight Rule']],
+        body: [
+          ['VirusTotal', t('vtWeightDesc')],
+          ['AbuseIPDB', t('abuseIpdbWeightDesc')],
+        ],
+        margin: { left: M, right: M },
+        styles: { fontSize: 8, cellPadding: 4, textColor: [40, 40, 40], lineColor: [220, 220, 220], lineWidth: 0.2 },
+        headStyles: { fillColor: COLORS.headerBg, textColor: COLORS.white, fontStyle: 'bold', fontSize: 8 },
+        columnStyles: { 0: { fontStyle: 'bold', cellWidth: 35 } },
+      });
+
+      y = (doc as any).lastAutoTable.finalY + 10;
+
+      // Scoring thresholds table
+      y = drawSectionTitle(y, t('scoringThresholds'));
+
+      autoTable(doc, {
+        startY: y,
+        head: [['Classification', 'Score Range', 'Description']],
+        body: [
+          ['SAFE', '0 – 30', t('safeDesc')],
+          ['SUSPICIOUS', '31 – 70', t('suspiciousDesc')],
+          ['MALICIOUS', '71 – 100', t('maliciousDesc')],
+        ],
+        margin: { left: M, right: M },
+        styles: { fontSize: 8, cellPadding: 4, textColor: [40, 40, 40], lineColor: [220, 220, 220], lineWidth: 0.2 },
+        headStyles: { fillColor: COLORS.headerBg, textColor: COLORS.white, fontStyle: 'bold', fontSize: 8 },
+        columnStyles: {
+          0: { fontStyle: 'bold', cellWidth: 30 },
+          1: { cellWidth: 22, halign: 'center' },
+        },
+        didDrawCell: (data: any) => {
+          if (data.section === 'body' && data.column.index === 0) {
+            const cellText = data.cell.raw as string;
+            const cellX = data.cell.x;
+            const cellY = data.cell.y;
+            const cellW = data.cell.width;
+            const cellH = data.cell.height;
+
+            doc.setFillColor(255, 255, 255);
+            doc.rect(cellX + 0.2, cellY + 0.2, cellW - 0.4, cellH - 0.4, 'F');
+
+            const color = getThreatColor(cellText.toLowerCase());
+            const pillW = Math.min(cellW - 4, 26);
+            const pillX = cellX + (cellW - pillW) / 2;
+            const pillY = cellY + (cellH / 2) - 2.5;
+            doc.setFillColor(...color);
+            doc.roundedRect(pillX, pillY, pillW, 5.5, 1.5, 1.5, 'F');
+            doc.setTextColor(...COLORS.white);
+            doc.setFontSize(7);
+            doc.setFont("helvetica", "bold");
+            doc.text(cellText, cellX + cellW / 2, cellY + cellH / 2 + 1, { align: 'center' });
+            doc.setTextColor(...COLORS.black);
+          }
+        },
+      });
+
+      // ═══════════════════════════════════════════════
+      // PAGES 3+: INDIVIDUAL IOC DETAILED ANALYSIS
+      // ═══════════════════════════════════════════════
+      for (let i = 0; i < results.length; i++) {
+        const res = results[i];
+        doc.addPage();
+        drawPageHeader(`IoC Analisado: ${res.query}`, `Target ${i + 1} of ${results.length}`);
+        let y = 42;
+
+        // ── IOC Identity Card (Gauge Style - Clean) ──
+        const cardHeight = 45;
+        const cardWidth = W - M * 2;
+
+        // 1. Background & Soft Border
+        doc.setFillColor(248, 250, 252);
+        doc.roundedRect(M, y, cardWidth, cardHeight, 4, 4, 'F');
+        doc.setDrawColor(230, 235, 245);
+        doc.setLineWidth(0.4);
+        doc.roundedRect(M, y, cardWidth, cardHeight, 4, 4, 'S');
+
+        // --- LEFT SIDE: IDENTITY ---
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(16);
+        doc.setTextColor(30, 35, 50);
+        doc.text(String(res.query || ''), M + 8, y + 12);
+
+        // Status Pill with '!' Icon
+        const statusColor = (getThreatColor(res.threatLevel) || [100, 100, 100]) as [number, number, number];
+        const pillY = y + 15.5;
+        doc.setFillColor(...statusColor);
+        doc.roundedRect(M + 8, pillY, 42, 7, 3.5, 3.5, 'F');
+
+        // White '!' Icon Circle
+        doc.setFillColor(255, 255, 255);
+        doc.circle(M + 11.5, pillY + 3.5, 2.2, 'F');
+        doc.setFontSize(5.5);
+        doc.setTextColor(...statusColor);
+        doc.text("!", M + 11.2, pillY + 4.3);
+
+        doc.setFontSize(7);
+        doc.setTextColor(255, 255, 255);
+        doc.text(String(res.threatLevel).toUpperCase(), M + 15, pillY + 4.8);
+
+        // Detections Box (Stylized Blue)
+        const detY = y + 29;
+        doc.setFillColor(242, 248, 255);
+        doc.roundedRect(M + 8, detY, 90, 10, 2, 2, 'F');
+
+        // Simple Shield Icon Simulation
+        doc.setDrawColor(70, 100, 150);
+        doc.setLineWidth(0.5);
+        doc.roundedRect(M + 12, detY + 3, 4.5, 4.5, 1, 1, 'S');
+
+        doc.setFontSize(8.5);
+        doc.setFont("helvetica", "normal");
+        doc.setTextColor(60, 80, 120);
+        doc.text(`Total Detections: ${res.detections}/${res.totalVendors}`, M + 20, detY + 6.5);
+
+        // --- RIGHT SIDE: SCORE & GAUGE ---
+        const rightEdge = W - M - 12;
+        const scoreVal = String(res.overallScore ?? 0);
+        const mutedCol = (COLORS.muted || [150, 150, 150]) as [number, number, number];
+
+        doc.setFontSize(7);
+        doc.setFont("helvetica", "bold");
+        doc.setTextColor(110, 120, 140);
+        doc.text("THREAT SCORE", rightEdge - 20, y + 10, { align: 'center' });
+
+        doc.setFontSize(28);
+        doc.setTextColor(...statusColor);
+        doc.text(scoreVal, rightEdge - 11, y + 24, { align: 'right' });
+        doc.setFontSize(10);
+        doc.setTextColor(...mutedCol);
+        doc.text("/100", rightEdge - 10, y + 24);
+
+        // --- THE GAUGE ---
+        const gX = rightEdge - 20;
+        const gY = y + 42;
+        const radius = 18;
+
+        // 1. Background Arc (Semi-circle track)
+        doc.setDrawColor(235, 240, 245);
+        doc.setLineWidth(4);
+        (doc as any).ellipse(gX, gY, radius, radius, 'S', 180, 0);
+
+        // 2. Colored Progress Arc
+        doc.setDrawColor(...statusColor);
+        const scoreAngle = (Math.min(res.overallScore, 100) / 100) * 180;
+        (doc as any).ellipse(gX, gY, radius, radius, 'S', 180, 180 - scoreAngle);
+
+        // 3. The Needle
+        const needleRad = (180 - scoreAngle) * (Math.PI / 180);
+        const nx = gX + (radius - 3) * Math.cos(needleRad);
+        const ny = gY - (radius - 3) * Math.sin(needleRad);
+
+        doc.setDrawColor(...statusColor);
+        doc.setLineWidth(1.8);
+        doc.line(gX, gY, nx, ny);
+
+        // Needle Base (The white circle with border)
+        doc.setFillColor(255, 255, 255);
+        doc.setDrawColor(...mutedCol);
+        doc.setLineWidth(0.5);
+        doc.circle(gX, gY, 2.8, 'FD');
+
+        y += cardHeight + 10;
+
+        // ── Geographic & Network Data Collection ──
+        const networkData: string[][] = [];
+        const addNetField = (label: string, value: any) => {
+          const valStr = String(value || '');
+          if (valStr && valStr !== "N/A" && valStr !== "Unknown" && valStr !== "0") {
+            networkData.push([label, valStr]);
+          }
+        };
+
+        // 1. ISP (Prefer Geolocation, fallback to AbuseIPDB)
+        const isp = getVendorField(res, "IP Geolocation", "ISP") !== "N/A"
+          ? getVendorField(res, "IP Geolocation", "ISP")
+          : getVendorField(res, "AbuseIPDB", "ISP");
+        addNetField("ISP", isp);
+
+        // 2. Organization
+        addNetField("Organization", getVendorField(res, "IP Geolocation", "Organization"));
+
+        // 3. Country (Prefer Geolocation, fallback to AbuseIPDB)
+        const country = getVendorField(res, "IP Geolocation", "Country") !== "N/A"
+          ? getVendorField(res, "IP Geolocation", "Country")
+          : getVendorField(res, "AbuseIPDB", "Country");
+        addNetField("Country", country);
+
+        // 4. ASN (New field added)
+        addNetField("ASN", getVendorField(res, "AbuseIPDB", "ASN"));
+
+        // 5. Network / CIDR (New field added)
+        addNetField("Network (CIDR)", getVendorField(res, "AbuseIPDB", "CIDR/Network"));
+
+        // 6. City (New field added)
+        addNetField("City", getVendorField(res, "IP Geolocation", "City"));
+
+        // 7. Hostname
+        addNetField("Hostname", getHostname(res));
+
+        // ── Render Table ──
+        if (networkData.length > 0) {
+          y = drawSectionTitle(y, "Geographic & Network Data");
+
+          const half = Math.ceil(networkData.length / 2);
+          const bodyRows: string[][] = [];
+          for (let r = 0; r < half; r++) {
+            bodyRows.push([
+              networkData[r]?.[0] || '', networkData[r]?.[1] || '',
+              networkData[r + half]?.[0] || '', networkData[r + half]?.[1] || '',
+            ]);
+          }
+
+          autoTable(doc, {
+            startY: y,
+            head: [['Property', 'Value', 'Property', 'Value']],
+            body: bodyRows,
+            margin: { left: M, right: M },
+            styles: {
+              fontSize: 8,
+              cellPadding: 3,
+              textColor: [40, 40, 40],
+              lineColor: [220, 220, 220],
+              lineWidth: 0.1
+            },
+            headStyles: {
+              fillColor: [55, 65, 81],
+              textColor: [255, 255, 255],
+              fontStyle: 'bold'
+            },
+            columnStyles: {
+              0: { fontStyle: 'bold', cellWidth: 32, fillColor: [249, 250, 251] },
+              2: { fontStyle: 'bold', cellWidth: 32, fillColor: [249, 250, 251] },
+            },
+          });
+          y = (doc as any).lastAutoTable.finalY + 10;
+        }
+
+        // ── Vendor Intelligence Breakdown ──
+        y = drawSectionTitle(y, "Vendor Intelligence Breakdown");
+        const CATEGORY_ORDER = ["Threat / Heuristics", "Network / IT", "Geo / Location", "Network Providers", "Reputation / Intel"];
+
+        const vendorRows = res.vendorData
+          .filter(v => v.name !== "IP Geolocation")
+          .map(v => {
+            const status = v.data["Status"] || 'Clean';
+            const grouped: Record<string, string[]> = {};
+            Object.entries(v.data).forEach(([k, val]) => {
+              if (["Status", "All Vendors", "Hostnames"].includes(k)) return;
+              const cat = getFieldCategory(k);
+              if (!grouped[cat]) grouped[cat] = [];
+              grouped[cat].push(`${k}: ${val}`);
+            });
+
+            const details = CATEGORY_ORDER
+              .filter(cat => grouped[cat]?.length > 0)
+              .map(cat => `► ${cat.toUpperCase()}\n${grouped[cat].join("\n")}`)
+              .join("\n\n");
+
+            return [v.name, status, details || 'No notable findings', v.link || ''];
+          });
+
+        autoTable(doc, {
+          startY: y,
+          head: [['Vendor', 'Status', 'Intelligence Details', 'Link']],
+          body: vendorRows,
+          margin: { left: M, right: M },
+          styles: { fontSize: 7, cellPadding: 4, textColor: [40, 40, 40], overflow: 'linebreak' },
+          headStyles: { fillColor: [20, 20, 20], textColor: [255, 255, 255] },
+          columnStyles: {
+            0: { fontStyle: 'bold', cellWidth: 28 },
+            1: { cellWidth: 22, halign: 'center' },
+            3: { cellWidth: 30, fontSize: 6, textColor: (COLORS.accent as [number, number, number]) }
+          },
+          didDrawCell: (data) => {
+            if (data.section === 'body' && data.column.index === 1) {
+              const text = String(data.cell.raw || '');
+              const { x, y: cy, width: cw, height: ch } = data.cell;
+
+              // Clear background with tuple safety for TS
+              const rowBg = (data.row.index % 2 === 0 ? [255, 255, 255] : [248, 248, 248]) as [number, number, number];
+              doc.setFillColor(...rowBg);
+              doc.rect(x + 0.1, cy + 0.1, cw - 0.2, ch - 0.2, 'F');
+
+              const color = getThreatColor(text.toLowerCase().replace('clean', 'safe'));
+              doc.setFillColor(...(color as [number, number, number]));
+              doc.roundedRect(x + (cw - 18) / 2, cy + (ch / 2) - 2.5, 18, 5, 1.5, 1.5, 'F');
+
+              doc.setTextColor(255, 255, 255);
+              doc.setFontSize(6);
+              doc.text(text.toUpperCase(), x + cw / 2, cy + (ch / 2) + 1, { align: 'center' });
+            }
+          },
+          didDrawPage: (data) => {
+            // CRITICAL: Only draw "cont." if the table actually overflowed onto a NEW page
+            // @ts-ignore
+            if (data.pageNumber > data.settings.startYPage) {
+              drawPageHeader(`IOC ANALYSIS: ${res.query} (cont.)`, `Target ${i + 1} of ${results.length}`);
+            }
+          }
+        });
       }
 
-      // SUBSEQUENT PAGES: INDIVIDUAL TARGET REPORTS
-      for (const res of results) {
-          setActiveTab(res.query);
-          await new Promise(r => setTimeout(r, 1200)); // allow charts to animate slightly
-          
-          let target = document.getElementById(`pdf-export-${res.query}`) as HTMLElement;
-          if (target) {
-              const actionsBar = target.querySelector('.flex-wrap.gap-2.animate-fade-in') as HTMLElement;
-              if (actionsBar) actionsBar.style.display = 'none';
+      // ── Final: Apply footers to all pages ──
+      drawPageFooter();
 
-              const canvas = await html2canvas(target, {
-                  scale: 2, useCORS: true, backgroundColor: "#121212", windowWidth: 1200
-              });
-              
-              if (actionsBar) actionsBar.style.display = 'flex';
+      doc.save(`ThreatSumm4ry_Report_${reportId}.pdf`);
 
-              const imgData = canvas.toDataURL('image/png');
-              const innerWidth = pdfWidth - (margin * 2);
-              const imgProps = pdf.getImageProperties(imgData);
-              const imgHeight = (imgProps.height * innerWidth) / imgProps.width;
-              let imgYOffset = 0;
-              
-              pdf.addPage();
-
-              while (imgYOffset < imgHeight) {
-                  const availableHeight = pdfHeight - 45 - margin;
-                  const drawY = 45 - imgYOffset;
-                  pdf.addImage(imgData, 'PNG', margin, drawY, innerWidth, imgHeight);
-                  addHeader(`TARGET PRINT EVIDENCE: ${res.query}`, `Individual Analysis Report`);
-
-                  imgYOffset += availableHeight;
-                  if (imgYOffset < imgHeight) {
-                      pdf.addPage();
-                  }
-              }
-          }
-      }
-
-      setActiveTab(originalTab);
-      pdf.save(`Comprehensive_Threat_Report_${Date.now()}.pdf`);
-      
       toast({
         title: t('exportSuccess'),
         description: t('pdfDownloaded'),
       });
 
     } catch (err) {
-       console.error("PDF generation failed:", err);
-       toast({ title: t('error'), description: "Report generation failed.", variant: "destructive" });
+      console.error("PDF generation failed:", err);
+      toast({ title: t('error'), description: "Report generation failed.", variant: "destructive" });
     } finally {
-       setIsExportingPDF(false);
+      setIsExportingPDF(false);
     }
   };
 
@@ -575,7 +1018,7 @@ const Index = () => {
         <div className="flex-1 flex flex-col items-center justify-center p-4">
           <div className="max-w-2xl w-full space-y-8 text-center">
             <div className="space-y-2 animate-fade-in">
-              <h1 
+              <h1
                 className="text-4xl md:text-6xl font-bold tracking-tight bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent cursor-pointer hover:opacity-80 transition-opacity"
                 onClick={handleReset}
               >
@@ -593,6 +1036,29 @@ const Index = () => {
                 onSubmit={handleSearch}
                 isLoading={isAnalyzing}
               />
+            </div>
+
+            {/* Example IPs */}
+            <div className="animate-fade-in space-y-2">
+              <p className="text-xs font-medium text-muted-foreground/70 uppercase tracking-widest">Try these examples</p>
+              <div className="flex flex-wrap justify-center gap-2">
+                {[
+                  { ip: "14.103.115.208", flag: "🇨🇳" },
+                  { ip: "51.210.208.8", flag: "🇫🇷" },
+                  { ip: "103.65.237.234", flag: "🇮🇩" },
+                  { ip: "1.1.1.1", flag: "☁️" },
+                  { ip: "8.8.8.8", flag: "🔒" },
+                ].map(({ ip, flag }) => (
+                  <button
+                    key={ip}
+                    onClick={() => setQuery(prev => prev ? `${prev}\n${ip}` : ip)}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-mono font-medium border border-border/60 bg-muted/30 hover:bg-primary/10 hover:border-primary/40 text-muted-foreground hover:text-foreground transition-all cursor-pointer"
+                  >
+                    <span>{flag}</span>
+                    <span>{ip}</span>
+                  </button>
+                ))}
+              </div>
             </div>
 
             <p className="text-sm text-muted-foreground animate-fade-in">
@@ -615,7 +1081,7 @@ const Index = () => {
             {/* Top Unified Header */}
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
               <div>
-                <h1 
+                <h1
                   className="text-3xl font-bold tracking-tight bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent cursor-pointer hover:opacity-80 transition-opacity"
                   onClick={handleReset}
                 >
@@ -642,9 +1108,9 @@ const Index = () => {
                 </Link>
                 <div className="w-px h-4 bg-border mx-1" />
                 {results.length > 0 && (
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
+                  <Button
+                    variant="outline"
+                    size="sm"
                     className="gap-2 h-8 rounded-full border-primary/20 hover:bg-primary/10"
                     onClick={exportGlobalPDF}
                     disabled={isExportingPDF}
@@ -715,72 +1181,72 @@ const Index = () => {
                   <div id={`pdf-export-${data.query}`} className="space-y-6">
                     <QuickActions
                       data={data}
-                    onRefresh={() => handleSearch()}
-                    isLoading={isAnalyzing}
-                    onCopyLinks={() => copyVendorLinks(data.query)}
-                  />
-
-                  <ThreatSummary
-                    query={data.query}
-                    overallScore={data.overallScore}
-                    threatLevel={data.threatLevel}
-                    totalVendors={data.totalVendors}
-                    detections={data.detections}
-                    vendorData={data.vendorData}
-                  />
-
-                  <ThreatCharts
-                    vendorData={data.vendorData}
-                    detections={data.detections}
-                    totalVendors={data.totalVendors}
-                  />
-
-                  <div className="flex items-center justify-between mb-4 animate-fade-in">
-                    <h2 className="text-2xl font-bold">{t('vendorResults')}</h2>
-                    <ViewToggle view={view} onViewChange={setView} />
-                  </div>
-
-                  {view === "table" ? (
-                    <VendorDataTable
-                      vendorData={data.vendorData.filter(v => v.name !== "IP Geolocation")}
-                      getVendorLink={getVendorLink}
+                      onRefresh={() => handleSearch()}
+                      isLoading={isAnalyzing}
+                      onCopyLinks={() => copyVendorLinks(data.query)}
                     />
-                  ) : (
-                    <div className="columns-1 md:columns-2 lg:columns-3 gap-4 space-y-4">
-                      {data.vendorData
-                        .filter(v => v.name !== "IP Geolocation")
-                        .sort((a, b) => {
-                          // Define vendor importance tiers
-                          const tier1 = ["VirusTotal", "AbuseIPDB"];
-                          const tier2 = ["Shodan", "AlienVault OTX", "Criminal IP"];
-                          const tier3 = ["Pulsedive", "URLhaus", "PhishTank"];
 
-                          const getTier = (name: string) => {
-                            if (tier1.includes(name)) return 1;
-                            if (tier2.includes(name)) return 2;
-                            if (tier3.includes(name)) return 3;
-                            return 4; // Others
-                          };
+                    <ThreatSummary
+                      query={data.query}
+                      overallScore={data.overallScore}
+                      threatLevel={data.threatLevel}
+                      totalVendors={data.totalVendors}
+                      detections={data.detections}
+                      vendorData={data.vendorData}
+                    />
 
-                          const tierA = getTier(a.name);
-                          const tierB = getTier(b.name);
+                    <ThreatCharts
+                      vendorData={data.vendorData}
+                      detections={data.detections}
+                      totalVendors={data.totalVendors}
+                    />
 
-                          // Sort by tier first, then alphabetically within tier
-                          if (tierA !== tierB) return tierA - tierB;
-                          return a.name.localeCompare(b.name);
-                        })
-                        .map((vendor) => (
-                          <VendorCard
-                            key={vendor.name}
-                            title={vendor.name}
-                            icon={getVendorIcon(vendor.name)}
-                            externalLink={vendor.link}
-                          >
-                            <VendorContent vendor={vendor} onPivot={onPivot} />
-                          </VendorCard>
-                        ))}
+                    <div className="flex items-center justify-between mb-4 animate-fade-in">
+                      <h2 className="text-2xl font-bold">{t('vendorResults')}</h2>
+                      <ViewToggle view={view} onViewChange={setView} />
                     </div>
-                  )}
+
+                    {view === "table" ? (
+                      <VendorDataTable
+                        vendorData={data.vendorData.filter(v => v.name !== "IP Geolocation")}
+                        getVendorLink={getVendorLink}
+                      />
+                    ) : (
+                      <div className="columns-1 md:columns-2 lg:columns-3 gap-4 space-y-4">
+                        {data.vendorData
+                          .filter(v => v.name !== "IP Geolocation")
+                          .sort((a, b) => {
+                            // Define vendor importance tiers
+                            const tier1 = ["VirusTotal", "AbuseIPDB"];
+                            const tier2 = ["Shodan", "AlienVault OTX", "Criminal IP"];
+                            const tier3 = ["Pulsedive", "URLhaus", "PhishTank"];
+
+                            const getTier = (name: string) => {
+                              if (tier1.includes(name)) return 1;
+                              if (tier2.includes(name)) return 2;
+                              if (tier3.includes(name)) return 3;
+                              return 4; // Others
+                            };
+
+                            const tierA = getTier(a.name);
+                            const tierB = getTier(b.name);
+
+                            // Sort by tier first, then alphabetically within tier
+                            if (tierA !== tierB) return tierA - tierB;
+                            return a.name.localeCompare(b.name);
+                          })
+                          .map((vendor) => (
+                            <VendorCard
+                              key={vendor.name}
+                              title={vendor.name}
+                              icon={getVendorIcon(vendor.name)}
+                              externalLink={vendor.link}
+                            >
+                              <VendorContent vendor={vendor} onPivot={onPivot} />
+                            </VendorCard>
+                          ))}
+                      </div>
+                    )}
                   </div>
                 </TabsContent>
               ))}
