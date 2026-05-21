@@ -97,9 +97,12 @@ export function VendorFilter({ selectedVendors, onVendorsChange }: VendorFilterP
     return (
         <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
-                <Button variant="outline" size="sm">
-                    <Filter className="mr-2 h-4 w-4" />
-                    Filter Vendors ({selectedVendors.length}/{VENDOR_LIST.length})
+                <Button variant="outline" size="sm" className="h-8 rounded-full border border-primary/20 hover:bg-primary/10 shadow-sm transition-colors px-3">
+                    <Filter className="h-4 w-4 sm:mr-2" />
+                    <span className="hidden sm:inline">Filter Vendors </span>
+                    <span className="text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-full ml-1 sm:ml-0 font-bold border border-primary/15 font-mono">
+                        {selectedVendors.length}
+                    </span>
                 </Button>
             </DialogTrigger>
             <DialogContent className="max-w-2xl">

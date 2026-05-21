@@ -254,6 +254,7 @@ const formatVendorData = (vendorName: string, data: any, query: string): any => 
                     "Proxy/VPN": data.proxy ? "Yes ⚠️" : "No",
                     "Hosting": data.hosting ? "Yes" : "No",
                     "Mobile": data.mobile ? "Yes" : "No",
+                    "Reverse Hostname": data.reverseHostname || "Unknown"
                 };
             }
             return { "Status": data.message || "No geolocation data available" };

@@ -38,7 +38,7 @@ export function HistorySidebar({ history, onSelect, onClear }: HistorySidebarPro
     return (
         <Sheet>
             <SheetTrigger asChild>
-                <Button variant="outline" size="icon" title="History">
+                <Button variant="outline" className="h-8 w-8 rounded-full border border-primary/20 hover:bg-primary/10 px-0 shadow-sm transition-colors" title="History">
                     <Clock className="h-4 w-4" />
                 </Button>
             </SheetTrigger>

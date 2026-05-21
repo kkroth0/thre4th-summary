@@ -74,7 +74,7 @@ export const ThreatSummary = ({ query, overallScore, threatLevel, totalVendors, 
 
   return (
     <Card className="border border-primary/15 bg-card/45 backdrop-blur-md shadow-md shadow-primary/5">
-      <CardHeader className="pb-4">
+      <CardHeader className="py-2.5 px-5 border-b border-primary/5">
         <CardTitle className="flex items-center justify-between text-xs font-bold tracking-wider uppercase text-muted-foreground/80">
           <span>{t('threatSummary')}</span>
           <div className="flex items-center gap-1.5">
@@ -90,10 +90,10 @@ export const ThreatSummary = ({ query, overallScore, threatLevel, totalVendors, 
           </div>
         </CardTitle>
       </CardHeader>
-      <CardContent className="pt-2">
+      <CardContent className="py-3 px-5">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 items-center">
           {/* Target Query Block */}
-          <div className="space-y-1.5">
+          <div className="space-y-1">
             <p className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">{t('query')}</p>
             <div className="flex items-center gap-2 group">
               <span className="font-mono font-semibold text-base bg-muted/40 px-2.5 py-1 rounded-lg border border-border/60 select-all truncate max-w-[200px]" title={query}>
@@ -113,9 +113,21 @@ export const ThreatSummary = ({ query, overallScore, threatLevel, totalVendors, 
               </Button>
             </div>
             {(() => {
+              const geoData = vendorData.find(v => v.name === "IP Geolocation")?.data;
+              const reverseHostname = geoData?.["Reverse Hostname"];
               const abuseData = vendorData.find(v => v.name === "AbuseIPDB")?.data;
-              const hostnames = abuseData?.["Hostnames"];
-              const hostname = hostnames && hostnames !== "None" ? hostnames.split(",")[0] : null;
+              const abuseHostnames = abuseData?.["Hostnames"];
+              const shodanData = vendorData.find(v => v.name === "Shodan")?.data;
+              const shodanHostnames = shodanData?.["Hostnames"];
+
+              let hostname = null;
+              if (reverseHostname && reverseHostname !== "Unknown" && reverseHostname !== "None") {
+                hostname = reverseHostname;
+              } else if (abuseHostnames && abuseHostnames !== "None" && abuseHostnames !== "Unknown") {
+                hostname = abuseHostnames.split(",")[0].trim();
+              } else if (shodanHostnames && shodanHostnames !== "None" && shodanHostnames !== "Unknown") {
+                hostname = shodanHostnames.split(",")[0].trim();
+              }
 
               if (hostname) {
                 return (
@@ -129,8 +141,8 @@ export const ThreatSummary = ({ query, overallScore, threatLevel, totalVendors, 
           </div>
 
           {/* SVG Circular Risk Gauge Block */}
-          <div className="flex items-center gap-4">
-            <div className="relative h-20 w-20 flex items-center justify-center shrink-0">
+          <div className="flex items-center gap-3">
+            <div className="relative h-16 w-16 flex items-center justify-center shrink-0">
               <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
                 {/* Background Ring */}
                 <circle
@@ -184,8 +196,8 @@ export const ThreatSummary = ({ query, overallScore, threatLevel, totalVendors, 
                 </defs>
               </svg>
               <div className="absolute flex flex-col items-center justify-center">
-                <span className="text-2xl font-extrabold tracking-tight">{overallScore}</span>
-                <span className="text-[9px] text-muted-foreground uppercase font-semibold">Score</span>
+                <span className="text-xl font-extrabold tracking-tight">{overallScore}</span>
+                <span className="text-[8px] text-muted-foreground uppercase font-semibold">Score</span>
               </div>
             </div>
             <div>

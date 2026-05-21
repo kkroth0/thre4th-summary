@@ -34,20 +34,19 @@ export function Header({ actions, logoAddon, onLogoClick, showBackButton = false
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-primary/10 bg-background/60 backdrop-blur-md supports-[backdrop-filter]:bg-background/40">
-      <div className="container max-w-7xl mx-auto flex h-16 items-center justify-between px-4">
-        {/* Brand Logo & Back Button */}
-        <div className="flex items-center gap-2">
-          {showBackButton && pathname !== "/" && (
-            <Link to="/">
-              <Button variant="ghost" size="sm" className="gap-1.5 h-8 px-2.5 rounded-full hover:bg-muted font-medium">
-                <ArrowLeft className="h-4 w-4" />
-                <span className="hidden sm:inline">{t('back') || "Back"}</span>
-              </Button>
-            </Link>
-          )}
-          {showBackButton && pathname !== "/" && (
-            <div className="h-4 w-px bg-border/60 mx-1" />
-          )}
+      <div className="container max-w-7xl mx-auto flex h-16 items-center justify-between px-4 relative">
+        {/* Back Button (Absolute positioned to prevent logo/nav shifting) */}
+        {showBackButton && pathname !== "/" && (
+          <Link to="/" className="absolute left-4 top-1/2 -translate-y-1/2 z-20">
+            <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full hover:bg-muted">
+              <ArrowLeft className="h-4 w-4" />
+              <span className="sr-only">{t('back') || "Back"}</span>
+            </Button>
+          </Link>
+        )}
+
+        {/* Brand Logo Container (Fixed position with pl-12 to reserve space for Back Button) */}
+        <div className="flex items-center pl-12">
           <Link
             to="/"
             onClick={handleLogoClick}
@@ -61,8 +60,8 @@ export function Header({ actions, logoAddon, onLogoClick, showBackButton = false
           {logoAddon}
         </div>
 
-        {/* Center Navigation Links (Desktop) */}
-        <div className="hidden md:flex items-center justify-center flex-1 max-w-md mx-auto">
+        {/* Center Navigation Links (Desktop - Absolutely centered to prevent shifting) */}
+        <div className="hidden lg:flex items-center justify-center absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-10">
           <nav className="flex items-center gap-1 bg-muted/40 p-1 rounded-full border border-border/40">
             {navItems.map((item) => {
               const isActive = item.isHome ? pathname === "/" : pathname === item.path;
@@ -91,7 +90,7 @@ export function Header({ actions, logoAddon, onLogoClick, showBackButton = false
         {/* Right Side Actions Container */}
         <div className="flex items-center gap-2">
           {/* Mobile Quick Navigation Icons (only on smaller screens) */}
-          <div className="flex md:hidden items-center gap-0.5 mr-1 bg-muted/30 p-0.5 rounded-full border border-border/30">
+          <div className="flex lg:hidden items-center gap-0.5 mr-1 bg-muted/30 p-0.5 rounded-full border border-border/30">
             {navItems.map((item) => {
               const isActive = item.isHome ? pathname === "/" : pathname === item.path;
               const Icon = item.icon;

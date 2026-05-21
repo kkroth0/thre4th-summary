@@ -1,7 +1,7 @@
 import { Card } from "@/components/ui/card";
 import { VendorData } from "@/types/threat-intelligence";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { Shield, Globe, Server, MapPin, Radio, Key, ShieldAlert } from "lucide-react";
+import { Shield, Globe, Server, MapPin, Radio, Key, ShieldAlert, Clock } from "lucide-react";
 
 interface ThreatChartsProps {
   vendorData: VendorData[];
@@ -35,6 +35,44 @@ export const ThreatCharts = ({ vendorData, detections, totalVendors }: ThreatCha
     if (otx && !otx.error && otx["Pulse Count"] && parseInt(otx["Pulse Count"]) > 0) {
       indicators.push({ type: "Threat Intelligence Pulses", value: `${otx["Pulse Count"]} pulses active`, source: "AlienVault OTX" });
     }
+
+    // VPN/Proxy and Hosting status from IP Geolocation
+    const geo = vendorData.find(v => v.name === "IP Geolocation")?.data;
+    if (geo && !geo.error) {
+      if (geo["Proxy/VPN"] === "Yes ⚠️" || geo["Proxy/VPN"] === "Yes") {
+        indicators.push({ type: "VPN / Proxy Alert", value: "Active VPN/Proxy Detected", source: "IP Geolocation" });
+      }
+      if (geo["Hosting"] === "Yes") {
+        indicators.push({ type: "Hosting Status", value: "Hosted on Datacenter / Cloud", source: "IP Geolocation" });
+      }
+    }
+
+    // WHOIS Insights
+    const whois = vendorData.find(v => v.name === "WHOIS")?.data;
+    if (whois && !whois.error) {
+      if (whois["Registrar"] && whois["Registrar"] !== "Unknown") {
+        indicators.push({ type: "Domain Registrar", value: whois["Registrar"], source: "WHOIS" });
+      }
+      if (whois["Created"] && whois["Created"] !== "Unknown") {
+        try {
+          const createdDate = new Date(whois["Created"]).toLocaleDateString();
+          indicators.push({ type: "Domain Created Date", value: createdDate, source: "WHOIS" });
+        } catch {
+          indicators.push({ type: "Domain Created Date", value: whois["Created"], source: "WHOIS" });
+        }
+      }
+    }
+
+    // Shodan Insights
+    const shodan = vendorData.find(v => v.name === "Shodan")?.data;
+    if (shodan && !shodan.error) {
+      if (shodan["Vulnerabilities"] && shodan["Vulnerabilities"] !== "0 CVEs") {
+        indicators.push({ type: "Vulnerabilities Found", value: shodan["Vulnerabilities"], source: "Shodan" });
+      }
+      if (shodan["Services"] && shodan["Services"] !== "Unknown" && shodan["Services"] !== "") {
+        indicators.push({ type: "Detected Services", value: shodan["Services"], source: "Shodan" });
+      }
+    }
     
     // Fallback Prominent Open Ports
     const ports = new Set<string>();
@@ -61,11 +99,16 @@ export const ThreatCharts = ({ vendorData, detections, totalVendors }: ThreatCha
       if (ipGeo["ISP"] && ipGeo["ISP"] !== "Unknown") data["ISP"] = ipGeo["ISP"];
       if (ipGeo["Organization"] && ipGeo["Organization"] !== "Unknown") data["Organization"] = ipGeo["Organization"];
       if (ipGeo["Country"] && ipGeo["Country"] !== "Unknown") data["Country"] = ipGeo["Country"];
+      if (ipGeo["Region"] && ipGeo["Region"] !== "Unknown") data["Region"] = ipGeo["Region"];
+      if (ipGeo["City"] && ipGeo["City"] !== "Unknown") data["City"] = ipGeo["City"];
+      if (ipGeo["Timezone"] && ipGeo["Timezone"] !== "Unknown") data["Timezone"] = ipGeo["Timezone"];
+      if (ipGeo["AS"] && ipGeo["AS"] !== "Unknown") data["ASN/AS"] = ipGeo["AS"];
       if (ipGeo["Proxy/VPN"] && ipGeo["Proxy/VPN"] !== "No") data["Proxy/VPN"] = ipGeo["Proxy/VPN"];
+      if (ipGeo["Hosting"] && ipGeo["Hosting"] !== "No") data["Hosting"] = ipGeo["Hosting"];
     }
 
     if (vt && !vt.error) {
-      if (!data["ASN"] && vt["ASN"] && vt["ASN"] !== "Unknown") data["ASN"] = vt["ASN"];
+      if (!data["ASN/AS"] && vt["ASN"] && vt["ASN"] !== "Unknown") data["ASN/AS"] = vt["ASN"];
       if (!data["Network"] && vt["Network"] && vt["Network"] !== "Unknown") data["Network"] = vt["Network"];
     }
 
@@ -175,11 +218,14 @@ export const ThreatCharts = ({ vendorData, detections, totalVendors }: ThreatCha
           {hasNetworkData ? (
             <div className="divide-y divide-border/40 w-full">
               {Object.entries(networkData).map(([key, value]) => {
-                const Icon = key === "Country" ? MapPin :
-                              key === "ISP" ? Radio :
-                              key === "Organization" ? Globe :
-                              key === "ASN" ? Key :
-                              key === "Network" ? Server : ShieldAlert;
+                let Icon = Globe;
+                if (key === "Country" || key === "Region" || key === "City") Icon = MapPin;
+                else if (key === "ISP") Icon = Radio;
+                else if (key === "Organization") Icon = Globe;
+                else if (key === "ASN/AS" || key === "ASN") Icon = Key;
+                else if (key === "Network" || key === "Hosting") Icon = Server;
+                else if (key === "Timezone") Icon = Clock;
+                else if (key === "Proxy/VPN") Icon = ShieldAlert;
                 return (
                   <div key={key} className="flex items-center justify-between py-2.5 first:pt-0 last:pb-0">
                     <div className="flex items-center gap-2">

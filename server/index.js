@@ -407,7 +407,21 @@ app.post('/api/ipgeo', async (req, res) => {
 
     try {
         const response = await axios.get(`http://ip-api.com/json/${query}?fields=status,country,countryCode,regionName,city,isp,org,as,proxy,hosting`);
-        res.json(response.data);
+        
+        let reverseHostname = "Unknown";
+        try {
+            const hostnames = await dns.promises.reverse(query);
+            if (hostnames && hostnames.length > 0) {
+                reverseHostname = hostnames[0];
+            }
+        } catch (dnsErr) {
+            console.log(`Reverse DNS lookup failed for ${query}:`, dnsErr.message);
+        }
+
+        res.json({
+            ...response.data,
+            reverseHostname
+        });
     } catch (error) {
         res.status(error.response?.status || 500).json({ error: error.message });
     }

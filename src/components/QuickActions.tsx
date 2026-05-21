@@ -1,25 +1,17 @@
 import { Button } from "@/components/ui/button";
-import { RefreshCw, Copy, Download, Share2, FileText, Zap, FileJson } from "lucide-react";
+import { RefreshCw, Copy, Link2 } from "lucide-react";
 import { ThreatIntelligenceResult } from "@/types/threat-intelligence";
 import { useToast } from "@/hooks/use-toast";
 import { useLanguage } from "@/contexts/LanguageContext";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 
 interface QuickActionsProps {
   data: ThreatIntelligenceResult;
   onRefresh: () => void;
   isLoading: boolean;
   onCopyLinks: () => void;
-  onExportFullReport?: () => void;
-  isExportingPDF?: boolean;
 }
 
-export const QuickActions = ({ data, onRefresh, isLoading, onCopyLinks, onExportFullReport, isExportingPDF }: QuickActionsProps) => {
+export const QuickActions = ({ data, onRefresh, isLoading, onCopyLinks }: QuickActionsProps) => {
   const { toast } = useToast();
   const { t } = useLanguage();
 
@@ -27,29 +19,96 @@ export const QuickActions = ({ data, onRefresh, isLoading, onCopyLinks, onExport
     const vtData = data.vendorData.find(v => v.name === "VirusTotal")?.data;
     const abuseData = data.vendorData.find(v => v.name === "AbuseIPDB")?.data;
     const geoData = data.vendorData.find(v => v.name === "IP Geolocation")?.data;
+    const shodanData = data.vendorData.find(v => v.name === "Shodan")?.data;
+    const whoisData = data.vendorData.find(v => v.name === "WHOIS")?.data;
 
-    const hostname = abuseData?.["Hostnames"] && abuseData["Hostnames"] !== "None" ? abuseData["Hostnames"].split(",")[0] : "—";
+    // Resolve Hostname
+    const reverseHostname = geoData?.["Reverse Hostname"];
+    const abuseHostnames = abuseData?.["Hostnames"];
+    const shodanHostnames = shodanData?.["Hostnames"];
+    let resolvedHostname = "—";
+    if (reverseHostname && reverseHostname !== "Unknown" && reverseHostname !== "None") {
+      resolvedHostname = reverseHostname;
+    } else if (abuseHostnames && abuseHostnames !== "None" && abuseHostnames !== "Unknown") {
+      resolvedHostname = abuseHostnames.split(",")[0].trim();
+    } else if (shodanHostnames && shodanHostnames !== "None" && shodanHostnames !== "Unknown") {
+      resolvedHostname = shodanHostnames.split(",")[0].trim();
+    }
+
+    // Network / Geo
     const country = geoData?.["Country"] || abuseData?.["Country"] || "—";
     const isp = geoData?.["ISP"] || abuseData?.["ISP"] || "—";
+    const asn = geoData?.["AS"] || vtData?.["ASN"] || "—";
+    const proxyVpn = geoData?.["Proxy/VPN"] || "No";
+    const hosting = geoData?.["Hosting"] || "No";
 
-    const vtScore = vtData?.["Detection Rate"] ? vtData["Detection Rate"] : "—";
+    // Key Indicators
+    const indicators: string[] = [];
+    if (whoisData && !whoisData.error) {
+      if (whoisData["Registrar"] && whoisData["Registrar"] !== "Unknown") {
+        indicators.push(`- Domain Registrar: ${whoisData["Registrar"]} (WHOIS)`);
+      }
+      if (whoisData["Created"] && whoisData["Created"] !== "Unknown") {
+        indicators.push(`- Domain Created Date: ${whoisData["Created"]} (WHOIS)`);
+      }
+    }
+    if (shodanData && !shodanData.error) {
+      if (shodanData["Vulnerabilities"] && shodanData["Vulnerabilities"] !== "0 CVEs") {
+        indicators.push(`- Vulnerabilities Found: ${shodanData["Vulnerabilities"]} (Shodan)`);
+      }
+      if (shodanData["Services"] && shodanData["Services"] !== "Unknown" && shodanData["Services"] !== "") {
+        indicators.push(`- Detected Services: ${shodanData["Services"]} (Shodan)`);
+      }
+    }
+    // Ports
+    const ports = new Set<string>();
+    data.vendorData.forEach(vendor => {
+      if (vendor.data && vendor.data["Open Ports"] && vendor.data["Open Ports"] !== "None") {
+        vendor.data["Open Ports"].split(", ").forEach((p: string) => ports.add(p));
+      }
+    });
+    if (ports.size > 0) {
+      indicators.push(`- Open Ports Found: ${Array.from(ports).slice(0, 5).join(", ")} (Multiple)`);
+    }
+
+    // Vendor Intelligence
+    const vtScore = vtData?.["Detection Rate"] ? `${vtData["Detection Rate"]} (${vtData["Status"] || "Unknown"})` : "—";
     const abuseConf = abuseData?.["Abuse Confidence Score"] !== undefined ? `${abuseData["Abuse Confidence Score"]}% (Reports: ${abuseData["Total Reports"] || 0})` : "—";
 
-    return `🛡️ ThreatSumm4ry Intelligence Report
-================================
+    let report = `THREATSUMM4RY INTEL REPORT
+========================================
 Target: ${data.query}
-Hostname: ${hostname}
+Hostname: ${resolvedHostname}
 Threat Level: ${data.threatLevel.toUpperCase()}
-Score: ${data.overallScore}/100
-Detections: ${data.detections}/${data.totalVendors}
+Overall Risk Score: ${data.overallScore}/100
+Detections: ${data.detections}/${data.totalVendors} vendors
 
-📍 Geographic & Network
+GEOGRAPHIC & NETWORK INFO
+----------------------------------------
 Country: ${country}
 ISP: ${isp}
+AS/ASN: ${asn}
+Proxy/VPN: ${proxyVpn}
+Hosting: ${hosting}
 
-🔍 Key Vendor Intelligence
-VirusTotal: ${vtScore}
-AbuseIPDB: ${abuseConf}`;
+`;
+
+    if (indicators.length > 0) {
+      report += `KEY INDICATORS
+----------------------------------------
+${indicators.join("\n")}
+
+`;
+    }
+
+    report += `VENDOR INTELLIGENCE
+----------------------------------------
+- VirusTotal: ${vtScore}
+- AbuseIPDB: ${abuseConf}
+========================================
+Report generated on ${new Date().toLocaleString()} (Local Time)`;
+
+    return report;
   };
 
   const handleCopy = () => {
@@ -58,28 +117,6 @@ AbuseIPDB: ${abuseConf}`;
     toast({
       title: t('copied'),
       description: t('summaryCopied'),
-    });
-  };
-
-  const handleExportPDF = () => {
-    if (onExportFullReport) {
-        onExportFullReport();
-    }
-  };
-
-  const handleExportJSON = () => {
-    const jsonString = JSON.stringify(data, null, 2);
-    const blob = new Blob([jsonString], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `threat-report-${data.query}.json`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    toast({
-      title: t('exportSuccess'),
-      description: t('jsonDownloaded'),
     });
   };
 
@@ -94,28 +131,9 @@ AbuseIPDB: ${abuseConf}`;
         {t('copySummary')}
       </Button>
       <Button variant="outline" size="sm" onClick={onCopyLinks}>
-        <Share2 className="mr-2 h-4 w-4" />
+        <Link2 className="mr-2 h-4 w-4" />
         {t('copyLinks')}
       </Button>
-
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button variant="outline" size="sm" className="gap-2">
-            <Download className="h-4 w-4" />
-            {t('export')}
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          <DropdownMenuItem onClick={handleExportPDF} disabled={isExportingPDF}>
-            <FileText className="mr-2 h-4 w-4" />
-            {isExportingPDF ? "Building Report..." : t('downloadPdf')}
-          </DropdownMenuItem>
-          <DropdownMenuItem onClick={handleExportJSON}>
-            <FileJson className="mr-2 h-4 w-4" />
-            {t('downloadJson')}
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
     </div>
   );
 };

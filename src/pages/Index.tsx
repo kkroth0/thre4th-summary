@@ -33,9 +33,19 @@ interface SearchFormProps {
   onSubmit: (e: React.FormEvent) => void;
   isLoading: boolean;
   className?: string;
+  selectedVendors: string[];
+  onVendorsChange: (vendors: string[]) => void;
 }
 
-const SearchForm = ({ query, setQuery, onSubmit, isLoading, className = "" }: SearchFormProps) => {
+const SearchForm = ({
+  query,
+  setQuery,
+  onSubmit,
+  isLoading,
+  className = "",
+  selectedVendors,
+  onVendorsChange,
+}: SearchFormProps) => {
   const { t } = useLanguage();
   const [activeTab, setActiveTab] = useState<string>("quick");
 
@@ -58,22 +68,30 @@ const SearchForm = ({ query, setQuery, onSubmit, isLoading, className = "" }: Se
           </TabsList>
 
           <TabsContent value="quick" className="focus-visible:outline-none focus-visible:ring-0 mt-2">
-            <div className="relative flex items-center bg-card/45 backdrop-blur-lg rounded-full border border-primary/25 hover:border-primary/50 focus-within:border-primary focus-within:ring-4 focus-within:ring-primary/10 transition-all duration-500 shadow-lg shadow-primary/5 p-1.5 pl-5">
-              <Search className="h-5 w-5 text-muted-foreground mr-3 shrink-0" />
-              <Input
-                type="text"
-                placeholder="Enter IP, Domain, Hash, or CVE (e.g. 51.210.208.8, CVE-2024-3094)..."
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                className="bg-transparent border-0 h-10 focus-visible:ring-0 focus-visible:ring-offset-0 text-base placeholder:text-muted-foreground/60 w-full pl-0"
-              />
-              <Button
-                type="submit"
-                disabled={isLoading || !query.trim()}
-                className="shadow-md hover:shadow-lg transition-all px-8 h-10 rounded-full font-semibold tracking-wide bg-gradient-to-r from-primary to-primary/80 shrink-0"
-              >
-                {isLoading ? t('analyzing') : <><Search className="mr-2 h-4 w-4" /> {t('analyze')}</>}
-              </Button>
+            <div className="space-y-3">
+              <div className="relative flex items-center bg-card/45 backdrop-blur-lg rounded-full border border-primary/25 hover:border-primary/50 focus-within:border-primary focus-within:ring-4 focus-within:ring-primary/10 transition-all duration-500 shadow-lg shadow-primary/5 p-1.5 pl-5">
+                <Search className="h-5 w-5 text-muted-foreground mr-3 shrink-0" />
+                <Input
+                  type="text"
+                  placeholder="Enter IP, Domain, Hash, or CVE (e.g. 51.210.208.8, CVE-2024-3094)..."
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  className="bg-transparent border-0 h-10 focus-visible:ring-0 focus-visible:ring-offset-0 text-base placeholder:text-muted-foreground/60 w-full pl-0"
+                />
+                <Button
+                  type="submit"
+                  disabled={isLoading || !query.trim()}
+                  className="shadow-md hover:shadow-lg transition-all px-8 h-10 rounded-full font-semibold tracking-wide bg-gradient-to-r from-primary to-primary/80 shrink-0"
+                >
+                  {isLoading ? t('analyzing') : <><Search className="mr-2 h-4 w-4" /> {t('analyze')}</>}
+                </Button>
+              </div>
+              <div className="flex justify-end px-2">
+                <VendorFilter
+                  selectedVendors={selectedVendors}
+                  onVendorsChange={onVendorsChange}
+                />
+              </div>
             </div>
           </TabsContent>
 
@@ -116,14 +134,20 @@ const SearchForm = ({ query, setQuery, onSubmit, isLoading, className = "" }: Se
                     : "Awaiting valid IOCs..."}
                 </div>
 
-                <Button
-                  type="submit"
-                  disabled={isLoading || extractedIps.length > 35 || (!query.trim())}
-                  size="lg"
-                  className="shadow-md hover:shadow-lg transition-all px-8 rounded-full font-semibold tracking-wide bg-gradient-to-r from-primary to-primary/80"
-                >
-                  {isLoading ? t('analyzing') : <><Search className="mr-2 h-4 w-4" /> {t('analyze')}</>}
-                </Button>
+                <div className="flex items-center gap-2">
+                  <VendorFilter
+                    selectedVendors={selectedVendors}
+                    onVendorsChange={onVendorsChange}
+                  />
+                  <Button
+                    type="submit"
+                    disabled={isLoading || extractedIps.length > 35 || (!query.trim())}
+                    size="lg"
+                    className="shadow-md hover:shadow-lg transition-all px-8 rounded-full font-semibold tracking-wide bg-gradient-to-r from-primary to-primary/80"
+                  >
+                    {isLoading ? t('analyzing') : <><Search className="mr-2 h-4 w-4" /> {t('analyze')}</>}
+                  </Button>
+                </div>
               </div>
             </div>
           </TabsContent>
@@ -1065,17 +1089,11 @@ const Index = () => {
         <Header
           onLogoClick={handleReset}
           actions={
-            <>
-              <VendorFilter
-                selectedVendors={selectedVendors}
-                onVendorsChange={setSelectedVendors}
-              />
-              <HistorySidebar
-                history={history}
-                onSelect={(q) => { setQuery(q); setTimeout(() => document.querySelector('form')?.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true })), 100); }}
-                onClear={() => { setHistory([]); localStorage.removeItem("searchHistory"); }}
-              />
-            </>
+            <HistorySidebar
+              history={history}
+              onSelect={(q) => { setQuery(q); setTimeout(() => document.querySelector('form')?.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true })), 100); }}
+              onClear={() => { setHistory([]); localStorage.removeItem("searchHistory"); }}
+            />
           }
         />
 
@@ -1099,6 +1117,8 @@ const Index = () => {
                 setQuery={setQuery}
                 onSubmit={handleSearch}
                 isLoading={isAnalyzing}
+                selectedVendors={selectedVendors}
+                onVendorsChange={setSelectedVendors}
               />
             </div>
 
@@ -1140,49 +1160,26 @@ const Index = () => {
     <div className="min-h-screen bg-background flex flex-col">
       <Header
         onLogoClick={handleReset}
-        logoAddon={
-          <span className="text-xs text-muted-foreground hidden sm:inline-block ml-1">
-            • {selectedVendors.length} {t('vendorsEnabled')}
-          </span>
-        }
         actions={
-          <>
-            {results.length > 0 && (
-              <Button
-                variant="outline"
-                size="sm"
-                className="gap-2 h-8 rounded-full border-primary/20 hover:bg-primary/10 shadow-sm"
-                onClick={exportGlobalPDF}
-                disabled={isExportingPDF}
-              >
-                <FileSearch className={`h-4 w-4 ${isExportingPDF ? "animate-pulse" : ""}`} />
-                <span className="hidden sm:inline">{isExportingPDF ? "Building Report..." : "Global PDF Report"}</span>
-              </Button>
-            )}
-            
-            <VendorFilter
-              selectedVendors={selectedVendors}
-              onVendorsChange={setSelectedVendors}
-            />
-            
-            <HistorySidebar
-              history={history}
-              onSelect={(q) => { setQuery(q); setTimeout(() => document.querySelector('form')?.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true })), 100); }}
-              onClear={() => { setHistory([]); localStorage.removeItem("searchHistory"); }}
-            />
-          </>
+          <HistorySidebar
+            history={history}
+            onSelect={(q) => { setQuery(q); setTimeout(() => document.querySelector('form')?.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true })), 100); }}
+            onClear={() => { setHistory([]); localStorage.removeItem("searchHistory"); }}
+          />
         }
       />
       <div className="flex-1 p-4 md:p-8">
         <div className="max-w-7xl mx-auto space-y-6">
           {/* In-page Re-search Bar */}
-          <div className="flex flex-col bg-card/40 backdrop-blur-md p-4 rounded-2xl border border-primary/15 shadow-lg shadow-primary/5 mb-8 animate-fade-in">
+          <div className="flex flex-col bg-card/40 backdrop-blur-md p-4 rounded-2xl shadow-lg shadow-primary/5 mb-8 animate-fade-in">
             <SearchForm
               query={query}
               setQuery={setQuery}
               onSubmit={handleSearch}
               isLoading={isAnalyzing}
               className="w-full"
+              selectedVendors={selectedVendors}
+              onVendorsChange={setSelectedVendors}
             />
           </div>
 
@@ -1194,17 +1191,31 @@ const Index = () => {
 
           {results.length > 0 && (
             <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-              <TabsList className="w-full justify-start overflow-x-auto h-auto p-1 flex-wrap">
-                <TabsTrigger value="overview" className="gap-2">
-                  <LayoutGrid className="h-4 w-4" /> Overview
-                </TabsTrigger>
-                {results.map((result, idx) => (
-                  <TabsTrigger key={idx} value={result.query} className="gap-2">
-                    {result.threatLevel === "malicious" && <AlertTriangle className="h-3 w-3 text-destructive" />}
-                    {result.query}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+                <TabsList className="w-full sm:w-auto justify-start overflow-x-auto h-auto p-1 flex-wrap">
+                  <TabsTrigger value="overview" className="gap-2">
+                    <LayoutGrid className="h-4 w-4" /> Overview
                   </TabsTrigger>
-                ))}
-              </TabsList>
+                  {results.map((result, idx) => (
+                    <TabsTrigger key={idx} value={result.query} className="gap-2">
+                      {result.threatLevel === "malicious" && <AlertTriangle className="h-3 w-3 text-destructive" />}
+                      {result.query}
+                    </TabsTrigger>
+                  ))}
+                </TabsList>
+
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-9 px-4 rounded-full border-primary/20 hover:bg-primary/10 shadow-sm flex items-center gap-2 self-start sm:self-auto"
+                  onClick={exportGlobalPDF}
+                  disabled={isExportingPDF}
+                  title={isExportingPDF ? "Building Report..." : "Global PDF Report"}
+                >
+                  <FileSearch className={`h-4 w-4 ${isExportingPDF ? "animate-pulse" : ""}`} />
+                  <span>{isExportingPDF ? "Building Report..." : "Global PDF Report"}</span>
+                </Button>
+              </div>
 
               <TabsContent value="overview" className="mt-6 animate-fade-in">
                 <div id="pdf-export-overview" className="space-y-6">

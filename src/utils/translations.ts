@@ -39,9 +39,9 @@ export const translations = {
         vendorResults: "Vendor Analysis Results",
         quickActions: "Quick Actions",
         refresh: "Refresh Data",
-        copyLinks: "Copy Vendor Links",
+        copyLinks: "Copy References",
         copySummary: "Copy Summary",
-        linksCopied: "Vendor links copied to clipboard",
+        linksCopied: "References copied to clipboard",
         copied: "Copied",
         summaryCopied: "Summary copied to clipboard",
         exportSuccess: "Export Successful",
@@ -182,8 +182,8 @@ export const translations = {
         vendorResults: "Resultados da Análise de Fontes",
         quickActions: "Ações Rápidas",
         refresh: "Atualizar Dados",
-        copyLinks: "Copiar Links das Fontes",
-        linksCopied: "Links das fontes de inteligência copiados",
+        copyLinks: "Copiar Referências",
+        linksCopied: "Referências copiadas para a área de transferência",
 
         // DNSBL Page
         dnsblTitle: "Verificador DNSBL",
