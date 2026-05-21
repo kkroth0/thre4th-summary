@@ -4,8 +4,9 @@ import { ThreatBadge } from "@/components/ThreatBadge";
 import { VendorData } from "@/types/threat-intelligence";
 import { ClickableArtifact } from "@/components/ClickableArtifact";
 import { Button } from "@/components/ui/button";
-import { Code } from "lucide-react";
+import { Code, Globe, Network, ExternalLink, ShieldAlert, ShieldCheck } from "lucide-react";
 import { useState } from "react";
+import { fetchAbuseIPDBCidrBlock } from "@/services/threatApi";
 
 interface VendorContentProps {
     vendor: VendorData;
@@ -15,6 +16,24 @@ interface VendorContentProps {
 export const VendorContent = ({ vendor, onPivot }: VendorContentProps) => {
     const { name, data, error, quota } = vendor;
     const [showRaw, setShowRaw] = useState(false);
+    const [cidrLoading, setCidrLoading] = useState(false);
+    const [cidrResults, setCidrResults] = useState<any>(null);
+    const [cidrError, setCidrError] = useState<string | null>(null);
+
+    const handleCheckCidr = async (cidr: string) => {
+        if (!cidr) return;
+        setCidrLoading(true);
+        setCidrError(null);
+        try {
+            const res = await fetchAbuseIPDBCidrBlock(cidr);
+            setCidrResults(res);
+        } catch (err: any) {
+            console.error(err);
+            setCidrError(err?.message || "Failed to scan CIDR block reputation");
+        } finally {
+            setCidrLoading(false);
+        }
+    };
 
     const renderValue = (value: string) => {
         if (!onPivot) return value;
@@ -118,6 +137,26 @@ export const VendorContent = ({ vendor, onPivot }: VendorContentProps) => {
                     <div><p className="text-muted-foreground">Usage Type</p><p className="font-medium">{data["Usage Type"]}</p></div>
                     <div className="col-span-2"><p className="text-muted-foreground">ISP</p><p className="font-medium truncate" title={data["ISP"]}>{data["ISP"]}</p></div>
                     <div className="col-span-2"><p className="text-muted-foreground">Domain</p><p className="font-medium">{renderValue(data["Domain"])}</p></div>
+                    {data["ASN"] && (
+                        <div>
+                            <p className="text-muted-foreground">ASN</p>
+                            <a
+                                href={`https://bgp.he.net/AS${data["ASN"]}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-primary hover:underline font-mono inline-flex items-center gap-1 font-semibold"
+                            >
+                                AS{data["ASN"]}
+                                <ExternalLink className="h-3 w-3" />
+                            </a>
+                        </div>
+                    )}
+                    {data["CIDR/Network"] && (
+                        <div>
+                            <p className="text-muted-foreground">CIDR/Network</p>
+                            <span className="font-mono font-semibold">{data["CIDR/Network"]}</span>
+                        </div>
+                    )}
                 </div>
                 {data["Hostnames"] !== "None" && (<div><p className="text-sm text-muted-foreground mb-1">Hostnames</p><p className="text-xs text-muted-foreground">{data["Hostnames"]}</p></div>)}
                 <div className="grid grid-cols-2 gap-2 text-xs">
@@ -125,6 +164,89 @@ export const VendorContent = ({ vendor, onPivot }: VendorContentProps) => {
                     <div><p className="text-muted-foreground">Is Whitelisted</p><Badge variant={data["Is Whitelisted"] === "Yes" ? "default" : "secondary"} className="text-xs">{data["Is Whitelisted"]}</Badge></div>
                 </div>
                 <div><p className="text-sm text-muted-foreground mb-1">Last Report</p><p className="font-mono text-xs">{data["Last Report"]}</p></div>
+
+                {data["CIDR/Network"] && (
+                    <div className="pt-3 border-t space-y-2">
+                        <div className="flex items-center justify-between">
+                            <span className="text-xs font-semibold text-muted-foreground uppercase flex items-center gap-1.5">
+                                <Network className="h-3.5 w-3.5 text-primary" />
+                                Subnet Reputation
+                            </span>
+                            {!cidrResults && (
+                                <Button
+                                    variant="outline"
+                                    size="xs"
+                                    onClick={() => handleCheckCidr(data["CIDR/Network"])}
+                                    disabled={cidrLoading}
+                                    className="h-7 text-[10px] px-2 rounded hover:bg-primary hover:text-primary-foreground transition-all"
+                                >
+                                    {cidrLoading ? "Scanning Subnet..." : "Scan CIDR Block"}
+                                </Button>
+                            )}
+                        </div>
+
+                        {cidrError && (
+                            <p className="text-xs text-destructive bg-destructive/5 p-2 rounded-md border border-destructive/20">
+                                {cidrError}
+                            </p>
+                        )}
+
+                        {cidrResults && (
+                            <div className="space-y-2.5 bg-muted/40 border border-border/50 rounded-xl p-3 text-xs">
+                                <div className="flex justify-between items-center text-[10px] text-muted-foreground uppercase font-medium">
+                                    <span>Subnet: {cidrResults.cidr}</span>
+                                    <span>Type: {cidrResults.addressSpaceDesc || "Public"}</span>
+                                </div>
+                                <div className="flex justify-between items-center bg-background/50 p-2 rounded-lg border border-border/30">
+                                    <span>Reported Hosts:</span>
+                                    <Badge variant={cidrResults.reportedAddress?.length > 0 ? "destructive" : "secondary"} className="font-mono">
+                                        {cidrResults.reportedAddress?.length || 0} / {cidrResults.numPossibleHosts || 0}
+                                    </Badge>
+                                </div>
+                                {cidrResults.reportedAddress && cidrResults.reportedAddress.length > 0 ? (
+                                    <div className="space-y-1.5 max-h-[160px] overflow-y-auto pr-1">
+                                        <p className="text-[10px] text-muted-foreground uppercase font-semibold">Reported IPs In Subnet</p>
+                                        {cidrResults.reportedAddress.map((rep: any, idx: number) => (
+                                            <div key={idx} className="flex justify-between items-center p-1.5 border border-border/40 rounded bg-background/30 hover:bg-background/60 transition-colors">
+                                                <span className="font-mono font-medium">{rep.ipAddress}</span>
+                                                <div className="flex items-center gap-1.5">
+                                                    <span className="text-[10px] text-muted-foreground">({rep.numReports} rep)</span>
+                                                    <Badge variant={rep.abuseConfidenceScore > 50 ? "destructive" : "default"} className="text-[10px] px-1 py-0 scale-90">
+                                                        {rep.abuseConfidenceScore}%
+                                                    </Badge>
+                                                    {onPivot && (
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            className="h-5 w-5 hover:bg-primary/10 rounded"
+                                                            onClick={() => onPivot(rep.ipAddress)}
+                                                            title={`Pivot search to ${rep.ipAddress}`}
+                                                        >
+                                                            <Globe className="h-3 w-3 text-primary" />
+                                                        </Button>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <div className="flex items-center gap-2 text-green-500 py-1 font-medium justify-center bg-green-500/5 rounded-lg border border-green-500/20">
+                                        <ShieldCheck className="h-4 w-4" />
+                                        <span>No reported abuse in this subnet block!</span>
+                                    </div>
+                                )}
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => setCidrResults(null)}
+                                    className="w-full text-[10px] h-6 text-muted-foreground hover:text-foreground"
+                                >
+                                    Clear Results
+                                </Button>
+                            </div>
+                        )}
+                    </div>
+                )}
                 {reports.length > 0 && (
                     <div className="pt-3 border-t">
                         <p className="text-sm font-medium mb-2">Recent Reports ({reports.length})</p>

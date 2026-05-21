@@ -1,17 +1,16 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { getFieldCategory } from "@/components/VendorDataTable";
-import { Shield, AlertTriangle, Bug, FileSearch, Globe, Link as LinkIcon, Radar, Database, Eye, Search, BookOpen, Layers, LayoutGrid, CheckCircle2 } from "lucide-react";
+import { Shield, AlertTriangle, Bug, FileSearch, Globe, Link as LinkIcon, Radar, Database, Eye, Search, BookOpen, Layers, LayoutGrid, CheckCircle2, Mail } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { ThreatSummary } from "@/components/ThreatSummary";
 import { VendorCard } from "@/components/VendorCard";
 import { VendorContent } from "@/components/VendorContent";
 import { VendorFilter } from "@/components/VendorFilter";
-import { ThemeToggle } from "@/components/ThemeToggle";
 import { Footer } from "@/components/Footer";
 import { HistorySidebar } from "@/components/HistorySidebar";
-import { LanguageToggle } from "@/components/LanguageToggle";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { Header } from "@/components/Header";
 
 import { ThreatCharts } from "@/components/ThreatCharts";
 import { VendorDataTable } from "@/components/VendorDataTable";
@@ -38,6 +37,7 @@ interface SearchFormProps {
 
 const SearchForm = ({ query, setQuery, onSubmit, isLoading, className = "" }: SearchFormProps) => {
   const { t } = useLanguage();
+  const [activeTab, setActiveTab] = useState<string>("quick");
 
   const ipv4Regex = /\b(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\b/g;
   const extractedIps = query ? Array.from(new Set(query.match(ipv4Regex) || [])) : [];
@@ -45,54 +45,89 @@ const SearchForm = ({ query, setQuery, onSubmit, isLoading, className = "" }: Se
   return (
     <div className={`w-full ${className}`}>
       <form onSubmit={onSubmit} className="w-full">
-        <div className="flex flex-col gap-3 relative">
-          <div className="relative group">
-            <Textarea
-              placeholder="Paste logs, IPs, domains, or hashes here (e.g. 8.8.8.8, malicious.com)..."
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              className="min-h-[140px] resize-y text-base p-4 bg-background/50 backdrop-blur-sm border-2 focus-visible:ring-primary/50 transition-all rounded-xl [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
-                  onSubmit(e as any);
-                }
-              }}
-            />
-            {extractedIps.length > 0 && (
-              <div className="absolute top-4 right-4 max-w-[50%] flex flex-wrap justify-end gap-1.5 opacity-80 pointer-events-none">
-                {extractedIps.slice(0, 3).map(ip => (
-                  <Badge key={ip} variant="secondary" className="font-mono text-[10px] px-1.5 py-0 shadow-sm border-primary/20 bg-primary/5 text-primary">
-                    {ip}
-                  </Badge>
-                ))}
-                {extractedIps.length > 3 && (
-                  <Badge variant="outline" className="font-mono text-[10px] px-1.5 py-0 bg-background/80 shadow-sm backdrop-blur">
-                    +{extractedIps.length - 3} more
-                  </Badge>
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full space-y-4">
+          <TabsList className="grid w-full grid-cols-2 max-w-[320px] mx-auto bg-muted/65 p-1 rounded-full border border-primary/10">
+            <TabsTrigger value="quick" className="rounded-full gap-2 text-xs font-semibold py-1.5 transition-all">
+              <Search className="h-3.5 w-3.5" />
+              <span>Quick Scan</span>
+            </TabsTrigger>
+            <TabsTrigger value="bulk" className="rounded-full gap-2 text-xs font-semibold py-1.5 transition-all">
+              <Layers className="h-3.5 w-3.5" />
+              <span>Bulk / Log Scan</span>
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="quick" className="focus-visible:outline-none focus-visible:ring-0 mt-2">
+            <div className="relative flex items-center bg-card/45 backdrop-blur-lg rounded-full border border-primary/25 hover:border-primary/50 focus-within:border-primary focus-within:ring-4 focus-within:ring-primary/10 transition-all duration-500 shadow-lg shadow-primary/5 p-1.5 pl-5">
+              <Search className="h-5 w-5 text-muted-foreground mr-3 shrink-0" />
+              <Input
+                type="text"
+                placeholder="Enter IP, Domain, Hash, or CVE (e.g. 51.210.208.8, CVE-2024-3094)..."
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                className="bg-transparent border-0 h-10 focus-visible:ring-0 focus-visible:ring-offset-0 text-base placeholder:text-muted-foreground/60 w-full pl-0"
+              />
+              <Button
+                type="submit"
+                disabled={isLoading || !query.trim()}
+                className="shadow-md hover:shadow-lg transition-all px-8 h-10 rounded-full font-semibold tracking-wide bg-gradient-to-r from-primary to-primary/80 shrink-0"
+              >
+                {isLoading ? t('analyzing') : <><Search className="mr-2 h-4 w-4" /> {t('analyze')}</>}
+              </Button>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="bulk" className="focus-visible:outline-none focus-visible:ring-0 mt-2">
+            <div className="flex flex-col gap-3 relative">
+              <div className="relative group">
+                <Textarea
+                  placeholder="Paste logs, multiple IPs, domains, or hashes (up to 35 items parsed automatically)..."
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  className="min-h-[120px] resize-y text-base p-4 bg-card/45 backdrop-blur-lg border border-primary/25 focus-visible:ring-primary/35 focus:border-primary transition-all duration-300 rounded-2xl [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden shadow-lg shadow-primary/5"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      onSubmit(e as any);
+                    }
+                  }}
+                />
+                {extractedIps.length > 0 && (
+                  <div className="absolute top-4 right-4 max-w-[50%] flex flex-wrap justify-end gap-1.5 opacity-80 pointer-events-none">
+                    {extractedIps.slice(0, 3).map(ip => (
+                      <Badge key={ip} variant="secondary" className="font-mono text-[10px] px-1.5 py-0 shadow-sm border-primary/20 bg-primary/5 text-primary">
+                        {ip}
+                      </Badge>
+                    ))}
+                    {extractedIps.length > 3 && (
+                      <Badge variant="outline" className="font-mono text-[10px] px-1.5 py-0 bg-background/80 shadow-sm backdrop-blur">
+                        +{extractedIps.length - 3} more
+                      </Badge>
+                    )}
+                  </div>
                 )}
               </div>
-            )}
-          </div>
 
-          <div className="flex items-center justify-between mt-1">
-            <div className="flex items-center gap-2 text-xs text-muted-foreground/80 font-medium">
-              <CheckCircle2 className={`h-4 w-4 ${extractedIps.length > 0 ? "text-green-500" : "text-muted-foreground/40"}`} />
-              {extractedIps.length > 0
-                ? `${extractedIps.length} target${extractedIps.length > 1 ? 's' : ''} parsed (max 35)`
-                : "Awaiting valid IOCs..."}
+              <div className="flex items-center justify-between mt-1">
+                <div className="flex items-center gap-2 text-xs text-muted-foreground/80 font-medium">
+                  <CheckCircle2 className={`h-4 w-4 ${extractedIps.length > 0 ? "text-green-500" : "text-muted-foreground/40"}`} />
+                  {extractedIps.length > 0
+                    ? `${extractedIps.length} target${extractedIps.length > 1 ? 's' : ''} parsed (max 35)`
+                    : "Awaiting valid IOCs..."}
+                </div>
+
+                <Button
+                  type="submit"
+                  disabled={isLoading || extractedIps.length > 35 || (!query.trim())}
+                  size="lg"
+                  className="shadow-md hover:shadow-lg transition-all px-8 rounded-full font-semibold tracking-wide bg-gradient-to-r from-primary to-primary/80"
+                >
+                  {isLoading ? t('analyzing') : <><Search className="mr-2 h-4 w-4" /> {t('analyze')}</>}
+                </Button>
+              </div>
             </div>
-
-            <Button
-              type="submit"
-              disabled={isLoading || extractedIps.length > 35 || (!query.trim())}
-              size="lg"
-              className="shadow-md hover:shadow-lg transition-all px-8 rounded-full font-semibold tracking-wide bg-gradient-to-r from-primary to-primary/80"
-            >
-              {isLoading ? t('analyzing') : <><Search className="mr-2 h-4 w-4" /> {t('analyze')}</>}
-            </Button>
-          </div>
-        </div>
+          </TabsContent>
+        </Tabs>
       </form>
     </div>
   );
@@ -129,6 +164,7 @@ const Index = () => {
   const { toast } = useToast();
   const { t } = useLanguage();
 
+
   // Load saved preferences and history
   useEffect(() => {
     const savedVendors = localStorage.getItem("selectedVendors");
@@ -151,6 +187,21 @@ const Index = () => {
       } catch (e) {
         console.error("Failed to parse history", e);
       }
+    }
+  }, []);
+
+  // Handle pivot search from CVE dashboard
+  useEffect(() => {
+    const pivotQuery = localStorage.getItem("pivotSearchQuery");
+    if (pivotQuery) {
+      setQuery(pivotQuery);
+      localStorage.removeItem("pivotSearchQuery");
+      setTimeout(() => {
+        const submitButton = document.querySelector('button[type="submit"]') as HTMLButtonElement;
+        if (submitButton) {
+          submitButton.click();
+        }
+      }, 300);
     }
   }, []);
 
@@ -198,9 +249,10 @@ const Index = () => {
     const domainRegex = /^([a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$/;
     const hashRegex = /^[a-fA-F0-9]{32}$|^[a-fA-F0-9]{40}$|^[a-fA-F0-9]{64}$/;
     const urlRegex = /^(http|https):\/\/[^ "]+$/;
+    const cveRegex = /^CVE-\d{4}-\d{4,7}$/i;
 
     const invalidQueries = queries.filter(q =>
-      !ipRegex.test(q) && !domainRegex.test(q) && !hashRegex.test(q) && !urlRegex.test(q)
+      !ipRegex.test(q) && !domainRegex.test(q) && !hashRegex.test(q) && !urlRegex.test(q) && !cveRegex.test(q)
     );
 
     if (invalidQueries.length > 0) {
@@ -326,6 +378,26 @@ const Index = () => {
       };
 
       // ── Reusable Drawing Utilities ──
+      const drawArc = (x: number, y: number, r: number, startAngleDeg: number, endAngleDeg: number, width: number, color: [number, number, number]) => {
+        doc.setDrawColor(...color);
+        doc.setLineWidth(width);
+        const steps = 35;
+        const startRad = startAngleDeg * (Math.PI / 180);
+        const endRad = endAngleDeg * (Math.PI / 180);
+        const angleStep = (endRad - startRad) / steps;
+        
+        for (let s = 0; s < steps; s++) {
+          const a1 = startRad + s * angleStep;
+          const a2 = startRad + (s + 1) * angleStep;
+          doc.line(
+            x + r * Math.cos(a1),
+            y - r * Math.sin(a1),
+            x + r * Math.cos(a2),
+            y - r * Math.sin(a2)
+          );
+        }
+      };
+
       const drawPageHeader = (title: string, subtitle?: string) => {
         doc.setFillColor(...COLORS.headerBg);
         doc.rect(0, 0, W, 32, 'F');
@@ -498,7 +570,7 @@ const Index = () => {
         startY: y,
         head: [['IOC Target', 'Hostname', 'Threat Level', 'Score', 'Detections', 'VT Rate', 'AbuseIPDB']],
         body: overviewRows,
-        margin: { left: M, right: M },
+        margin: { top: 36, bottom: 16, left: M, right: M },
         styles: {
           fontSize: 8,
           cellPadding: 3,
@@ -582,7 +654,7 @@ const Index = () => {
           ['VirusTotal', t('vtWeightDesc')],
           ['AbuseIPDB', t('abuseIpdbWeightDesc')],
         ],
-        margin: { left: M, right: M },
+        margin: { top: 36, bottom: 16, left: M, right: M },
         styles: { fontSize: 8, cellPadding: 4, textColor: [40, 40, 40], lineColor: [220, 220, 220], lineWidth: 0.2 },
         headStyles: { fillColor: COLORS.headerBg, textColor: COLORS.white, fontStyle: 'bold', fontSize: 8 },
         columnStyles: { 0: { fontStyle: 'bold', cellWidth: 35 } },
@@ -601,7 +673,7 @@ const Index = () => {
           ['SUSPICIOUS', '31 – 70', t('suspiciousDesc')],
           ['MALICIOUS', '71 – 100', t('maliciousDesc')],
         ],
-        margin: { left: M, right: M },
+        margin: { top: 36, bottom: 16, left: M, right: M },
         styles: { fontSize: 8, cellPadding: 4, textColor: [40, 40, 40], lineColor: [220, 220, 220], lineWidth: 0.2 },
         headStyles: { fillColor: COLORS.headerBg, textColor: COLORS.white, fontStyle: 'bold', fontSize: 8 },
         columnStyles: {
@@ -715,14 +787,11 @@ const Index = () => {
         const radius = 18;
 
         // 1. Background Arc (Semi-circle track)
-        doc.setDrawColor(235, 240, 245);
-        doc.setLineWidth(4);
-        (doc as any).ellipse(gX, gY, radius, radius, 'S', 180, 0);
+        drawArc(gX, gY, radius, 0, 180, 4, [235, 240, 245]);
 
         // 2. Colored Progress Arc
-        doc.setDrawColor(...statusColor);
-        const scoreAngle = (Math.min(res.overallScore, 100) / 100) * 180;
-        (doc as any).ellipse(gX, gY, radius, radius, 'S', 180, 180 - scoreAngle);
+        const scoreAngle = (Math.min(res.overallScore ?? 0, 100) / 100) * 180;
+        drawArc(gX, gY, radius, 180 - scoreAngle, 180, 4, statusColor);
 
         // 3. The Needle
         const needleRad = (180 - scoreAngle) * (Math.PI / 180);
@@ -794,7 +863,7 @@ const Index = () => {
             startY: y,
             head: [['Property', 'Value', 'Property', 'Value']],
             body: bodyRows,
-            margin: { left: M, right: M },
+            margin: { top: 36, bottom: 16, left: M, right: M },
             styles: {
               fontSize: 8,
               cellPadding: 3,
@@ -843,7 +912,7 @@ const Index = () => {
           startY: y,
           head: [['Vendor', 'Status', 'Intelligence Details', 'Link']],
           body: vendorRows,
-          margin: { left: M, right: M },
+          margin: { top: 36, bottom: 16, left: M, right: M },
           styles: { fontSize: 7, cellPadding: 4, textColor: [40, 40, 40], overflow: 'linebreak' },
           headStyles: { fillColor: [20, 20, 20], textColor: [255, 255, 255] },
           columnStyles: {
@@ -993,27 +1062,22 @@ const Index = () => {
   if (results.length === 0 && !isAnalyzing) {
     return (
       <div className="min-h-screen bg-background flex flex-col">
-        {/* Top Navigation / Action Bar */}
-        <div className="absolute top-4 right-4 md:top-6 md:right-8 flex items-center gap-3 animate-fade-in bg-background/80 backdrop-blur-md p-2 rounded-full border shadow-sm z-50">
-          <Link to="/vendors">
-            <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full hover:bg-muted font-medium" title="Vendor Directory">
-              <BookOpen className="h-4 w-4" />
-            </Button>
-          </Link>
-          <Link to="/dnsbl">
-            <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full hover:bg-muted font-medium" title={t('dnsblCheck')}>
-              <Shield className="h-4 w-4" />
-            </Button>
-          </Link>
-          <div className="w-px h-4 bg-border mx-1" />
-          <HistorySidebar
-            history={history}
-            onSelect={(q) => { setQuery(q); setTimeout(() => document.querySelector('form')?.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true })), 100); }}
-            onClear={() => { setHistory([]); localStorage.removeItem("searchHistory"); }}
-          />
-          <LanguageToggle />
-          <ThemeToggle />
-        </div>
+        <Header
+          onLogoClick={handleReset}
+          actions={
+            <>
+              <VendorFilter
+                selectedVendors={selectedVendors}
+                onVendorsChange={setSelectedVendors}
+              />
+              <HistorySidebar
+                history={history}
+                onSelect={(q) => { setQuery(q); setTimeout(() => document.querySelector('form')?.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true })), 100); }}
+                onClear={() => { setHistory([]); localStorage.removeItem("searchHistory"); }}
+              />
+            </>
+          }
+        />
 
         <div className="flex-1 flex flex-col items-center justify-center p-4">
           <div className="max-w-2xl w-full space-y-8 text-center">
@@ -1074,77 +1138,52 @@ const Index = () => {
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
+      <Header
+        onLogoClick={handleReset}
+        logoAddon={
+          <span className="text-xs text-muted-foreground hidden sm:inline-block ml-1">
+            • {selectedVendors.length} {t('vendorsEnabled')}
+          </span>
+        }
+        actions={
+          <>
+            {results.length > 0 && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-2 h-8 rounded-full border-primary/20 hover:bg-primary/10 shadow-sm"
+                onClick={exportGlobalPDF}
+                disabled={isExportingPDF}
+              >
+                <FileSearch className={`h-4 w-4 ${isExportingPDF ? "animate-pulse" : ""}`} />
+                <span className="hidden sm:inline">{isExportingPDF ? "Building Report..." : "Global PDF Report"}</span>
+              </Button>
+            )}
+            
+            <VendorFilter
+              selectedVendors={selectedVendors}
+              onVendorsChange={setSelectedVendors}
+            />
+            
+            <HistorySidebar
+              history={history}
+              onSelect={(q) => { setQuery(q); setTimeout(() => document.querySelector('form')?.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true })), 100); }}
+              onClear={() => { setHistory([]); localStorage.removeItem("searchHistory"); }}
+            />
+          </>
+        }
+      />
       <div className="flex-1 p-4 md:p-8">
         <div className="max-w-7xl mx-auto space-y-6">
-          {/* New Header Design */}
-          <div className="flex flex-col gap-6 mb-8 animate-fade-in">
-            {/* Top Unified Header */}
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-              <div>
-                <h1
-                  className="text-3xl font-bold tracking-tight bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent cursor-pointer hover:opacity-80 transition-opacity"
-                  onClick={handleReset}
-                >
-                  {t('appName')}
-                </h1>
-                <p className="text-sm text-muted-foreground mt-1">
-                  {selectedVendors.length} {t('vendorsEnabled')}
-                </p>
-              </div>
-
-              {/* Centralized Navigation and Settings Actions */}
-              <div className="flex items-center flex-wrap gap-2 bg-muted/30 p-1.5 rounded-full border shadow-sm">
-                <Link to="/vendors">
-                  <Button variant="ghost" size="sm" className="gap-2 h-8 rounded-full text-muted-foreground hover:text-foreground hover:bg-background">
-                    <BookOpen className="h-4 w-4" />
-                    <span className="hidden sm:inline">{t('vendors')}</span>
-                  </Button>
-                </Link>
-                <Link to="/dnsbl">
-                  <Button variant="ghost" size="sm" className="gap-2 h-8 rounded-full text-muted-foreground hover:text-foreground hover:bg-background">
-                    <Shield className="h-4 w-4" />
-                    <span className="hidden sm:inline">{t('dnsblCheck')}</span>
-                  </Button>
-                </Link>
-                <div className="w-px h-4 bg-border mx-1" />
-                {results.length > 0 && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="gap-2 h-8 rounded-full border-primary/20 hover:bg-primary/10"
-                    onClick={exportGlobalPDF}
-                    disabled={isExportingPDF}
-                  >
-                    <FileSearch className={`h-4 w-4 ${isExportingPDF ? "animate-pulse" : ""}`} />
-                    <span className="hidden sm:inline">{isExportingPDF ? "Building Report..." : "Global PDF Report"}</span>
-                  </Button>
-                )}
-                <div className="w-px h-4 bg-border mx-1" />
-                <VendorFilter
-                  selectedVendors={selectedVendors}
-                  onVendorsChange={setSelectedVendors}
-                />
-                <HistorySidebar
-                  history={history}
-                  onSelect={(q) => { setQuery(q); setTimeout(() => document.querySelector('form')?.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true })), 100); }}
-                  onClear={() => { setHistory([]); localStorage.removeItem("searchHistory"); }}
-                />
-                <div className="w-px h-4 bg-border mx-1" />
-                <LanguageToggle />
-                <ThemeToggle />
-              </div>
-            </div>
-
-            {/* In-page Re-search Bar */}
-            <div className="flex flex-col bg-card p-4 rounded-xl border shadow-sm">
-              <SearchForm
-                query={query}
-                setQuery={setQuery}
-                onSubmit={handleSearch}
-                isLoading={isAnalyzing}
-                className="w-full"
-              />
-            </div>
+          {/* In-page Re-search Bar */}
+          <div className="flex flex-col bg-card/40 backdrop-blur-md p-4 rounded-2xl border border-primary/15 shadow-lg shadow-primary/5 mb-8 animate-fade-in">
+            <SearchForm
+              query={query}
+              setQuery={setQuery}
+              onSubmit={handleSearch}
+              isLoading={isAnalyzing}
+              className="w-full"
+            />
           </div>
 
           {error && (

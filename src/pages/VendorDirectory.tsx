@@ -1,8 +1,10 @@
-import { ArrowLeft, ExternalLink, Shield } from "lucide-react";
+import { ExternalLink, Shield, BookOpen } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { VENDOR_IOC_SUPPORT } from "@/services/threatApi";
 import { Badge } from "@/components/ui/badge";
+import { Header } from "@/components/Header";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 const VENDOR_INFO: Record<string, { description: string; docLink: string }> = {
     "VirusTotal": {
@@ -78,22 +80,19 @@ const VENDOR_INFO: Record<string, { description: string; docLink: string }> = {
 const VendorDirectory = () => {
     const vendors = Object.entries(VENDOR_IOC_SUPPORT).sort((a, b) => a[0].localeCompare(b[0]));
 
+    const { t } = useLanguage();
+
     return (
-        <div className="min-h-screen bg-background p-4 md:p-8">
-            <div className="max-w-7xl mx-auto space-y-8">
-                <div className="flex items-center gap-4">
-                    <Link to="/">
-                        <Button variant="ghost" size="icon">
-                            <ArrowLeft className="h-4 w-4" />
-                        </Button>
-                    </Link>
+        <div className="min-h-screen bg-background flex flex-col">
+            <Header showBackButton />
+            <div className="flex-1 p-4 md:p-8">
+                <div className="max-w-7xl mx-auto space-y-8">
                     <div>
                         <h1 className="text-3xl font-bold">Vendor Directory</h1>
-                        <p className="text-muted-foreground">
+                        <p className="text-muted-foreground mt-1">
                             Integrated threat intelligence sources and their capabilities
                         </p>
                     </div>
-                </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {vendors.map(([name, types]) => (
@@ -137,6 +136,7 @@ const VendorDirectory = () => {
                 </div>
             </div>
         </div>
+    </div>
     );
 };
 

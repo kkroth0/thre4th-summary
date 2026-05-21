@@ -117,12 +117,6 @@ const formatVendorData = (vendorName: string, data: any, query: string): any => 
                 "ASN": otxData.asn || "Unknown",
                 "Sections": otxData.sections?.join(", ") || "None",
             };
-        case "Shodan":
-            return {
-                "Open Ports": data.ports?.slice(0, 5).join(", ") || "None",
-                "Services": Array.isArray(data.data) ? data.data.slice(0, 3).map((d: any) => d.product || d.port).join(", ") : "Unknown",
-                "Vulnerabilities": data.vulns ? `${Object.keys(data.vulns).length} CVEs` : "0 CVEs",
-            };
         case "URLhaus":
             if (data.query_status === "ok") {
                 return {
@@ -327,6 +321,22 @@ export const fetchIPGeoData = (query: string) => fetchFromBackend('ipgeo', query
 export const fetchWHOISData = (query: string) => fetchFromBackend('whois', query, "WHOIS");
 export const fetchVirusTotalData = (query: string) => fetchFromBackend('virustotal', query, "VirusTotal");
 export const fetchAbuseIPDBData = (query: string) => fetchFromBackend('abuseipdb', query, "AbuseIPDB");
+export const fetchAbuseIPDBCidrBlock = async (ip: string): Promise<any> => {
+    const parts = ip.split('.');
+    if (parts.length !== 4) throw new Error("Invalid IP address");
+    const network = `${parts[0]}.${parts[1]}.${parts[2]}.0/24`;
+
+    const response = await fetch('/api/abuseipdb/check-block', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: network })
+    });
+    if (!response.ok) {
+        throw new Error(`Failed to check block: ${response.statusText}`);
+    }
+    const res = await response.json();
+    return res.data?.data ? res.data.data : res.data;
+};
 export const fetchAlienVaultData = (query: string) => fetchFromBackend('alienvault', query, "AlienVault OTX");
 export const fetchShodanData = (query: string) => fetchFromBackend('shodan', query, "Shodan");
 export const fetchURLhausData = (query: string) => fetchFromBackend('urlhaus', query, "URLhaus");

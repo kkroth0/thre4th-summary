@@ -73,17 +73,45 @@ export const ThreatSummary = ({ query, overallScore, threatLevel, totalVendors, 
   };
 
   return (
-    <Card className="border-2">
-      <CardHeader>
-        <CardTitle className="flex items-center justify-between">
+    <Card className="border border-primary/15 bg-card/45 backdrop-blur-md shadow-md shadow-primary/5">
+      <CardHeader className="pb-4">
+        <CardTitle className="flex items-center justify-between text-xs font-bold tracking-wider uppercase text-muted-foreground/80">
           <span>{t('threatSummary')}</span>
+          <div className="flex items-center gap-1.5">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 px-3 text-xs gap-1.5 rounded-full border-primary/15 hover:bg-primary/5 transition-all duration-300"
+              onClick={handleCopy}
+            >
+              <Copy className="h-3 w-3" />
+              <span>{t('copySummary')}</span>
+            </Button>
+          </div>
         </CardTitle>
       </CardHeader>
-      <CardContent>
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-          <div>
-            <p className="text-sm text-muted-foreground mb-1">{t('query')}</p>
-            <p className="font-mono font-semibold text-lg">{query}</p>
+      <CardContent className="pt-2">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 items-center">
+          {/* Target Query Block */}
+          <div className="space-y-1.5">
+            <p className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">{t('query')}</p>
+            <div className="flex items-center gap-2 group">
+              <span className="font-mono font-semibold text-base bg-muted/40 px-2.5 py-1 rounded-lg border border-border/60 select-all truncate max-w-[200px]" title={query}>
+                {query}
+              </span>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 text-muted-foreground hover:text-foreground hover:bg-muted/80 rounded-full"
+                onClick={() => {
+                  navigator.clipboard.writeText(query);
+                  toast({ description: t('copiedToClipboard') });
+                }}
+                title={t('copy')}
+              >
+                <Copy className="h-3.5 w-3.5" />
+              </Button>
+            </div>
             {(() => {
               const abuseData = vendorData.find(v => v.name === "AbuseIPDB")?.data;
               const hostnames = abuseData?.["Hostnames"];
@@ -91,7 +119,7 @@ export const ThreatSummary = ({ query, overallScore, threatLevel, totalVendors, 
 
               if (hostname) {
                 return (
-                  <p className="text-xs text-muted-foreground truncate max-w-[200px]" title={hostname}>
+                  <p className="text-xs text-muted-foreground truncate max-w-[220px] pl-2 border-l-2 border-primary/30 mt-1" title={hostname}>
                     {hostname}
                   </p>
                 );
@@ -99,53 +127,119 @@ export const ThreatSummary = ({ query, overallScore, threatLevel, totalVendors, 
               return null;
             })()}
           </div>
-          <div>
-            <p className="text-sm text-muted-foreground mb-1">{t('overallScore')}</p>
-            <p className="text-3xl font-bold">{overallScore}/100</p>
-          </div>
-          <div className="flex flex-col">
-          <div className="flex items-center gap-1">
-            <span className="text-sm text-muted-foreground">{t('threatLevel')}</span>
-            <Dialog>
-              <DialogTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-4 w-4 rounded-full text-muted-foreground hover:text-foreground">
-                  <Info className="h-3 w-3" />
-                  <span className="sr-only">How Scoring Works</span>
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="max-w-md">
-                <DialogHeader>
-                  <DialogTitle>{t('threatLevelScoringMethodology')}</DialogTitle>
-                </DialogHeader>
-                <div className="space-y-4 text-sm mt-4">
-                  <p>{t('threatEngineExplanation')}</p>
-                  
-                  <div className="space-y-2">
-                    <h4 className="font-semibold border-b pb-1">{t('primaryVendorWeights')}</h4>
-                    <ul className="space-y-1.5 list-disc pl-4 text-xs text-muted-foreground">
-                      <li><strong className="text-foreground">VirusTotal:</strong> {t('vtWeightDesc')}</li>
-                      <li><strong className="text-foreground">AbuseIPDB:</strong> {t('abuseIpdbWeightDesc')}</li>
-                    </ul>
-                  </div>
 
-                  <div className="space-y-2">
-                    <h4 className="font-semibold border-b pb-1">{t('scoringThresholds')}</h4>
-                    <ul className="space-y-1.5 list-disc pl-4 text-xs text-muted-foreground">
-                      <li><strong className="text-green-500">SAFE (0-30):</strong> {t('safeDesc')}</li>
-                      <li><strong className="text-orange-500">SUSPICIOUS (31-70):</strong> {t('suspiciousDesc')}</li>
-                      <li><strong className="text-red-500">MALICIOUS (71-100):</strong> {t('maliciousDesc')}</li>
-                    </ul>
+          {/* SVG Circular Risk Gauge Block */}
+          <div className="flex items-center gap-4">
+            <div className="relative h-20 w-20 flex items-center justify-center shrink-0">
+              <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
+                {/* Background Ring */}
+                <circle
+                  cx="50"
+                  cy="50"
+                  r="40"
+                  className="stroke-muted/40"
+                  strokeWidth="8"
+                  fill="transparent"
+                />
+                {/* Foreground Ring with Glow */}
+                <circle
+                  cx="50"
+                  cy="50"
+                  r="40"
+                  stroke={`url(#threatGradient-${threatLevel})`}
+                  strokeWidth="8"
+                  fill="transparent"
+                  strokeDasharray="251.2"
+                  strokeDashoffset={251.2 - (251.2 * Math.min(overallScore, 100)) / 100}
+                  strokeLinecap="round"
+                  className="transition-all duration-1000 ease-out"
+                  filter="url(#glow-filter)"
+                />
+                
+                {/* Definitions for Gradients and Glow Filters */}
+                <defs>
+                  <filter id="glow-filter" x="-20%" y="-20%" width="140%" height="140%">
+                    <feGaussianBlur stdDeviation="2" result="blur" />
+                    <feMerge>
+                      <feMergeNode in="blur" />
+                      <feMergeNode in="SourceGraphic" />
+                    </feMerge>
+                  </filter>
+                  <linearGradient id="threatGradient-safe" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stopColor="#10b981" />
+                    <stop offset="100%" stopColor="#059669" />
+                  </linearGradient>
+                  <linearGradient id="threatGradient-suspicious" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stopColor="#f59e0b" />
+                    <stop offset="100%" stopColor="#d97706" />
+                  </linearGradient>
+                  <linearGradient id="threatGradient-malicious" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stopColor="#ef4444" />
+                    <stop offset="100%" stopColor="#b91c1c" />
+                  </linearGradient>
+                  <linearGradient id="threatGradient-unknown" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stopColor="#6b7280" />
+                    <stop offset="100%" stopColor="#4b5563" />
+                  </linearGradient>
+                </defs>
+              </svg>
+              <div className="absolute flex flex-col items-center justify-center">
+                <span className="text-2xl font-extrabold tracking-tight">{overallScore}</span>
+                <span className="text-[9px] text-muted-foreground uppercase font-semibold">Score</span>
+              </div>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">{t('overallScore')}</p>
+              <p className="text-xs font-mono font-medium mt-0.5 text-muted-foreground">{overallScore}/100 max</p>
+            </div>
+          </div>
+
+          {/* Threat Level Badge Block */}
+          <div className="flex flex-col gap-1.5">
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">{t('threatLevel')}</span>
+              <Dialog>
+                <DialogTrigger asChild>
+                  <Button variant="ghost" size="icon" className="h-4 w-4 rounded-full text-muted-foreground hover:text-foreground">
+                    <Info className="h-3.5 w-3.5" />
+                    <span className="sr-only">How Scoring Works</span>
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="max-w-md">
+                  <DialogHeader>
+                    <DialogTitle>{t('threatLevelScoringMethodology')}</DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-4 text-sm mt-4">
+                    <p>{t('threatEngineExplanation')}</p>
+                    
+                    <div className="space-y-2">
+                      <h4 className="font-semibold border-b pb-1">{t('primaryVendorWeights')}</h4>
+                      <ul className="space-y-1.5 list-disc pl-4 text-xs text-muted-foreground">
+                        <li><strong className="text-foreground">VirusTotal:</strong> {t('vtWeightDesc')}</li>
+                        <li><strong className="text-foreground">AbuseIPDB:</strong> {t('abuseIpdbWeightDesc')}</li>
+                      </ul>
+                    </div>
+
+                    <div className="space-y-2">
+                      <h4 className="font-semibold border-b pb-1">{t('scoringThresholds')}</h4>
+                      <ul className="space-y-1.5 list-disc pl-4 text-xs text-muted-foreground">
+                        <li><strong className="text-green-500">SAFE (0-30):</strong> {t('safeDesc')}</li>
+                        <li><strong className="text-orange-500">SUSPICIOUS (31-70):</strong> {t('suspiciousDesc')}</li>
+                        <li><strong className="text-red-500">MALICIOUS (71-100):</strong> {t('maliciousDesc')}</li>
+                      </ul>
+                    </div>
                   </div>
-                </div>
-              </DialogContent>
-            </Dialog>
+                </DialogContent>
+              </Dialog>
+            </div>
+            <ThreatBadge level={threatLevel} className="text-xs px-3 py-1 font-bold rounded-full w-fit shadow-sm" />
           </div>
-            <ThreatBadge level={threatLevel} className="text-sm px-3 py-1 mt-1 w-fit" />
-          </div>
-          <div>
-            <p className="text-sm text-muted-foreground mb-1">{t('detections')}</p>
-            <p className="text-3xl font-bold">
-              {detections}<span className="text-lg text-muted-foreground">/{totalVendors}</span>
+
+          {/* Detections Info Block */}
+          <div className="space-y-1.5">
+            <p className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">{t('detections')}</p>
+            <p className="text-3xl font-extrabold tracking-tight">
+              {detections}<span className="text-sm font-semibold text-muted-foreground">/{totalVendors} vendors</span>
             </p>
           </div>
         </div>

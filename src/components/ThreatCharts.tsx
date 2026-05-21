@@ -1,7 +1,7 @@
 import { Card } from "@/components/ui/card";
 import { VendorData } from "@/types/threat-intelligence";
-import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Legend } from "recharts";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { Shield, Globe, Server, MapPin, Radio, Key, ShieldAlert } from "lucide-react";
 
 interface ThreatChartsProps {
   vendorData: VendorData[];
@@ -69,7 +69,7 @@ export const ThreatCharts = ({ vendorData, detections, totalVendors }: ThreatCha
       if (!data["Network"] && vt["Network"] && vt["Network"] !== "Unknown") data["Network"] = vt["Network"];
     }
 
-    return Object.keys(data).length > 0 ? data : { "Status": "No network data available" };
+    return data;
   };
 
   // Vendor Threat Scores
@@ -92,7 +92,7 @@ export const ThreatCharts = ({ vendorData, detections, totalVendors }: ThreatCha
     if (data["Abuse Confidence Score"]) {
       return {
         score: parseInt(data["Abuse Confidence Score"]),
-        status: `Confidence: ${data["Abuse Confidence Score"]}`
+        status: `Confidence: ${data["Abuse Confidence Score"]}%`
       };
     }
 
@@ -134,7 +134,7 @@ export const ThreatCharts = ({ vendorData, detections, totalVendors }: ThreatCha
         name: vendor.name,
         score,
         status,
-        fill: score > 70 ? "hsl(var(--destructive))" : score > 30 ? "#eab308" : "hsl(var(--primary))"
+        fill: score > 70 ? "hsl(var(--destructive))" : score > 30 ? "#eab308" : "#10b981"
       };
     })
     .sort((a, b) => b.score - a.score)
@@ -142,63 +142,112 @@ export const ThreatCharts = ({ vendorData, detections, totalVendors }: ThreatCha
 
   const indicators = getKeyIndicators();
   const networkData = getNetworkData();
-
-  const CustomTooltip = ({ active, payload, label }: any) => {
-    if (active && payload && payload.length) {
-      return (
-        <div className="bg-popover border text-popover-foreground p-2 rounded shadow-md text-sm">
-          <p className="font-semibold">{label}</p>
-          <p>{t('score')}: {payload[0].value}/100</p>
-          <p className="text-muted-foreground">{payload[0].payload.status}</p>
-        </div>
-      );
-    }
-    return null;
-  };
+  const hasNetworkData = Object.keys(networkData).length > 0;
 
   return (
-    <div className="grid gap-4 md:grid-cols-3 animate-fade-in">
-      <Card className="p-6">
-        <h3 className="text-lg font-semibold mb-4">Key Indicators</h3>
-        <div className="space-y-4 max-h-[300px] overflow-y-auto pr-2">
+    <div className="grid gap-6 md:grid-cols-3 animate-fade-in">
+      {/* Key Indicators Card */}
+      <Card className="p-6 border border-primary/10 bg-card/45 backdrop-blur-md shadow-md shadow-primary/5 flex flex-col">
+        <h3 className="text-sm font-bold tracking-wider uppercase text-muted-foreground mb-4">Key Indicators</h3>
+        <div className="flex-1 space-y-4 max-h-[300px] overflow-y-auto pr-1.5 [scrollbar-width:thin] [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-thumb]:bg-muted/80 [&::-webkit-scrollbar-thumb]:rounded-full">
           {indicators.length > 0 ? indicators.map((ind, idx) => (
-            <div key={idx} className="flex flex-col gap-1 border-b pb-3 last:border-0">
-              <span className="text-sm font-medium text-foreground">{ind.type}</span>
-              <span className="text-xs text-muted-foreground break-words">{ind.value}</span>
-              <span className="text-[10px] text-muted-foreground/70 uppercase">src: {ind.source}</span>
+            <div key={idx} className="flex flex-col gap-1 border-b border-border/40 pb-3 last:border-0 last:pb-0">
+              <span className="text-xs font-semibold text-foreground">{ind.type}</span>
+              <span className="text-sm font-bold text-primary break-words mt-0.5">{ind.value}</span>
+              <span className="text-[9px] text-muted-foreground/60 uppercase font-mono tracking-wider">src: {ind.source}</span>
             </div>
           )) : (
-            <p className="text-sm text-muted-foreground">No prominent indicators detected.</p>
+            <div className="flex flex-col items-center justify-center py-12 text-center border border-dashed border-border/60 rounded-xl bg-muted/10">
+              <Shield className="h-7 w-7 text-muted-foreground/50 mb-2.5" />
+              <p className="text-xs font-semibold text-muted-foreground">No indicators detected</p>
+              <p className="text-[10px] text-muted-foreground/50 max-w-[180px] mt-1 leading-normal">
+                This target did not trigger specific alerts on VT, AbuseIPDB or AlienVault.
+              </p>
+            </div>
           )}
         </div>
       </Card>
 
-      <Card className="p-6">
-        <h3 className="text-lg font-semibold mb-4">Geographic & Network Data</h3>
-        <div className="flex flex-col text-sm w-full divide-y">
-          {Object.entries(networkData).map(([key, value]) => (
-            <div key={key} className="grid grid-cols-1 sm:grid-cols-[130px_1fr] py-3 items-start gap-1 sm:gap-4">
-              <span className="font-medium text-muted-foreground">{key}</span>
-              <span className="text-foreground font-medium break-words sm:text-right">{value}</span>
+      {/* Geographic & Network Data Card */}
+      <Card className="p-6 border border-primary/10 bg-card/45 backdrop-blur-md shadow-md shadow-primary/5 flex flex-col">
+        <h3 className="text-sm font-bold tracking-wider uppercase text-muted-foreground mb-4">Geographic & Network Data</h3>
+        <div className="flex-1 flex flex-col text-sm justify-center">
+          {hasNetworkData ? (
+            <div className="divide-y divide-border/40 w-full">
+              {Object.entries(networkData).map(([key, value]) => {
+                const Icon = key === "Country" ? MapPin :
+                              key === "ISP" ? Radio :
+                              key === "Organization" ? Globe :
+                              key === "ASN" ? Key :
+                              key === "Network" ? Server : ShieldAlert;
+                return (
+                  <div key={key} className="flex items-center justify-between py-2.5 first:pt-0 last:pb-0">
+                    <div className="flex items-center gap-2">
+                      <Icon className="h-4 w-4 text-primary/70 shrink-0" />
+                      <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{key}</span>
+                    </div>
+                    <span className="text-xs font-mono font-bold text-foreground max-w-[170px] truncate" title={value}>
+                      {value}
+                    </span>
+                  </div>
+                );
+              })}
             </div>
-          ))}
+          ) : (
+            <div className="flex flex-col items-center justify-center py-12 text-center border border-dashed border-border/60 rounded-xl bg-muted/10">
+              <Globe className="h-7 w-7 text-muted-foreground/50 mb-2.5" />
+              <p className="text-xs font-semibold text-muted-foreground">No network data</p>
+              <p className="text-[10px] text-muted-foreground/50 max-w-[180px] mt-1 leading-normal">
+                Could not retrieve ISP, Country, or ASN geolocation info.
+              </p>
+            </div>
+          )}
         </div>
       </Card>
 
-      <Card className="p-6">
-        <h3 className="text-lg font-semibold mb-4">{t('vendorThreatScores')}</h3>
-        <ResponsiveContainer width="100%" height={300}>
-          <BarChart data={vendorScores} layout="vertical" margin={{ left: 20 }}>
-            <XAxis type="number" domain={[0, 100]} hide />
-            <YAxis type="category" dataKey="name" width={100} style={{ fontSize: '12px' }} />
-            <Tooltip content={<CustomTooltip />} />
-            <Bar dataKey="score" radius={[0, 4, 4, 0]}>
-              {vendorScores.map((entry, index) => (
-                <Cell key={`cell-${index}`} fill={entry.fill} />
-              ))}
-            </Bar>
-          </BarChart>
-        </ResponsiveContainer>
+      {/* Vendor Threat Scores Card */}
+      <Card className="p-6 border border-primary/10 bg-card/45 backdrop-blur-md shadow-md shadow-primary/5 flex flex-col">
+        <h3 className="text-sm font-bold tracking-wider uppercase text-muted-foreground mb-4">{t('vendorThreatScores')}</h3>
+        <div className="flex-1 space-y-4 max-h-[300px] overflow-y-auto pr-1.5 [scrollbar-width:thin] [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-thumb]:bg-muted/80 [&::-webkit-scrollbar-thumb]:rounded-full">
+          {vendorScores.length > 0 ? (
+            vendorScores.map((vendor, idx) => {
+              const statusBadgeColor = vendor.score > 70 ? "bg-destructive/10 text-destructive border-destructive/20" :
+                                       vendor.score > 30 ? "bg-amber-500/10 text-amber-500 border-amber-500/20" :
+                                       "bg-emerald-500/10 text-emerald-500 border-emerald-500/20";
+              return (
+                <div key={idx} className="space-y-1.5 border-b border-border/40 pb-3 last:border-0 last:pb-0">
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="font-semibold text-foreground">{vendor.name}</span>
+                    <div className="flex items-center gap-2">
+                      <span className={`text-[9px] px-1.5 py-0.5 rounded border uppercase font-mono font-semibold tracking-wider ${statusBadgeColor}`}>
+                        {vendor.status}
+                      </span>
+                      <div className="flex items-center gap-0.5">
+                        <span className={`font-bold ${
+                          vendor.score > 70 ? "text-destructive" :
+                          vendor.score > 30 ? "text-amber-500" : "text-emerald-500"
+                        }`}>{vendor.score}</span>
+                        <span className="text-muted-foreground/60 text-[10px]">/100</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="w-full bg-muted/40 h-2 rounded-full overflow-hidden border border-muted/20 relative shadow-inner">
+                    <div
+                      className="h-full rounded-full transition-all duration-1000 ease-out"
+                      style={{
+                        width: `${vendor.score}%`,
+                        backgroundColor: vendor.fill,
+                        boxShadow: `0 0 6px ${vendor.fill}80`
+                      }}
+                    />
+                  </div>
+                </div>
+              );
+            })
+          ) : (
+            <p className="text-xs text-muted-foreground">No vendor scores recorded.</p>
+          )}
+        </div>
       </Card>
     </div>
   );

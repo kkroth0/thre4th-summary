@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Index from "./pages/Index";
 import VendorDirectory from "./pages/VendorDirectory";
 import DnsblCheck from "./pages/DnsblCheck";
+import Newsletter from "./pages/Newsletter";
 import NotFound from "./pages/NotFound";
 import { LanguageProvider } from "./contexts/LanguageContext";
 
@@ -22,6 +23,7 @@ const App = () => (
             <Route path="/" element={<Index />} />
             <Route path="/vendors" element={<VendorDirectory />} />
             <Route path="/dnsbl" element={<DnsblCheck />} />
+            <Route path="/newsletter" element={<Newsletter />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>

@@ -65,7 +65,7 @@ AbuseIPDB: ${abuseConf}`;
     };
 
     return (
-        <div className="rounded-md border bg-card hide-scrollbar-table [&>div]:[scrollbar-width:none] [&>div]:[-ms-overflow-style:none] [&>div::-webkit-scrollbar]:hidden">
+        <div className="rounded-xl border border-primary/10 bg-card/45 backdrop-blur-md shadow-md shadow-primary/5 hide-scrollbar-table [&>div]:[scrollbar-width:none] [&>div]:[-ms-overflow-style:none] [&>div::-webkit-scrollbar]:hidden">
                 <Table>
                     <TableHeader>
                         <TableRow>
@@ -152,13 +152,27 @@ AbuseIPDB: ${abuseConf}`;
                                 <ThreatBadge level={result.threatLevel} />
                             </TableCell>
                             <TableCell>
-                                <div className="flex items-center gap-2">
-                                    <span className={`font-bold ${result.overallScore > 70 ? "text-destructive" :
-                                            result.overallScore > 30 ? "text-orange-500" : "text-green-500"
-                                        }`}>
-                                        {result.overallScore}
-                                    </span>
-                                    <span className="text-muted-foreground text-xs">/100</span>
+                                <div className="flex flex-col gap-1 min-w-[75px]">
+                                    <div className="flex items-center gap-1">
+                                        <span className={`font-bold text-sm ${result.overallScore > 70 ? "text-destructive" :
+                                                result.overallScore > 30 ? "text-orange-500" : "text-green-500"
+                                            }`}>
+                                            {result.overallScore}
+                                        </span>
+                                        <span className="text-muted-foreground text-[10px]">/100</span>
+                                    </div>
+                                    <div className="w-full bg-muted/40 h-2 rounded-full overflow-hidden border border-muted/20 relative shadow-inner">
+                                        <div
+                                            className="h-full rounded-full transition-all duration-500"
+                                            style={{
+                                                width: `${Math.min(result.overallScore, 100)}%`,
+                                                backgroundColor: result.overallScore > 70 ? "hsl(var(--destructive))" : result.overallScore > 30 ? "#eab308" : "#10b981",
+                                                boxShadow: `0 0 6px ${
+                                                    result.overallScore > 70 ? "hsl(var(--destructive))" : result.overallScore > 30 ? "#eab308" : "#10b981"
+                                                }80`
+                                            }}
+                                        />
+                                    </div>
                                 </div>
                             </TableCell>
                             <TableCell className="text-muted-foreground whitespace-nowrap">
