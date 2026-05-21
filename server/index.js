@@ -557,8 +557,82 @@ app.post('/api/teamcymru', async (req, res) => {
 });
 
 
+// Censys (Platform API v3)
+app.post('/api/censys', async (req, res) => {
+    const { query } = req.body;
+    if (!process.env.CENSYS_API_KEY) return res.status(500).json({ error: "API Key missing" });
+
+    const queryType = detectQueryType(query);
+    if (queryType !== "ip") return res.json({ data: { "Status": "IP only" } });
+
+    try {
+        const response = await axios.get(`https://api.platform.censys.io/v3/global/asset/host/${query}`, {
+            headers: {
+                'Authorization': `Bearer ${process.env.CENSYS_API_KEY}`,
+                'Accept': 'application/json'
+            },
+            timeout: 10000
+        });
+
+        const resource = response.data?.result?.resource;
+        if (!resource) return res.json({ data: { "Status": "No data available" } });
+
+        // Build a clean result with services fingerprint data
+        const result = {
+            ip: resource.ip,
+            service_count: resource.service_count || 0,
+            services: (resource.services || []).map(svc => ({
+                port: svc.port,
+                protocol: svc.protocol || "UNKNOWN",
+                transport: svc.transport_protocol || "tcp",
+                software: svc.software?.product || svc.software?.vendor || null,
+                software_version: svc.software?.version || null,
+                scan_time: svc.scan_time,
+                // HTTP details
+                http_status: svc.http?.response?.status_code || null,
+                http_title: svc.http?.response?.html_title || null,
+                http_headers: svc.http?.response?.headers ? Object.keys(svc.http.response.headers).slice(0, 10) : null,
+                http_body_hash: svc.http?.response?.body_hash || null,
+                // TLS handshake
+                tls_version: svc.tls?.version_selected || null,
+                // Certificate
+                certificate_fingerprint: svc.tls?.certificates?.leaf_data?.fingerprint || null,
+                certificate_subject: svc.tls?.certificates?.leaf_data?.subject_dn || null,
+                certificate_issuer: svc.tls?.certificates?.leaf_data?.issuer_dn || null,
+                certificate_names: svc.tls?.certificates?.leaf_data?.names || [],
+                certificate_trusted: svc.tls?.certificates?.leaf_data?.browser_trust?.is_trusted || null,
+            })),
+            // Location
+            location: resource.location ? {
+                country: resource.location.country,
+                country_code: resource.location.country_code,
+                city: resource.location.city,
+                province: resource.location.province,
+                continent: resource.location.continent,
+            } : null,
+            // ASN
+            autonomous_system: resource.autonomous_system ? {
+                asn: resource.autonomous_system.asn,
+                name: resource.autonomous_system.name || resource.autonomous_system.description,
+                bgp_prefix: resource.autonomous_system.bgp_prefix,
+            } : null,
+            // DNS
+            dns: resource.dns || null,
+        };
+
+        res.json({ data: result });
+    } catch (error) {
+        if (error.response?.status === 404) {
+            return res.json({ data: { "Status": "Host not found in Censys" } });
+        }
+        res.status(error.response?.status || 500).json({ error: error.message });
+    }
+});
+
+
 
 // CTI & CVE Newsletter and CVE Dashboard Endpoints
+
 
 // Helper to decode HTML/XML entities
 const decodeEntities = (str) => {

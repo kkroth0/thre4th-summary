@@ -37,6 +37,9 @@ const NETWORK_FIELDS = new Set([
   "Domain", "Hostnames", "Domains", "Organization", "Registrar",
   "Tags", "Feeds", "Sections", "OS", "File Name", "File Size",
   "File Type", "Signature",
+  "Service Count", "Software", "HTTP Status", "HTML Title", "Body Hash",
+  "TLS Version", "Certificate Subject", "Certificate Issuer", "Cert Fingerprint",
+  "Certificate Names", "Browser Trust", "BGP Prefix",
 ]);
 
 const GEO_FIELDS = new Set([
@@ -160,7 +163,7 @@ export const VendorDataTable = ({ vendorData, getVendorLink }: VendorDataTablePr
       return sortOrder === "asc" ? compareValue : -compareValue;
     });
 
-  const HIDDEN_KEYS = new Set(["Status", "Reports", "All Vendors", "Hostnames"]);
+  const HIDDEN_KEYS = new Set(["Status", "Reports", "All Vendors", "Hostnames", "Services Detail"]);
 
   const renderCategorizedFields = (vendor: VendorData) => {
     if (vendor.error) return <span className="text-destructive font-medium">{vendor.error}</span>;

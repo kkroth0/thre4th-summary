@@ -29,6 +29,7 @@ export const VENDOR_IOC_SUPPORT: Record<string, ('ip' | 'domain' | 'hash' | 'url
     "AlienVault OTX": ['ip', 'domain', 'hash'],
     "Shodan": ['ip'],
     "URLhaus": ['url', 'domain'],
+    "Censys": ['ip'],
 
 };
 
@@ -240,6 +241,76 @@ const formatVendorData = (vendorName: string, data: any, query: string): any => 
                 "Vulnerabilities": data.vulns ? `${Object.keys(data.vulns).length} CVEs` : "0 CVEs",
                 "Tags": data.tags?.slice(0, 5).join(", ") || "None"
             };
+        case "Censys": {
+            const censysData = data.data || data;
+            if (censysData.Status) return censysData;
+            const services = censysData.services || [];
+            const openPorts = services.map((s: any) => `${s.port}/${s.transport}`).join(", ") || "None";
+            const softwareList = services
+                .filter((s: any) => s.software)
+                .map((s: any) => `${s.software}${s.software_version ? ' ' + s.software_version : ''} (${s.port}/${s.transport})`)
+                .join(", ") || "None detected";
+            const tlsServices = services.filter((s: any) => s.tls_version);
+            const certServices = services.filter((s: any) => s.certificate_subject);
+            const httpServices = services.filter((s: any) => s.http_status || s.http_title);
+
+            const result: Record<string, any> = {
+                "Open Ports": openPorts,
+                "Service Count": censysData.service_count || services.length,
+                "Software": softwareList,
+            };
+
+            // HTTP fingerprint
+            if (httpServices.length > 0) {
+                const httpSvc = httpServices[0];
+                result["HTTP Status"] = httpSvc.http_status ? String(httpSvc.http_status) : "N/A";
+                result["HTML Title"] = httpSvc.http_title || "N/A";
+                if (httpSvc.http_body_hash) result["Body Hash"] = httpSvc.http_body_hash;
+            }
+
+            // TLS fingerprint
+            if (tlsServices.length > 0) {
+                result["TLS Version"] = tlsServices.map((s: any) => `${s.tls_version} (${s.port})`).join(", ");
+            }
+
+            // Certificate fingerprint
+            if (certServices.length > 0) {
+                const cert = certServices[0];
+                result["Certificate Subject"] = cert.certificate_subject || "N/A";
+                result["Certificate Issuer"] = cert.certificate_issuer || "N/A";
+                if (cert.certificate_fingerprint) result["Cert Fingerprint"] = cert.certificate_fingerprint;
+                if (cert.certificate_names && cert.certificate_names.length > 0) {
+                    result["Certificate Names"] = cert.certificate_names.slice(0, 8).join(", ") + (cert.certificate_names.length > 8 ? ` (+${cert.certificate_names.length - 8} more)` : "");
+                }
+                if (cert.certificate_trusted !== null) {
+                    result["Browser Trust"] = cert.certificate_trusted ? "Trusted" : "Not Trusted";
+                }
+            }
+
+            // ASN
+            if (censysData.autonomous_system) {
+                result["ASN"] = `AS${censysData.autonomous_system.asn} - ${censysData.autonomous_system.name}`;
+                if (censysData.autonomous_system.bgp_prefix) result["BGP Prefix"] = censysData.autonomous_system.bgp_prefix;
+            }
+
+            // Location
+            if (censysData.location) {
+                result["Location"] = [censysData.location.city, censysData.location.province, censysData.location.country].filter(Boolean).join(", ");
+            }
+
+            // Services detail (for expanded vendor card)
+            result["Services Detail"] = services.map((s: any) => ({
+                port: s.port,
+                protocol: s.protocol,
+                transport: s.transport,
+                software: s.software,
+                tls: s.tls_version,
+                http_title: s.http_title,
+                cert_subject: s.certificate_subject,
+            }));
+
+            return result;
+        }
         case "IP Geolocation":
             if (data.status === "success") {
                 return {
@@ -291,6 +362,7 @@ const getVendorLink = (vendorName: string, query: string): string | undefined =>
         case "OpenPhish": return `https://openphish.com/`;
         case "DShield": return `https://isc.sans.edu/ipinfo.html?ip=${query}`;
         case "Team Cymru": return `https://team-cymru.com/community-services/ip-asn-mapping/`;
+        case "Censys": return `https://search.censys.io/hosts/${query}`;
         case "WHOIS": return `https://who.is/whois/${query}`;
         case "IP Geolocation": return `https://ip-api.com/#${query}`;
         default: return undefined;
@@ -356,6 +428,7 @@ export const fetchRansomwareLiveData = (query: string) => fetchFromBackend('rans
 export const fetchOpenPhishData = (query: string) => fetchFromBackend('openphish', query, "OpenPhish");
 export const fetchDShieldData = (query: string) => fetchFromBackend('dshield', query, "DShield");
 export const fetchTeamCymruData = (query: string) => fetchFromBackend('teamcymru', query, "Team Cymru");
+export const fetchCensysData = (query: string) => fetchFromBackend('censys', query, "Censys");
 
 export const checkDNSBL = async (ip: string, provider: string): Promise<{ listed: boolean; addresses?: string[]; status: string; error?: string }> => {
     try {
@@ -395,6 +468,7 @@ export const fetchThreatData = async (query: string, selectedVendors?: string[])
         "OpenPhish": () => fetchOpenPhishData(query),
         "DShield": () => fetchDShieldData(query),
         "Team Cymru": () => fetchTeamCymruData(query),
+        "Censys": () => fetchCensysData(query),
     };
 
     // Detect IOC type
@@ -543,6 +617,7 @@ export const fetchThreatDataProgressive = async (
         "OpenPhish": () => fetchOpenPhishData(query),
         "DShield": () => fetchDShieldData(query),
         "Team Cymru": () => fetchTeamCymruData(query),
+        "Censys": () => fetchCensysData(query),
     };
 
     // Detect IOC type

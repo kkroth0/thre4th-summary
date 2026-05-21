@@ -76,21 +76,22 @@ const SearchForm = ({
                   placeholder="Enter IP, Domain, Hash, or CVE (e.g. 51.210.208.8, CVE-2024-3094)..."
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
-                  className="bg-transparent border-0 h-10 focus-visible:ring-0 focus-visible:ring-offset-0 text-base placeholder:text-muted-foreground/60 w-full pl-0"
+                  className="bg-transparent border-0 h-10 focus-visible:ring-0 focus-visible:ring-offset-0 text-base placeholder:text-muted-foreground/60 flex-1 min-w-0 pl-0 pr-3"
                 />
-                <Button
-                  type="submit"
-                  disabled={isLoading || !query.trim()}
-                  className="shadow-md hover:shadow-lg transition-all px-8 h-10 rounded-full font-semibold tracking-wide bg-gradient-to-r from-primary to-primary/80 shrink-0"
-                >
-                  {isLoading ? t('analyzing') : <><Search className="mr-2 h-4 w-4" /> {t('analyze')}</>}
-                </Button>
-              </div>
-              <div className="flex justify-end px-2">
-                <VendorFilter
-                  selectedVendors={selectedVendors}
-                  onVendorsChange={onVendorsChange}
-                />
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <VendorFilter
+                    selectedVendors={selectedVendors}
+                    onVendorsChange={onVendorsChange}
+                    className="h-10 border-0 bg-transparent hover:bg-primary/10 hover:text-foreground text-muted-foreground px-3.5 rounded-full transition-all duration-200"
+                  />
+                  <Button
+                    type="submit"
+                    disabled={isLoading || !query.trim()}
+                    className="shadow-md hover:shadow-lg transition-all px-8 h-10 rounded-full font-semibold tracking-wide bg-gradient-to-r from-primary to-primary/80"
+                  >
+                    {isLoading ? t('analyzing') : <><Search className="mr-2 h-4 w-4" /> {t('analyze')}</>}
+                  </Button>
+                </div>
               </div>
             </div>
           </TabsContent>
@@ -163,7 +164,7 @@ const ALL_VENDORS = [
   "PhishTank", "Pulsedive",
   "Hybrid Analysis", "CIRCL hashlookup",
   "Criminal IP", "MetaDefender", "PhishStats", "Ransomware.live",
-  "OpenPhish", "DShield", "Team Cymru"
+  "OpenPhish", "DShield", "Team Cymru", "Censys"
 ];
 
 interface HistoryItem {

@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Check, Filter, X, Sparkles, Key } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Check, Filter, X, Sparkles, Key, ShieldCheck, Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
     Dialog,
@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { cn } from "@/lib/utils";
 
 interface VendorConfig {
     name: string;
@@ -51,11 +52,19 @@ const VENDOR_LIST: VendorConfig[] = [
 interface VendorFilterProps {
     selectedVendors: string[];
     onVendorsChange: (vendors: string[]) => void;
+    className?: string;
 }
 
-export function VendorFilter({ selectedVendors, onVendorsChange }: VendorFilterProps) {
+export function VendorFilter({ selectedVendors, onVendorsChange, className }: VendorFilterProps) {
     const [tempSelected, setTempSelected] = useState<string[]>(selectedVendors);
     const [open, setOpen] = useState(false);
+
+    // Sync tempSelected with selectedVendors when dialog opens
+    useEffect(() => {
+        if (open) {
+            setTempSelected(selectedVendors);
+        }
+    }, [open, selectedVendors]);
 
     const handleToggle = (vendorName: string) => {
         setTempSelected(prev =>
@@ -97,68 +106,125 @@ export function VendorFilter({ selectedVendors, onVendorsChange }: VendorFilterP
     return (
         <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
-                <Button variant="outline" size="sm" className="h-8 rounded-full border border-primary/20 hover:bg-primary/10 shadow-sm transition-colors px-3">
-                    <Filter className="h-4 w-4 sm:mr-2" />
-                    <span className="hidden sm:inline">Filter Vendors </span>
-                    <span className="text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-full ml-1 sm:ml-0 font-bold border border-primary/15 font-mono">
+                <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className={cn(
+                        "h-8 rounded-full border border-primary/20 hover:bg-primary/10 shadow-sm transition-all px-3 group", 
+                        className
+                    )}
+                >
+                    <Filter className="h-4 w-4 sm:mr-2 text-muted-foreground/80 group-hover:text-foreground transition-colors" />
+                    <span className="hidden sm:inline">Filter Vendors</span>
+                    <span className="text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-full ml-1 sm:ml-1.5 font-bold border border-primary/15 font-mono">
                         {selectedVendors.length}
                     </span>
                 </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-2xl">
-                <DialogHeader>
-                    <DialogTitle>Select Threat Intelligence Vendors</DialogTitle>
-                    <DialogDescription>
+            <DialogContent className="max-w-2xl bg-background/95 backdrop-blur-md border-primary/20 shadow-2xl rounded-2xl p-6">
+                <DialogHeader className="space-y-1">
+                    <DialogTitle className="text-xl font-bold tracking-tight flex items-center gap-2">
+                        <span>Select Threat Intelligence Vendors</span>
+                        <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/15 font-mono">
+                            {tempSelected.length} / {VENDOR_LIST.length} active
+                        </span>
+                    </DialogTitle>
+                    <DialogDescription className="text-muted-foreground/90">
                         Choose which vendors to query. Selected vendors are saved automatically.
                     </DialogDescription>
                 </DialogHeader>
 
-                <div className="space-y-3">
-                    <div>
-                        <p className="text-sm font-medium mb-2">Quick Select:</p>
-                        <div className="flex flex-wrap gap-2">
-                            <Button type="button" onClick={handleSelectAll} variant="outline" size="sm">
-                                <Check className="mr-2 h-4 w-4" /> Select All
-                            </Button>
-                            <Button type="button" onClick={handleDeselectAll} variant="outline" size="sm">
-                                <X className="mr-2 h-4 w-4" /> Deselect All
-                            </Button>
-                            <Button type="button" onClick={handleSelectFree} variant="outline" size="sm" className="text-green-600">
-                                <Sparkles className="mr-2 h-4 w-4" /> Only Free ({freeVendors.length})
-                            </Button>
-                            <Button type="button" onClick={handleSelectPaid} variant="outline" size="sm" className="text-orange-600">
-                                <Key className="mr-2 h-4 w-4" /> Only Paid ({paidVendors.length})
-                            </Button>
-                        </div>
+                <div className="bg-muted/10 border border-primary/5 p-4 rounded-xl space-y-2.5 mt-2">
+                    <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/80">Quick Selection Tools</p>
+                    <div className="flex flex-wrap gap-2">
+                        <Button 
+                            type="button" 
+                            onClick={handleSelectAll} 
+                            variant="outline" 
+                            size="sm"
+                            className="rounded-full h-8 text-xs border-primary/10 hover:bg-primary/5 hover:text-foreground transition-all"
+                        >
+                            <Check className="mr-1.5 h-3.5 w-3.5" /> Select All
+                        </Button>
+                        <Button 
+                            type="button" 
+                            onClick={handleDeselectAll} 
+                            variant="outline" 
+                            size="sm"
+                            className="rounded-full h-8 text-xs border-primary/10 hover:bg-primary/5 hover:text-foreground transition-all"
+                        >
+                            <X className="mr-1.5 h-3.5 w-3.5" /> Deselect All
+                        </Button>
+                        <Button 
+                            type="button" 
+                            onClick={handleSelectFree} 
+                            variant="outline" 
+                            size="sm" 
+                            className="rounded-full h-8 text-xs bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 border border-emerald-500/20 transition-all font-medium"
+                        >
+                            <Sparkles className="mr-1.5 h-3.5 w-3.5" /> Only Free ({freeVendors.length})
+                        </Button>
+                        <Button 
+                            type="button" 
+                            onClick={handleSelectPaid} 
+                            variant="outline" 
+                            size="sm" 
+                            className="rounded-full h-8 text-xs bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 border border-amber-500/20 transition-all font-medium"
+                        >
+                            <Key className="mr-1.5 h-3.5 w-3.5" /> Only Paid ({paidVendors.length})
+                        </Button>
                     </div>
                 </div>
 
-                <ScrollArea className="h-[300px] pr-4 my-4">
+                <ScrollArea className="h-[380px] pr-3 my-4 border-y border-primary/5 py-4">
                     <div className="space-y-6">
                         <div>
-                            <h3 className="font-semibold mb-3 text-green-600">✓ Free APIs ({freeVendors.length})</h3>
-                            <div className="grid grid-cols-2 gap-3">
+                            <div className="flex items-center gap-2 mb-4 border-b border-primary/5 pb-2">
+                                <ShieldCheck className="h-4 w-4 text-emerald-400" />
+                                <span className="text-sm font-semibold tracking-wide uppercase text-emerald-400">Free APIs</span>
+                                <span className="text-xs text-muted-foreground ml-auto bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-0.5 rounded-full font-mono font-medium">{freeVendors.length} sources</span>
+                            </div>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                 {freeVendors.map((vendor) => (
-                                    <div key={vendor.name} className="flex items-start space-x-2">
-                                        <Checkbox
-                                            id={vendor.name}
-                                            checked={tempSelected.includes(vendor.name)}
-                                            onCheckedChange={() => handleToggle(vendor.name)}
-                                        />
-                                        <div className="flex flex-col">
-                                            <label
-                                                htmlFor={vendor.name}
-                                                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
-                                            >
+                                    <div
+                                        key={vendor.name}
+                                        role="checkbox"
+                                        aria-checked={tempSelected.includes(vendor.name)}
+                                        tabIndex={0}
+                                        className={cn(
+                                            "flex items-center justify-between p-3 rounded-xl border transition-all duration-200 cursor-pointer select-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50",
+                                            tempSelected.includes(vendor.name)
+                                                ? "bg-primary/10 border-primary/30 hover:border-primary/50 text-foreground shadow-sm shadow-primary/5"
+                                                : "bg-muted/15 border-border/40 hover:border-border/80 hover:bg-muted/30 text-muted-foreground"
+                                        )}
+                                        onClick={() => handleToggle(vendor.name)}
+                                        onKeyDown={(e) => {
+                                            if (e.key === " " || e.key === "Enter") {
+                                                e.preventDefault();
+                                                handleToggle(vendor.name);
+                                            }
+                                        }}
+                                    >
+                                        <div className="flex items-center space-x-3 min-w-0 pointer-events-none">
+                                            <Checkbox
+                                                id={`vendor-${vendor.name}`}
+                                                checked={tempSelected.includes(vendor.name)}
+                                                className="border-muted-foreground/35 data-[state=checked]:bg-primary data-[state=checked]:border-primary"
+                                            />
+                                            <span className="text-sm font-medium tracking-tight truncate">
                                                 {vendor.name}
-                                            </label>
-                                            <span className="text-xs text-muted-foreground">
-                                                {[
-                                                    vendor.supportsIP && "IP",
-                                                    vendor.supportsDomain && "Domain",
-                                                    vendor.supportsHash && "Hash"
-                                                ].filter(Boolean).join(", ")}
                                             </span>
+                                        </div>
+                                        <div className="flex items-center gap-1 shrink-0 ml-2 pointer-events-none">
+                                            {vendor.supportsIP && (
+                                                <span className="text-[9px] px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/10 font-semibold tracking-wider">IP</span>
+                                            )}
+                                            {vendor.supportsDomain && (
+                                                <span className="text-[9px] px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-400 border border-purple-500/10 font-semibold tracking-wider font-mono">Domain</span>
+                                            )}
+                                            {vendor.supportsHash && (
+                                                <span className="text-[9px] px-1.5 py-0.5 rounded bg-teal-500/10 text-teal-400 border border-teal-500/10 font-semibold tracking-wider font-mono">Hash</span>
+                                            )}
                                         </div>
                                     </div>
                                 ))}
@@ -166,29 +232,52 @@ export function VendorFilter({ selectedVendors, onVendorsChange }: VendorFilterP
                         </div>
 
                         <div>
-                            <h3 className="font-semibold mb-3 text-orange-600">🔑 Requires API Key ({paidVendors.length})</h3>
-                            <div className="grid grid-cols-2 gap-3">
+                            <div className="flex items-center gap-2 mb-4 border-b border-primary/5 pb-2">
+                                <Lock className="h-4 w-4 text-amber-400" />
+                                <span className="text-sm font-semibold tracking-wide uppercase text-amber-400 font-medium">Requires API Key</span>
+                                <span className="text-xs text-muted-foreground ml-auto bg-amber-500/10 border border-amber-500/20 px-2.5 py-0.5 rounded-full font-mono font-medium">{paidVendors.length} sources</span>
+                            </div>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                 {paidVendors.map((vendor) => (
-                                    <div key={vendor.name} className="flex items-start space-x-2">
-                                        <Checkbox
-                                            id={vendor.name}
-                                            checked={tempSelected.includes(vendor.name)}
-                                            onCheckedChange={() => handleToggle(vendor.name)}
-                                        />
-                                        <div className="flex flex-col">
-                                            <label
-                                                htmlFor={vendor.name}
-                                                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
-                                            >
+                                    <div
+                                        key={vendor.name}
+                                        role="checkbox"
+                                        aria-checked={tempSelected.includes(vendor.name)}
+                                        tabIndex={0}
+                                        className={cn(
+                                            "flex items-center justify-between p-3 rounded-xl border transition-all duration-200 cursor-pointer select-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50",
+                                            tempSelected.includes(vendor.name)
+                                                ? "bg-primary/10 border-primary/30 hover:border-primary/50 text-foreground shadow-sm shadow-primary/5"
+                                                : "bg-muted/15 border-border/40 hover:border-border/80 hover:bg-muted/30 text-muted-foreground"
+                                        )}
+                                        onClick={() => handleToggle(vendor.name)}
+                                        onKeyDown={(e) => {
+                                            if (e.key === " " || e.key === "Enter") {
+                                                e.preventDefault();
+                                                handleToggle(vendor.name);
+                                            }
+                                        }}
+                                    >
+                                        <div className="flex items-center space-x-3 min-w-0 pointer-events-none">
+                                            <Checkbox
+                                                id={`vendor-${vendor.name}`}
+                                                checked={tempSelected.includes(vendor.name)}
+                                                className="border-muted-foreground/35 data-[state=checked]:bg-primary data-[state=checked]:border-primary"
+                                            />
+                                            <span className="text-sm font-medium tracking-tight truncate">
                                                 {vendor.name}
-                                            </label>
-                                            <span className="text-xs text-muted-foreground">
-                                                {[
-                                                    vendor.supportsIP && "IP",
-                                                    vendor.supportsDomain && "Domain",
-                                                    vendor.supportsHash && "Hash"
-                                                ].filter(Boolean).join(", ")}
                                             </span>
+                                        </div>
+                                        <div className="flex items-center gap-1 shrink-0 ml-2 pointer-events-none">
+                                            {vendor.supportsIP && (
+                                                <span className="text-[9px] px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/10 font-semibold tracking-wider">IP</span>
+                                            )}
+                                            {vendor.supportsDomain && (
+                                                <span className="text-[9px] px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-400 border border-purple-500/10 font-semibold tracking-wider font-mono">Domain</span>
+                                            )}
+                                            {vendor.supportsHash && (
+                                                <span className="text-[9px] px-1.5 py-0.5 rounded bg-teal-500/10 text-teal-400 border border-teal-500/10 font-semibold tracking-wider font-mono">Hash</span>
+                                            )}
                                         </div>
                                     </div>
                                 ))}
@@ -197,12 +286,21 @@ export function VendorFilter({ selectedVendors, onVendorsChange }: VendorFilterP
                     </div>
                 </ScrollArea>
 
-                <div className="flex justify-end gap-2 pt-4">
-                    <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+                <div className="flex justify-end gap-3 pt-4 border-t border-primary/5">
+                    <Button 
+                        type="button" 
+                        variant="ghost" 
+                        onClick={() => setOpen(false)}
+                        className="rounded-full px-5 hover:bg-primary/5 text-muted-foreground hover:text-foreground"
+                    >
                         Cancel
                     </Button>
-                    <Button type="button" onClick={handleApply}>
-                        Apply ({tempSelected.length} selected)
+                    <Button 
+                        type="button" 
+                        onClick={handleApply}
+                        className="rounded-full px-6 font-semibold bg-gradient-to-r from-primary to-primary/80 text-primary-foreground shadow-md hover:shadow-lg transition-all"
+                    >
+                        Apply Selection ({tempSelected.length})
                     </Button>
                 </div>
             </DialogContent>

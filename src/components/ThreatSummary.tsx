@@ -131,7 +131,7 @@ export const ThreatSummary = ({ query, overallScore, threatLevel, totalVendors, 
 
               if (hostname) {
                 return (
-                  <p className="text-xs text-muted-foreground truncate max-w-[220px] pl-2 border-l-2 border-primary/30 mt-1" title={hostname}>
+                  <p className="text-xs text-muted-foreground break-all pl-2 border-l-2 border-primary/30 mt-1" title={hostname}>
                     {hostname}
                   </p>
                 );
