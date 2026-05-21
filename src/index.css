@@ -173,3 +173,15 @@ All colors MUST be HSL.
 }
 
 #lovable-badge { display: none !important; }
+
+/* Custom Leaflet Map styling */
+.leaflet-container {
+  background: transparent !important;
+}
+.leaflet-dark-map {
+  background: transparent !important;
+}
+.custom-red-dot {
+  background: transparent !important;
+  border: none !important;
+}

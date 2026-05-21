@@ -1,4 +1,4 @@
-import { Github, Twitter, Instagram } from "lucide-react";
+import { Github, Twitter, Instagram, Linkedin } from "lucide-react";
 
 export function Footer() {
     return (
@@ -6,12 +6,12 @@ export function Footer() {
             <div className="container mx-auto px-4 py-6">
                 <div className="flex flex-col md:flex-row items-center justify-between gap-4">
                     <div className="text-sm text-muted-foreground">
-                        © {new Date().getFullYear()} ThreatSumm4ry. Built for the cybersecurity community.
+                        © {new Date().getFullYear()} ThreatSumm4ry - kkroth0.
                     </div>
 
                     <div className="flex items-center gap-4">
                         <a
-                            href="https://github.com/yourusername"
+                            href="https://github.com/kkroth0"
                             target="_blank"
                             rel="noopener noreferrer"
                             className="text-muted-foreground hover:text-foreground transition-colors"
@@ -20,7 +20,7 @@ export function Footer() {
                             <Github className="h-5 w-5" />
                         </a>
                         <a
-                            href="https://twitter.com/yourusername"
+                            href="https://x.com/kkct00"
                             target="_blank"
                             rel="noopener noreferrer"
                             className="text-muted-foreground hover:text-foreground transition-colors"
@@ -29,13 +29,13 @@ export function Footer() {
                             <Twitter className="h-5 w-5" />
                         </a>
                         <a
-                            href="https://instagram.com/yourusername"
+                            href="https://www.linkedin.com/in/matheuslima-andrade/"
                             target="_blank"
                             rel="noopener noreferrer"
                             className="text-muted-foreground hover:text-foreground transition-colors"
                             aria-label="Instagram"
                         >
-                            <Instagram className="h-5 w-5" />
+                            <Linkedin className="h-5 w-5" />
                         </a>
                     </div>
                 </div>

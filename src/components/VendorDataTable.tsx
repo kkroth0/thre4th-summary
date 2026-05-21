@@ -280,8 +280,42 @@ export const VendorDataTable = ({ vendorData, getVendorLink }: VendorDataTablePr
               const status = getStatus(vendor);
               const link = getVendorLink?.(vendor.name);
               return (
-                <TableRow key={vendor.name} className="hover:bg-muted/50 transition-colors align-top">
-                  <TableCell className="font-medium">{vendor.name}</TableCell>
+                 <TableRow key={vendor.name} className="hover:bg-muted/50 transition-colors align-top">
+                  <TableCell className="font-medium">
+                    <div className="flex items-center gap-2">
+                      <img
+                        src={`https://www.google.com/s2/favicons?sz=32&domain=${
+                          vendor.name === "VirusTotal" ? "virustotal.com" :
+                          vendor.name === "AbuseIPDB" ? "abuseipdb.com" :
+                          vendor.name === "AlienVault OTX" ? "alienvault.com" :
+                          vendor.name === "Shodan" ? "shodan.io" :
+                          vendor.name === "Censys" ? "censys.io" :
+                          vendor.name === "WHOIS" ? "who.is" :
+                          vendor.name === "IP Geolocation" ? "ip-api.com" :
+                          vendor.name === "URLhaus" ? "abuse.ch" :
+                          vendor.name === "MalwareBazaar" ? "abuse.ch" :
+                          vendor.name === "Google Safe Browsing" ? "google.com" :
+                          vendor.name === "PhishTank" ? "phishtank.com" :
+                          vendor.name === "Pulsedive" ? "pulsedive.com" :
+                          vendor.name === "Hybrid Analysis" ? "hybrid-analysis.com" :
+                          vendor.name === "CIRCL hashlookup" ? "circl.lu" :
+                          vendor.name === "Criminal IP" ? "criminalip.io" :
+                          vendor.name === "MetaDefender" ? "opswat.com" :
+                          vendor.name === "PhishStats" ? "phishstats.info" :
+                          vendor.name === "Ransomware.live" ? "ransomware.live" :
+                          vendor.name === "OpenPhish" ? "openphish.com" :
+                          vendor.name === "DShield" ? "dshield.org" :
+                          "team-cymru.com"
+                        }`}
+                        alt=""
+                        className="w-3.5 h-3.5 rounded-sm object-contain shrink-0"
+                        onError={(e) => {
+                          (e.target as HTMLElement).style.display = "none";
+                        }}
+                      />
+                      <span>{vendor.name}</span>
+                    </div>
+                  </TableCell>
                   <TableCell>{getStatusBadge(status)}</TableCell>
                   <TableCell>
                     <Badge variant="secondary">{Object.keys(vendor.data).length}</Badge>

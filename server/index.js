@@ -406,7 +406,7 @@ app.post('/api/ipgeo', async (req, res) => {
     if (queryType !== "ip") return res.json({ data: { "Status": "IP only" } });
 
     try {
-        const response = await axios.get(`http://ip-api.com/json/${query}?fields=status,country,countryCode,regionName,city,isp,org,as,proxy,hosting`);
+        const response = await axios.get(`http://ip-api.com/json/${query}?fields=status,country,countryCode,regionName,city,isp,org,as,proxy,hosting,lat,lon`);
         
         let reverseHostname = "Unknown";
         try {

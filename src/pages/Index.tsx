@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { getFieldCategory } from "@/components/VendorDataTable";
-import { Shield, AlertTriangle, Bug, FileSearch, Globe, Link as LinkIcon, Radar, Database, Eye, Search, BookOpen, Layers, LayoutGrid, CheckCircle2, Mail } from "lucide-react";
+import { Shield, AlertTriangle, Bug, FileSearch, Globe, Link as LinkIcon, Radar, Database, Eye, Search, BookOpen, Layers, LayoutGrid, CheckCircle2, Mail, ArrowRight } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { ThreatSummary } from "@/components/ThreatSummary";
 import { VendorCard } from "@/components/VendorCard";
@@ -56,16 +56,24 @@ const SearchForm = ({
     <div className={`w-full ${className}`}>
       <form onSubmit={onSubmit} className="w-full">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full space-y-4">
-          <TabsList className="grid w-full grid-cols-2 max-w-[320px] mx-auto bg-muted/65 p-1 rounded-full border border-primary/10">
-            <TabsTrigger value="quick" className="rounded-full gap-2 text-xs font-semibold py-1.5 transition-all">
-              <Search className="h-3.5 w-3.5" />
-              <span>Quick Scan</span>
-            </TabsTrigger>
-            <TabsTrigger value="bulk" className="rounded-full gap-2 text-xs font-semibold py-1.5 transition-all">
-              <Layers className="h-3.5 w-3.5" />
-              <span>Bulk / Log Scan</span>
-            </TabsTrigger>
-          </TabsList>
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+            <TabsList className="grid w-full grid-cols-2 max-w-[320px] bg-muted/65 p-1 rounded-full border border-primary/10 shrink-0">
+              <TabsTrigger value="quick" className="rounded-full gap-2 text-xs font-semibold py-1.5 transition-all">
+                <Search className="h-3.5 w-3.5" />
+                <span>Quick Scan</span>
+              </TabsTrigger>
+              <TabsTrigger value="bulk" className="rounded-full gap-2 text-xs font-semibold py-1.5 transition-all">
+                <Layers className="h-3.5 w-3.5" />
+                <span>Bulk / Log Scan</span>
+              </TabsTrigger>
+            </TabsList>
+
+            <VendorFilter
+              selectedVendors={selectedVendors}
+              onVendorsChange={onVendorsChange}
+              className="h-9 border-primary/10 bg-card/45 hover:bg-primary/10 hover:text-foreground text-muted-foreground px-4 rounded-full transition-all duration-200 backdrop-blur-md text-xs font-semibold shrink-0"
+            />
+          </div>
 
           <TabsContent value="quick" className="focus-visible:outline-none focus-visible:ring-0 mt-2">
             <div className="space-y-3">
@@ -78,20 +86,19 @@ const SearchForm = ({
                   onChange={(e) => setQuery(e.target.value)}
                   className="bg-transparent border-0 h-10 focus-visible:ring-0 focus-visible:ring-offset-0 text-base placeholder:text-muted-foreground/60 flex-1 min-w-0 pl-0 pr-3"
                 />
-                <div className="flex items-center gap-1.5 shrink-0">
-                  <VendorFilter
-                    selectedVendors={selectedVendors}
-                    onVendorsChange={onVendorsChange}
-                    className="h-10 border-0 bg-transparent hover:bg-primary/10 hover:text-foreground text-muted-foreground px-3.5 rounded-full transition-all duration-200"
-                  />
-                  <Button
-                    type="submit"
-                    disabled={isLoading || !query.trim()}
-                    className="shadow-md hover:shadow-lg transition-all px-8 h-10 rounded-full font-semibold tracking-wide bg-gradient-to-r from-primary to-primary/80"
-                  >
-                    {isLoading ? t('analyzing') : <><Search className="mr-2 h-4 w-4" /> {t('analyze')}</>}
-                  </Button>
-                </div>
+                <Button
+                  type="submit"
+                  disabled={isLoading || !query.trim()}
+                  size="icon"
+                  className="h-10 w-10 shadow-md hover:shadow-lg transition-all rounded-full bg-gradient-to-r from-primary to-primary/80 flex items-center justify-center shrink-0"
+                  title="Analyze Target"
+                >
+                  {isLoading ? (
+                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary-foreground border-t-transparent" />
+                  ) : (
+                    <ArrowRight className="h-5 w-5 text-primary-foreground" />
+                  )}
+                </Button>
               </div>
             </div>
           </TabsContent>
@@ -135,20 +142,24 @@ const SearchForm = ({
                     : "Awaiting valid IOCs..."}
                 </div>
 
-                <div className="flex items-center gap-2">
-                  <VendorFilter
-                    selectedVendors={selectedVendors}
-                    onVendorsChange={onVendorsChange}
-                  />
-                  <Button
-                    type="submit"
-                    disabled={isLoading || extractedIps.length > 35 || (!query.trim())}
-                    size="lg"
-                    className="shadow-md hover:shadow-lg transition-all px-8 rounded-full font-semibold tracking-wide bg-gradient-to-r from-primary to-primary/80"
-                  >
-                    {isLoading ? t('analyzing') : <><Search className="mr-2 h-4 w-4" /> {t('analyze')}</>}
-                  </Button>
-                </div>
+                <Button
+                  type="submit"
+                  disabled={isLoading || extractedIps.length > 35 || (!query.trim())}
+                  size="lg"
+                  className="shadow-md hover:shadow-lg transition-all px-8 rounded-full font-semibold tracking-wide bg-gradient-to-r from-primary to-primary/80 flex items-center gap-2"
+                >
+                  {isLoading ? (
+                    <>
+                      <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary-foreground border-t-transparent" />
+                      <span>{t('analyzing')}</span>
+                    </>
+                  ) : (
+                    <>
+                      <ArrowRight className="h-4 w-4 text-primary-foreground" />
+                      <span>{t('analyze')}</span>
+                    </>
+                  )}
+                </Button>
               </div>
             </div>
           </TabsContent>
@@ -410,7 +421,7 @@ const Index = () => {
         const startRad = startAngleDeg * (Math.PI / 180);
         const endRad = endAngleDeg * (Math.PI / 180);
         const angleStep = (endRad - startRad) / steps;
-        
+
         for (let s = 0; s < steps; s++) {
           const a1 = startRad + s * angleStep;
           const a2 = startRad + (s + 1) * angleStep;
@@ -1038,27 +1049,70 @@ const Index = () => {
     });
   };
 
+  const VendorFavicon = ({ name, fallbackIcon }: { name: string; fallbackIcon: React.ReactNode }) => {
+    const [error, setError] = useState(false);
+
+    if (error) return <>{fallbackIcon}</>;
+
+    const domainMap: Record<string, string> = {
+      "VirusTotal": "virustotal.com",
+      "AbuseIPDB": "abuseipdb.com",
+      "AlienVault OTX": "alienvault.com",
+      "Shodan": "shodan.io",
+      "URLhaus": "abuse.ch",
+      "MalwareBazaar": "abuse.ch",
+      "Google Safe Browsing": "google.com",
+      "PhishTank": "phishtank.com",
+      "Pulsedive": "pulsedive.com",
+      "Hybrid Analysis": "hybrid-analysis.com",
+      "CIRCL hashlookup": "circl.lu",
+      "Criminal IP": "criminalip.io",
+      "MetaDefender": "opswat.com",
+      "PhishStats": "phishstats.info",
+      "Ransomware.live": "ransomware.live",
+      "WHOIS": "who.is",
+      "IP Geolocation": "ip-api.com",
+      "Censys": "censys.io",
+      "OpenPhish": "openphish.com",
+      "DShield": "dshield.org",
+      "Team Cymru": "team-cymru.com"
+    };
+
+    const domain = domainMap[name] || "google.com";
+
+    return (
+      <img
+        src={`https://www.google.com/s2/favicons?sz=32&domain=${domain}`}
+        alt=""
+        className="w-5 h-5 rounded-sm object-contain shrink-0"
+        onError={() => setError(true)}
+      />
+    );
+  };
+
   const getVendorIcon = (name: string) => {
+    let fallback = <Shield className="h-5 w-5 text-primary" />;
     switch (name) {
-      case "VirusTotal": return <Shield className="h-5 w-5 text-primary" />;
-      case "AbuseIPDB": return <AlertTriangle className="h-5 w-5 text-primary" />;
-      case "AlienVault OTX": return <Eye className="h-5 w-5 text-primary" />;
-      case "Shodan": return <Radar className="h-5 w-5 text-primary" />;
-      case "URLhaus": return <LinkIcon className="h-5 w-5 text-primary" />;
-      case "MalwareBazaar": return <Bug className="h-5 w-5 text-primary" />;
-      case "Google Safe Browsing": return <Shield className="h-5 w-5 text-primary" />;
-      case "PhishTank": return <LinkIcon className="h-5 w-5 text-primary" />;
-      case "Pulsedive": return <Radar className="h-5 w-5 text-primary" />;
-      case "Hybrid Analysis": return <Bug className="h-5 w-5 text-primary" />;
-      case "CIRCL hashlookup": return <Database className="h-5 w-5 text-primary" />;
-      case "Criminal IP": return <AlertTriangle className="h-5 w-5 text-primary" />;
-      case "MetaDefender": return <Shield className="h-5 w-5 text-primary" />;
-      case "PhishStats": return <LinkIcon className="h-5 w-5 text-primary" />;
-      case "Ransomware.live": return <Bug className="h-5 w-5 text-primary" />;
-      case "WHOIS": return <FileSearch className="h-5 w-5 text-primary" />;
-      case "IP Geolocation": return <Globe className="h-5 w-5 text-primary" />;
-      default: return <Shield className="h-5 w-5 text-primary" />;
+      case "VirusTotal": fallback = <Shield className="h-5 w-5 text-primary" />; break;
+      case "AbuseIPDB": fallback = <AlertTriangle className="h-5 w-5 text-primary" />; break;
+      case "AlienVault OTX": fallback = <Eye className="h-5 w-5 text-primary" />; break;
+      case "Shodan": fallback = <Radar className="h-5 w-5 text-primary" />; break;
+      case "URLhaus": fallback = <LinkIcon className="h-5 w-5 text-primary" />; break;
+      case "MalwareBazaar": fallback = <Bug className="h-5 w-5 text-primary" />; break;
+      case "Google Safe Browsing": fallback = <Shield className="h-5 w-5 text-primary" />; break;
+      case "PhishTank": fallback = <LinkIcon className="h-5 w-5 text-primary" />; break;
+      case "Pulsedive": fallback = <Radar className="h-5 w-5 text-primary" />; break;
+      case "Hybrid Analysis": fallback = <Bug className="h-5 w-5 text-primary" />; break;
+      case "CIRCL hashlookup": fallback = <Database className="h-5 w-5 text-primary" />; break;
+      case "Criminal IP": fallback = <AlertTriangle className="h-5 w-5 text-primary" />; break;
+      case "MetaDefender": fallback = <Shield className="h-5 w-5 text-primary" />; break;
+      case "PhishStats": fallback = <LinkIcon className="h-5 w-5 text-primary" />; break;
+      case "Ransomware.live": fallback = <Bug className="h-5 w-5 text-primary" />; break;
+      case "WHOIS": fallback = <FileSearch className="h-5 w-5 text-primary" />; break;
+      case "IP Geolocation": fallback = <Globe className="h-5 w-5 text-primary" />; break;
+      default: fallback = <Shield className="h-5 w-5 text-primary" />; break;
     }
+    return <VendorFavicon name={name} fallbackIcon={fallback} />;
   };
 
   const getVendorLink = (name: string) => {
@@ -1145,10 +1199,6 @@ const Index = () => {
                 ))}
               </div>
             </div>
-
-            <p className="text-sm text-muted-foreground animate-fade-in">
-              Secure & Private Threat Analysis • API Keys Managed Locally
-            </p>
           </div>
         </div>
 
