@@ -312,29 +312,29 @@ export const ThreatCharts = ({ vendorData, detections, totalVendors }: ThreatCha
       <Card className="p-6 border border-primary/10 bg-card/45 backdrop-blur-md shadow-md shadow-primary/5 flex flex-col min-h-[340px]">
         <h3 className="text-sm font-bold tracking-wider uppercase text-muted-foreground mb-4">Geolocation</h3>
         {geoDetails.hasCoordinates ? (
-          <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-4 items-center">
+          <div className="flex-1 flex flex-col gap-4">
             {/* Map Area */}
-            <div className="relative w-full h-[200px] rounded-xl overflow-hidden border border-primary/10 bg-background/50">
+            <div className="relative w-full h-[150px] rounded-xl overflow-hidden border border-primary/10 bg-background/50">
               <LeafletMap lat={geoDetails.lat} lon={geoDetails.lon} />
             </div>
             
             {/* Geolocation details */}
-            <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-x-4 gap-y-2.5">
               <div>
-                <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Country</p>
-                <p className="text-sm font-bold text-foreground truncate" title={geoDetails.country}>{geoDetails.country}</p>
+                <p className="text-[9px] text-muted-foreground uppercase tracking-wider font-semibold">Country</p>
+                <p className="text-xs font-bold text-foreground truncate" title={geoDetails.country}>{geoDetails.country}</p>
               </div>
               <div>
-                <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">City</p>
-                <p className="text-sm font-bold text-foreground truncate" title={geoDetails.city}>{geoDetails.city}</p>
+                <p className="text-[9px] text-muted-foreground uppercase tracking-wider font-semibold">City</p>
+                <p className="text-xs font-bold text-foreground truncate" title={geoDetails.city}>{geoDetails.city}</p>
               </div>
               <div>
-                <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Latitude</p>
-                <p className="text-sm font-mono font-bold text-foreground">{geoDetails.lat}</p>
+                <p className="text-[9px] text-muted-foreground uppercase tracking-wider font-semibold">Latitude</p>
+                <p className="text-xs font-mono font-bold text-foreground">{geoDetails.lat}</p>
               </div>
               <div>
-                <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Longitude</p>
-                <p className="text-sm font-mono font-bold text-foreground">{geoDetails.lon}</p>
+                <p className="text-[9px] text-muted-foreground uppercase tracking-wider font-semibold">Longitude</p>
+                <p className="text-xs font-mono font-bold text-foreground">{geoDetails.lon}</p>
               </div>
             </div>
           </div>

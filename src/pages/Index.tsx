@@ -8,8 +8,8 @@ import { VendorCard } from "@/components/VendorCard";
 import { VendorContent } from "@/components/VendorContent";
 import { VendorFilter } from "@/components/VendorFilter";
 import { Footer } from "@/components/Footer";
-import { HistorySidebar } from "@/components/HistorySidebar";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { useSidebar } from "@/contexts/SidebarContext";
 import { Header } from "@/components/Header";
 
 import { ThreatCharts } from "@/components/ThreatCharts";
@@ -55,30 +55,42 @@ const SearchForm = ({
   return (
     <div className={`w-full ${className}`}>
       <form onSubmit={onSubmit} className="w-full">
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full space-y-4">
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
-            <TabsList className="grid w-full grid-cols-2 max-w-[320px] bg-muted/65 p-1 rounded-full border border-primary/10 shrink-0">
-              <TabsTrigger value="quick" className="rounded-full gap-2 text-xs font-semibold py-1.5 transition-all">
+        <div className="space-y-3">
+          <div className="relative flex flex-col md:flex-row md:items-center bg-card/45 backdrop-blur-lg rounded-2xl md:rounded-full border border-primary/25 hover:border-primary/50 focus-within:border-primary focus-within:ring-4 focus-within:ring-primary/10 transition-all duration-500 shadow-lg shadow-primary/5 p-1.5 pl-3 gap-2">
+            
+            {/* Integrated Tab Selector Inside Search Bar */}
+            <div className="flex items-center gap-1 bg-muted/40 p-1 rounded-full border border-primary/5 shrink-0">
+              <button
+                type="button"
+                onClick={() => { setActiveTab("quick"); }}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all ${
+                  activeTab === "quick" 
+                    ? "bg-background text-foreground shadow-sm" 
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
                 <Search className="h-3.5 w-3.5" />
                 <span>Quick Scan</span>
-              </TabsTrigger>
-              <TabsTrigger value="bulk" className="rounded-full gap-2 text-xs font-semibold py-1.5 transition-all">
+              </button>
+              <button
+                type="button"
+                onClick={() => { setActiveTab("bulk"); }}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all ${
+                  activeTab === "bulk" 
+                    ? "bg-background text-foreground shadow-sm" 
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
                 <Layers className="h-3.5 w-3.5" />
                 <span>Bulk / Log Scan</span>
-              </TabsTrigger>
-            </TabsList>
+              </button>
+            </div>
 
-            <VendorFilter
-              selectedVendors={selectedVendors}
-              onVendorsChange={onVendorsChange}
-              className="h-9 border-primary/10 bg-card/45 hover:bg-primary/10 hover:text-foreground text-muted-foreground px-4 rounded-full transition-all duration-200 backdrop-blur-md text-xs font-semibold shrink-0"
-            />
-          </div>
+            <div className="h-5 w-[1px] bg-border/60 hidden md:block" />
 
-          <TabsContent value="quick" className="focus-visible:outline-none focus-visible:ring-0 mt-2">
-            <div className="space-y-3">
-              <div className="relative flex items-center bg-card/45 backdrop-blur-lg rounded-full border border-primary/25 hover:border-primary/50 focus-within:border-primary focus-within:ring-4 focus-within:ring-primary/10 transition-all duration-500 shadow-lg shadow-primary/5 p-1.5 pl-5">
-                <Search className="h-5 w-5 text-muted-foreground mr-3 shrink-0" />
+            {/* Input area depends on activeTab */}
+            {activeTab === "quick" ? (
+              <div className="flex-1 flex items-center min-w-0 px-2">
                 <Input
                   type="text"
                   placeholder="Enter IP, Domain, Hash, or CVE (e.g. 51.210.208.8, CVE-2024-3094)..."
@@ -86,31 +98,14 @@ const SearchForm = ({
                   onChange={(e) => setQuery(e.target.value)}
                   className="bg-transparent border-0 h-10 focus-visible:ring-0 focus-visible:ring-offset-0 text-base placeholder:text-muted-foreground/60 flex-1 min-w-0 pl-0 pr-3"
                 />
-                <Button
-                  type="submit"
-                  disabled={isLoading || !query.trim()}
-                  size="icon"
-                  className="h-10 w-10 shadow-md hover:shadow-lg transition-all rounded-full bg-gradient-to-r from-primary to-primary/80 flex items-center justify-center shrink-0"
-                  title="Analyze Target"
-                >
-                  {isLoading ? (
-                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary-foreground border-t-transparent" />
-                  ) : (
-                    <ArrowRight className="h-5 w-5 text-primary-foreground" />
-                  )}
-                </Button>
               </div>
-            </div>
-          </TabsContent>
-
-          <TabsContent value="bulk" className="focus-visible:outline-none focus-visible:ring-0 mt-2">
-            <div className="flex flex-col gap-3 relative">
-              <div className="relative group">
-                <Textarea
-                  placeholder="Paste logs, multiple IPs, domains, or hashes (up to 35 items parsed automatically)..."
+            ) : (
+              <div className="flex-1 flex items-center min-w-0 px-2 py-1">
+                <textarea
+                  placeholder="Paste logs, multiple IPs, domains, or hashes (parsed automatically)..."
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
-                  className="min-h-[120px] resize-y text-base p-4 bg-card/45 backdrop-blur-lg border border-primary/25 focus-visible:ring-primary/35 focus:border-primary transition-all duration-300 rounded-2xl [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden shadow-lg shadow-primary/5"
+                  className="bg-transparent border-0 h-10 min-h-[40px] max-h-[160px] resize-y focus-visible:ring-0 focus:outline-none text-base placeholder:text-muted-foreground/60 flex-1 min-w-0 pl-0 pr-3 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' && !e.shiftKey) {
                       e.preventDefault();
@@ -118,52 +113,59 @@ const SearchForm = ({
                     }
                   }}
                 />
-                {extractedIps.length > 0 && (
-                  <div className="absolute top-4 right-4 max-w-[50%] flex flex-wrap justify-end gap-1.5 opacity-80 pointer-events-none">
-                    {extractedIps.slice(0, 3).map(ip => (
-                      <Badge key={ip} variant="secondary" className="font-mono text-[10px] px-1.5 py-0 shadow-sm border-primary/20 bg-primary/5 text-primary">
-                        {ip}
-                      </Badge>
-                    ))}
-                    {extractedIps.length > 3 && (
-                      <Badge variant="outline" className="font-mono text-[10px] px-1.5 py-0 bg-background/80 shadow-sm backdrop-blur">
-                        +{extractedIps.length - 3} more
-                      </Badge>
-                    )}
-                  </div>
+              </div>
+            )}
+
+            {/* Vendor Filter & Scan Button */}
+            <div className="flex items-center gap-2 shrink-0 ml-auto pr-1">
+              <VendorFilter
+                selectedVendors={selectedVendors}
+                onVendorsChange={onVendorsChange}
+                className="h-9 border-primary/10 bg-muted/40 hover:bg-primary/10 hover:text-foreground text-muted-foreground px-3.5 rounded-full transition-all duration-200 backdrop-blur-md text-[11px] font-semibold"
+              />
+              <Button
+                type="submit"
+                disabled={isLoading || (activeTab === "bulk" ? extractedIps.length > 35 || !query.trim() : !query.trim())}
+                size="icon"
+                className="h-9 w-9 shadow-md hover:shadow-lg transition-all rounded-full bg-gradient-to-r from-primary to-primary/80 flex items-center justify-center shrink-0"
+                title="Analyze Target"
+              >
+                {isLoading ? (
+                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary-foreground border-t-transparent" />
+                ) : (
+                  <ArrowRight className="h-4 w-4 text-primary-foreground" />
                 )}
-              </div>
-
-              <div className="flex items-center justify-between mt-1">
-                <div className="flex items-center gap-2 text-xs text-muted-foreground/80 font-medium">
-                  <CheckCircle2 className={`h-4 w-4 ${extractedIps.length > 0 ? "text-green-500" : "text-muted-foreground/40"}`} />
-                  {extractedIps.length > 0
-                    ? `${extractedIps.length} target${extractedIps.length > 1 ? 's' : ''} parsed (max 35)`
-                    : "Awaiting valid IOCs..."}
-                </div>
-
-                <Button
-                  type="submit"
-                  disabled={isLoading || extractedIps.length > 35 || (!query.trim())}
-                  size="lg"
-                  className="shadow-md hover:shadow-lg transition-all px-8 rounded-full font-semibold tracking-wide bg-gradient-to-r from-primary to-primary/80 flex items-center gap-2"
-                >
-                  {isLoading ? (
-                    <>
-                      <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary-foreground border-t-transparent" />
-                      <span>{t('analyzing')}</span>
-                    </>
-                  ) : (
-                    <>
-                      <ArrowRight className="h-4 w-4 text-primary-foreground" />
-                      <span>{t('analyze')}</span>
-                    </>
-                  )}
-                </Button>
-              </div>
+              </Button>
             </div>
-          </TabsContent>
-        </Tabs>
+          </div>
+
+          {/* Additional details for Bulk Scan mode */}
+          {activeTab === "bulk" && (
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mt-1 px-4 py-2 bg-muted/20 border border-border/40 rounded-2xl animate-fade-in">
+              <div className="flex items-center gap-2 text-xs text-muted-foreground/80 font-medium">
+                <CheckCircle2 className={`h-4 w-4 ${extractedIps.length > 0 ? "text-green-500" : "text-muted-foreground/40"}`} />
+                {extractedIps.length > 0
+                  ? `${extractedIps.length} target${extractedIps.length > 1 ? 's' : ''} parsed (max 35)`
+                  : "Awaiting valid IOCs..."}
+              </div>
+
+              {extractedIps.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 max-w-[70%] justify-end">
+                  {extractedIps.slice(0, 5).map(ip => (
+                    <Badge key={ip} variant="secondary" className="font-mono text-[10px] px-1.5 py-0 shadow-sm border-primary/20 bg-primary/5 text-primary">
+                      {ip}
+                    </Badge>
+                  ))}
+                  {extractedIps.length > 5 && (
+                    <Badge variant="outline" className="font-mono text-[10px] px-1.5 py-0 bg-background/80 shadow-sm">
+                      +{extractedIps.length - 5} more
+                    </Badge>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       </form>
     </div>
   );
@@ -178,16 +180,10 @@ const ALL_VENDORS = [
   "OpenPhish", "DShield", "Team Cymru", "Censys"
 ];
 
-interface HistoryItem {
-  query: string;
-  timestamp: number;
-  threatLevel: "safe" | "suspicious" | "malicious" | "unknown";
-}
-
 const Index = () => {
+  const { isCollapsed } = useSidebar();
   const [query, setQuery] = useState("");
   const [selectedVendors, setSelectedVendors] = useState<string[]>(ALL_VENDORS);
-  const [history, setHistory] = useState<HistoryItem[]>([]);
 
   // Changed data to results array to support multi-IP
   const [results, setResults] = useState<ThreatIntelligenceResult[]>([]);
@@ -201,7 +197,7 @@ const Index = () => {
   const { t } = useLanguage();
 
 
-  // Load saved preferences and history
+  // Load saved preferences
   useEffect(() => {
     const savedVendors = localStorage.getItem("selectedVendors");
     if (savedVendors) {
@@ -213,15 +209,6 @@ const Index = () => {
       } catch (e) {
         console.error("Failed to parse saved vendors", e);
         setSelectedVendors(ALL_VENDORS);
-      }
-    }
-
-    const savedHistory = localStorage.getItem("searchHistory");
-    if (savedHistory) {
-      try {
-        setHistory(JSON.parse(savedHistory));
-      } catch (e) {
-        console.error("Failed to parse history", e);
       }
     }
   }, []);
@@ -339,17 +326,6 @@ const Index = () => {
 
         // Update final result for this query
         setResults(prev => prev.map(r => r.query === q ? result : r));
-
-        // Update history
-        setHistory(prev => {
-          const filtered = prev.filter(item => item.query !== result.query);
-          const newHistory = [
-            { query: result.query, timestamp: Date.now(), threatLevel: result.threatLevel },
-            ...filtered
-          ].slice(0, 50);
-          localStorage.setItem("searchHistory", JSON.stringify(newHistory));
-          return newHistory;
-        });
       }));
 
     } catch (error) {
@@ -1140,17 +1116,8 @@ const Index = () => {
 
   if (results.length === 0 && !isAnalyzing) {
     return (
-      <div className="min-h-screen bg-background flex flex-col">
-        <Header
-          onLogoClick={handleReset}
-          actions={
-            <HistorySidebar
-              history={history}
-              onSelect={(q) => { setQuery(q); setTimeout(() => document.querySelector('form')?.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true })), 100); }}
-              onClear={() => { setHistory([]); localStorage.removeItem("searchHistory"); }}
-            />
-          }
-        />
+      <div className={`min-h-screen bg-background flex flex-col transition-all duration-300 ${isCollapsed ? "lg:pl-16" : "lg:pl-56"}`}>
+        <Header onLogoClick={handleReset} />
 
         <div className="flex-1 flex flex-col items-center justify-center p-4">
           <div className="max-w-2xl w-full space-y-8 text-center">
@@ -1191,7 +1158,7 @@ const Index = () => {
                   <button
                     key={ip}
                     onClick={() => setQuery(prev => prev ? `${prev}\n${ip}` : ip)}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-mono font-medium border border-border/60 bg-muted/30 hover:bg-primary/10 hover:border-primary/40 text-muted-foreground hover:text-foreground transition-all cursor-pointer"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-sans font-semibold border border-border/60 bg-muted/30 hover:bg-primary/10 hover:border-primary/40 text-muted-foreground hover:text-foreground transition-all cursor-pointer"
                   >
                     <span>{flag}</span>
                     <span>{ip}</span>
@@ -1208,31 +1175,25 @@ const Index = () => {
   }
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
-      <Header
-        onLogoClick={handleReset}
-        actions={
-          <HistorySidebar
-            history={history}
-            onSelect={(q) => { setQuery(q); setTimeout(() => document.querySelector('form')?.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true })), 100); }}
-            onClear={() => { setHistory([]); localStorage.removeItem("searchHistory"); }}
+    <div className={`min-h-screen bg-background flex flex-col transition-all duration-300 ${isCollapsed ? "lg:pl-16" : "lg:pl-56"}`}>
+      <Header onLogoClick={handleReset} />
+      {/* Sticky Top Search Bar */}
+      <div className="sticky top-16 lg:top-0 z-20 w-full border-b border-primary/5 bg-background/55 backdrop-blur-md px-4 md:px-8 py-3.5 animate-fade-in">
+        <div className="max-w-7xl mx-auto">
+          <SearchForm
+            query={query}
+            setQuery={setQuery}
+            onSubmit={handleSearch}
+            isLoading={isAnalyzing}
+            className="w-full"
+            selectedVendors={selectedVendors}
+            onVendorsChange={setSelectedVendors}
           />
-        }
-      />
+        </div>
+      </div>
+
       <div className="flex-1 p-4 md:p-8">
         <div className="max-w-7xl mx-auto space-y-6">
-          {/* In-page Re-search Bar */}
-          <div className="flex flex-col bg-card/40 backdrop-blur-md p-4 rounded-2xl shadow-lg shadow-primary/5 mb-8 animate-fade-in">
-            <SearchForm
-              query={query}
-              setQuery={setQuery}
-              onSubmit={handleSearch}
-              isLoading={isAnalyzing}
-              className="w-full"
-              selectedVendors={selectedVendors}
-              onVendorsChange={setSelectedVendors}
-            />
-          </div>
 
           {error && (
             <div className="bg-destructive/10 border border-destructive text-destructive px-4 py-3 rounded-lg animate-fade-in">

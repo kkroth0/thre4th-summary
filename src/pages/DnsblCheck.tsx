@@ -226,57 +226,65 @@ const DnsblCheck = () => {
             });
         }
     };
-
     return (
-        <div className="min-h-screen bg-background flex flex-col">
+        <div className="min-h-screen bg-background flex flex-col lg:pl-56">
             <Header showBackButton />
 
-            <div className="flex-1 p-4 md:p-8">
-                <div className="max-w-7xl mx-auto space-y-8">
+            <div className={`flex-1 p-4 md:p-8 flex flex-col ${results.length === 0 ? "justify-center min-h-[75vh]" : ""} transition-all duration-500`}>
+                <div className={`w-full transition-all duration-500 ${results.length === 0 ? "max-w-3xl mx-auto space-y-6 py-6" : "max-w-7xl mx-auto space-y-8"}`}>
 
                     {/* Page Header */}
-                    <div className="max-w-2xl mx-auto text-center space-y-4">
-                        <h2 className="text-3xl font-bold tracking-tight bg-gradient-to-r from-primary via-primary/80 to-primary/60 bg-clip-text text-transparent">
-                            {t('checkIpReputation')}
-                        </h2>
-                        <p className="text-muted-foreground">
-                            {t('dnsblDescription', { count: DNSBL_PROVIDERS.length })}
-                        </p>
+                    <div className={`transition-all duration-500 ${results.length === 0 ? "text-center space-y-4 mb-2" : "flex flex-col md:flex-row md:items-center justify-between gap-4 border-b pb-4"}`}>
+                        <div className={`${results.length === 0 ? "space-y-3" : ""}`}>
+                            <h2 className={`font-bold tracking-tight text-foreground transition-all duration-500 ${results.length === 0 ? "text-3xl sm:text-4xl bg-gradient-to-r from-primary via-primary/80 to-primary/60 bg-clip-text text-transparent" : "text-2xl"}`}>
+                                {t('checkIpReputation')}
+                            </h2>
+                            <p className="text-sm text-muted-foreground mt-1 max-w-xl mx-auto">
+                                {t('dnsblDescription', { count: DNSBL_PROVIDERS.length })}
+                            </p>
+                        </div>
                     </div>
 
                     {/* Search Panel */}
-                    <div className="max-w-xl mx-auto">
-                        <Card className="border-primary/10 bg-card/60 backdrop-blur-md shadow-lg shadow-primary/5">
+                    <div className={`transition-all duration-500 w-full ${results.length === 0 ? "max-w-3xl mx-auto" : "max-w-none"}`}>
+                        <Card className="border-primary/10 bg-card/25 backdrop-blur-xl shadow-xl rounded-3xl p-1">
                             <CardContent className="pt-6 space-y-4">
-                                <form onSubmit={handleSearch} className="flex gap-2">
+                                <form onSubmit={handleSearch} className="flex flex-col sm:flex-row gap-3">
                                     <div className="relative flex-1">
-                                        <Shield className="absolute left-3 top-3.5 h-5 w-5 text-muted-foreground" />
+                                        <Shield className="absolute left-4 top-3.5 h-5 w-5 text-muted-foreground/75" />
                                         <Input
                                             placeholder={t('enterIp')}
                                             value={query}
                                             onChange={(e) => setQuery(e.target.value)}
-                                            className="flex-1 text-lg h-12 pl-10 bg-background/50 focus-visible:ring-primary/40 border-primary/10"
+                                            className="flex-1 text-sm h-12 pl-11 bg-background/40 focus-visible:ring-primary/30 border-primary/20 rounded-2xl placeholder:text-muted-foreground/50 text-foreground font-medium"
                                         />
                                     </div>
-                                    <Button type="submit" disabled={isScanning} size="lg" className="h-12 px-8 font-semibold shadow-md shadow-primary/25 hover:shadow-primary/15 transition-all">
-                                        {isScanning ? <RotateCw className="mr-2 h-5 w-5 animate-spin" /> : <Search className="mr-2 h-5 w-5" />}
-                                        {isScanning ? t('scanning') : t('scan')}
+                                    <Button 
+                                        type="submit" 
+                                        disabled={isScanning} 
+                                        size="lg" 
+                                        className="h-12 px-8 font-semibold rounded-2xl bg-primary hover:bg-primary/95 text-primary-foreground flex items-center gap-2 shrink-0 transition-all shadow-md hover:shadow-lg"
+                                    >
+                                        {isScanning ? <RotateCw className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+                                        <span>{isScanning ? t('scanning') : t('scan')}</span>
                                     </Button>
                                 </form>
 
                                 {/* Presets / IP Suggestions */}
-                                <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground justify-center sm:justify-start pt-1">
-                                    <span className="font-medium">{language === 'pt' ? "Sugestões de IP:" : "IP Suggestions:"}</span>
-                                    {PRESETS.map(ip => (
-                                        <button
-                                            key={ip}
-                                            type="button"
-                                            onClick={() => setQuery(ip)}
-                                            className="px-2.5 py-1 rounded bg-muted/65 hover:bg-primary/20 hover:text-primary transition-all border border-primary/5 hover:border-primary/20 font-mono shadow-sm"
-                                        >
-                                            {ip}
-                                        </button>
-                                    ))}
+                                <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground/80 justify-center sm:justify-start pt-2 border-t border-border/10">
+                                    <span className="font-semibold">{language === 'pt' ? "Sugestões de IP:" : "IP Suggestions:"}</span>
+                                    <div className="flex flex-wrap gap-2">
+                                        {PRESETS.map(ip => (
+                                            <button
+                                                key={ip}
+                                                type="button"
+                                                onClick={() => setQuery(ip)}
+                                                className="px-2.5 py-1 rounded bg-muted/60 hover:bg-primary/15 hover:text-primary transition-all border border-primary/5 hover:border-primary/20 font-mono shadow-sm"
+                                            >
+                                                {ip}
+                                            </button>
+                                        ))}
+                                    </div>
                                 </div>
                             </CardContent>
                         </Card>

@@ -1,142 +1,281 @@
-import { ExternalLink, Shield, BookOpen } from "lucide-react";
+import { useState, useMemo, useEffect } from "react";
+import { ExternalLink, Shield, Search, SlidersHorizontal, BookOpen, Globe } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { VENDOR_IOC_SUPPORT } from "@/services/threatApi";
 import { Badge } from "@/components/ui/badge";
 import { Header } from "@/components/Header";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { useSidebar } from "@/contexts/SidebarContext";
 
-const VENDOR_INFO: Record<string, { description: string; docLink: string }> = {
+const VENDOR_INFO: Record<string, { description: string; docLink: string; domain: string }> = {
     "VirusTotal": {
         description: "Analyze suspicious files, domains, IPs and URLs to detect malware and other breaches.",
-        docLink: "https://docs.virustotal.com/reference/overview"
+        docLink: "https://docs.virustotal.com/reference/overview",
+        domain: "virustotal.com"
     },
     "AbuseIPDB": {
         description: "A project dedicated to helping combat the spread of hackers, spammers, and abusive activity on the internet.",
-        docLink: "https://docs.abuseipdb.com/"
+        docLink: "https://docs.abuseipdb.com/",
+        domain: "abuseipdb.com"
     },
     "AlienVault OTX": {
-        description: "Open Threat Exchange is the world's first truly open threat intelligence community that enables collaborative defense with actionable, community-powered threat data.",
-        docLink: "https://otx.alienvault.com/api"
+        description: "Open Threat Exchange is the world's first open threat intelligence community for collaborative defense.",
+        docLink: "https://otx.alienvault.com/api",
+        domain: "alienvault.com"
     },
     "Shodan": {
-        description: "Search engine for Internet-connected devices. Discover which of your devices are connected to the Internet, where they are located, and who is using them.",
-        docLink: "https://developer.shodan.io/api"
+        description: "Search engine for Internet-connected devices. Discover device types, location, and active service banners.",
+        docLink: "https://developer.shodan.io/api",
+        domain: "shodan.io"
     },
     "URLhaus": {
-        description: "A project from abuse.ch with the goal of sharing malicious URLs that are being used for malware distribution.",
-        docLink: "https://urlhaus-api.abuse.ch/"
+        description: "A project from abuse.ch sharing malicious URLs that are actively used for malware distribution.",
+        docLink: "https://urlhaus-api.abuse.ch/",
+        domain: "abuse.ch"
     },
     "MalwareBazaar": {
-        description: "A project from abuse.ch with the goal of sharing malware samples with the infosec community, AV vendors, and threat intelligence providers.",
-        docLink: "https://bazaar.abuse.ch/api/"
+        description: "A project from abuse.ch sharing verified malware samples with infosec teams and security products.",
+        docLink: "https://bazaar.abuse.ch/api/",
+        domain: "abuse.ch"
     },
     "Google Safe Browsing": {
-        description: "Google's Safe Browsing service provides lists of URLs for web resources that contain malware or phishing content.",
-        docLink: "https://developers.google.com/safe-browsing/v4"
+        description: "Google's Safe Browsing service provides lists of URLs for web resources that contain malicious content.",
+        docLink: "https://developers.google.com/safe-browsing/v4",
+        domain: "google.com"
     },
     "PhishTank": {
-        description: "PhishTank is a collaborative clearing house for data and information about phishing on the Internet.",
-        docLink: "https://www.phishtank.com/developer_info.php"
+        description: "PhishTank is a collaborative clearing house for sharing and verifying phishing data on the web.",
+        docLink: "https://www.phishtank.com/developer_info.php",
+        domain: "phishtank.com"
     },
     "Pulsedive": {
-        description: "Pulsedive is a free threat intelligence platform that allows you to search, scan, and enrich IPs, URLs, and domains.",
-        docLink: "https://pulsedive.com/api/"
+        description: "A community-driven threat intelligence platform allowing user search, scanning, and IOC enrichment.",
+        docLink: "https://pulsedive.com/api/",
+        domain: "pulsedive.com"
     },
     "Hybrid Analysis": {
-        description: "Free malware analysis service for the community that detects and analyzes unknown threats using a unique Hybrid Analysis technology.",
-        docLink: "https://www.hybrid-analysis.com/docs/api/v2"
+        description: "Free malware analysis service that detects and analyzes threats using Hybrid Analysis sandboxing.",
+        docLink: "https://www.hybrid-analysis.com/docs/api/v2",
+        domain: "hybrid-analysis.com"
     },
     "CIRCL hashlookup": {
-        description: "A public service to lookup hash values against known malicious files.",
-        docLink: "https://hashlookup.circl.lu/"
+        description: "A public lookup database matching hash values against known benign and malicious software files.",
+        docLink: "https://hashlookup.circl.lu/",
+        domain: "circl.lu"
     },
     "Criminal IP": {
-        description: "Cyber Threat Intelligence (CTI) search engine that monitors open ports of IP addresses around the world.",
-        docLink: "https://www.criminalip.io/developer/api-docs"
+        description: "Cyber Threat Intelligence (CTI) search engine monitoring open ports and vulnerability vectors globaly.",
+        docLink: "https://www.criminalip.io/developer/api-docs",
+        domain: "criminalip.io"
     },
     "MetaDefender": {
-        description: "Advanced threat prevention and detection platform.",
-        docLink: "https://docs.opswat.com/mdcloud/metadefender-cloud-api-v4"
+        description: "Advanced malware prevention cloud sandbox and multiscanning platform by OPSWAT.",
+        docLink: "https://docs.opswat.com/mdcloud/metadefender-cloud-api-v4",
+        domain: "opswat.com"
     },
     "PhishStats": {
-        description: "Phishing statistics and threat intelligence data.",
-        docLink: "https://phishstats.info/"
+        description: "Phishing statistics database and real-time public CTI feed provider.",
+        docLink: "https://phishstats.info/",
+        domain: "phishstats.info"
     },
     "Ransomware.live": {
-        description: "Tracking ransomware groups and their victims.",
-        docLink: "https://www.ransomware.live/api"
+        description: "Tracking active ransomware operations, negotiation leak sites, and organization victims.",
+        docLink: "https://www.ransomware.live/api",
+        domain: "ransomware.live"
     },
     "WHOIS": {
-        description: "Query databases that store the registered users or assignees of an Internet resource, such as a domain name, an IP address block or an autonomous system.",
-        docLink: "https://en.wikipedia.org/wiki/WHOIS"
+        description: "Query databases storing registered assignees, creation dates, and network registrars for domain assets.",
+        docLink: "https://en.wikipedia.org/wiki/WHOIS",
+        domain: "who.is"
     },
     "IP Geolocation": {
-        description: "Identification of the geographic location of a device, such as a computer, mobile phone, or router, using its IP address.",
-        docLink: "https://ip-api.com/docs"
+        description: "Mapping of numeric IP networks to physical coordinates, ISP owners, regions, and timezone offsets.",
+        docLink: "https://ip-api.com/docs",
+        domain: "ip-api.com"
     }
 };
 
 const VendorDirectory = () => {
-    const vendors = Object.entries(VENDOR_IOC_SUPPORT).sort((a, b) => a[0].localeCompare(b[0]));
-
+    const { isCollapsed } = useSidebar();
     const { t } = useLanguage();
+    const [searchQuery, setSearchQuery] = useState("");
+    const [selectedType, setSelectedType] = useState<string>("ALL");
+    const [apiStatuses, setApiStatuses] = useState<Record<string, boolean>>({});
+
+    useEffect(() => {
+        fetch("/api/vendors/status")
+            .then(res => res.json())
+            .then(data => setApiStatuses(data))
+            .catch(err => console.error("Error fetching vendor API statuses:", err));
+    }, []);
+
+    const vendorsList = useMemo(() => {
+        return Object.entries(VENDOR_IOC_SUPPORT).sort((a, b) => a[0].localeCompare(b[0]));
+    }, []);
+
+    // Filter logic
+    const filteredVendors = useMemo(() => {
+        return vendorsList.filter(([name, types]) => {
+            const matchesSearch = name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                (VENDOR_INFO[name]?.description || "").toLowerCase().includes(searchQuery.toLowerCase());
+            
+            const matchesType = selectedType === "ALL" || types.includes(selectedType as any);
+
+            return matchesSearch && matchesType;
+        });
+    }, [vendorsList, searchQuery, selectedType]);
+
+    // Unique IOC Types across all vendors
+    const iocTypes = ["ALL", "IP", "DOMAIN", "HASH", "URL", "CVE"];
+
+    const activeCount = Object.values(apiStatuses).filter(Boolean).length;
+    const totalCount = Object.keys(apiStatuses).length;
 
     return (
-        <div className="min-h-screen bg-background flex flex-col">
+        <div className={`min-h-screen bg-background flex flex-col transition-all duration-300 ${isCollapsed ? "lg:pl-16" : "lg:pl-56"}`}>
             <Header showBackButton />
             <div className="flex-1 p-4 md:p-8">
-                <div className="max-w-7xl mx-auto space-y-8">
-                    <div>
-                        <h1 className="text-3xl font-bold">Vendor Directory</h1>
-                        <p className="text-muted-foreground mt-1">
-                            Integrated threat intelligence sources and their capabilities
-                        </p>
+                <div className="max-w-6xl mx-auto space-y-6">
+                    {/* Header bar and stats summary */}
+                    <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-card/20 p-6 rounded-3xl border border-primary/10 backdrop-blur-md">
+                        <div>
+                            <h1 className="text-2xl font-bold flex items-center gap-2">
+                                Vendor Directory
+                                <Badge variant="secondary" className="bg-primary/10 text-primary border-primary/20">
+                                    {vendorsList.length} integrated
+                                </Badge>
+                            </h1>
+                            <p className="text-xs text-muted-foreground mt-1">
+                                High-density intelligence sources lookup database
+                            </p>
+                        </div>
+                        <div className="text-xs text-muted-foreground/80 md:text-right space-y-0.5">
+                            <div>API Connectors Status: <span className="text-emerald-500 font-semibold">{totalCount > 0 ? `${activeCount}/${totalCount} Active` : "Checking..."}</span></div>
+                            <div>Default Cache TTL: <span className="font-mono">30 minutes</span></div>
+                        </div>
                     </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {vendors.map(([name, types]) => (
-                        <div key={name} className="p-6 rounded-xl border bg-card shadow-sm hover:shadow-md transition-all flex flex-col h-full">
-                            <div className="flex items-start justify-between mb-4">
-                                <div className="flex items-center gap-2">
-                                    <Shield className="h-5 w-5 text-primary" />
-                                    <h3 className="font-semibold text-lg">{name}</h3>
-                                </div>
-                                {VENDOR_INFO[name]?.docLink && (
-                                    <a
-                                        href={VENDOR_INFO[name].docLink}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="text-muted-foreground hover:text-primary transition-colors"
-                                        title="View Documentation"
-                                    >
-                                        <ExternalLink className="h-4 w-4" />
-                                    </a>
-                                )}
-                            </div>
-
-                            <div className="flex-1 space-y-4">
-                                <p className="text-sm text-muted-foreground">
-                                    {VENDOR_INFO[name]?.description || "No description available."}
-                                </p>
-
-                                <div>
-                                    <p className="text-xs font-semibold text-muted-foreground mb-2 uppercase tracking-wider">Supported IOC Types</p>
-                                    <div className="flex flex-wrap gap-2">
-                                        {types.map(type => (
-                                            <Badge key={type} variant="secondary" className="uppercase text-xs">
-                                                {type}
-                                            </Badge>
-                                        ))}
-                                    </div>
-                                </div>
-                            </div>
+                    {/* Filter controls row */}
+                    <div className="flex flex-col md:flex-row items-center gap-3 bg-card/45 border border-primary/10 p-3 rounded-2xl">
+                        <div className="relative w-full md:w-80">
+                            <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground/60" />
+                            <Input
+                                type="text"
+                                placeholder="Search vendors..."
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                className="pl-9 h-9 text-xs rounded-full bg-background border-primary/10 focus-visible:ring-primary/30"
+                            />
                         </div>
-                    ))}
+
+                        {/* Switcher pills */}
+                        <div className="flex flex-wrap gap-1.5 overflow-x-auto w-full md:w-auto">
+                            {iocTypes.map((type) => (
+                                <Button
+                                    key={type}
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => setSelectedType(type)}
+                                    className={`rounded-full text-xs font-semibold py-1 px-3 h-7 transition-all ${
+                                        selectedType === type
+                                            ? "bg-primary text-primary-foreground shadow"
+                                            : "text-muted-foreground hover:text-foreground hover:bg-muted/30"
+                                    }`}
+                                >
+                                    {type}
+                                </Button>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* High-density grid */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                        {filteredVendors.length > 0 ? (
+                            filteredVendors.map(([name, types]) => {
+                                const info = VENDOR_INFO[name];
+                                const domain = info?.domain || "google.com";
+
+                                return (
+                                    <div
+                                        key={name}
+                                        className="p-4 rounded-2xl border border-primary/10 bg-card/30 hover:bg-card/50 transition-all hover:scale-[1.01] hover:border-primary/20 flex flex-col justify-between h-[160px] relative shadow-sm hover:shadow-md"
+                                    >
+                                        <div className="space-y-2">
+                                            <div className="flex items-center justify-between gap-2">
+                                                <div className="flex items-center gap-2 min-w-0 flex-1">
+                                                    <img
+                                                        src={`https://www.google.com/s2/favicons?sz=32&domain=${domain}`}
+                                                        alt=""
+                                                        className="w-3.5 h-3.5 rounded-sm object-contain shrink-0"
+                                                        onError={(e) => {
+                                                            (e.target as HTMLElement).style.display = "none";
+                                                        }}
+                                                    />
+                                                    <h3 className="font-bold text-sm text-foreground truncate">{name}</h3>
+                                                </div>
+                                                <div className="flex items-center gap-1.5 shrink-0 ml-auto">
+                                                    {apiStatuses[name] !== undefined ? (
+                                                        apiStatuses[name] ? (
+                                                            <span className="inline-flex items-center gap-1.5 text-[9px] font-black tracking-wider px-2 py-0.5 rounded bg-emerald-500 text-neutral-950 shadow-sm shadow-emerald-500/20 shrink-0">
+                                                                <span className="h-1.5 w-1.5 rounded-full bg-neutral-950 animate-pulse" />
+                                                                API ON
+                                                            </span>
+                                                        ) : (
+                                                            <span className="inline-flex items-center gap-1.5 text-[9px] font-black tracking-wider px-2 py-0.5 rounded bg-red-500/10 text-red-500 border border-red-500/20 shrink-0">
+                                                                <span className="h-1.5 w-1.5 rounded-full bg-red-500" />
+                                                                API OFF
+                                                            </span>
+                                                        )
+                                                    ) : (
+                                                        <span className="inline-flex items-center gap-1.5 text-[9px] font-black tracking-wider px-2 py-0.5 rounded bg-muted/40 text-muted-foreground border border-muted/50 animate-pulse shrink-0">
+                                                            <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground" />
+                                                            CHECKING
+                                                        </span>
+                                                    )}
+                                                    {info?.docLink && (
+                                                        <a
+                                                            href={info.docLink}
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            className="text-muted-foreground/60 hover:text-primary transition-colors p-1 rounded-full hover:bg-primary/10 shrink-0"
+                                                            title="View Documentation"
+                                                        >
+                                                            <ExternalLink className="h-3 w-3" />
+                                                        </a>
+                                                    )}
+                                                </div>
+                                            </div>
+                                            <p className="text-xs text-muted-foreground/90 line-clamp-2 leading-relaxed" title={info?.description}>
+                                                {info?.description || "No description available."}
+                                            </p>
+                                        </div>
+
+                                        <div className="flex flex-wrap gap-1 mt-2">
+                                            {types.map((type) => (
+                                                <Badge
+                                                    key={type}
+                                                    variant="secondary"
+                                                    className="text-[9px] uppercase font-bold py-0 px-1.5 bg-primary/5 text-primary border border-primary/10 scale-95 origin-left"
+                                                >
+                                                    {type}
+                                                </Badge>
+                                            ))}
+                                        </div>
+                                    </div>
+                                );
+                            })
+                        ) : (
+                            <div className="col-span-full h-32 flex flex-col items-center justify-center text-muted-foreground bg-card/10 rounded-2xl border border-dashed border-primary/10">
+                                <Shield className="h-6 w-6 text-muted-foreground/40 mb-2" />
+                                <p className="text-xs">No intelligence sources matching filters found.</p>
+                            </div>
+                        )}
+                    </div>
                 </div>
             </div>
         </div>
-    </div>
     );
 };
 
