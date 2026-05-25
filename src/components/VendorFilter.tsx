@@ -134,53 +134,53 @@ export function VendorFilter({ selectedVendors, onVendorsChange, className }: Ve
                     </DialogDescription>
                 </DialogHeader>
 
-                <div className="bg-muted/10 border border-primary/5 p-3 rounded-xl space-y-2 mt-1.5">
-                    <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/80">Quick Selection Tools</p>
-                    <div className="flex flex-wrap gap-1.5">
+                <div className="bg-muted/10 border border-primary/5 p-3.5 rounded-2xl space-y-2 mt-1.5 animate-fade-in">
+                    <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/80">Quick Selection Tools</p>
+                    <div className="flex flex-wrap gap-2">
                         <Button 
                             type="button" 
                             onClick={handleSelectAll} 
                             variant="outline" 
                             size="sm"
-                            className="rounded-full h-7 text-[11px] px-2.5 border-primary/10 hover:bg-primary/5 hover:text-foreground transition-all"
+                            className="rounded-full h-8.5 text-xs px-3.5 border-primary/10 hover:bg-primary/5 hover:text-foreground transition-all"
                         >
-                            <Check className="mr-1 h-3 w-3" /> Select All
+                            <Check className="mr-1.5 h-3.5 w-3.5" /> Select All
                         </Button>
                         <Button 
                             type="button" 
                             onClick={handleDeselectAll} 
                             variant="outline" 
                             size="sm"
-                            className="rounded-full h-7 text-[11px] px-2.5 border-primary/10 hover:bg-primary/5 hover:text-foreground transition-all"
+                            className="rounded-full h-8.5 text-xs px-3.5 border-primary/10 hover:bg-primary/5 hover:text-foreground transition-all"
                         >
-                            <X className="mr-1 h-3 w-3" /> Deselect All
+                            <X className="mr-1.5 h-3.5 w-3.5" /> Deselect All
                         </Button>
                         <Button 
                             type="button" 
                             onClick={handleSelectFree} 
                             variant="outline" 
                             size="sm" 
-                            className="rounded-full h-7 text-[11px] px-2.5 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 border border-emerald-500/20 transition-all font-medium"
+                            className="rounded-full h-8.5 text-xs px-3.5 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 border border-emerald-500/20 transition-all font-semibold"
                         >
-                            <Sparkles className="mr-1 h-3 w-3" /> Only Free ({freeVendors.length})
+                            <Sparkles className="mr-1.5 h-3.5 w-3.5" /> Only Free ({freeVendors.length})
                         </Button>
                         <Button 
                             type="button" 
                             onClick={handleSelectPaid} 
                             variant="outline" 
                             size="sm" 
-                            className="rounded-full h-7 text-[11px] px-2.5 bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 border border-amber-500/20 transition-all font-medium"
+                            className="rounded-full h-8.5 text-xs px-3.5 bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 border border-amber-500/20 transition-all font-semibold"
                         >
-                            <Key className="mr-1 h-3 w-3" /> Only Paid ({paidVendors.length})
+                            <Key className="mr-1.5 h-3.5 w-3.5" /> Only Paid ({paidVendors.length})
                         </Button>
                     </div>
                 </div>
 
-                <ScrollArea className="h-[40vh] max-h-[300px] min-h-[160px] pr-3 my-2 border-y border-primary/5 py-3">
+                <ScrollArea className="h-[40vh] max-h-[300px] min-h-[160px] pr-3 my-3.5 border-y border-primary/5 py-4">
                     <div className="space-y-6">
                         <div>
-                            <div className="flex items-center gap-2 mb-4 border-b border-primary/5 pb-2">
-                                <ShieldCheck className="h-4 w-4 text-emerald-400" />
+                            <div className="flex items-center gap-2 mb-4 border-b border-primary/5 pb-2.5">
+                                <ShieldCheck className="h-4.5 w-4.5 text-emerald-400" />
                                 <span className="text-sm font-semibold tracking-wide uppercase text-emerald-400">Free APIs</span>
                                 <span className="text-xs text-muted-foreground ml-auto bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-0.5 rounded-full font-mono font-medium">{freeVendors.length} sources</span>
                             </div>
@@ -192,7 +192,7 @@ export function VendorFilter({ selectedVendors, onVendorsChange, className }: Ve
                                         aria-checked={tempSelected.includes(vendor.name)}
                                         tabIndex={0}
                                         className={cn(
-                                            "flex items-center justify-between py-1.5 px-2.5 rounded-lg border transition-all duration-200 cursor-pointer select-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50",
+                                            "flex items-center justify-between py-2 px-3 rounded-xl border transition-all duration-200 cursor-pointer select-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50",
                                             tempSelected.includes(vendor.name)
                                                 ? "bg-primary/10 border-primary/25 hover:border-primary/45 text-foreground shadow-sm shadow-primary/5"
                                                 : "bg-muted/10 border-border/30 hover:border-border/60 hover:bg-muted/20 text-muted-foreground"
@@ -205,11 +205,11 @@ export function VendorFilter({ selectedVendors, onVendorsChange, className }: Ve
                                             }
                                         }}
                                     >
-                                        <div className="flex items-center space-x-2 min-w-0 pointer-events-none">
+                                        <div className="flex items-center space-x-2.5 min-w-0 pointer-events-none">
                                             <Checkbox
                                                 id={`vendor-${vendor.name}`}
                                                 checked={tempSelected.includes(vendor.name)}
-                                                className="h-3.5 w-3.5 border-muted-foreground/35 data-[state=checked]:bg-primary data-[state=checked]:border-primary"
+                                                className="h-4 w-4 border-muted-foreground/35 data-[state=checked]:bg-primary data-[state=checked]:border-primary"
                                             />
                                             <span className="text-xs font-semibold tracking-tight truncate">
                                                 {vendor.name}
@@ -217,13 +217,13 @@ export function VendorFilter({ selectedVendors, onVendorsChange, className }: Ve
                                         </div>
                                         <div className="flex items-center gap-1 shrink-0 ml-2 pointer-events-none">
                                             {vendor.supportsIP && (
-                                                <span className="text-[8px] px-1 py-0 rounded bg-blue-500/10 text-blue-400 border border-blue-500/10 font-semibold tracking-wider">IP</span>
+                                                <span className="text-[9px] px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/10 font-semibold tracking-wider">IP</span>
                                             )}
                                             {vendor.supportsDomain && (
-                                                <span className="text-[8px] px-1 py-0 rounded bg-purple-500/10 text-purple-400 border border-purple-500/10 font-semibold tracking-wider font-mono">Domain</span>
+                                                <span className="text-[9px] px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-400 border border-purple-500/10 font-semibold tracking-wider font-mono">Domain</span>
                                             )}
                                             {vendor.supportsHash && (
-                                                <span className="text-[8px] px-1 py-0 rounded bg-teal-500/10 text-teal-400 border border-teal-500/10 font-semibold tracking-wider font-mono">Hash</span>
+                                                <span className="text-[9px] px-1.5 py-0.5 rounded bg-teal-500/10 text-teal-400 border border-teal-500/10 font-semibold tracking-wider font-mono">Hash</span>
                                             )}
                                         </div>
                                     </div>
@@ -232,8 +232,8 @@ export function VendorFilter({ selectedVendors, onVendorsChange, className }: Ve
                         </div>
 
                         <div>
-                            <div className="flex items-center gap-2 mb-4 border-b border-primary/5 pb-2">
-                                <Lock className="h-4 w-4 text-amber-400" />
+                            <div className="flex items-center gap-2 mb-4 border-b border-primary/5 pb-2.5">
+                                <Lock className="h-4.5 w-4.5 text-amber-400" />
                                 <span className="text-sm font-semibold tracking-wide uppercase text-amber-400 font-medium">Requires API Key</span>
                                 <span className="text-xs text-muted-foreground ml-auto bg-amber-500/10 border border-amber-500/20 px-2.5 py-0.5 rounded-full font-mono font-medium">{paidVendors.length} sources</span>
                             </div>
@@ -245,7 +245,7 @@ export function VendorFilter({ selectedVendors, onVendorsChange, className }: Ve
                                         aria-checked={tempSelected.includes(vendor.name)}
                                         tabIndex={0}
                                         className={cn(
-                                            "flex items-center justify-between py-1.5 px-2.5 rounded-lg border transition-all duration-200 cursor-pointer select-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50",
+                                            "flex items-center justify-between py-2 px-3 rounded-xl border transition-all duration-200 cursor-pointer select-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50",
                                             tempSelected.includes(vendor.name)
                                                 ? "bg-primary/10 border-primary/25 hover:border-primary/45 text-foreground shadow-sm shadow-primary/5"
                                                 : "bg-muted/10 border-border/30 hover:border-border/60 hover:bg-muted/20 text-muted-foreground"
@@ -258,11 +258,11 @@ export function VendorFilter({ selectedVendors, onVendorsChange, className }: Ve
                                             }
                                         }}
                                     >
-                                        <div className="flex items-center space-x-2 min-w-0 pointer-events-none">
+                                        <div className="flex items-center space-x-2.5 min-w-0 pointer-events-none">
                                             <Checkbox
                                                 id={`vendor-${vendor.name}`}
                                                 checked={tempSelected.includes(vendor.name)}
-                                                className="h-3.5 w-3.5 border-muted-foreground/35 data-[state=checked]:bg-primary data-[state=checked]:border-primary"
+                                                className="h-4 w-4 border-muted-foreground/35 data-[state=checked]:bg-primary data-[state=checked]:border-primary"
                                             />
                                             <span className="text-xs font-semibold tracking-tight truncate">
                                                 {vendor.name}
@@ -270,13 +270,13 @@ export function VendorFilter({ selectedVendors, onVendorsChange, className }: Ve
                                         </div>
                                         <div className="flex items-center gap-1 shrink-0 ml-2 pointer-events-none">
                                             {vendor.supportsIP && (
-                                                <span className="text-[8px] px-1 py-0 rounded bg-blue-500/10 text-blue-400 border border-blue-500/10 font-semibold tracking-wider">IP</span>
+                                                <span className="text-[9px] px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/10 font-semibold tracking-wider">IP</span>
                                             )}
                                             {vendor.supportsDomain && (
-                                                <span className="text-[8px] px-1 py-0 rounded bg-purple-500/10 text-purple-400 border border-purple-500/10 font-semibold tracking-wider font-mono">Domain</span>
+                                                <span className="text-[9px] px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-400 border border-purple-500/10 font-semibold tracking-wider font-mono">Domain</span>
                                             )}
                                             {vendor.supportsHash && (
-                                                <span className="text-[8px] px-1 py-0 rounded bg-teal-500/10 text-teal-400 border border-teal-500/10 font-semibold tracking-wider font-mono">Hash</span>
+                                                <span className="text-[9px] px-1.5 py-0.5 rounded bg-teal-500/10 text-teal-400 border border-teal-500/10 font-semibold tracking-wider font-mono">Hash</span>
                                             )}
                                         </div>
                                     </div>

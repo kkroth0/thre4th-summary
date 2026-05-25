@@ -1,7 +1,7 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
 import { getFieldCategory } from "@/components/VendorDataTable";
-import { Shield, AlertTriangle, Bug, FileSearch, Globe, Link as LinkIcon, Radar, Database, Eye, Search, BookOpen, Layers, LayoutGrid, CheckCircle2, Mail, ArrowRight } from "lucide-react";
+import { Shield, AlertTriangle, Bug, FileSearch, Globe, Link as LinkIcon, Radar, Database, Eye, Search, BookOpen, Layers, LayoutGrid, CheckCircle2, Mail, ArrowRight, Upload } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { ThreatSummary } from "@/components/ThreatSummary";
 import { VendorCard } from "@/components/VendorCard";
@@ -16,6 +16,7 @@ import { ThreatCharts } from "@/components/ThreatCharts";
 import { VendorDataTable } from "@/components/VendorDataTable";
 import { QuickActions } from "@/components/QuickActions";
 import { ViewToggle } from "@/components/ViewToggle";
+import { ThreatCorrelationGraph } from "@/components/ThreatCorrelationGraph";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -46,66 +47,147 @@ const SearchForm = ({
   selectedVendors,
   onVendorsChange,
 }: SearchFormProps) => {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
+  const { toast } = useToast();
   const [activeTab, setActiveTab] = useState<string>("quick");
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const ipv4Regex = /\b(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\b/g;
-  const extractedIps = query ? Array.from(new Set(query.match(ipv4Regex) || [])) : [];
+  const ipRegex = /\b(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\b/g;
+  const domainRegex = /\b([a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}\b/g;
+  const hashRegex = /\b[a-fA-F0-9]{64}\b|\b[a-fA-F0-9]{40}\b|\b[a-fA-F0-9]{32}\b/g;
+  const cveRegex = /\bCVE-\d{4}-\d{4,7}\b/gi;
+
+  const getExtractedIocs = () => {
+    if (!query) return [];
+    const ips = query.match(ipRegex) || [];
+    const domains = query.match(domainRegex) || [];
+    const hashes = query.match(hashRegex) || [];
+    const cves = query.match(cveRegex) || [];
+
+    const cleanDomains = domains.filter(d => {
+      const ext = d.split('.').pop()?.toLowerCase() || '';
+      return !["exe", "dll", "sys", "zip", "rar", "tar", "gz", "png", "jpg", "jpeg", "gif", "css", "js", "html", "htm", "txt", "log", "json", "xml", "pdf", "doc", "docx", "xls", "xlsx"].includes(ext);
+    });
+
+    return Array.from(new Set([
+      ...ips,
+      ...cleanDomains,
+      ...hashes,
+      ...cves.map(c => c.toUpperCase())
+    ]));
+  };
+
+  const extractedIocs = getExtractedIocs();
+
+  const handleLogFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        if (event.target?.result) {
+          const text = event.target.result as string;
+          
+          const ips = text.match(ipRegex) || [];
+          const domains = text.match(domainRegex) || [];
+          const hashes = text.match(hashRegex) || [];
+          const cves = text.match(cveRegex) || [];
+
+          const cleanDomains = domains.filter(d => {
+            const ext = d.split('.').pop()?.toLowerCase() || '';
+            return !["exe", "dll", "sys", "zip", "rar", "tar", "gz", "png", "jpg", "jpeg", "gif", "css", "js", "html", "htm", "txt", "log", "json", "xml", "pdf", "doc", "docx", "xls", "xlsx"].includes(ext);
+          });
+
+          const allIocs = Array.from(new Set([
+            ...ips,
+            ...cleanDomains,
+            ...hashes,
+            ...cves.map(c => c.toUpperCase())
+          ]));
+
+          if (allIocs.length > 0) {
+            setQuery(allIocs.join("\n"));
+            toast({
+              title: language === "pt" ? "IOCs Extraídos" : "IOCs Extracted",
+              description: language === "pt" 
+                ? `Extraídos ${allIocs.length} alvos únicos de ameaça do arquivo ${file.name}.`
+                : `Extracted ${allIocs.length} unique threat targets from ${file.name}.`,
+            });
+          } else {
+            toast({
+              title: language === "pt" ? "Nenhum IOC Encontrado" : "No IOCs Found",
+              description: language === "pt"
+                ? "Não foi possível encontrar IPs, domínios, hashes ou CVEs válidos no arquivo."
+                : "Could not find any valid IPs, domains, hashes, or CVEs in the file.",
+              variant: "destructive"
+            });
+          }
+        }
+      };
+      reader.readAsText(file);
+      e.target.value = ""; // Reset
+    }
+  };
 
   return (
     <div className={`w-full ${className}`}>
       <form onSubmit={onSubmit} className="w-full">
-        <div className="space-y-3">
-          <div className="relative flex flex-col md:flex-row md:items-center bg-card/45 backdrop-blur-lg rounded-2xl md:rounded-full border border-primary/25 hover:border-primary/50 focus-within:border-primary focus-within:ring-4 focus-within:ring-primary/10 transition-all duration-500 shadow-lg shadow-primary/5 p-1.5 pl-3 gap-2">
-            
-            {/* Integrated Tab Selector Inside Search Bar */}
-            <div className="flex items-center gap-1 bg-muted/40 p-1 rounded-full border border-primary/5 shrink-0">
+        <div className="space-y-4">
+          {/* Tabs switch centered above the search input */}
+          <div className="flex justify-center animate-fade-in">
+            <div className="inline-flex items-center gap-1 bg-card/45 backdrop-blur-lg p-1 rounded-full border border-primary/25 shadow-md shadow-primary/2">
               <button
                 type="button"
                 onClick={() => { setActiveTab("quick"); }}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all ${
+                className={`flex items-center gap-2 px-5 py-2 rounded-full text-xs sm:text-sm font-semibold transition-all duration-300 ${
                   activeTab === "quick" 
-                    ? "bg-background text-foreground shadow-sm" 
-                    : "text-muted-foreground hover:text-foreground"
+                    ? "bg-primary text-primary-foreground shadow-md" 
+                    : "text-muted-foreground hover:text-foreground hover:bg-muted/30"
                 }`}
               >
-                <Search className="h-3.5 w-3.5" />
+                <Search className="h-4 w-4" />
                 <span>Quick Scan</span>
               </button>
               <button
                 type="button"
                 onClick={() => { setActiveTab("bulk"); }}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all ${
+                className={`flex items-center gap-2 px-5 py-2 rounded-full text-xs sm:text-sm font-semibold transition-all duration-300 ${
                   activeTab === "bulk" 
-                    ? "bg-background text-foreground shadow-sm" 
-                    : "text-muted-foreground hover:text-foreground"
+                    ? "bg-primary text-primary-foreground shadow-md" 
+                    : "text-muted-foreground hover:text-foreground hover:bg-muted/30"
                 }`}
               >
-                <Layers className="h-3.5 w-3.5" />
+                <Layers className="h-4 w-4" />
                 <span>Bulk / Log Scan</span>
               </button>
             </div>
+          </div>
 
-            <div className="h-5 w-[1px] bg-border/60 hidden md:block" />
+          {/* Main search bar container */}
+          <div className="relative flex flex-col md:flex-row md:items-center bg-card/45 backdrop-blur-lg rounded-full border border-primary/25 hover:border-primary/50 focus-within:border-primary/60 focus-within:ring-4 focus-within:ring-primary/10 transition-all duration-500 shadow-xl shadow-primary/5 p-2 pl-3 gap-3">
+            
+            {/* Search Icon Anchor */}
+            <div className="flex items-center justify-center pl-2 text-muted-foreground/60 shrink-0">
+              <Search className="h-5.5 w-5.5" />
+            </div>
 
             {/* Input area depends on activeTab */}
             {activeTab === "quick" ? (
-              <div className="flex-1 flex items-center min-w-0 px-2">
+              <div className="flex-1 flex items-center min-w-0">
                 <Input
                   type="text"
                   placeholder="Enter IP, Domain, Hash, or CVE (e.g. 51.210.208.8, CVE-2024-3094)..."
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
-                  className="bg-transparent border-0 h-10 focus-visible:ring-0 focus-visible:ring-offset-0 text-base placeholder:text-muted-foreground/60 flex-1 min-w-0 pl-0 pr-3"
+                  className="bg-transparent border-0 h-12 focus-visible:ring-0 focus-visible:ring-offset-0 text-base placeholder:text-muted-foreground/50 flex-1 min-w-0 pl-1 pr-3"
                 />
               </div>
             ) : (
-              <div className="flex-1 flex items-center min-w-0 px-2 py-1">
+              <div className="flex-1 flex items-center min-w-0 py-1">
                 <textarea
                   placeholder="Paste logs, multiple IPs, domains, or hashes (parsed automatically)..."
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
-                  className="bg-transparent border-0 h-10 min-h-[40px] max-h-[160px] resize-y focus-visible:ring-0 focus:outline-none text-base placeholder:text-muted-foreground/60 flex-1 min-w-0 pl-0 pr-3 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+                  className="bg-transparent border-0 h-12 min-h-[48px] max-h-[180px] resize-none focus-visible:ring-0 focus:outline-none text-base placeholder:text-muted-foreground/50 flex-1 min-w-0 pl-1 pr-3 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' && !e.shiftKey) {
                       e.preventDefault();
@@ -116,53 +198,64 @@ const SearchForm = ({
               </div>
             )}
 
-            {/* Vendor Filter & Scan Button */}
+            {/* Scan Actions */}
             <div className="flex items-center gap-2 shrink-0 ml-auto pr-1">
-              <VendorFilter
-                selectedVendors={selectedVendors}
-                onVendorsChange={onVendorsChange}
-                className="h-9 border-primary/10 bg-muted/40 hover:bg-primary/10 hover:text-foreground text-muted-foreground px-3.5 rounded-full transition-all duration-200 backdrop-blur-md text-[11px] font-semibold"
-              />
+              {activeTab === "bulk" && (
+                <>
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    onChange={handleLogFileUpload}
+                    accept=".txt,.log,.csv,.json"
+                    className="hidden"
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="h-11 w-11 shadow-sm rounded-full flex items-center justify-center shrink-0 border border-primary/10 bg-muted/40 hover:bg-primary/10 hover:text-foreground text-muted-foreground transition-all duration-200"
+                    title={language === "pt" ? "Enviar arquivo de log" : "Upload Log File"}
+                  >
+                    <Upload className="h-4.5 w-4.5" />
+                  </Button>
+                </>
+              )}
               <Button
                 type="submit"
-                disabled={isLoading || (activeTab === "bulk" ? extractedIps.length > 35 || !query.trim() : !query.trim())}
+                disabled={isLoading || (activeTab === "bulk" ? extractedIocs.length > 35 || !query.trim() : !query.trim())}
                 size="icon"
-                className="h-9 w-9 shadow-md hover:shadow-lg transition-all rounded-full bg-gradient-to-r from-primary to-primary/80 flex items-center justify-center shrink-0"
+                className="h-11 w-11 shadow-md hover:shadow-lg transition-all rounded-full bg-gradient-to-r from-primary to-primary/80 flex items-center justify-center shrink-0"
                 title="Analyze Target"
               >
                 {isLoading ? (
-                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary-foreground border-t-transparent" />
+                  <div className="h-5 w-5 animate-spin rounded-full border-2 border-primary-foreground border-t-transparent" />
                 ) : (
-                  <ArrowRight className="h-4 w-4 text-primary-foreground" />
+                  <ArrowRight className="h-5 w-5 text-primary-foreground" />
                 )}
               </Button>
             </div>
           </div>
 
           {/* Additional details for Bulk Scan mode */}
-          {activeTab === "bulk" && (
+          {activeTab === "bulk" && extractedIocs.length > 0 && (
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mt-1 px-4 py-2 bg-muted/20 border border-border/40 rounded-2xl animate-fade-in">
               <div className="flex items-center gap-2 text-xs text-muted-foreground/80 font-medium">
-                <CheckCircle2 className={`h-4 w-4 ${extractedIps.length > 0 ? "text-green-500" : "text-muted-foreground/40"}`} />
-                {extractedIps.length > 0
-                  ? `${extractedIps.length} target${extractedIps.length > 1 ? 's' : ''} parsed (max 35)`
-                  : "Awaiting valid IOCs..."}
+                <CheckCircle2 className="h-4 w-4 text-green-500" />
+                {`${extractedIocs.length} target${extractedIocs.length > 1 ? 's' : ''} parsed (max 35)`}
               </div>
 
-              {extractedIps.length > 0 && (
-                <div className="flex flex-wrap gap-1.5 max-w-[70%] justify-end">
-                  {extractedIps.slice(0, 5).map(ip => (
-                    <Badge key={ip} variant="secondary" className="font-mono text-[10px] px-1.5 py-0 shadow-sm border-primary/20 bg-primary/5 text-primary">
-                      {ip}
-                    </Badge>
-                  ))}
-                  {extractedIps.length > 5 && (
-                    <Badge variant="outline" className="font-mono text-[10px] px-1.5 py-0 bg-background/80 shadow-sm">
-                      +{extractedIps.length - 5} more
-                    </Badge>
-                  )}
-                </div>
-              )}
+              <div className="flex flex-wrap gap-1.5 max-w-[70%] justify-end">
+                {extractedIocs.slice(0, 5).map(ioc => (
+                  <Badge key={ioc} variant="secondary" className="font-mono text-[10px] px-1.5 py-0 shadow-sm border-primary/20 bg-primary/5 text-primary">
+                    {ioc}
+                  </Badge>
+                ))}
+                {extractedIocs.length > 5 && (
+                  <Badge variant="outline" className="font-mono text-[10px] px-1.5 py-0 bg-background/80 shadow-sm">
+                    +{extractedIocs.length - 5} more
+                  </Badge>
+                )}
+              </div>
             </div>
           )}
         </div>
@@ -192,7 +285,7 @@ const Index = () => {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isExportingPDF, setIsExportingPDF] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [view, setView] = useState<"cards" | "table">("cards");
+  const [view, setView] = useState<"graph" | "cards" | "table">("graph");
   const { toast } = useToast();
   const { t } = useLanguage();
 
@@ -242,20 +335,24 @@ const Index = () => {
       return;
     }
 
-    let queries: string[] = [];
+    // Extract all potential tokens by splitting on whitespace, quotes, commas, brackets, etc.
+    const ipPattern = /^(\d{1,3}\.){3}\d{1,3}$/;
+    const domainPattern = /^([a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$/;
+    const hashPattern = /^[a-fA-F0-9]{32}$|^[a-fA-F0-9]{40}$|^[a-fA-F0-9]{64}$/;
+    const urlPattern = /^(http|https):\/\/[^ "]+$/;
+    const cvePattern = /^CVE-\d{4}-\d{4,7}$/i;
 
-    // Extract IPv4 addresses using robust regex
-    const ipv4Regex = /\b(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\b/g;
-    const extractedIps = rawQuery.match(ipv4Regex);
+    const tokens = rawQuery.split(/[\s,"'()\[\]{}|<>]+/).map(t => t.trim()).filter(t => t.length > 0);
+    const uniqueTokens = Array.from(new Set(tokens));
 
-    if (extractedIps && extractedIps.length > 0) {
-      // De-duplicate extracted IPs
-      queries = Array.from(new Set(extractedIps));
-    } else {
-      // Fallback: Split by comma, newline, or space for domains/hashes
-      queries = rawQuery.split(/[\s,]+/).filter(q => q.length > 0);
-      // De-duplicate
-      queries = Array.from(new Set(queries));
+    // Filter to only valid IOCs
+    let queries = uniqueTokens.filter(q =>
+      ipPattern.test(q) || domainPattern.test(q) || hashPattern.test(q) || urlPattern.test(q) || cvePattern.test(q)
+    );
+
+    // If no valid structured IOCs were found, fall back to the raw split tokens (to trigger type validation warnings properly)
+    if (queries.length === 0) {
+      queries = uniqueTokens;
     }
 
     if (queries.length > 35) {
@@ -1116,21 +1213,47 @@ const Index = () => {
 
   if (results.length === 0 && !isAnalyzing) {
     return (
-      <div className={`min-h-screen bg-background flex flex-col transition-all duration-300 ${isCollapsed ? "lg:pl-16" : "lg:pl-56"}`}>
+      <div className={`min-h-screen bg-background flex flex-col transition-all duration-300 ${isCollapsed ? "lg:pl-20" : "lg:pl-64"}`}>
         <Header onLogoClick={handleReset} />
 
         <div className="flex-1 flex flex-col items-center justify-center p-4">
           <div className="max-w-2xl w-full space-y-8 text-center">
-            <div className="space-y-2 animate-fade-in">
-              <h1
-                className="text-4xl md:text-6xl font-bold tracking-tight bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent cursor-pointer hover:opacity-80 transition-opacity"
+            <div className="space-y-4 animate-fade-in flex flex-col items-center">
+              <div 
+                className="h-48 w-48 flex items-center justify-center overflow-hidden cursor-pointer hover:scale-[1.03] active:scale-[0.97] transition-all duration-300 filter drop-shadow-[0_0_15px_rgba(139,92,246,0.2)] hover:drop-shadow-[0_0_30px_rgba(139,92,246,0.4)]"
                 onClick={handleReset}
               >
-                {t('appName')}
-              </h1>
-              <p className="text-xl text-muted-foreground">
-                {t('dashboardTitle')}
-              </p>
+                <img src="/logo.png" alt="Logo" className="h-full w-full object-contain" />
+              </div>
+              <div className="space-y-2">
+                <div className="flex items-center justify-center gap-3 flex-wrap">
+                  <h1
+                    className="text-4xl md:text-6xl font-bold tracking-tight bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent cursor-pointer hover:opacity-80 transition-opacity"
+                    onClick={handleReset}
+                  >
+                    {t('appName')}
+                  </h1>
+                  <a
+                    href="https://github.com/kkroth0/thre4th-summary/actions/workflows/vulnerability-scan.yml"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center hover:scale-105 transition-transform duration-200"
+                    title="Continuous Security Scan Status"
+                  >
+                    <img
+                      src="https://github.com/kkroth0/thre4th-summary/actions/workflows/vulnerability-scan.yml/badge.svg"
+                      alt="Security Scan Status"
+                      className="h-5 shrink-0"
+                      onError={(e) => {
+                        e.currentTarget.style.display = 'none';
+                      }}
+                    />
+                  </a>
+                </div>
+                <p className="text-xl text-muted-foreground text-center">
+                  {t('dashboardTitle')}
+                </p>
+              </div>
             </div>
 
             <div className="p-1 sm:p-2 animate-fade-in w-full">
@@ -1158,7 +1281,7 @@ const Index = () => {
                   <button
                     key={ip}
                     onClick={() => setQuery(prev => prev ? `${prev}\n${ip}` : ip)}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-sans font-semibold border border-border/60 bg-muted/30 hover:bg-primary/10 hover:border-primary/40 text-muted-foreground hover:text-foreground transition-all cursor-pointer"
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-xs font-sans font-semibold border border-border/60 bg-muted/30 hover:bg-primary/10 hover:border-primary/40 text-muted-foreground hover:text-foreground transition-all cursor-pointer shadow-sm"
                   >
                     <span>{flag}</span>
                     <span>{ip}</span>
@@ -1175,7 +1298,7 @@ const Index = () => {
   }
 
   return (
-    <div className={`min-h-screen bg-background flex flex-col transition-all duration-300 ${isCollapsed ? "lg:pl-16" : "lg:pl-56"}`}>
+    <div className={`min-h-screen bg-background flex flex-col transition-all duration-300 ${isCollapsed ? "lg:pl-20" : "lg:pl-64"}`}>
       <Header onLogoClick={handleReset} />
       {/* Sticky Top Search Bar */}
       <div className="sticky top-16 lg:top-0 z-20 w-full border-b border-primary/5 bg-background/55 backdrop-blur-md px-4 md:px-8 py-3.5 animate-fade-in">
@@ -1268,7 +1391,16 @@ const Index = () => {
                       <ViewToggle view={view} onViewChange={setView} />
                     </div>
 
-                    {view === "table" ? (
+                    {view === "graph" ? (
+                      <ThreatCorrelationGraph
+                        query={data.query}
+                        overallScore={data.overallScore}
+                        threatLevel={data.threatLevel}
+                        totalVendors={data.totalVendors}
+                        detections={data.detections}
+                        vendorData={data.vendorData}
+                      />
+                    ) : view === "table" ? (
                       <VendorDataTable
                         vendorData={data.vendorData.filter(v => v.name !== "IP Geolocation")}
                         getVendorLink={getVendorLink}

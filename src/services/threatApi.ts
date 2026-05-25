@@ -737,3 +737,28 @@ export const fetchThreatDataProgressive = async (
         vendorData: results,
     };
 };
+
+export interface DnsLookupResult {
+    domain: string;
+    records: {
+        A: string[];
+        AAAA: string[];
+        MX: string[];
+        TXT: string[];
+        NS: string[];
+        CNAME: string[];
+    };
+}
+
+export const fetchDnsLookup = async (domain: string): Promise<DnsLookupResult> => {
+    const response = await fetch('/api/dns/lookup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: domain })
+    });
+    if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`DNS Lookup API error: ${response.status} - ${errorText}`);
+    }
+    return response.json();
+};

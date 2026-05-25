@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Footer } from "@/components/Footer";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { useSidebar } from "@/contexts/SidebarContext";
 import { Header } from "@/components/Header";
 import { toast } from "sonner";
 
@@ -95,6 +96,7 @@ Return-Path: <noreply@github.com>
 `;
 
 const PhishingAnalyzer = () => {
+  const { isCollapsed } = useSidebar();
   const { t, language } = useLanguage();
   const [dragActive, setDragActive] = useState(false);
   const [parsedData, setParsedData] = useState<ParsedEml | null>(null);
@@ -434,7 +436,7 @@ const PhishingAnalyzer = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background flex flex-col lg:pl-56">
+    <div className={`min-h-screen bg-background flex flex-col transition-all duration-300 ${isCollapsed ? "lg:pl-20" : "lg:pl-64"}`}>
       <Header showBackButton />
 
       <div className="flex-1 p-4 md:p-8">

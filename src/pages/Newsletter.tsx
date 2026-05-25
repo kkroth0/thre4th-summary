@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { Link } from "react-router-dom";
-import { ArrowLeft, Globe, BookOpen, AlertTriangle, Search, Mail, Eye, Sparkles, Filter, CheckCircle2, ChevronRight, Download, Layers, RefreshCw } from "lucide-react";
+import { ArrowLeft, Globe, BookOpen, AlertTriangle, Search, Mail, Eye, Sparkles, Filter, CheckCircle2, ChevronLeft, ChevronRight, Download, Layers, RefreshCw, Calendar } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -9,8 +9,16 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Footer } from "@/components/Footer";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { useSidebar } from "@/contexts/SidebarContext";
 import { Header } from "@/components/Header";
 import { toast } from "sonner";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 interface Advisory {
   title: string;
@@ -22,6 +30,7 @@ interface Advisory {
 }
 
 const Newsletter = () => {
+  const { isCollapsed } = useSidebar();
   const { t, language } = useLanguage();
   
   // Newsletter States
@@ -33,10 +42,55 @@ const Newsletter = () => {
   const [isDigestOpen, setIsDigestOpen] = useState(false);
   const [selectedLayer, setSelectedLayer] = useState<string>("all");
 
+  // Calendar Month Selector States
+  const [selectedMonth, setSelectedMonth] = useState<number>(new Date().getMonth());
+  const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
+
+  const monthNames = [
+    "January", "February", "March", "April", "May", "June", 
+    "July", "August", "September", "October", "November", "December"
+  ];
+  const monthNamesPt = [
+    "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
+    "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
+  ];
+
+  const handlePrevMonth = () => {
+    setSelectedMonth(prev => {
+      if (prev === 0) {
+        setSelectedYear(y => y - 1);
+        return 11;
+      }
+      return prev - 1;
+    });
+  };
+
+  const handleNextMonth = () => {
+    setSelectedMonth(prev => {
+      if (prev === 11) {
+        setSelectedYear(y => y + 1);
+        return 0;
+      }
+      return prev + 1;
+    });
+  };
+
   // Background Polling / Last Updated States
   const [lastUpdatedNews, setLastUpdatedNews] = useState<Date | null>(null);
   const [isRefreshingNews, setIsRefreshingNews] = useState(false);
   const [secondsRemaining, setSecondsRemaining] = useState(300);
+
+  // Load from Cache on mount
+  useEffect(() => {
+    const cached = localStorage.getItem("cached_cti_advisories");
+    if (cached) {
+      try {
+        setAdvisories(JSON.parse(cached));
+      } catch (e) {
+        console.error("Failed to parse cached advisories", e);
+      }
+    }
+  }, []);
 
   // Fetch CTI News / Advisories
   const loadNews = async (isBackground = false) => {
@@ -51,7 +105,25 @@ const Newsletter = () => {
       const res = await fetch("/api/newsletter");
       if (!res.ok) throw new Error("Failed to load threat advisories");
       const data = await res.json();
-      setAdvisories(data);
+      
+      setAdvisories(prev => {
+        const merged = [...prev];
+        const seenKeys = new Set(merged.map(item => `${item.link}_${item.title}_${item.source}`));
+        
+        data.forEach((item: Advisory) => {
+          const key = `${item.link}_${item.title}_${item.source}`;
+          if (!seenKeys.has(key)) {
+            merged.push(item);
+            seenKeys.add(key);
+          }
+        });
+        
+        // Sort newest first
+        merged.sort((a, b) => new Date(b.pubDate).getTime() - new Date(a.pubDate).getTime());
+        localStorage.setItem("cached_cti_advisories", JSON.stringify(merged));
+        return merged;
+      });
+
       setLastUpdatedNews(new Date());
     } catch (err: any) {
       console.error(err);
@@ -191,24 +263,36 @@ const Newsletter = () => {
   };
 
   // Filter Advisories / News
-  const filteredAdvisories = advisories.filter(item => {
-    const matchesSearch =
-      (item.title ?? '').toLowerCase().includes(searchNews.toLowerCase()) ||
-      (item.description ?? '').toLowerCase().includes(searchNews.toLowerCase()) ||
-      (item.source ?? '').toLowerCase().includes(searchNews.toLowerCase());
+  const filteredAdvisories = useMemo(() => {
+    return advisories.filter(item => {
+      // 1. Month/Year filter
+      const d = new Date(item.pubDate);
+      if (d.getMonth() !== selectedMonth || d.getFullYear() !== selectedYear) {
+        return false;
+      }
 
-    if (selectedLayer === "all") return matchesSearch;
-    if (selectedLayer === "l1") return matchesSearch && item.layer === 1;
-    if (selectedLayer === "l2") return matchesSearch && item.layer === 2;
-    if (selectedLayer === "l3") return matchesSearch && item.layer === 3;
-    return matchesSearch;
-  });
+      // 2. Search Text filter
+      const matchesSearch =
+        (item.title ?? '').toLowerCase().includes(searchNews.toLowerCase()) ||
+        (item.description ?? '').toLowerCase().includes(searchNews.toLowerCase()) ||
+        (item.source ?? '').toLowerCase().includes(searchNews.toLowerCase());
+
+      if (!matchesSearch) return false;
+
+      // 3. Layer filter
+      if (selectedLayer === "all") return true;
+      if (selectedLayer === "l1") return item.layer === 1;
+      if (selectedLayer === "l2") return item.layer === 2;
+      if (selectedLayer === "l3") return item.layer === 3;
+      return true;
+    });
+  }, [advisories, selectedMonth, selectedYear, searchNews, selectedLayer]);
 
   const selectedCount = Object.values(selectedNews).filter(Boolean).length;
   const selectedAdvisoriesList = advisories.filter(item => selectedNews[item.title]);
 
   return (
-    <div className="min-h-screen bg-background flex flex-col lg:pl-56">
+    <div className={`min-h-screen bg-background flex flex-col transition-all duration-300 ${isCollapsed ? "lg:pl-20" : "lg:pl-64"}`}>
       <Header showBackButton />
 
       <div className="flex-1 p-4 md:p-8">
@@ -268,6 +352,65 @@ const Newsletter = () => {
                 {language === "pt" ? "Última atualização: " : "Last updated: "}
                 {lastUpdatedNews ? lastUpdatedNews.toLocaleTimeString() : "Pending"}
               </span>
+            </div>
+          </div>
+
+          {/* Calendar Month Selector Bar */}
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-card/25 backdrop-blur-xl border border-primary/10 rounded-2xl p-4 shadow-lg">
+            <div className="flex items-center gap-3">
+              <Button
+                variant="outline"
+                size="icon"
+                className="h-9.5 w-9.5 rounded-xl border-primary/15 hover:bg-primary/5 shrink-0"
+                onClick={handlePrevMonth}
+                title={language === "pt" ? "Mês Anterior" : "Previous Month"}
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <div className="flex items-center gap-2 px-2 shrink-0">
+                <Calendar className="h-4 w-4 text-primary" />
+                <span className="text-sm font-bold text-foreground font-mono whitespace-nowrap min-w-[130px] text-center">
+                  {language === "pt" ? monthNamesPt[selectedMonth] : monthNames[selectedMonth]} {selectedYear}
+                </span>
+              </div>
+              <Button
+                variant="outline"
+                size="icon"
+                className="h-9.5 w-9.5 rounded-xl border-primary/15 hover:bg-primary/5 shrink-0"
+                onClick={handleNextMonth}
+                title={language === "pt" ? "Próximo Mês" : "Next Month"}
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+
+            {/* Quick Month Select Dropdown */}
+            <div className="flex items-center gap-2.5 w-full sm:w-auto">
+              <Select value={selectedMonth.toString()} onValueChange={(val) => setSelectedMonth(parseInt(val))}>
+                <SelectTrigger className="h-9.5 w-full sm:w-[130px] bg-background/50 border-primary/15 rounded-xl text-xs font-semibold focus:ring-primary/20 hover:bg-background/60 transition-all">
+                  <SelectValue placeholder={language === "pt" ? "Mês" : "Month"} />
+                </SelectTrigger>
+                <SelectContent className="max-h-60 border-primary/10 bg-popover/95 backdrop-blur-md rounded-xl">
+                  {(language === "pt" ? monthNamesPt : monthNames).map((name, idx) => (
+                    <SelectItem key={idx} value={idx.toString()} className="text-xs rounded-lg">
+                      {name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <Select value={selectedYear.toString()} onValueChange={(val) => setSelectedYear(parseInt(val))}>
+                <SelectTrigger className="h-9.5 w-full sm:w-[95px] bg-background/50 border-primary/15 rounded-xl text-xs font-semibold focus:ring-primary/20 hover:bg-background/60 transition-all">
+                  <SelectValue placeholder={language === "pt" ? "Ano" : "Year"} />
+                </SelectTrigger>
+                <SelectContent className="border-primary/10 bg-popover/95 backdrop-blur-md rounded-xl">
+                  {["2024", "2025", "2026", "2027"].map(year => (
+                    <SelectItem key={year} value={year} className="text-xs rounded-lg">
+                      {year}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
 
@@ -468,9 +611,19 @@ const Newsletter = () => {
                   <p className="text-sm text-muted-foreground mt-1">Please try again later.</p>
                 </div>
               ) : filteredAdvisories.length === 0 ? (
-                <div className="p-12 border border-dashed rounded-xl text-center bg-card">
+                <div className="p-12 border border-dashed rounded-xl text-center bg-card space-y-4">
                   <BookOpen className="h-12 w-12 text-muted-foreground/50 mx-auto mb-3" />
-                  <p className="text-muted-foreground font-medium">{t("noAdvisoriesFound") || "No advisories found"}</p>
+                  <div>
+                    <p className="text-muted-foreground font-medium">{language === "pt" ? "Nenhuma notícia encontrada para este mês no cache local" : "No threat advisories found for this month in local cache"}</p>
+                    <p className="text-xs text-muted-foreground mt-1">{language === "pt" ? "Você pode buscar as notícias mais recentes do servidor para popular o cache" : "Try fetching the latest feed from the server or choose another month"}</p>
+                  </div>
+                  <Button
+                    onClick={() => loadNews()}
+                    className="gap-2 h-9 px-4 rounded-xl text-xs font-semibold bg-primary hover:bg-primary/90 text-white mx-auto"
+                  >
+                    <RefreshCw className="h-3.5 w-3.5" />
+                    {language === "pt" ? "Buscar Notícias Recentes" : "Fetch Recent Advisories"}
+                  </Button>
                 </div>
               ) : (
                 <div className="grid grid-cols-1 gap-4">
@@ -512,9 +665,9 @@ const Newsletter = () => {
                             </a>
                           </h3>
                           
-                          <p className="text-sm text-muted-foreground leading-relaxed">
+                          <div className="text-sm text-muted-foreground leading-relaxed">
                             {renderHighlightedDescription(item.description)}
-                          </p>
+                          </div>
 
                           <div className="pt-2 flex items-center justify-between">
                             <a

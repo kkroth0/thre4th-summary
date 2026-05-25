@@ -134,7 +134,7 @@ const VendorDirectory = () => {
     const totalCount = Object.keys(apiStatuses).length;
 
     return (
-        <div className={`min-h-screen bg-background flex flex-col transition-all duration-300 ${isCollapsed ? "lg:pl-16" : "lg:pl-56"}`}>
+        <div className={`min-h-screen bg-background flex flex-col transition-all duration-300 ${isCollapsed ? "lg:pl-20" : "lg:pl-64"}`}>
             <Header showBackButton />
             <div className="flex-1 p-4 md:p-8">
                 <div className="max-w-6xl mx-auto space-y-6">

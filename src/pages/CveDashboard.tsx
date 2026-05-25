@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { Link } from "react-router-dom";
-import { ArrowLeft, Globe, Shield, AlertTriangle, Search, Eye, BarChart2, RefreshCw, ExternalLink } from "lucide-react";
+import { ArrowLeft, Globe, Shield, AlertTriangle, Search, Eye, BarChart2, RefreshCw, ExternalLink, X, ChevronLeft, Calendar } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -11,6 +11,13 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { useSidebar } from "@/contexts/SidebarContext";
 import { Header } from "@/components/Header";
 import { toast } from "sonner";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 interface CveItem {
   id: string;
@@ -47,9 +54,60 @@ const CveDashboard = () => {
   const [loadingExploited, setLoadingExploited] = useState(true);
   const [cveError, setCveError] = useState<string | null>(null);
 
+  // Filters State
+  const [selectedVendor, setSelectedVendor] = useState("all");
+  const [selectedSoftware, setSelectedSoftware] = useState("all");
+  const [selectedSeverity, setSelectedSeverity] = useState("all");
+
+  // Calendar Month Selector States
+  const [selectedMonth, setSelectedMonth] = useState<number>(new Date().getMonth());
+  const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
+
+  const monthNames = [
+    "January", "February", "March", "April", "May", "June", 
+    "July", "August", "September", "October", "November", "December"
+  ];
+  const monthNamesPt = [
+    "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
+    "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
+  ];
+
+  const handlePrevMonth = () => {
+    setSelectedMonth(prev => {
+      if (prev === 0) {
+        setSelectedYear(y => y - 1);
+        return 11;
+      }
+      return prev - 1;
+    });
+  };
+
+  const handleNextMonth = () => {
+    setSelectedMonth(prev => {
+      if (prev === 11) {
+        setSelectedYear(y => y + 1);
+        return 0;
+      }
+      return prev + 1;
+    });
+  };
+
   // Background Polling / Last Updated States
   const [lastUpdatedCves, setLastUpdatedCves] = useState<Date | null>(null);
   const [isRefreshingCves, setIsRefreshingCves] = useState(false);
+
+  // Load from local storage cache on mount
+  useEffect(() => {
+    const cachedRecent = localStorage.getItem("cached_recent_cves");
+    const cachedExploited = localStorage.getItem("cached_exploited_cves");
+    
+    if (cachedRecent) {
+      try { setRecentCves(JSON.parse(cachedRecent)); } catch (e) { console.error(e); }
+    }
+    if (cachedExploited) {
+      try { setExploitedCves(JSON.parse(cachedExploited)); } catch (e) { console.error(e); }
+    }
+  }, []);
 
   // Fetch CVE Dashboard Data
   const loadCves = async (isBackground = false) => {
@@ -72,8 +130,34 @@ const CveDashboard = () => {
       const recentData = await recentRes.json();
       const exploitedData = await exploitedRes.json();
       
-      setRecentCves(recentData);
-      setExploitedCves(exploitedData);
+      setRecentCves(prev => {
+        const merged = [...prev];
+        const seenIds = new Set(merged.map(item => item.id));
+        recentData.forEach((item: CveItem) => {
+          if (!seenIds.has(item.id)) {
+            merged.push(item);
+            seenIds.add(item.id);
+          }
+        });
+        merged.sort((a, b) => new Date(b.Published).getTime() - new Date(a.Published).getTime());
+        localStorage.setItem("cached_recent_cves", JSON.stringify(merged));
+        return merged;
+      });
+
+      setExploitedCves(prev => {
+        const merged = [...prev];
+        const seenIds = new Set(merged.map(item => item.cveID));
+        exploitedData.forEach((item: ExploitedCve) => {
+          if (!seenIds.has(item.cveID)) {
+            merged.push(item);
+            seenIds.add(item.cveID);
+          }
+        });
+        merged.sort((a, b) => new Date(b.dateAdded).getTime() - new Date(a.dateAdded).getTime());
+        localStorage.setItem("cached_exploited_cves", JSON.stringify(merged));
+        return merged;
+      });
+
       setLastUpdatedCves(new Date());
     } catch (err: any) {
       console.error(err);
@@ -118,30 +202,139 @@ const CveDashboard = () => {
     return { label: "Low", color: "bg-green-500/20 text-green-500 border-green-500/30" };
   };
 
-  // Filter CVEs
-  const filteredRecentCves = recentCves.filter(cve =>
-    (cve.id ?? '').toLowerCase().includes(searchCveQuery.toLowerCase()) ||
-    (cve.summary ?? '').toLowerCase().includes(searchCveQuery.toLowerCase())
-  );
+  // Extract unique vendors from exploitedCves
+  const uniqueVendors = useMemo(() => {
+    const vendors = new Set<string>();
+    exploitedCves.forEach(cve => {
+      if (cve.vendorProject) {
+        vendors.add(cve.vendorProject);
+      }
+    });
+    return Array.from(vendors).sort();
+  }, [exploitedCves]);
 
-  const filteredExploitedCves = exploitedCves.filter(cve =>
-    (cve.cveID ?? '').toLowerCase().includes(searchCveQuery.toLowerCase()) ||
-    (cve.vendorProject ?? '').toLowerCase().includes(searchCveQuery.toLowerCase()) ||
-    (cve.product ?? '').toLowerCase().includes(searchCveQuery.toLowerCase()) ||
-    (cve.vulnerabilityName ?? '').toLowerCase().includes(searchCveQuery.toLowerCase())
-  );
+  // Extract unique products from exploitedCves (filtered by selectedVendor if active)
+  const uniqueSoftwares = useMemo(() => {
+    const products = new Set<string>();
+    exploitedCves.forEach(cve => {
+      if (selectedVendor !== "all" && cve.vendorProject !== selectedVendor) {
+        return;
+      }
+      if (cve.product) {
+        products.add(cve.product);
+      }
+    });
+    return Array.from(products).sort();
+  }, [exploitedCves, selectedVendor]);
+
+  // Reset selectedSoftware when selectedVendor changes if it's no longer in the list
+  useEffect(() => {
+    if (selectedSoftware !== "all" && !uniqueSoftwares.includes(selectedSoftware)) {
+      setSelectedSoftware("all");
+    }
+  }, [selectedVendor, uniqueSoftwares, selectedSoftware]);
+
+  // Filter CVEs
+  const filteredRecentCves = useMemo(() => {
+    return recentCves.filter(cve => {
+      // 0. Month/Year Filter
+      const d = new Date(cve.Published);
+      if (d.getMonth() !== selectedMonth || d.getFullYear() !== selectedYear) {
+        return false;
+      }
+
+      // 1. Text Search Filter
+      const queryMatch = 
+        (cve.id ?? '').toLowerCase().includes(searchCveQuery.toLowerCase()) ||
+        (cve.summary ?? '').toLowerCase().includes(searchCveQuery.toLowerCase());
+      
+      if (!queryMatch) return false;
+
+      // 2. Vendor Filter (matching summary since recentCves don't have structured vendor fields)
+      if (selectedVendor !== "all") {
+        const vendorLower = selectedVendor.toLowerCase();
+        if (!(cve.summary ?? '').toLowerCase().includes(vendorLower)) {
+          return false;
+        }
+      }
+
+      // 3. Software/Product Filter (matching summary)
+      if (selectedSoftware !== "all") {
+        const softwareLower = selectedSoftware.toLowerCase();
+        if (!(cve.summary ?? '').toLowerCase().includes(softwareLower)) {
+          return false;
+        }
+      }
+
+      // 4. Severity Filter
+      if (selectedSeverity !== "all") {
+        const sev = getCvssSeverity(cve.cvss);
+        if (sev.label !== selectedSeverity) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+  }, [recentCves, searchCveQuery, selectedVendor, selectedSoftware, selectedSeverity, selectedMonth, selectedYear]);
+
+  const filteredExploitedCves = useMemo(() => {
+    return exploitedCves.filter(cve => {
+      // 0. Month/Year Filter
+      const d = new Date(cve.dateAdded);
+      if (d.getMonth() !== selectedMonth || d.getFullYear() !== selectedYear) {
+        return false;
+      }
+
+      // 1. Text Search Filter
+      const queryMatch = 
+        (cve.cveID ?? '').toLowerCase().includes(searchCveQuery.toLowerCase()) ||
+        (cve.vendorProject ?? '').toLowerCase().includes(searchCveQuery.toLowerCase()) ||
+        (cve.product ?? '').toLowerCase().includes(searchCveQuery.toLowerCase()) ||
+        (cve.vulnerabilityName ?? '').toLowerCase().includes(searchCveQuery.toLowerCase());
+
+      if (!queryMatch) return false;
+
+      // 2. Vendor Filter
+      if (selectedVendor !== "all" && cve.vendorProject !== selectedVendor) {
+        return false;
+      }
+
+      // 3. Software/Product Filter
+      if (selectedSoftware !== "all" && cve.product !== selectedSoftware) {
+        return false;
+      }
+
+      // 4. Severity Filter (cross-referencing with recentCves if possible)
+      if (selectedSeverity !== "all") {
+        const recentMatch = recentCves.find(r => r.id === cve.cveID);
+        const sevLabel = recentMatch ? getCvssSeverity(recentMatch.cvss).label : "Critical";
+        if (sevLabel !== selectedSeverity) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+  }, [exploitedCves, recentCves, searchCveQuery, selectedVendor, selectedSoftware, selectedSeverity, selectedMonth, selectedYear]);
 
   // Statistics calculation for CVEs
-  const totalCvesTracked = recentCves.length + exploitedCves.length;
-  const validCvssList = recentCves
+  const totalCvesTracked = filteredRecentCves.length + filteredExploitedCves.length;
+  const validCvssList = filteredRecentCves
     .map(c => c.cvss)
     .filter((c): c is number => c !== null && c !== undefined && !isNaN(Number(c)))
     .map(Number);
-  const averageCvss = validCvssList.length > 0 ? (validCvssList.reduce((a, b) => a + b, 0) / validCvssList.length).toFixed(1) : "8.2";
-  const criticalCount = recentCves.filter(c => {
-    const val = c.cvss !== null && c.cvss !== undefined ? Number(c.cvss) : null;
-    return val !== null && !isNaN(val) && val >= 9.0;
-  }).length + exploitedCves.length;
+  
+  const exploitedCvssList = filteredExploitedCves
+    .map(cve => {
+      const recentMatch = recentCves.find(r => r.id === cve.cveID);
+      return recentMatch ? recentMatch.cvss : null;
+    })
+    .filter((c): c is number => c !== null && c !== undefined && !isNaN(Number(c)))
+    .map(Number);
+
+  const combinedCvssList = [...validCvssList, ...exploitedCvssList];
+  const averageCvss = combinedCvssList.length > 0 ? (combinedCvssList.reduce((a, b) => a + b, 0) / combinedCvssList.length).toFixed(1) : "8.2";
 
   // Detailed CVSS Severity counts
   const cvssDistribution = useMemo(() => {
@@ -151,7 +344,7 @@ const CveDashboard = () => {
     let low = 0;      // 0.1 - 3.9
     let na = 0;       // null/NaN/0
 
-    recentCves.forEach(cve => {
+    filteredRecentCves.forEach(cve => {
       const score = cve.cvss;
       if (score === null || score === undefined || isNaN(Number(score))) {
         na++;
@@ -165,10 +358,25 @@ const CveDashboard = () => {
       }
     });
 
-    critical += exploitedCves.length;
+    filteredExploitedCves.forEach(cve => {
+      const recentMatch = recentCves.find(r => r.id === cve.cveID);
+      const val = recentMatch ? (recentMatch.cvss !== null && recentMatch.cvss !== undefined ? Number(recentMatch.cvss) : null) : null;
+      
+      if (val === null || isNaN(val)) {
+        critical++;
+      } else {
+        if (val >= 9.0) critical++;
+        else if (val >= 7.0) high++;
+        else if (val >= 4.0) medium++;
+        else if (val > 0) low++;
+        else critical++;
+      }
+    });
 
     return { critical, high, medium, low, na };
-  }, [recentCves, exploitedCves]);
+  }, [filteredRecentCves, filteredExploitedCves, recentCves]);
+
+  const criticalCount = cvssDistribution.critical;
 
   // Top Targeted Vendors based on CISA KEV catalog (exploitedCves)
   const topTargetedVendors = useMemo(() => {
@@ -185,7 +393,7 @@ const CveDashboard = () => {
   }, [exploitedCves]);
 
   return (
-    <div className="min-h-screen bg-background flex flex-col lg:pl-56">
+    <div className={`min-h-screen bg-background flex flex-col transition-all duration-300 ${isCollapsed ? "lg:pl-20" : "lg:pl-64"}`}>
       <Header showBackButton />
 
       <div className="flex-1 p-4 md:p-8">
@@ -382,8 +590,97 @@ const CveDashboard = () => {
               placeholder={t("searchCves") || "Search CVEs..."}
               value={searchCveQuery}
               onChange={(e) => setSearchCveQuery(e.target.value)}
-              className="pl-9 bg-card"
+              className="pl-9 bg-card h-11 rounded-xl"
             />
+          </div>
+
+          {/* Filters Bar */}
+          <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 bg-card/25 backdrop-blur-xl p-5 rounded-2xl border border-primary/10 shadow-lg">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 flex-1">
+              {/* Vendor Select */}
+              <div className="flex flex-col gap-1.5">
+                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider pl-1">
+                  {language === "pt" ? "Fabricante" : "Vendor"}
+                </span>
+                <Select value={selectedVendor} onValueChange={setSelectedVendor}>
+                  <SelectTrigger className="h-10.5 bg-background/40 border-primary/15 rounded-xl text-xs font-semibold focus:ring-primary/20 hover:bg-background/60 transition-all">
+                    <SelectValue placeholder={language === "pt" ? "Todos Fabricantes" : "All Vendors"} />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-80 border-primary/10 bg-popover/95 backdrop-blur-md rounded-xl">
+                    <SelectItem value="all" className="text-xs font-semibold rounded-lg">
+                      {language === "pt" ? "Todos Fabricantes" : "All Vendors"}
+                    </SelectItem>
+                    {uniqueVendors.map(vendor => (
+                      <SelectItem key={vendor} value={vendor} className="text-xs rounded-lg">
+                        {vendor}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Software Select */}
+              <div className="flex flex-col gap-1.5">
+                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider pl-1">
+                  {language === "pt" ? "Software / Produto" : "Software / Product"}
+                </span>
+                <Select value={selectedSoftware} onValueChange={setSelectedSoftware}>
+                  <SelectTrigger className="h-10.5 bg-background/40 border-primary/15 rounded-xl text-xs font-semibold focus:ring-primary/20 hover:bg-background/60 transition-all">
+                    <SelectValue placeholder={language === "pt" ? "Todos Softwares" : "All Softwares"} />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-80 border-primary/10 bg-popover/95 backdrop-blur-md rounded-xl">
+                    <SelectItem value="all" className="text-xs font-semibold rounded-lg">
+                      {language === "pt" ? "Todos Softwares" : "All Softwares"}
+                    </SelectItem>
+                    {uniqueSoftwares.map(software => (
+                      <SelectItem key={software} value={software} className="text-xs rounded-lg">
+                        {software}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Severity Select */}
+              <div className="flex flex-col gap-1.5">
+                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider pl-1">
+                  {language === "pt" ? "Severidade" : "Severity"}
+                </span>
+                <Select value={selectedSeverity} onValueChange={setSelectedSeverity}>
+                  <SelectTrigger className="h-10.5 bg-background/40 border-primary/15 rounded-xl text-xs font-semibold focus:ring-primary/20 hover:bg-background/60 transition-all">
+                    <SelectValue placeholder={language === "pt" ? "Todas Severidades" : "All Severities"} />
+                  </SelectTrigger>
+                  <SelectContent className="border-primary/10 bg-popover/95 backdrop-blur-md rounded-xl">
+                    <SelectItem value="all" className="text-xs font-semibold rounded-lg">
+                      {language === "pt" ? "Todas Severidades" : "All Severities"}
+                    </SelectItem>
+                    <SelectItem value="Critical" className="text-xs rounded-lg text-red-500 font-medium">Critical</SelectItem>
+                    <SelectItem value="High" className="text-xs rounded-lg text-orange-500 font-medium">High</SelectItem>
+                    <SelectItem value="Medium" className="text-xs rounded-lg text-yellow-500 font-medium">Medium</SelectItem>
+                    <SelectItem value="Low" className="text-xs rounded-lg text-green-500 font-medium">Low</SelectItem>
+                    <SelectItem value="N/A" className="text-xs rounded-lg text-slate-400 font-medium">N/A</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            {/* Reset Filters Button */}
+            {(selectedVendor !== "all" || selectedSoftware !== "all" || selectedSeverity !== "all" || searchCveQuery !== "") ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setSelectedVendor("all");
+                  setSelectedSoftware("all");
+                  setSelectedSeverity("all");
+                  setSearchCveQuery("");
+                }}
+                className="h-10 px-4 rounded-xl text-xs text-muted-foreground hover:text-foreground hover:bg-muted/50 gap-1.5 transition-all font-semibold shrink-0 self-start md:self-end"
+              >
+                <X className="h-4 w-4" />
+                {language === "pt" ? "Limpar Filtros" : "Clear Filters"}
+              </Button>
+            ) : null}
           </div>
 
           {/* Sub tabs: Recent vs Exploited */}

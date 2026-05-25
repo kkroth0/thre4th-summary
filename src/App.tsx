@@ -9,9 +9,14 @@ import DnsblCheck from "./pages/DnsblCheck";
 import Newsletter from "./pages/Newsletter";
 import CveDashboard from "./pages/CveDashboard";
 import PhishingAnalyzer from "./pages/PhishingAnalyzer";
+import DnsVisualizer from "./pages/DnsVisualizer";
+import Login from "./pages/Login";
+import AuthCallback from "./pages/AuthCallback";
 import NotFound from "./pages/NotFound";
 import { LanguageProvider } from "./contexts/LanguageContext";
 import { SidebarProvider } from "./contexts/SidebarContext";
+import { AuthProvider } from "./contexts/AuthContext";
+import { ProtectedRoute } from "./components/ProtectedRoute";
 
 const queryClient = new QueryClient();
 
@@ -22,18 +27,49 @@ const App = () => (
         <TooltipProvider>
           <Toaster />
           <Sonner />
-          <BrowserRouter>
-            <Routes>
-              <Route path="/" element={<Index />} />
-              <Route path="/vendors" element={<VendorDirectory />} />
-              <Route path="/dnsbl" element={<DnsblCheck />} />
-              <Route path="/newsletter" element={<Newsletter />} />
-              <Route path="/cves" element={<CveDashboard />} />
-              <Route path="/phishing-analyzer" element={<PhishingAnalyzer />} />
-              {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-              <Route path="*" element={<NotFound />} />
-            </Routes>
-          </BrowserRouter>
+          <AuthProvider>
+            <BrowserRouter>
+              <Routes>
+                {/* Protected Routes (CTI & CVE Dashboard) */}
+                <Route 
+                  path="/" 
+                  element={
+                    <ProtectedRoute>
+                      <Index />
+                    </ProtectedRoute>
+                  } 
+                />
+                <Route 
+                  path="/cves" 
+                  element={
+                    <ProtectedRoute>
+                      <CveDashboard />
+                    </ProtectedRoute>
+                  } 
+                />
+                <Route 
+                  path="/dns-visualizer" 
+                  element={
+                    <ProtectedRoute>
+                      <DnsVisualizer />
+                    </ProtectedRoute>
+                  } 
+                />
+
+                {/* Authentication Routes */}
+                <Route path="/login" element={<Login />} />
+                <Route path="/auth/callback" element={<AuthCallback />} />
+
+                {/* Public Routes */}
+                <Route path="/vendors" element={<VendorDirectory />} />
+                <Route path="/dnsbl" element={<DnsblCheck />} />
+                <Route path="/newsletter" element={<Newsletter />} />
+                <Route path="/phishing-analyzer" element={<PhishingAnalyzer />} />
+                
+                <Route path="*" element={<NotFound />} />
+              </Routes>
+            </BrowserRouter>
+          </AuthProvider>
         </TooltipProvider>
       </SidebarProvider>
     </LanguageProvider>

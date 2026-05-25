@@ -1,5 +1,5 @@
 import { Link, useLocation } from "react-router-dom";
-import { BookOpen, Shield, Mail, Activity, Terminal, ArrowLeft, ShieldAlert, MailWarning, ChevronLeft, ChevronRight } from "lucide-react";
+import { BookOpen, Shield, Mail, Activity, Terminal, ArrowLeft, ShieldAlert, MailWarning, ChevronLeft, ChevronRight, Globe } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { LanguageToggle } from "@/components/LanguageToggle";
@@ -32,6 +32,7 @@ export function Header({ actions, logoAddon, onLogoClick, showBackButton = false
     { path: "/", label: t("appName") || "ThreatSumm4ry", icon: Activity, isHome: true },
     { path: "/vendors", label: t("vendors") || "Vendors", icon: BookOpen },
     { path: "/dnsbl", label: t("dnsblCheck") || "DNSBL Check", icon: ShieldAlert },
+    { path: "/dns-visualizer", label: t("dnsVisualizer") || "DNS Visualizer", icon: Globe },
     { path: "/phishing-analyzer", label: language === "pt" ? "Análise de Phishing" : "Phishing Analyzer", icon: MailWarning },
     { path: "/newsletter", label: language === "pt" ? "Feed de Advisories" : "Advisory Feed", icon: Mail },
     { path: "/cves", label: language === "pt" ? "Painel de CVEs" : "CVE Dashboard", icon: Shield },
@@ -43,14 +44,14 @@ export function Header({ actions, logoAddon, onLogoClick, showBackButton = false
       <Button
         variant="ghost"
         className={cn(
-          "w-full gap-2.5 h-8.5 rounded-lg text-[11px] font-semibold transition-all duration-200",
-          isCollapsed ? "justify-center px-0 w-9 h-9 rounded-full mx-auto" : "justify-start px-3",
+          "w-full gap-3 h-10.5 rounded-xl text-[13px] font-semibold transition-all duration-200",
+          isCollapsed ? "justify-center px-0 w-11 h-11 rounded-xl mx-auto" : "justify-start px-3.5",
           isActive
             ? "bg-primary/10 text-primary hover:bg-primary/15 hover:text-primary"
             : "text-muted-foreground/80 hover:text-foreground hover:bg-muted/20"
         )}
       >
-        <Icon className={cn("h-4 w-4 shrink-0", isActive ? "text-primary" : "text-muted-foreground")} />
+        <Icon className={cn("h-5 w-5 shrink-0", isActive ? "text-primary" : "text-muted-foreground")} />
         {!isCollapsed && <span>{item.label}</span>}
       </Button>
     );
@@ -60,7 +61,7 @@ export function Header({ actions, logoAddon, onLogoClick, showBackButton = false
         {isActive && (
           <div className={cn(
             "absolute bg-primary rounded-r transition-all duration-300", 
-            isCollapsed ? "left-0 top-2 bottom-2 w-1" : "left-0 top-1 bottom-1 w-0.5"
+            isCollapsed ? "left-0 top-2 bottom-2 w-1" : "left-0 top-1.5 bottom-1.5 w-0.5"
           )} />
         )}
         {isCollapsed ? (
@@ -68,7 +69,7 @@ export function Header({ actions, logoAddon, onLogoClick, showBackButton = false
             <TooltipTrigger asChild>
               {buttonElement}
             </TooltipTrigger>
-            <TooltipContent side="right" className="font-semibold text-xs bg-popover border border-primary/10 text-popover-foreground shadow-md backdrop-blur-md">
+            <TooltipContent side="right" className="font-semibold text-xs bg-popover border border-primary/10 text-popover-foreground shadow-md backdrop-blur-md py-1.5 px-2.5">
               {item.label}
             </TooltipContent>
           </Tooltip>
@@ -101,7 +102,7 @@ export function Header({ actions, logoAddon, onLogoClick, showBackButton = false
               onClick={handleLogoClick}
               className="flex items-center gap-2"
             >
-              <Terminal className="h-5 w-5 text-primary animate-pulse" />
+              <img src="/logo.png" alt="Logo" className="h-6 w-6 object-contain" />
               <span className="font-bold tracking-tight text-xl bg-gradient-to-r from-primary via-primary/80 to-primary/50 bg-clip-text text-transparent hover:opacity-95 transition-all">
                 {t("appName") || "ThreatSumm4ry"}
               </span>
@@ -153,119 +154,70 @@ export function Header({ actions, logoAddon, onLogoClick, showBackButton = false
       </header>
 
       {/* Desktop Sidebar (lg:flex) */}
-      <aside className="hidden lg:flex lg:flex-col lg:fixed lg:left-0 lg:top-0 lg:h-screen lg:w-56 lg:border-r lg:border-primary/10 lg:bg-card/45 lg:backdrop-blur-md lg:p-4 lg:z-30 lg:justify-between lg:overflow-y-auto">
+      <aside className={cn(
+        "hidden lg:flex lg:flex-col lg:fixed lg:left-0 lg:top-0 lg:h-screen lg:border-r lg:border-primary/10 lg:bg-card/45 lg:backdrop-blur-md lg:z-30 lg:justify-between lg:overflow-y-auto transition-all duration-300",
+        isCollapsed ? "lg:w-20 lg:p-3" : "lg:w-64 lg:p-4.5"
+      )}>
         {/* Top Part */}
         <div className="flex flex-col gap-6">
           {/* Brand Logo Container */}
-          <div className="flex items-center gap-2 relative pl-2 py-2">
+          <div className={cn("flex items-center gap-2 relative py-2", isCollapsed ? "justify-center" : "pl-2")}>
             <Link
               to="/"
               onClick={handleLogoClick}
-              className="flex items-center gap-2"
+              className="flex items-center gap-2.5"
             >
-              <Terminal className="h-4.5 w-4.5 text-primary animate-pulse" />
-              <span className="font-bold tracking-tight text-[15px] bg-gradient-to-r from-primary via-primary/80 to-primary/50 bg-clip-text text-transparent hover:opacity-95 transition-all">
-                {t("appName") || "ThreatSumm4ry"}
-              </span>
+              <img src="/logo.png" alt="Logo" className="h-6 w-6 object-contain shrink-0" />
+              {!isCollapsed && (
+                <span className="font-bold tracking-tight text-[17px] bg-gradient-to-r from-primary via-primary/80 to-primary/50 bg-clip-text text-transparent hover:opacity-95 transition-all">
+                  {t("appName") || "ThreatSumm4ry"}
+                </span>
+              )}
             </Link>
-            {logoAddon}
+            {!isCollapsed && logoAddon}
           </div>
 
           {/* Navigation Links Grouped by Categories */}
-          <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-5">
             {/* Category 1: SCAN & SEARCH */}
             <div>
-              <div className="px-3 mb-1.5 text-[10px] font-bold text-muted-foreground/45 uppercase tracking-widest">
-                {language === 'pt' ? 'Escaneamento' : 'Scan & Search'}
-              </div>
-              <div className="flex flex-col gap-0.5">
-                {navItems.filter(item => item.isHome).map((item) => {
-                  const isActive = pathname === "/";
-                  const Icon = item.icon;
-                  return (
-                    <Link key={item.path} to={item.path} className="w-full relative block">
-                      {isActive && (
-                        <div className="absolute left-0 top-1 bottom-1 w-0.5 bg-primary rounded-r" />
-                      )}
-                      <Button
-                        variant="ghost"
-                        className={cn(
-                          "w-full justify-start gap-2.5 h-8.5 px-3 rounded-lg text-xs font-semibold transition-all duration-200",
-                          isActive
-                            ? "bg-primary/10 text-primary hover:bg-primary/15 hover:text-primary"
-                            : "text-muted-foreground/80 hover:text-foreground hover:bg-muted/20"
-                        )}
-                      >
-                        <Icon className={cn("h-4 w-4 shrink-0", isActive ? "text-primary" : "text-muted-foreground")} />
-                        <span>{item.label}</span>
-                      </Button>
-                    </Link>
-                  );
-                })}
+              {!isCollapsed ? (
+                <div className="px-3 mb-2.5 text-[11px] font-bold text-muted-foreground/50 uppercase tracking-wider">
+                  {language === 'pt' ? 'Escaneamento' : 'Scan & Search'}
+                </div>
+              ) : (
+                <div className="h-px bg-primary/10 my-3.5 mx-2" />
+              )}
+              <div className="flex flex-col gap-1">
+                {navItems.filter(item => item.isHome).map((item) => renderNavItem(item, pathname === "/"))}
               </div>
             </div>
 
             {/* Category 2: INTELLIGENCE TOOLS */}
             <div>
-              <div className="px-3 mb-1.5 text-[10px] font-bold text-muted-foreground/45 uppercase tracking-widest">
-                {language === 'pt' ? 'Ferramentas' : 'Intelligence Tools'}
-              </div>
-              <div className="flex flex-col gap-0.5">
-                {navItems.filter(item => !item.isHome && item.path !== "/newsletter" && item.path !== "/cves").map((item) => {
-                  const isActive = pathname === item.path;
-                  const Icon = item.icon;
-                  return (
-                    <Link key={item.path} to={item.path} className="w-full relative block">
-                      {isActive && (
-                        <div className="absolute left-0 top-1 bottom-1 w-0.5 bg-primary rounded-r" />
-                      )}
-                      <Button
-                        variant="ghost"
-                        className={cn(
-                          "w-full justify-start gap-2.5 h-8.5 px-3 rounded-lg text-xs font-semibold transition-all duration-200",
-                          isActive
-                            ? "bg-primary/10 text-primary hover:bg-primary/15 hover:text-primary"
-                            : "text-muted-foreground/80 hover:text-foreground hover:bg-muted/20"
-                        )}
-                      >
-                        <Icon className={cn("h-4 w-4 shrink-0", isActive ? "text-primary" : "text-muted-foreground")} />
-                        <span>{item.label}</span>
-                      </Button>
-                    </Link>
-                  );
-                })}
+              {!isCollapsed ? (
+                <div className="px-3 mb-2.5 text-[11px] font-bold text-muted-foreground/50 uppercase tracking-wider">
+                  {language === 'pt' ? 'Ferramentas' : 'Intelligence Tools'}
+                </div>
+              ) : (
+                <div className="h-px bg-primary/10 my-3.5 mx-2" />
+              )}
+              <div className="flex flex-col gap-1">
+                {navItems.filter(item => !item.isHome && item.path !== "/newsletter" && item.path !== "/cves").map((item) => renderNavItem(item, pathname === item.path))}
               </div>
             </div>
 
             {/* Category 3: THREAT FEEDS */}
             <div>
-              <div className="px-3 mb-1.5 text-[10px] font-bold text-muted-foreground/45 uppercase tracking-widest">
-                {language === 'pt' ? 'Feeds de Ameaças' : 'Threat Feeds'}
-              </div>
-              <div className="flex flex-col gap-0.5">
-                {navItems.filter(item => item.path === "/newsletter" || item.path === "/cves").map((item) => {
-                  const isActive = pathname === item.path;
-                  const Icon = item.icon;
-                  return (
-                    <Link key={item.path} to={item.path} className="w-full relative block">
-                      {isActive && (
-                        <div className="absolute left-0 top-1 bottom-1 w-0.5 bg-primary rounded-r" />
-                      )}
-                      <Button
-                        variant="ghost"
-                        className={cn(
-                          "w-full justify-start gap-2.5 h-8.5 px-3 rounded-lg text-xs font-semibold transition-all duration-200",
-                          isActive
-                            ? "bg-primary/10 text-primary hover:bg-primary/15 hover:text-primary"
-                            : "text-muted-foreground/80 hover:text-foreground hover:bg-muted/20"
-                        )}
-                      >
-                        <Icon className={cn("h-4 w-4 shrink-0", isActive ? "text-primary" : "text-muted-foreground")} />
-                        <span>{item.label}</span>
-                      </Button>
-                    </Link>
-                  );
-                })}
+              {!isCollapsed ? (
+                <div className="px-3 mb-2.5 text-[11px] font-bold text-muted-foreground/50 uppercase tracking-wider">
+                  {language === 'pt' ? 'Feeds de Ameaças' : 'Threat Feeds'}
+                </div>
+              ) : (
+                <div className="h-px bg-primary/10 my-3.5 mx-2" />
+              )}
+              <div className="flex flex-col gap-1">
+                {navItems.filter(item => item.path === "/newsletter" || item.path === "/cves").map((item) => renderNavItem(item, pathname === item.path))}
               </div>
             </div>
           </div>
@@ -273,6 +225,26 @@ export function Header({ actions, logoAddon, onLogoClick, showBackButton = false
 
         {/* Bottom Part */}
         <div className="flex flex-col gap-4 border-t border-primary/10 pt-4">
+          {/* Collapse Trigger Button */}
+          <Button
+            variant="ghost"
+            onClick={toggleSidebar}
+            className={cn(
+              "w-full h-10 rounded-xl text-muted-foreground/80 hover:text-foreground hover:bg-muted/20 flex items-center gap-3 transition-all duration-200",
+              isCollapsed ? "justify-center px-0 w-11 h-11 rounded-xl mx-auto" : "px-3.5 justify-start"
+            )}
+            title={isCollapsed ? (language === "pt" ? "Expandir" : "Expand") : (language === "pt" ? "Colapsar" : "Collapse")}
+          >
+            {isCollapsed ? (
+              <ChevronRight className="h-5 w-5 text-muted-foreground" />
+            ) : (
+              <>
+                <ChevronLeft className="h-5 w-5 text-muted-foreground" />
+                <span className="text-xs font-semibold">{language === "pt" ? "Recolher Menu" : "Collapse Sidebar"}</span>
+              </>
+            )}
+          </Button>
+
           {/* Custom actions passed from page */}
           {actions && (
             <div className="w-full">
@@ -281,12 +253,14 @@ export function Header({ actions, logoAddon, onLogoClick, showBackButton = false
           )}
 
           {/* Theme & Language Toggles */}
-          <div className="flex items-center justify-between gap-2 px-1">
-            <div className="flex items-center gap-2">
+          <div className={cn("flex items-center justify-between gap-2", isCollapsed ? "flex-col justify-center px-0 gap-3" : "px-1")}>
+            <div className={cn("flex items-center gap-2", isCollapsed && "flex-col")}>
               <LanguageToggle />
-              <span className="text-[10px] font-bold text-muted-foreground/50 uppercase tracking-wider">
-                {t('lang') || "Lang"}
-              </span>
+              {!isCollapsed && (
+                <span className="text-[10px] font-bold text-muted-foreground/50 uppercase tracking-wider">
+                  {t('lang') || "Lang"}
+                </span>
+              )}
             </div>
             <ThemeToggle />
           </div>

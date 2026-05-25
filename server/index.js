@@ -6,18 +6,10 @@ import axios from 'axios';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import dns from 'dns';
+import fs from 'fs';
+import crypto from 'crypto';
 
 dotenv.config({ path: '../.env' });
-
-// Ensure VITE_ prefixed keys from frontend .env are available to backend
-Object.keys(process.env).forEach(key => {
-    if (key.startsWith('VITE_')) {
-        const standardKey = key.replace('VITE_', '');
-        if (!process.env[standardKey]) {
-            process.env[standardKey] = process.env[key];
-        }
-    }
-});
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -25,43 +17,197 @@ const PORT = process.env.PORT || 3001;
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Middleware
-app.use(cors());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+// Session and Auth Configuration
+const SESSION_SECRET = process.env.SESSION_SECRET || 'threatsummary-jwt-signature-secret-key-998877';
+const GITHUB_CLIENT_ID = process.env.GITHUB_CLIENT_ID || '';
+const GITHUB_CLIENT_SECRET = process.env.GITHUB_CLIENT_SECRET || '';
+const ALLOW_MOCK_AUTH = process.env.ALLOW_MOCK_AUTH !== 'false';
+
+// Token utilities
+function generateToken(payload) {
+    const data = Buffer.from(JSON.stringify(payload)).toString('base64');
+    const signature = crypto.createHmac('sha256', SESSION_SECRET).update(data).digest('base64');
+    return `${data}.${signature}`;
+}
+
+function verifyToken(token) {
+    if (!token) return null;
+    const parts = token.split('.');
+    if (parts.length !== 2) return null;
+    const [data, signature] = parts;
+    const expectedSignature = crypto.createHmac('sha256', SESSION_SECRET).update(data).digest('base64');
+    if (signature !== expectedSignature) return null;
+    try {
+        return JSON.parse(Buffer.from(data, 'base64').toString('utf8'));
+    } catch {
+        return null;
+    }
+}
+
+// CORS Config
+const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',') || ['http://localhost:8080'];
+app.use(cors({
+    origin: (origin, callback) => {
+        if (!origin || allowedOrigins.includes(origin) || origin === 'null') {
+            callback(null, true);
+        } else {
+            callback(new Error('Not allowed by CORS'));
+        }
+    },
+    methods: ['GET', 'POST', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    credentials: true
+}));
+
+// Express Settings - Payload Limits
+app.use(express.json({ limit: '10kb' }));
+app.use(express.urlencoded({ extended: false, limit: '10kb' }));
 
 // Rate limiting
 const limiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 500, // limit each IP to 500 requests per windowMs (increased for progressive loading)
-    message: 'Too many requests, please try again later.'
+    max: 150,
+    message: { error: 'Too many requests, please try again later.' },
+    standardHeaders: true,
+    legacyHeaders: false
 });
 app.use('/api/', limiter);
 
-// Helper to detect query type
-// Helper to detect query type (Strict Validation)
+const scanLimiter = rateLimit({
+    windowMs: 60 * 1000, // 1 minute
+    max: 60,
+    message: { error: 'Scan rate limit exceeded. Please wait a minute.' },
+    standardHeaders: true,
+    legacyHeaders: false
+});
+
+// Dynamic DNSBL whitelist parser
+let allowedDnsblProviders = new Set();
+const loadDnsblProviders = () => {
+    try {
+        const filePath = path.join(__dirname, '../src/pages/DnsblCheck.tsx');
+        if (fs.existsSync(filePath)) {
+            const content = fs.readFileSync(filePath, 'utf8');
+            const match = content.match(/const DNSBL_PROVIDERS = \[[^\]]+\]/s);
+            if (match) {
+                const matches = match[0].match(/["']([^"']+)["']/g);
+                if (matches) {
+                    matches.forEach(m => {
+                        allowedDnsblProviders.add(m.replace(/["']/g, ''));
+                    });
+                }
+            }
+        }
+        console.log(`Loaded ${allowedDnsblProviders.size} DNSBL providers from DnsblCheck.tsx`);
+    } catch (err) {
+        console.error('Failed to parse DNSBL providers:', err.message);
+    }
+    // Ensure we have standard fallbacks if parsing failed or was empty
+    if (allowedDnsblProviders.size === 0) {
+        [
+            'zen.spamhaus.org', 'dbl.spamhaus.org', 'xbl.spamhaus.org', 'sbl.spamhaus.org',
+            'pbl.spamhaus.org', 'bl.spamcop.net', 'b.barracudacentral.org', 'dnsbl.sorbs.net',
+            'spam.dnsbl.sorbs.net', 'dul.dnsbl.sorbs.net', 'dnsbl-1.uceprotect.net',
+            'dnsbl-2.uceprotect.net', 'dnsbl-3.uceprotect.net'
+        ].forEach(p => allowedDnsblProviders.add(p));
+    }
+};
+loadDnsblProviders();
+
+// Regex & Sanitization
+const SAFE_IP_REGEX = /^(\d{1,3}\.){3}\d{1,3}$/;
+const SAFE_DOMAIN_REGEX = /^([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$/;
+const SAFE_HASH_REGEX = /^[a-fA-F0-9]{32,64}$/;
+const SAFE_CIDR_REGEX = /^(\d{1,3}\.){3}\d{1,3}\/\d{1,2}$/;
+
+const sanitizeQuery = (query, expectedType) => {
+    const trimmed = query?.trim();
+    if (!trimmed) throw new Error('Empty query');
+    if (trimmed.length > 2048) throw new Error('Query too long');
+
+    switch (expectedType) {
+        case 'ip': {
+            if (!SAFE_IP_REGEX.test(trimmed)) throw new Error('Invalid IP format');
+            const octets = trimmed.split('.').map(Number);
+            if (octets.some(o => o > 255 || o < 0)) throw new Error('Invalid IP octet');
+            if (octets[0] === 10 || octets[0] === 127 ||
+                (octets[0] === 172 && octets[1] >= 16 && octets[1] <= 31) ||
+                (octets[0] === 192 && octets[1] === 168) ||
+                (octets[0] === 169 && octets[1] === 254) ||
+                trimmed === '0.0.0.0') {
+                throw new Error('Internal/reserved IP not allowed');
+            }
+            return trimmed;
+        }
+        case 'cidr': {
+            if (!SAFE_CIDR_REGEX.test(trimmed)) throw new Error('Invalid CIDR format');
+            const [ipPart, maskPart] = trimmed.split('/');
+            const mask = parseInt(maskPart, 10);
+            if (mask < 0 || mask > 32) throw new Error('Invalid CIDR mask');
+            const octets = ipPart.split('.').map(Number);
+            if (octets.some(o => o > 255 || o < 0)) throw new Error('Invalid IP octet in CIDR');
+            if (octets[0] === 10 || octets[0] === 127 ||
+                (octets[0] === 172 && octets[1] >= 16 && octets[1] <= 31) ||
+                (octets[0] === 192 && octets[1] === 168) ||
+                (octets[0] === 169 && octets[1] === 254) ||
+                ipPart === '0.0.0.0') {
+                throw new Error('Internal/reserved CIDR block not allowed');
+            }
+            return trimmed;
+        }
+        case 'domain':
+            if (!SAFE_DOMAIN_REGEX.test(trimmed)) throw new Error('Invalid domain format');
+            if (trimmed.length > 253) throw new Error('Domain too long');
+            return trimmed;
+        case 'hash':
+            if (!SAFE_HASH_REGEX.test(trimmed)) throw new Error('Invalid hash format');
+            return trimmed;
+        case 'url': {
+            try {
+                const parsed = new URL(trimmed);
+                if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+                    throw new Error('Only http/https protocols allowed');
+                }
+                const hostname = parsed.hostname;
+                if (SAFE_IP_REGEX.test(hostname)) {
+                    const octets = hostname.split('.').map(Number);
+                    if (octets[0] === 10 || octets[0] === 127 ||
+                        (octets[0] === 172 && octets[1] >= 16 && octets[1] <= 31) ||
+                        (octets[0] === 192 && octets[1] === 168) ||
+                        (octets[0] === 169 && octets[1] === 254) ||
+                        hostname === '0.0.0.0') {
+                        throw new Error('Internal/reserved IP URL not allowed');
+                    }
+                }
+                if (['localhost', 'localhost.localdomain'].includes(hostname.toLowerCase()) || hostname.endsWith('.local')) {
+                    throw new Error('Local domains not allowed');
+                }
+                return trimmed;
+            } catch (e) {
+                throw new Error('Invalid URL: ' + e.message);
+            }
+        }
+        default:
+            throw new Error('Unknown expected type');
+    }
+};
+
 const detectQueryType = (query) => {
     if (!query) return "unknown";
     const trimmed = query.trim();
+    if (trimmed.length > 2048) return "unknown";
 
-    // URL
     if (/^(http|https):\/\/[^ "]+$/.test(trimmed)) return "url";
-
-    // Hash (MD5, SHA1, SHA256)
     if (/^[a-fA-F0-9]{32}$/.test(trimmed)) return "hash";
     if (/^[a-fA-F0-9]{40}$/.test(trimmed)) return "hash";
     if (/^[a-fA-F0-9]{64}$/.test(trimmed)) return "hash";
-
-    // IPv4
     if (/^(\d{1,3}\.){3}\d{1,3}$/.test(trimmed)) return "ip";
-
-    // Domain
     if (/^([a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$/.test(trimmed)) return "domain";
 
     return "unknown";
 };
 
-// Security Middleware
+// Security middleware to validate query format on requests
 const validateRequest = (req, res, next) => {
     if (req.method === 'POST' && req.body.query) {
         const type = detectQueryType(req.body.query);
@@ -71,25 +217,59 @@ const validateRequest = (req, res, next) => {
     }
     next();
 };
-
 app.use(validateRequest);
+
+// Error Sanitization Utility
+const sanitizeError = (error) => {
+    const status = error.response?.status || 500;
+    const safeMessages = {
+        400: 'Bad request',
+        401: 'Upstream authentication failed',
+        403: 'Access denied by upstream provider',
+        404: 'Resource not found',
+        429: 'Rate limit exceeded on upstream provider',
+    };
+    const message = safeMessages[status] || 'Internal server error';
+    console.error(`[Error] Status: ${status}, Message: ${error.message}`);
+    return { status, message };
+};
+
+// HTML entity and XSS escaping helper
+const escapeHtml = (unsafe) => {
+    if (!unsafe) return '';
+    return unsafe
+         .replace(/&/g, "&amp;")
+         .replace(/</g, "&lt;")
+         .replace(/>/g, "&gt;")
+         .replace(/"/g, "&quot;")
+         .replace(/'/g, "&#039;");
+};
+
+// Auth middleware
+const requireAuth = (req, res, next) => {
+    const authHeader = req.headers['authorization'];
+    if (!authHeader) {
+        return res.status(401).json({ error: 'Unauthorized: No token provided' });
+    }
+    const token = authHeader.split(' ')[1];
+    const user = verifyToken(token);
+    if (!user) {
+        return res.status(401).json({ error: 'Unauthorized: Invalid or expired token' });
+    }
+    req.user = user;
+    next();
+};
 
 // Helper to extract quota info
 const sendResponseWithQuota = (res, axiosResponse) => {
     const headers = axiosResponse.headers;
     const quota = {};
 
-    // Common rate limit headers
     if (headers['x-ratelimit-remaining']) quota.remaining = headers['x-ratelimit-remaining'];
     if (headers['x-ratelimit-limit']) quota.limit = headers['x-ratelimit-limit'];
     if (headers['x-ratelimit-reset']) quota.reset = headers['x-ratelimit-reset'];
 
-    // Vendor specific headers
-    // VirusTotal
     if (headers['x-daily-requests-left']) quota.daily_remaining = headers['x-daily-requests-left'];
-
-    // AbuseIPDB
-    if (headers['x-ratelimit-remaining']) quota.remaining = headers['x-ratelimit-remaining'];
 
     res.json({
         data: axiosResponse.data,
@@ -100,194 +280,240 @@ const sendResponseWithQuota = (res, axiosResponse) => {
 // --- API Endpoints ---
 
 // VirusTotal
-app.post('/api/virustotal', async (req, res) => {
+app.post('/api/virustotal', requireAuth, scanLimiter, async (req, res) => {
     const { query } = req.body;
     if (!process.env.VIRUSTOTAL_API_KEY) return res.status(500).json({ error: "API Key missing" });
 
     try {
         const queryType = detectQueryType(query);
+        const sanitized = sanitizeQuery(query, queryType);
         let endpoint = "";
 
-        if (queryType === "ip") endpoint = `https://www.virustotal.com/api/v3/ip_addresses/${query}`;
-        else if (queryType === "domain") endpoint = `https://www.virustotal.com/api/v3/domains/${query}`;
-        else if (queryType === "hash") endpoint = `https://www.virustotal.com/api/v3/files/${query}`;
-        else endpoint = `https://www.virustotal.com/api/v3/urls/${btoa(query).replace(/=/g, "")}`;
+        if (queryType === "ip") endpoint = `https://www.virustotal.com/api/v3/ip_addresses/${sanitized}`;
+        else if (queryType === "domain") endpoint = `https://www.virustotal.com/api/v3/domains/${sanitized}`;
+        else if (queryType === "hash") endpoint = `https://www.virustotal.com/api/v3/files/${sanitized}`;
+        else endpoint = `https://www.virustotal.com/api/v3/urls/${Buffer.from(sanitized).toString('base64').replace(/=/g, "")}`;
 
         const response = await axios.get(endpoint, {
             headers: { "x-apikey": process.env.VIRUSTOTAL_API_KEY }
         });
         sendResponseWithQuota(res, response);
     } catch (error) {
-        res.status(error.response?.status || 500).json({ error: error.message });
+        const { status, message } = sanitizeError(error);
+        res.status(status).json({ error: message });
     }
 });
 
 // AbuseIPDB
-app.post('/api/abuseipdb', async (req, res) => {
+app.post('/api/abuseipdb', requireAuth, scanLimiter, async (req, res) => {
     const { query } = req.body;
     if (!process.env.ABUSEIPDB_API_KEY) return res.status(500).json({ error: "API Key missing" });
 
-    const queryType = detectQueryType(query);
-    if (queryType !== "ip") return res.json({ data: { "Status": "IP only" } }); // Return 200 with message to match frontend expectation
-
     try {
+        const queryType = detectQueryType(query);
+        if (queryType !== "ip") return res.json({ data: { "Status": "IP only" } }); 
+
+        const sanitized = sanitizeQuery(query, 'ip');
         const response = await axios.get(`https://api.abuseipdb.com/api/v2/check`, {
             params: {
-                ipAddress: query,
-                maxAgeInDays: 90,  // Get reports from last 90 days
-                verbose: true      // Include report details
+                ipAddress: sanitized,
+                maxAgeInDays: 90,
+                verbose: true
             },
             headers: { "Key": process.env.ABUSEIPDB_API_KEY, "Accept": "application/json" }
         });
         sendResponseWithQuota(res, response);
     } catch (error) {
-        res.status(error.response?.status || 500).json({ error: error.message });
+        const { status, message } = sanitizeError(error);
+        res.status(status).json({ error: message });
     }
 });
 
 // AbuseIPDB Check-Block
-app.post('/api/abuseipdb/check-block', async (req, res) => {
-    const { query } = req.body; // Using query to match frontend fetchFromBackend expectation
+app.post('/api/abuseipdb/check-block', requireAuth, scanLimiter, async (req, res) => {
+    const { query } = req.body;
     if (!process.env.ABUSEIPDB_API_KEY) return res.status(500).json({ error: "API Key missing" });
     if (!query) return res.status(400).json({ error: "Network parameter 'query' is required" });
 
     try {
+        const sanitized = sanitizeQuery(query, 'cidr');
         const response = await axios.get(`https://api.abuseipdb.com/api/v2/check-block`, {
             params: {
-                network: query,
+                network: sanitized,
                 maxAgeInDays: 90
             },
             headers: { "Key": process.env.ABUSEIPDB_API_KEY, "Accept": "application/json" }
         });
         sendResponseWithQuota(res, response);
     } catch (error) {
-        res.status(error.response?.status || 500).json({ error: error.message });
+        const { status, message } = sanitizeError(error);
+        res.status(status).json({ error: message });
     }
 });
 
 // AlienVault OTX
-app.post('/api/alienvault', async (req, res) => {
+app.post('/api/alienvault', requireAuth, scanLimiter, async (req, res) => {
     const { query } = req.body;
     const headers = {};
     if (process.env.ALIENVAULT_API_KEY) headers["X-OTX-API-KEY"] = process.env.ALIENVAULT_API_KEY;
 
     try {
         const queryType = detectQueryType(query);
+        const sanitized = sanitizeQuery(query, queryType);
         let endpoint = "";
 
-        if (queryType === "ip") endpoint = `https://otx.alienvault.com/api/v1/indicators/IPv4/${query}/general`;
-        else if (queryType === "domain") endpoint = `https://otx.alienvault.com/api/v1/indicators/domain/${query}/general`;
-        else if (queryType === "hash") endpoint = `https://otx.alienvault.com/api/v1/indicators/file/${query}/general`;
-        else endpoint = `https://otx.alienvault.com/api/v1/indicators/url/${encodeURIComponent(query)}/general`;
+        if (queryType === "ip") endpoint = `https://otx.alienvault.com/api/v1/indicators/IPv4/${sanitized}/general`;
+        else if (queryType === "domain") endpoint = `https://otx.alienvault.com/api/v1/indicators/domain/${sanitized}/general`;
+        else if (queryType === "hash") endpoint = `https://otx.alienvault.com/api/v1/indicators/file/${sanitized}/general`;
+        else endpoint = `https://otx.alienvault.com/api/v1/indicators/url/${encodeURIComponent(sanitized)}/general`;
 
         const response = await axios.get(endpoint, { headers });
         sendResponseWithQuota(res, response);
     } catch (error) {
-        res.status(error.response?.status || 500).json({ error: error.message });
+        const { status, message } = sanitizeError(error);
+        res.status(status).json({ error: message });
     }
 });
 
 // Shodan
-app.post('/api/shodan', async (req, res) => {
+app.post('/api/shodan', requireAuth, scanLimiter, async (req, res) => {
     const { query } = req.body;
     if (!process.env.SHODAN_API_KEY) return res.status(500).json({ error: "API Key missing" });
 
-    const queryType = detectQueryType(query);
-    if (queryType !== "ip") return res.json({ data: { "Status": "IP only" } });
-
     try {
-        const response = await axios.get(`https://api.shodan.io/shodan/host/${query}?key=${process.env.SHODAN_API_KEY}`);
+        const queryType = detectQueryType(query);
+        if (queryType !== "ip") return res.json({ data: { "Status": "IP only" } });
+
+        const sanitized = sanitizeQuery(query, 'ip');
+        const response = await axios.get(`https://api.shodan.io/shodan/host/${sanitized}`, {
+            params: { key: process.env.SHODAN_API_KEY }
+        });
         sendResponseWithQuota(res, response);
     } catch (error) {
-        res.status(error.response?.status || 500).json({ error: error.message });
+        const { status, message } = sanitizeError(error);
+        res.status(status).json({ error: message });
     }
 });
 
 // URLhaus
-app.post('/api/urlhaus', async (req, res) => {
+app.post('/api/urlhaus', requireAuth, scanLimiter, async (req, res) => {
     const { query } = req.body;
     try {
+        const queryType = detectQueryType(query);
+        if (queryType !== "url" && queryType !== "domain") {
+            return res.status(400).json({ error: "URL or Domain query required" });
+        }
+        const sanitized = sanitizeQuery(query, queryType);
+
+        // Safe x-www-form-urlencoded formatting (VULN-08)
+        const params = new URLSearchParams();
+        params.append('host', sanitized);
+
         const response = await axios.post(`https://urlhaus-api.abuse.ch/v1/host/`,
-            `host=${query}`,
+            params.toString(),
             { headers: { "Content-Type": "application/x-www-form-urlencoded" } }
         );
         res.json(response.data);
     } catch (error) {
-        res.status(error.response?.status || 500).json({ error: error.message });
+        const { status, message } = sanitizeError(error);
+        res.status(status).json({ error: message });
     }
 });
-
-
 
 // MalwareBazaar
-app.post('/api/malwarebazaar', async (req, res) => {
+app.post('/api/malwarebazaar', requireAuth, scanLimiter, async (req, res) => {
     const { query } = req.body;
-    const queryType = detectQueryType(query);
-    if (queryType !== "hash") return res.json({ data: { "Status": "Hash only" } });
-
     try {
+        const queryType = detectQueryType(query);
+        if (queryType !== "hash") return res.json({ data: { "Status": "Hash only" } });
+
+        const sanitized = sanitizeQuery(query, 'hash');
+        
+        // Safe form-encoded encoding (VULN-08)
+        const params = new URLSearchParams();
+        params.append('query', 'get_info');
+        params.append('hash', sanitized);
+
         const response = await axios.post(`https://mb-api.abuse.ch/api/v1/`,
-            `query=get_info&hash=${query}`,
+            params.toString(),
             { headers: { "Content-Type": "application/x-www-form-urlencoded" } }
         );
         res.json(response.data);
     } catch (error) {
-        res.status(error.response?.status || 500).json({ error: error.message });
+        const { status, message } = sanitizeError(error);
+        res.status(status).json({ error: message });
     }
 });
 
-
-
 // PhishTank
-app.post('/api/phishtank', async (req, res) => {
+app.post('/api/phishtank', requireAuth, scanLimiter, async (req, res) => {
     const { query } = req.body;
     try {
-        const body = `url=${encodeURIComponent(query)}&format=json${process.env.PHISHTANK_API_KEY ? `&app_key=${process.env.PHISHTANK_API_KEY}` : ""}`;
-        const response = await axios.post(`https://checkurl.phishtank.com/checkurl/`, body, {
-            headers: {
-                "Content-Type": "application/x-www-form-urlencoded",
-                "User-Agent": "phishtank/threatsumm4ry"
+        const queryType = detectQueryType(query);
+        if (queryType !== "url") return res.status(400).json({ error: "URL query required" });
+        const sanitized = sanitizeQuery(query, 'url');
+
+        // Safe URL parameters (VULN-08)
+        const params = new URLSearchParams();
+        params.append('url', sanitized);
+        params.append('format', 'json');
+        if (process.env.PHISHTANK_API_KEY) {
+            params.append('app_key', process.env.PHISHTANK_API_KEY);
+        }
+
+        const response = await axios.post(`https://checkurl.phishtank.com/checkurl/`, 
+            params.toString(), 
+            {
+                headers: {
+                    "Content-Type": "application/x-www-form-urlencoded",
+                    "User-Agent": "phishtank/threatsumm4ry"
+                }
             }
-        });
+        );
         res.json(response.data);
     } catch (error) {
-        res.status(error.response?.status || 500).json({ error: error.message });
+        const { status, message } = sanitizeError(error);
+        res.status(status).json({ error: message });
     }
 });
 
 // Pulsedive
-app.post('/api/pulsedive', async (req, res) => {
+app.post('/api/pulsedive', requireAuth, scanLimiter, async (req, res) => {
     const { query } = req.body;
     const key = process.env.PULSEDIVE_API_KEY || "free";
     try {
-        const response = await axios.get(`https://pulsedive.com/api/info.php?indicator=${query}&key=${key}`);
+        const queryType = detectQueryType(query);
+        const sanitized = sanitizeQuery(query, queryType);
+
+        const response = await axios.get(`https://pulsedive.com/api/info.php`, {
+            params: {
+                indicator: sanitized,
+                key: key
+            }
+        });
         res.json(response.data);
     } catch (error) {
-        res.status(error.response?.status || 500).json({ error: error.message });
+        const { status, message } = sanitizeError(error);
+        res.status(status).json({ error: message });
     }
 });
 
-
-
-
-
-
-
-
-
-
-
 // Hybrid Analysis
-app.post('/api/hybridanalysis', async (req, res) => {
+app.post('/api/hybridanalysis', requireAuth, scanLimiter, async (req, res) => {
     const { query } = req.body;
     if (!process.env.HYBRID_ANALYSIS_API_KEY) return res.status(500).json({ error: "API Key missing" });
 
-    const queryType = detectQueryType(query);
-    if (queryType !== "hash") return res.json({ data: { "Status": "Hash only" } });
-
     try {
+        const queryType = detectQueryType(query);
+        if (queryType !== "hash") return res.json({ data: { "Status": "Hash only" } });
+
+        const sanitized = sanitizeQuery(query, 'hash');
+
+        const params = new URLSearchParams();
+        params.append('hash', sanitized);
+
         const response = await axios.post(`https://www.hybrid-analysis.com/api/v2/search/hash`,
-            `hash=${query}`,
+            params.toString(),
             {
                 headers: {
                     "api-key": process.env.HYBRID_ANALYSIS_API_KEY,
@@ -297,156 +523,200 @@ app.post('/api/hybridanalysis', async (req, res) => {
         );
         res.json(response.data);
     } catch (error) {
-        res.status(error.response?.status || 500).json({ error: error.message });
+        const { status, message } = sanitizeError(error);
+        res.status(status).json({ error: message });
     }
 });
 
 // CIRCL hashlookup
-app.post('/api/circl', async (req, res) => {
+app.post('/api/circl', requireAuth, scanLimiter, async (req, res) => {
     const { query } = req.body;
-    const queryType = detectQueryType(query);
-    if (queryType !== "hash") return res.json({ data: { "Status": "Hash only" } });
-
     try {
-        const response = await axios.get(`https://hashlookup.circl.lu/lookup/${queryType}/${query}`);
+        const queryType = detectQueryType(query);
+        if (queryType !== "hash") return res.json({ data: { "Status": "Hash only" } });
+
+        const sanitized = sanitizeQuery(query, 'hash');
+        const response = await axios.get(`https://hashlookup.circl.lu/lookup/sha256/${sanitized}`);
         res.json(response.data);
     } catch (error) {
-        res.status(error.response?.status || 500).json({ error: error.message });
+        const { status, message } = sanitizeError(error);
+        res.status(status).json({ error: message });
     }
 });
 
 // Criminal IP
-app.post('/api/criminalip', async (req, res) => {
+app.post('/api/criminalip', requireAuth, scanLimiter, async (req, res) => {
     const { query } = req.body;
     if (!process.env.CRIMINALIP_API_KEY) return res.status(500).json({ error: "API Key missing" });
 
-    const queryType = detectQueryType(query);
-    if (queryType !== "ip" && queryType !== "domain") return res.json({ data: { "Status": "IP/Domain only" } });
-
     try {
+        const queryType = detectQueryType(query);
+        if (queryType !== "ip" && queryType !== "domain") return res.json({ data: { "Status": "IP/Domain only" } });
+        const sanitized = sanitizeQuery(query, queryType);
+
         const endpoint = queryType === "ip"
-            ? `https://api.criminalip.io/v1/ip/data?ip=${query}`
-            : `https://api.criminalip.io/v1/domain/reports?query=${query}`;
+            ? `https://api.criminalip.io/v1/ip/data`
+            : `https://api.criminalip.io/v1/domain/reports`;
 
         const response = await axios.get(endpoint, {
+            params: queryType === "ip" ? { ip: sanitized } : { query: sanitized },
             headers: { "x-api-key": process.env.CRIMINALIP_API_KEY },
         });
         res.json(response.data);
     } catch (error) {
-        res.status(error.response?.status || 500).json({ error: error.message });
+        const { status, message } = sanitizeError(error);
+        res.status(status).json({ error: message });
     }
 });
 
 // MetaDefender
-app.post('/api/metadefender', async (req, res) => {
+app.post('/api/metadefender', requireAuth, scanLimiter, async (req, res) => {
     const { query } = req.body;
     if (!process.env.METADEFENDER_API_KEY) return res.status(500).json({ error: "API Key missing" });
 
-    const queryType = detectQueryType(query);
-    if (queryType !== "hash" && queryType !== "ip") return res.json({ data: { "Status": "Hash/IP only" } });
-
     try {
+        const queryType = detectQueryType(query);
+        if (queryType !== "hash" && queryType !== "ip") return res.json({ data: { "Status": "Hash/IP only" } });
+        const sanitized = sanitizeQuery(query, queryType);
+
         const endpoint = queryType === "hash"
-            ? `https://api.metadefender.com/v4/hash/${query}`
-            : `https://api.metadefender.com/v4/ip/${query}`;
+            ? `https://api.metadefender.com/v4/hash/${sanitized}`
+            : `https://api.metadefender.com/v4/ip/${sanitized}`;
 
         const response = await axios.get(endpoint, {
             headers: { "apikey": process.env.METADEFENDER_API_KEY },
         });
         sendResponseWithQuota(res, response);
     } catch (error) {
-        res.status(error.response?.status || 500).json({ error: error.message });
+        const { status, message } = sanitizeError(error);
+        res.status(status).json({ error: message });
     }
 });
 
 // PhishStats
-app.post('/api/phishstats', async (req, res) => {
+app.post('/api/phishstats', requireAuth, scanLimiter, async (req, res) => {
     const { query } = req.body;
-    const queryType = detectQueryType(query);
-    if (queryType !== "url" && queryType !== "domain") return res.json({ data: { "Status": "URL/Domain only" } });
-
     try {
-        const searchTerm = queryType === "url" ? query : query;
-        const response = await axios.get(`https://phishstats.info:2096/api/phishing?_where=(url,like,${encodeURIComponent(searchTerm)})&_sort=-date&_size=5`);
+        const queryType = detectQueryType(query);
+        if (queryType !== "url" && queryType !== "domain") return res.json({ data: { "Status": "URL/Domain only" } });
+        const sanitized = sanitizeQuery(query, queryType);
+
+        const response = await axios.get(`https://phishstats.info:2096/api/phishing`, {
+            params: {
+                _where: `(url,like,${sanitized})`,
+                _sort: '-date',
+                _size: 5
+            }
+        });
         res.json(response.data);
     } catch (error) {
-        res.status(error.response?.status || 500).json({ error: error.message });
+        const { status, message } = sanitizeError(error);
+        res.status(status).json({ error: message });
     }
 });
 
 // Ransomware.live
-app.post('/api/ransomwarelive', async (req, res) => {
-    const { query } = req.body;
+app.post('/api/ransomwarelive', requireAuth, scanLimiter, async (req, res) => {
     try {
         const response = await axios.get(`https://api.ransomware.live/recentvictims`);
         res.json(response.data);
     } catch (error) {
-        res.status(error.response?.status || 500).json({ error: error.message });
+        const { status, message } = sanitizeError(error);
+        res.status(status).json({ error: message });
     }
 });
 
 // WHOIS
-app.post('/api/whois', async (req, res) => {
+app.post('/api/whois', requireAuth, scanLimiter, async (req, res) => {
     const { query } = req.body;
-    const queryType = detectQueryType(query);
-    if (queryType !== "domain") return res.json({ data: { "Status": "Domain only" } });
-
     try {
-        const response = await axios.get(`https://www.whoisxmlapi.com/whoisserver/WhoisService?apiKey=${process.env.WHOIS_API_KEY}&domainName=${query}&outputFormat=JSON`);
+        const queryType = detectQueryType(query);
+        if (queryType !== "domain") return res.json({ data: { "Status": "Domain only" } });
+        
+        const sanitized = sanitizeQuery(query, 'domain');
+        const response = await axios.get(`https://www.whoisxmlapi.com/whoisserver/WhoisService`, {
+            params: {
+                apiKey: process.env.WHOIS_API_KEY,
+                domainName: sanitized,
+                outputFormat: 'JSON'
+            }
+        });
         res.json(response.data);
     } catch (error) {
-        res.status(error.response?.status || 500).json({ error: error.message });
+        const { status, message } = sanitizeError(error);
+        res.status(status).json({ error: message });
     }
 });
 
-// IP Geolocation
-app.post('/api/ipgeo', async (req, res) => {
+// IP Geolocation (Mitigated HTTP/No TLS)
+app.post('/api/ipgeo', requireAuth, scanLimiter, async (req, res) => {
     const { query } = req.body;
-    const queryType = detectQueryType(query);
-    if (queryType !== "ip") return res.json({ data: { "Status": "IP only" } });
-
     try {
-        const response = await axios.get(`http://ip-api.com/json/${query}?fields=status,country,countryCode,regionName,city,isp,org,as,proxy,hosting,lat,lon`);
+        const queryType = detectQueryType(query);
+        if (queryType !== "ip") return res.json({ data: { "Status": "IP only" } });
+
+        const sanitized = sanitizeQuery(query, 'ip');
+
+        // VULN-12: Use HTTPS geolocation api (ipwhois.app instead of HTTP ip-api.com)
+        const response = await axios.get(`https://ipwhois.app/json/${sanitized}`);
+        const data = response.data;
         
         let reverseHostname = "Unknown";
         try {
-            const hostnames = await dns.promises.reverse(query);
+            const hostnames = await dns.promises.reverse(sanitized);
             if (hostnames && hostnames.length > 0) {
                 reverseHostname = hostnames[0];
             }
         } catch (dnsErr) {
-            console.log(`Reverse DNS lookup failed for ${query}:`, dnsErr.message);
+            // VULN-17: Avoid logging client IP addresses directly
+            console.log(`Reverse DNS lookup failed:`, dnsErr.message);
         }
 
-        res.json({
-            ...response.data,
+        const mappedData = {
+            status: data.success ? "success" : "fail",
+            country: data.country,
+            countryCode: data.country_code,
+            regionName: data.region,
+            city: data.city,
+            isp: data.isp,
+            org: data.org,
+            as: data.asn,
+            proxy: false,
+            hosting: false,
+            lat: parseFloat(data.latitude || 0),
+            lon: parseFloat(data.longitude || 0),
             reverseHostname
-        });
+        };
+
+        res.json(mappedData);
     } catch (error) {
-        res.status(error.response?.status || 500).json({ error: error.message });
+        const { status, message } = sanitizeError(error);
+        res.status(status).json({ error: message });
     }
 });
 
-
-
-// Generic DNSBL Endpoint
-app.post('/api/dnsbl', async (req, res) => {
+// Generic DNSBL Endpoint (Whitelist check added)
+app.post('/api/dnsbl', scanLimiter, async (req, res) => {
     const { query, provider } = req.body;
-    const queryType = detectQueryType(query);
-
-    if (queryType !== "ip") {
-        return res.json({ listed: false, status: "IP only" });
-    }
-
-    if (!provider) {
-        return res.status(400).json({ error: "Provider required" });
-    }
-
     try {
-        const reversed = query.split('.').reverse().join('.');
+        const queryType = detectQueryType(query);
+        if (queryType !== "ip") {
+            return res.json({ listed: false, status: "IP only" });
+        }
+        const sanitized = sanitizeQuery(query, 'ip');
+
+        if (!provider) {
+            return res.status(400).json({ error: "Provider required" });
+        }
+
+        // VULN-02: DNSBL provider whitelist check
+        if (!allowedDnsblProviders.has(provider)) {
+            return res.status(400).json({ error: "Invalid/unauthorized DNSBL provider" });
+        }
+
+        const reversed = sanitized.split('.').reverse().join('.');
         const dnsQuery = `${reversed}.${provider}`;
         
-        // Timeout DNS queries after 3 seconds
         const timeoutPromise = new Promise((_, reject) => 
             setTimeout(() => reject(new Error('DNS Timeout')), 3000)
         );
@@ -466,61 +736,62 @@ app.post('/api/dnsbl', async (req, res) => {
             }
         });
     } catch (error) {
-        res.status(500).json({ error: error.message });
+        const { status, message } = sanitizeError(error);
+        res.status(status).json({ error: message });
     }
 });
 
-
-
 // OpenPhish
-app.post('/api/openphish', async (req, res) => {
+app.post('/api/openphish', requireAuth, scanLimiter, async (req, res) => {
     const { query } = req.body;
-    const queryType = detectQueryType(query);
-    if (queryType !== "url" && queryType !== "domain") return res.json({ data: { "Status": "URL/Domain only" } });
-
     try {
-        // OpenPhish provides a feed, we'll check if the URL is in it
+        const queryType = detectQueryType(query);
+        if (queryType !== "url" && queryType !== "domain") return res.json({ data: { "Status": "URL/Domain only" } });
+        const sanitized = sanitizeQuery(query, queryType);
+
         const response = await axios.get('https://openphish.com/feed.txt');
         const urls = response.data.split('\n');
-        const found = urls.some(url => url.includes(query));
+        const found = urls.some(url => url.includes(sanitized));
 
         res.json({
             listed: found,
             status: found ? "Listed as phishing" : "Not found in OpenPhish feed"
         });
     } catch (error) {
-        res.status(error.response?.status || 500).json({ error: error.message });
+        const { status, message } = sanitizeError(error);
+        res.status(status).json({ error: message });
     }
 });
 
 // DShield (SANS ISC)
-app.post('/api/dshield', async (req, res) => {
+app.post('/api/dshield', requireAuth, scanLimiter, async (req, res) => {
     const { query } = req.body;
-    const queryType = detectQueryType(query);
-    if (queryType !== "ip") return res.json({ data: { "Status": "IP only" } });
-
     try {
-        const response = await axios.get(`https://isc.sans.edu/api/ip/${query}?json`);
+        const queryType = detectQueryType(query);
+        if (queryType !== "ip") return res.json({ data: { "Status": "IP only" } });
+
+        const sanitized = sanitizeQuery(query, 'ip');
+        const response = await axios.get(`https://isc.sans.edu/api/ip/${sanitized}?json`);
         res.json(response.data);
     } catch (error) {
-        res.status(error.response?.status || 500).json({ error: error.message });
+        const { status, message } = sanitizeError(error);
+        res.status(status).json({ error: message });
     }
 });
 
 // Team Cymru
-app.post('/api/teamcymru', async (req, res) => {
+app.post('/api/teamcymru', requireAuth, scanLimiter, async (req, res) => {
     const { query } = req.body;
-    const queryType = detectQueryType(query);
-
     try {
+        const queryType = detectQueryType(query);
+
         if (queryType === "ip") {
-            // Use Team Cymru's IP to ASN service
-            const reversed = query.split('.').reverse().join('.');
+            const sanitized = sanitizeQuery(query, 'ip');
+            const reversed = sanitized.split('.').reverse().join('.');
             const dnsQuery = `${reversed}.origin.asn.cymru.com`;
 
             dns.promises.resolveTxt(dnsQuery)
                 .then(records => {
-                    // Parse response: "ASN | IP | BGP Prefix | CC | Registry | Allocated"
                     const parts = records[0][0].split('|').map(s => s.trim());
                     res.json({
                         asn: parts[0],
@@ -534,8 +805,10 @@ app.post('/api/teamcymru', async (req, res) => {
                     res.json({ status: "No data found" });
                 });
         } else if (queryType === "hash") {
-            // Team Cymru MHR (Malware Hash Registry)
-            const dnsQuery = `${query}.malware.hash.cymru.com`;
+            // VULN-13: Validate hash syntax before DNS query
+            const sanitized = sanitizeQuery(query, 'hash');
+            const dnsQuery = `${sanitized}.malware.hash.cymru.com`;
+            
             dns.promises.resolveTxt(dnsQuery)
                 .then(records => {
                     const timestamp = records[0][0];
@@ -552,21 +825,22 @@ app.post('/api/teamcymru', async (req, res) => {
             res.json({ data: { "Status": "IP/Hash only" } });
         }
     } catch (error) {
-        res.status(500).json({ error: error.message });
+        const { status, message } = sanitizeError(error);
+        res.status(status).json({ error: message });
     }
 });
 
-
 // Censys (Platform API v3)
-app.post('/api/censys', async (req, res) => {
+app.post('/api/censys', requireAuth, scanLimiter, async (req, res) => {
     const { query } = req.body;
     if (!process.env.CENSYS_API_KEY) return res.status(500).json({ error: "API Key missing" });
 
-    const queryType = detectQueryType(query);
-    if (queryType !== "ip") return res.json({ data: { "Status": "IP only" } });
-
     try {
-        const response = await axios.get(`https://api.platform.censys.io/v3/global/asset/host/${query}`, {
+        const queryType = detectQueryType(query);
+        if (queryType !== "ip") return res.json({ data: { "Status": "IP only" } });
+
+        const sanitized = sanitizeQuery(query, 'ip');
+        const response = await axios.get(`https://api.platform.censys.io/v3/global/asset/host/${sanitized}`, {
             headers: {
                 'Authorization': `Bearer ${process.env.CENSYS_API_KEY}`,
                 'Accept': 'application/json'
@@ -577,7 +851,6 @@ app.post('/api/censys', async (req, res) => {
         const resource = response.data?.result?.resource;
         if (!resource) return res.json({ data: { "Status": "No data available" } });
 
-        // Build a clean result with services fingerprint data
         const result = {
             ip: resource.ip,
             service_count: resource.service_count || 0,
@@ -588,21 +861,17 @@ app.post('/api/censys', async (req, res) => {
                 software: svc.software?.product || svc.software?.vendor || null,
                 software_version: svc.software?.version || null,
                 scan_time: svc.scan_time,
-                // HTTP details
                 http_status: svc.http?.response?.status_code || null,
                 http_title: svc.http?.response?.html_title || null,
                 http_headers: svc.http?.response?.headers ? Object.keys(svc.http.response.headers).slice(0, 10) : null,
                 http_body_hash: svc.http?.response?.body_hash || null,
-                // TLS handshake
                 tls_version: svc.tls?.version_selected || null,
-                // Certificate
                 certificate_fingerprint: svc.tls?.certificates?.leaf_data?.fingerprint || null,
                 certificate_subject: svc.tls?.certificates?.leaf_data?.subject_dn || null,
                 certificate_issuer: svc.tls?.certificates?.leaf_data?.issuer_dn || null,
                 certificate_names: svc.tls?.certificates?.leaf_data?.names || [],
                 certificate_trusted: svc.tls?.certificates?.leaf_data?.browser_trust?.is_trusted || null,
             })),
-            // Location
             location: resource.location ? {
                 country: resource.location.country,
                 country_code: resource.location.country_code,
@@ -610,13 +879,11 @@ app.post('/api/censys', async (req, res) => {
                 province: resource.location.province,
                 continent: resource.location.continent,
             } : null,
-            // ASN
             autonomous_system: resource.autonomous_system ? {
                 asn: resource.autonomous_system.asn,
                 name: resource.autonomous_system.name || resource.autonomous_system.description,
                 bgp_prefix: resource.autonomous_system.bgp_prefix,
             } : null,
-            // DNS
             dns: resource.dns || null,
         };
 
@@ -625,7 +892,8 @@ app.post('/api/censys', async (req, res) => {
         if (error.response?.status === 404) {
             return res.json({ data: { "Status": "Host not found in Censys" } });
         }
-        res.status(error.response?.status || 500).json({ error: error.message });
+        const { status, message } = sanitizeError(error);
+        res.status(status).json({ error: message });
     }
 });
 
@@ -656,6 +924,16 @@ function parseFeed(xmlText, sourceName, layer) {
     const items = [];
     const isAtom = xmlText.includes('<entry>') || xmlText.includes('<feed');
     
+    const cleanTag = (str) => {
+        if (!str) return '';
+        const stripped = str
+             .replace(/<!\[CDATA\[/gi, '')
+             .replace(/\]\]>/g, '')
+             .replace(/<[^>]*>/g, '')
+             .trim();
+        return escapeHtml(stripped);
+    };
+
     if (isAtom) {
         const entries = xmlText.split(/<entry>/i);
         for (let i = 1; i < entries.length; i++) {
@@ -665,15 +943,6 @@ function parseFeed(xmlText, sourceName, layer) {
             const dateMatch = entryHtml.match(/<(?:updated|published)>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/(?:updated|published)>/i);
             const summaryMatch = entryHtml.match(/<(?:summary|content)(?:[^>]*)>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/(?:summary|content)>/i);
             
-            const cleanTag = (str) => {
-                if (!str) return '';
-                return str
-                     .replace(/<!\[CDATA\[/gi, '')
-                     .replace(/\]\]>/g, '')
-                     .replace(/<[^>]*>/g, '')
-                     .trim();
-            };
-
             const title = decodeEntities(cleanTag(titleMatch ? titleMatch[1] : 'Untitled Alert'));
             const link = linkMatch ? linkMatch[1].trim() : '';
             const pubDate = dateMatch ? dateMatch[1].trim() : '';
@@ -699,15 +968,6 @@ function parseFeed(xmlText, sourceName, layer) {
             const dateMatch = itemHtml.match(/<pubDate>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/pubDate>/i);
             const descMatch = itemHtml.match(/<description>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/description>/i);
             
-            const cleanTag = (str) => {
-                if (!str) return '';
-                return str
-                     .replace(/<!\[CDATA\[/gi, '')
-                     .replace(/\]\]>/g, '')
-                     .replace(/<[^>]*>/g, '')
-                     .trim();
-            };
-
             const title = decodeEntities(cleanTag(titleMatch ? titleMatch[1] : 'Untitled Alert'));
             const link = (linkMatch ? linkMatch[1] : '').trim();
             const pubDate = (dateMatch ? dateMatch[1] : '').trim();
@@ -801,8 +1061,100 @@ app.get('/api/newsletter', async (req, res) => {
     }
 });
 
+// --- Authentication Endpoints ---
+
+// Check Auth Config
+app.get('/api/auth/config', (req, res) => {
+    res.json({
+        githubConfigured: !!(GITHUB_CLIENT_ID && GITHUB_CLIENT_SECRET),
+        clientId: GITHUB_CLIENT_ID,
+        allowMock: ALLOW_MOCK_AUTH
+    });
+});
+
+// GitHub OAuth Login/Exchange code
+app.post('/api/auth/github', async (req, res) => {
+    const { code } = req.body;
+    if (!code) {
+        return res.status(400).json({ error: 'Code parameter is required' });
+    }
+
+    if (!GITHUB_CLIENT_ID || !GITHUB_CLIENT_SECRET) {
+        return res.status(500).json({ error: 'GitHub OAuth is not configured on the server' });
+    }
+
+    try {
+        // Exchange code for token
+        const tokenResponse = await axios.post('https://github.com/login/oauth/access_token', {
+            client_id: GITHUB_CLIENT_ID,
+            client_secret: GITHUB_CLIENT_SECRET,
+            code
+        }, {
+            headers: {
+                Accept: 'application/json'
+            }
+        });
+
+        const { access_token, error: oauthError } = tokenResponse.data;
+        if (oauthError) {
+            throw new Error(`GitHub token exchange failed: ${oauthError}`);
+        }
+
+        // Fetch user profile info
+        const userResponse = await axios.get('https://api.github.com/user', {
+            headers: {
+                Authorization: `token ${access_token}`
+            }
+        });
+
+        const githubUser = userResponse.data;
+        const user = {
+            username: githubUser.login,
+            name: githubUser.name || githubUser.login,
+            avatar_url: githubUser.avatar_url,
+            id: githubUser.id
+        };
+
+        const token = generateToken(user);
+        res.json({ token, user });
+    } catch (err) {
+        console.error('GitHub Auth Error:', err.message);
+        res.status(401).json({ error: 'GitHub authentication failed' });
+    }
+});
+
+// Mock Auth endpoint for development
+app.post('/api/auth/mock', (req, res) => {
+    if (!ALLOW_MOCK_AUTH) {
+        return res.status(403).json({ error: 'Mock authentication is disabled' });
+    }
+    const user = {
+        username: 'mock_security_analyst',
+        name: 'Mock Analyst (Dev Mode)',
+        avatar_url: 'https://avatars.githubusercontent.com/u/9919?v=4',
+        id: 999999
+    };
+    const token = generateToken(user);
+    res.json({ token, user });
+});
+
+// Get profile details
+app.get('/api/auth/me', (req, res) => {
+    const authHeader = req.headers['authorization'];
+    if (!authHeader) {
+        return res.json({ authenticated: false });
+    }
+    const token = authHeader.split(' ')[1];
+    const user = verifyToken(token);
+    if (!user) {
+        return res.json({ authenticated: false });
+    }
+    res.json({ authenticated: true, user });
+});
+
+
 // Latest CVEs from CIRCL
-app.get('/api/cves/recent', async (req, res) => {
+app.get('/api/cves/recent', requireAuth, async (req, res) => {
     const now = Date.now();
     if (memoryCache.recentCves.data && memoryCache.recentCves.expiresAt > now) {
         return res.json(memoryCache.recentCves.data);
@@ -830,7 +1182,7 @@ app.get('/api/cves/recent', async (req, res) => {
             Published: new Date(Date.now() - 3600000).toISOString(),
             source: "NIST NVD (National Vulnerability Database)",
             vectorString: "CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H",
-            mitigation: "Apply the May 2026 security updates from Microsoft. Enable Virtualization-Based Security (VBS) to mitigate kernel exploits. Monitor for unusual LSASS process injection events.",
+            mitigation: "Apply the May 2026 security updates from Microsoft. Enable Virtualization-Based Security (VBS) to mitigate kernel exploits. Monitor for LSASS process injection events.",
             references: [
                 "https://nvd.nist.gov/vuln/detail/CVE-2026-2115",
                 "https://msrc.microsoft.com/update-guide/vulnerability/CVE-2026-2115",
@@ -886,7 +1238,6 @@ app.get('/api/cves/recent', async (req, res) => {
         if (Array.isArray(response.data)) {
             const formatted = [];
             response.data.forEach(item => {
-                // If it is the old flat format
                 if (item.id) {
                     formatted.push({
                         id: item.id,
@@ -902,7 +1253,6 @@ app.get('/api/cves/recent', async (req, res) => {
                     return;
                 }
                 
-                // If it is the new CSAF format
                 const document = item.document || {};
                 const tracking = document.tracking || {};
                 const docId = tracking.id || 'Unknown-Advisory';
@@ -951,7 +1301,6 @@ app.get('/api/cves/recent', async (req, res) => {
                 }
             });
 
-            // Filter for valid CVE prefixes and deduplicate/limit
             let result = formatted.filter(item => item.id && item.id.startsWith("CVE-"));
             if (result.length < 5) {
                 result = [...result, ...fallbacks].slice(0, 50);
@@ -971,20 +1320,61 @@ app.get('/api/cves/recent', async (req, res) => {
 });
 
 // Exploited CVEs from CISA KEV
-app.get('/api/cves/exploited', async (req, res) => {
+app.get('/api/cves/exploited', requireAuth, async (req, res) => {
     try {
         const response = await axios.get('https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json', { timeout: 8000 });
         if (response.data && Array.isArray(response.data.vulnerabilities)) {
-            // Sort by dateAdded descending
             const sorted = response.data.vulnerabilities
                 .sort((a, b) => new Date(b.dateAdded) - new Date(a.dateAdded))
-                .slice(0, 50); // Get latest 50
+                .slice(0, 50);
             return res.json(sorted);
         }
         throw new Error("Invalid response format from CISA");
     } catch (error) {
-        console.error("CISA KEV API Error:", error.message);
-        res.status(500).json({ error: error.message });
+        const { status, message } = sanitizeError(error);
+        res.status(status).json({ error: message });
+    }
+});
+
+// DNS Record Lookup
+app.post('/api/dns/lookup', requireAuth, scanLimiter, async (req, res) => {
+    const { query } = req.body;
+    try {
+        const sanitized = sanitizeQuery(query, 'domain');
+
+        const resolveSafe = async (resolverFn) => {
+            try {
+                return await resolverFn(sanitized);
+            } catch (err) {
+                return [];
+            }
+        };
+
+        const [a, aaaa, mx, txt, ns, cname] = await Promise.all([
+            resolveSafe(dns.promises.resolve4),
+            resolveSafe(dns.promises.resolve6),
+            resolveSafe(dns.promises.resolveMx),
+            resolveSafe(dns.promises.resolveTxt),
+            resolveSafe(dns.promises.resolveNs),
+            resolveSafe(dns.promises.resolveCname),
+        ]);
+
+        const flatTxt = txt.map(record => record.join(' '));
+
+        res.json({
+            domain: sanitized,
+            records: {
+                A: a,
+                AAAA: aaaa,
+                MX: mx.map(record => `${record.exchange} (priority: ${record.priority})`),
+                TXT: flatTxt,
+                NS: ns,
+                CNAME: cname
+            }
+        });
+    } catch (error) {
+        const { status, message } = sanitizeError(error);
+        res.status(status).json({ error: message });
     }
 });
 
