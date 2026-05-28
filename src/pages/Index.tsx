@@ -13,7 +13,6 @@ import { useSidebar } from "@/contexts/SidebarContext";
 import { Header } from "@/components/Header";
 
 import { ThreatCharts } from "@/components/ThreatCharts";
-import { VendorDataTable } from "@/components/VendorDataTable";
 import { QuickActions } from "@/components/QuickActions";
 import { ViewToggle } from "@/components/ViewToggle";
 import { ThreatCorrelationGraph } from "@/components/ThreatCorrelationGraph";
@@ -27,6 +26,89 @@ import { useToast } from "@/hooks/use-toast";
 import { ThreatIntelligenceResult } from "@/types/threat-intelligence";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+
+const TypingTitle = ({ language }: { language: string }) => {
+  const line1 = language === "pt" ? "Uma consulta." : "One query.";
+  const line2Prefix = language === "pt" ? "Vinte e um " : "Twenty-one ";
+  
+  const words = language === "pt" 
+    ? ["vereditos.", "insights.", "análises.", "resultados.", "relatórios."]
+    : ["verdicts.", "insights.", "analyses.", "results.", "reports."];
+
+  const [text1, setText1] = useState("");
+  const [text2Prefix, setText2Prefix] = useState("");
+  const [dynamicWord, setDynamicWord] = useState("");
+  const [wordIndex, setWordIndex] = useState(0);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  useEffect(() => {
+    // Reset everything on language change
+    setText1("");
+    setText2Prefix("");
+    setDynamicWord("");
+    setWordIndex(0);
+    setIsDeleting(false);
+  }, [language]);
+
+  useEffect(() => {
+    let timer: NodeJS.Timeout;
+    
+    // Phase 1: Type line 1
+    if (text1.length < line1.length) {
+      timer = setTimeout(() => {
+        setText1(line1.substring(0, text1.length + 1));
+      }, 50); // Typing speed for line 1
+      return () => clearTimeout(timer);
+    }
+    
+    // Phase 2: Type line 2 prefix after line 1 is fully typed
+    if (text2Prefix.length < line2Prefix.length) {
+      timer = setTimeout(() => {
+        setText2Prefix(line2Prefix.substring(0, text2Prefix.length + 1));
+      }, 50); // Typing speed for line 2 prefix
+      return () => clearTimeout(timer);
+    }
+
+    // Phase 3: Cycle words
+    const currentFullWord = words[wordIndex];
+    if (!isDeleting) {
+      // Type character
+      if (dynamicWord.length < currentFullWord.length) {
+        timer = setTimeout(() => {
+          setDynamicWord(currentFullWord.substring(0, dynamicWord.length + 1));
+        }, 60); // Typing speed for dynamic words
+      } else {
+        // Fully typed, wait then start deleting
+        timer = setTimeout(() => {
+          setIsDeleting(true);
+        }, 1500); // Hold time
+      }
+    } else {
+      // Delete character
+      if (dynamicWord.length > 0) {
+        timer = setTimeout(() => {
+          setDynamicWord(dynamicWord.substring(0, dynamicWord.length - 1));
+        }, 40); // Deleting speed
+      } else {
+        // Fully deleted, move to next word
+        setIsDeleting(false);
+        setWordIndex((prev) => (prev + 1) % words.length);
+      }
+    }
+
+    return () => clearTimeout(timer);
+  }, [text1, text2Prefix, dynamicWord, isDeleting, wordIndex, language, line1, line2Prefix, words]);
+
+  return (
+    <>
+      {text1}
+      {text1 === line1 && <br />}
+      {text2Prefix}
+      {dynamicWord}
+      <span className="animate-pulse inline-block w-[4px] h-[0.9em] bg-indigo-500 ml-1.5 translate-y-[2px]" />
+    </>
+  );
+};
 
 interface SearchFormProps {
   query: string;
@@ -49,8 +131,8 @@ const SearchForm = ({
 }: SearchFormProps) => {
   const { t, language } = useLanguage();
   const { toast } = useToast();
-  const [activeTab, setActiveTab] = useState<string>("quick");
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const ipRegex = /\b(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\b/g;
   const domainRegex = /\b([a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}\b/g;
@@ -78,6 +160,14 @@ const SearchForm = ({
   };
 
   const extractedIocs = getExtractedIocs();
+  const hasMultipleLines = query.includes("\n") || extractedIocs.length > 1;
+
+  // Keep textarea height fixed
+  useEffect(() => {
+    if (textareaRef.current) {
+      textareaRef.current.style.height = "40px";
+    }
+  }, [query]);
 
   const handleLogFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -86,7 +176,7 @@ const SearchForm = ({
       reader.onload = (event) => {
         if (event.target?.result) {
           const text = event.target.result as string;
-          
+
           const ips = text.match(ipRegex) || [];
           const domains = text.match(domainRegex) || [];
           const hashes = text.match(hashRegex) || [];
@@ -108,7 +198,7 @@ const SearchForm = ({
             setQuery(allIocs.join("\n"));
             toast({
               title: language === "pt" ? "IOCs Extraídos" : "IOCs Extracted",
-              description: language === "pt" 
+              description: language === "pt"
                 ? `Extraídos ${allIocs.length} alvos únicos de ameaça do arquivo ${file.name}.`
                 : `Extracted ${allIocs.length} unique threat targets from ${file.name}.`,
             });
@@ -124,138 +214,98 @@ const SearchForm = ({
         }
       };
       reader.readAsText(file);
-      e.target.value = ""; // Reset
+      e.target.value = "";
     }
   };
 
   return (
     <div className={`w-full ${className}`}>
       <form onSubmit={onSubmit} className="w-full">
-        <div className="space-y-4">
-          {/* Tabs switch centered above the search input */}
-          <div className="flex justify-center animate-fade-in">
-            <div className="inline-flex items-center gap-1 bg-card/45 backdrop-blur-lg p-1 rounded-full border border-primary/25 shadow-md shadow-primary/2">
-              <button
-                type="button"
-                onClick={() => { setActiveTab("quick"); }}
-                className={`flex items-center gap-2 px-5 py-2 rounded-full text-xs sm:text-sm font-semibold transition-all duration-300 ${
-                  activeTab === "quick" 
-                    ? "bg-primary text-primary-foreground shadow-md" 
-                    : "text-muted-foreground hover:text-foreground hover:bg-muted/30"
-                }`}
-              >
-                <Search className="h-4 w-4" />
-                <span>Quick Scan</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => { setActiveTab("bulk"); }}
-                className={`flex items-center gap-2 px-5 py-2 rounded-full text-xs sm:text-sm font-semibold transition-all duration-300 ${
-                  activeTab === "bulk" 
-                    ? "bg-primary text-primary-foreground shadow-md" 
-                    : "text-muted-foreground hover:text-foreground hover:bg-muted/30"
-                }`}
-              >
-                <Layers className="h-4 w-4" />
-                <span>Bulk / Log Scan</span>
-              </button>
-            </div>
-          </div>
+        <div className="space-y-3">
+          {/* Search bar */}
+          <div className="relative flex items-center bg-[#0B0E1C]/90 backdrop-blur-2xl border border-white/[0.06] hover:border-indigo-500/25 focus-within:border-indigo-500/40 transition-all duration-500 shadow-[0_8px_40px_-12px_rgba(0,0,0,0.6)] focus-within:shadow-[0_8px_50px_-8px_rgba(99,102,241,0.15)] max-w-2xl mx-auto w-full rounded-full p-1.5 pl-5 flex-row items-center gap-2">
 
-          {/* Main search bar container */}
-          <div className="relative flex flex-col md:flex-row md:items-center bg-card/45 backdrop-blur-lg rounded-full border border-primary/25 hover:border-primary/50 focus-within:border-primary/60 focus-within:ring-4 focus-within:ring-primary/10 transition-all duration-500 shadow-xl shadow-primary/5 p-2 pl-3 gap-3">
-            
-            {/* Search Icon Anchor */}
-            <div className="flex items-center justify-center pl-2 text-muted-foreground/60 shrink-0">
-              <Search className="h-5.5 w-5.5" />
+            {/* Search icon */}
+            <div className="flex items-center shrink-0">
+              <Search className="h-4 w-4 text-slate-500" />
             </div>
 
-            {/* Input area depends on activeTab */}
-            {activeTab === "quick" ? (
-              <div className="flex-1 flex items-center min-w-0">
-                <Input
-                  type="text"
-                  placeholder="Enter IP, Domain, Hash, or CVE (e.g. 51.210.208.8, CVE-2024-3094)..."
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  className="bg-transparent border-0 h-12 focus-visible:ring-0 focus-visible:ring-offset-0 text-base placeholder:text-muted-foreground/50 flex-1 min-w-0 pl-1 pr-3"
-                />
-              </div>
-            ) : (
-              <div className="flex-1 flex items-center min-w-0 py-1">
-                <textarea
-                  placeholder="Paste logs, multiple IPs, domains, or hashes (parsed automatically)..."
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  className="bg-transparent border-0 h-12 min-h-[48px] max-h-[180px] resize-none focus-visible:ring-0 focus:outline-none text-base placeholder:text-muted-foreground/50 flex-1 min-w-0 pl-1 pr-3 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                      e.preventDefault();
-                      onSubmit(e as any);
-                    }
-                  }}
-                />
-              </div>
-            )}
+            {/* Unified textarea input */}
+            <textarea
+              ref={textareaRef}
+              placeholder={language === "pt"
+                ? "IP, domínio, hash, CVE — cole um ou vários..."
+                : "IP, domain, hash, CVE — paste one or many..."
+              }
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              rows={1}
+              className="bg-transparent border-0 focus:outline-none focus-visible:ring-0 text-[13px] text-slate-200 placeholder:text-slate-500/70 flex-1 min-w-0 resize-none [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden leading-relaxed h-10 py-2.5 pl-2.5"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  onSubmit(e as any);
+                }
+              }}
+            />
 
-            {/* Scan Actions */}
-            <div className="flex items-center gap-2 shrink-0 ml-auto pr-1">
-              {activeTab === "bulk" && (
-                <>
-                  <input
-                    type="file"
-                    ref={fileInputRef}
-                    onChange={handleLogFileUpload}
-                    accept=".txt,.log,.csv,.json"
-                    className="hidden"
-                  />
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    onClick={() => fileInputRef.current?.click()}
-                    className="h-11 w-11 shadow-sm rounded-full flex items-center justify-center shrink-0 border border-primary/10 bg-muted/40 hover:bg-primary/10 hover:text-foreground text-muted-foreground transition-all duration-200"
-                    title={language === "pt" ? "Enviar arquivo de log" : "Upload Log File"}
-                  >
-                    <Upload className="h-4.5 w-4.5" />
-                  </Button>
-                </>
+            {/* Actions row */}
+            <div className="flex items-center gap-1.5 shrink-0 pr-0.5">
+              {/* IOC count badge */}
+              {extractedIocs.length > 1 && (
+                <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/15 text-[10px] font-bold text-indigo-400 font-mono tracking-wide">
+                  <div className="h-1.5 w-1.5 rounded-full bg-indigo-400 animate-pulse" />
+                  {extractedIocs.length} IOCs
+                </div>
               )}
+
+              {/* File upload */}
+              <input
+                type="file"
+                ref={fileInputRef}
+                onChange={handleLogFileUpload}
+                accept=".txt,.log,.csv,.json"
+                className="hidden"
+              />
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="h-9 w-9 rounded-full flex items-center justify-center shrink-0 text-slate-500 hover:text-slate-300 hover:bg-white/[0.04] transition-all duration-200"
+                title={language === "pt" ? "Enviar arquivo de log" : "Upload log file"}
+              >
+                <Upload className="h-4 w-4" />
+              </button>
+
+              {/* Submit */}
               <Button
                 type="submit"
-                disabled={isLoading || (activeTab === "bulk" ? extractedIocs.length > 35 || !query.trim() : !query.trim())}
+                disabled={isLoading || !query.trim()}
                 size="icon"
-                className="h-11 w-11 shadow-md hover:shadow-lg transition-all rounded-full bg-gradient-to-r from-primary to-primary/80 flex items-center justify-center shrink-0"
-                title="Analyze Target"
+                className="h-9 w-9 rounded-full bg-indigo-500 hover:bg-indigo-400 transition-all duration-200 flex items-center justify-center shrink-0 border-0 shadow-lg shadow-indigo-500/20 hover:shadow-indigo-400/30 disabled:opacity-30 disabled:shadow-none"
+                title={language === "pt" ? "Analisar" : "Analyze"}
               >
                 {isLoading ? (
-                  <div className="h-5 w-5 animate-spin rounded-full border-2 border-primary-foreground border-t-transparent" />
+                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
                 ) : (
-                  <ArrowRight className="h-5 w-5 text-primary-foreground" />
+                  <ArrowRight className="h-4 w-4 text-white" />
                 )}
               </Button>
             </div>
           </div>
 
-          {/* Additional details for Bulk Scan mode */}
-          {activeTab === "bulk" && extractedIocs.length > 0 && (
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mt-1 px-4 py-2 bg-muted/20 border border-border/40 rounded-2xl animate-fade-in">
-              <div className="flex items-center gap-2 text-xs text-muted-foreground/80 font-medium">
-                <CheckCircle2 className="h-4 w-4 text-green-500" />
-                {`${extractedIocs.length} target${extractedIocs.length > 1 ? 's' : ''} parsed (max 35)`}
-              </div>
-
-              <div className="flex flex-wrap gap-1.5 max-w-[70%] justify-end">
-                {extractedIocs.slice(0, 5).map(ioc => (
-                  <Badge key={ioc} variant="secondary" className="font-mono text-[10px] px-1.5 py-0 shadow-sm border-primary/20 bg-primary/5 text-primary">
-                    {ioc}
-                  </Badge>
-                ))}
-                {extractedIocs.length > 5 && (
-                  <Badge variant="outline" className="font-mono text-[10px] px-1.5 py-0 bg-background/80 shadow-sm">
-                    +{extractedIocs.length - 5} more
-                  </Badge>
-                )}
-              </div>
+          {/* Parsed IOCs preview — only when many targets */}
+          {extractedIocs.length > 1 && (
+            <div className="flex flex-wrap items-center justify-center gap-1.5 max-w-2xl mx-auto animate-fade-in">
+              {extractedIocs.slice(0, 6).map(ioc => (
+                <span key={ioc} className="inline-flex items-center px-2 py-0.5 rounded-md bg-white/[0.03] border border-white/[0.06] text-[10px] font-mono text-slate-400 tracking-wide">
+                  {ioc}
+                </span>
+              ))}
+              {extractedIocs.length > 6 && (
+                <span className="text-[10px] text-slate-500 font-medium">
+                  +{extractedIocs.length - 6} more
+                </span>
+              )}
             </div>
           )}
         </div>
@@ -285,9 +335,9 @@ const Index = () => {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isExportingPDF, setIsExportingPDF] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [view, setView] = useState<"graph" | "cards" | "table">("graph");
+  const [view, setView] = useState<"graph" | "cards">("graph");
   const { toast } = useToast();
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
 
 
   // Load saved preferences
@@ -405,25 +455,39 @@ const Index = () => {
       }));
       setResults(initialResults);
 
-      // Process each query
-      await Promise.all(queries.map(async (q) => {
-        const result = await fetchThreatDataProgressive(q, selectedVendors, (vendorData) => {
-          setResults(prev => prev.map(r => {
-            if (r.query === q) {
-              return {
-                ...r,
-                vendorData: r.vendorData.map(v =>
-                  v.name === vendorData.name ? { ...vendorData, loading: false } : v
-                )
-              };
-            }
-            return r;
-          }));
-        });
+      // Process queries in batches to avoid overwhelming the backend
+      const BATCH_SIZE = 3;
+      for (let i = 0; i < queries.length; i += BATCH_SIZE) {
+        const batch = queries.slice(i, i + BATCH_SIZE);
+        await Promise.all(batch.map(async (q) => {
+          try {
+            const result = await fetchThreatDataProgressive(q, selectedVendors, (vendorData) => {
+              setResults(prev => prev.map(r => {
+                if (r.query === q) {
+                  return {
+                    ...r,
+                    vendorData: r.vendorData.map(v =>
+                      v.name === vendorData.name ? { ...vendorData, loading: false } : v
+                    )
+                  };
+                }
+                return r;
+              }));
+            });
 
-        // Update final result for this query
-        setResults(prev => prev.map(r => r.query === q ? result : r));
-      }));
+            // Update final result for this query
+            setResults(prev => prev.map(r => r.query === q ? result : r));
+          } catch (err) {
+            console.error(`Failed to fetch data for ${q}:`, err);
+            // Mark this query as failed but don't stop other queries
+            setResults(prev => prev.map(r => r.query === q ? {
+              ...r,
+              threatLevel: "unknown" as const,
+              vendorData: r.vendorData.map(v => ({ ...v, loading: false, error: v.loading ? "Request failed" : v.error }))
+            } : r));
+          }
+        }));
+      }
 
     } catch (error) {
       console.error("Analysis error:", error);
@@ -1213,49 +1277,86 @@ const Index = () => {
 
   if (results.length === 0 && !isAnalyzing) {
     return (
-      <div className={`min-h-screen bg-background flex flex-col transition-all duration-300 ${isCollapsed ? "lg:pl-20" : "lg:pl-64"}`}>
+      <div className={`min-h-screen bg-background flex flex-col transition-all duration-300 relative overflow-hidden ${isCollapsed ? "lg:pl-20" : "lg:pl-64"}`}>
+        {/* Glowing background gradient mesh */}
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-indigo-900/10 via-background to-background pointer-events-none z-0" />
+
         <Header onLogoClick={handleReset} />
 
-        <div className="flex-1 flex flex-col items-center justify-center p-4">
+        {/* Top inline navbar inside the content area (Desktop only) */}
+        <div className="relative z-10 flex justify-between items-center w-full max-w-7xl mx-auto py-6 px-4 md:px-8 border-b border-primary/5 hidden md:flex">
+          {/* Brand/Logo */}
+          <div className="flex items-center gap-2.5">
+            <div className="h-7 w-7 rounded bg-indigo-600 flex items-center justify-center font-black text-white text-[11px] shadow-md shadow-indigo-600/30 select-none">
+              T
+            </div>
+            <span className="font-extrabold tracking-tight text-base text-slate-100 font-sans">
+              {t('appName')}
+            </span>
+          </div>
+
+          {/* Center Links */}
+          <div className="flex items-center gap-5 flex-wrap justify-center">
+            <a
+              href="#features"
+              className="text-xs font-semibold text-muted-foreground hover:text-foreground hover:underline underline-offset-4 transition-all duration-200"
+            >
+              {t('features') || 'Features'}
+            </a>
+            <Link
+              to="/vendors"
+              className="text-xs font-semibold text-muted-foreground hover:text-foreground hover:underline underline-offset-4 transition-all duration-200"
+            >
+              {t('vendors') || 'Vendors'}
+            </Link>
+            <Link
+              to="/dnsbl"
+              className="text-xs font-semibold text-muted-foreground hover:text-foreground hover:underline underline-offset-4 transition-all duration-200"
+            >
+              {t('dnsblCheck') || 'DNSBL Check'}
+            </Link>
+            <Link
+              to="/dns-visualizer"
+              className="text-xs font-semibold text-muted-foreground hover:text-foreground hover:underline underline-offset-4 transition-all duration-200"
+            >
+              {t('dnsVisualizer') || 'DNS Visualizer'}
+            </Link>
+            <Link
+              to="/phishing-analyzer"
+              className="text-xs font-semibold text-muted-foreground hover:text-foreground hover:underline underline-offset-4 transition-all duration-200"
+            >
+              {language === "pt" ? "Análise de Phishing" : "Phishing Analyzer"}
+            </Link>
+            <Link
+              to="/newsletter"
+              className="text-xs font-semibold text-muted-foreground hover:text-foreground hover:underline underline-offset-4 transition-all duration-200"
+            >
+              {language === "pt" ? "Feed de Advisories" : "Advisory Feed"}
+            </Link>
+            <Link
+              to="/cves"
+              className="text-xs font-semibold text-muted-foreground hover:text-foreground hover:underline underline-offset-4 transition-all duration-200"
+            >
+              {language === "pt" ? "Painel de CVEs" : "CVE Dashboard"}
+            </Link>
+          </div>
+        </div>
+
+        <div className="relative z-10 flex-1 flex flex-col items-center justify-center p-4 min-h-[50vh]">
           <div className="max-w-2xl w-full space-y-8 text-center">
-            <div className="space-y-4 animate-fade-in flex flex-col items-center">
-              <div 
-                className="h-48 w-48 flex items-center justify-center overflow-hidden cursor-pointer hover:scale-[1.03] active:scale-[0.97] transition-all duration-300 filter drop-shadow-[0_0_15px_rgba(139,92,246,0.2)] hover:drop-shadow-[0_0_30px_rgba(139,92,246,0.4)]"
-                onClick={handleReset}
-              >
-                <img src="/logo.png" alt="Logo" className="h-full w-full object-contain" />
-              </div>
-              <div className="space-y-2">
-                <div className="flex items-center justify-center gap-3 flex-wrap">
-                  <h1
-                    className="text-4xl md:text-6xl font-bold tracking-tight bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent cursor-pointer hover:opacity-80 transition-opacity"
-                    onClick={handleReset}
-                  >
-                    {t('appName')}
-                  </h1>
-                  <a
-                    href="https://github.com/kkroth0/thre4th-summary/actions/workflows/vulnerability-scan.yml"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center hover:scale-105 transition-transform duration-200"
-                    title="Continuous Security Scan Status"
-                  >
-                    <img
-                      src="https://github.com/kkroth0/thre4th-summary/actions/workflows/vulnerability-scan.yml/badge.svg"
-                      alt="Security Scan Status"
-                      className="h-5 shrink-0"
-                      onError={(e) => {
-                        e.currentTarget.style.display = 'none';
-                      }}
-                    />
-                  </a>
-                </div>
-                <p className="text-xl text-muted-foreground text-center">
-                  {t('dashboardTitle')}
+            <div className="flex flex-col items-center">
+              {/* Hero Title & Description */}
+              <div className="space-y-4">
+                <h1 className="text-4xl md:text-6xl font-extrabold tracking-tight bg-gradient-to-r from-foreground via-foreground/90 to-foreground/50 bg-clip-text text-transparent leading-[1.1] md:leading-[1.1]">
+                  <TypingTitle language={language} />
+                </h1>
+                <p className="text-sm md:text-base text-muted-foreground/80 max-w-xl mx-auto leading-relaxed">
+                  {t('heroDescription') || 'Paste an IP, domain, or hash. ThreatSumm4ry aggregates intelligence from 21 vendors and returns a unified verdict in under two seconds.'}
                 </p>
               </div>
             </div>
 
+            {/* Main Capsule Search Bar */}
             <div className="p-1 sm:p-2 animate-fade-in w-full">
               <SearchForm
                 query={query}
@@ -1267,10 +1368,12 @@ const Index = () => {
               />
             </div>
 
-            {/* Example IPs */}
-            <div className="animate-fade-in space-y-2">
-              <p className="text-xs font-medium text-muted-foreground/70 uppercase tracking-widest">Try these examples</p>
-              <div className="flex flex-wrap justify-center gap-2">
+            {/* Try these Examples */}
+            <div id="examples" className="animate-fade-in space-y-3 scroll-mt-6">
+              <p className="text-[10px] font-bold text-muted-foreground/50 uppercase tracking-widest">
+                {language === "pt" ? "Experimente estes exemplos" : "Try these examples"}
+              </p>
+              <div className="flex flex-wrap justify-center gap-2.5">
                 {[
                   { ip: "14.103.115.208", flag: "🇨🇳" },
                   { ip: "51.210.208.8", flag: "🇫🇷" },
@@ -1281,7 +1384,7 @@ const Index = () => {
                   <button
                     key={ip}
                     onClick={() => setQuery(prev => prev ? `${prev}\n${ip}` : ip)}
-                    className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-xs font-sans font-semibold border border-border/60 bg-muted/30 hover:bg-primary/10 hover:border-primary/40 text-muted-foreground hover:text-foreground transition-all cursor-pointer shadow-sm"
+                    className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-semibold border border-primary/10 bg-muted/20 hover:bg-indigo-500/5 hover:border-indigo-500/30 text-muted-foreground hover:text-foreground hover:scale-[1.03] active:scale-[0.97] transition-all cursor-pointer shadow-sm"
                   >
                     <span>{flag}</span>
                     <span>{ip}</span>
@@ -1289,11 +1392,52 @@ const Index = () => {
                 ))}
               </div>
             </div>
+
+            {/* Capabilities */}
+            <div id="features" className="pt-10 border-t border-white/[0.04] mt-10 max-w-3xl mx-auto scroll-mt-6">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-center">
+                {[
+                  {
+                    icon: Shield,
+                    title: language === "pt" ? "21 Fontes" : "21 Sources",
+                    desc: language === "pt" ? "Veredito unificado" : "Unified verdict"
+                  },
+                  {
+                    icon: Radar,
+                    title: language === "pt" ? "Correlação" : "Correlation",
+                    desc: language === "pt" ? "Grafo interativo" : "Interactive graph"
+                  },
+                  {
+                    icon: Database,
+                    title: language === "pt" ? "Multi-formato" : "Multi-format",
+                    desc: language === "pt" ? "IP, hash, CVE" : "IP, hash, CVE"
+                  },
+                  {
+                    icon: FileSearch,
+                    title: language === "pt" ? "PDF / SOC" : "PDF / SOC",
+                    desc: language === "pt" ? "Relatórios prontos" : "Export ready"
+                  }
+                ].map((feat, index) => {
+                  const Icon = feat.icon;
+                  return (
+                    <div key={index} className="flex flex-col items-center gap-2 p-4 rounded-xl border border-white/[0.04] bg-white/[0.015] hover:bg-white/[0.03] hover:border-indigo-500/15 transition-all duration-300">
+                      <div className="h-8 w-8 rounded-lg bg-indigo-500/8 border border-indigo-500/15 flex items-center justify-center text-indigo-400">
+                        <Icon className="h-4 w-4" />
+                      </div>
+                      <div>
+                        <h3 className="font-bold text-[11px] text-foreground">{feat.title}</h3>
+                        <p className="text-[10px] text-muted-foreground/50 mt-0.5">{feat.desc}</p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
           </div>
         </div>
 
         <Footer />
-      </div >
+      </div>
     );
   }
 
@@ -1399,11 +1543,6 @@ const Index = () => {
                         totalVendors={data.totalVendors}
                         detections={data.detections}
                         vendorData={data.vendorData}
-                      />
-                    ) : view === "table" ? (
-                      <VendorDataTable
-                        vendorData={data.vendorData.filter(v => v.name !== "IP Geolocation")}
-                        getVendorLink={getVendorLink}
                       />
                     ) : (
                       <div className="columns-1 md:columns-2 lg:columns-3 gap-4 space-y-4">

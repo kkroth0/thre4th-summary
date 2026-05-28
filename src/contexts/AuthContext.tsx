@@ -36,22 +36,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setIsLoading(false);
       return;
     }
-
     try {
-      const response = await fetch("/api/auth/me");
+      const response = await fetch("/api/auth/me", {
+        headers: { "Authorization": `Bearer ${token}` }
+      });
       if (response.ok) {
         const data = await response.json();
-        if (data.authenticated) {
+        if (data.authenticated && data.user) {
           setUser(data.user);
           setIsAuthenticated(true);
         } else {
           localStorage.removeItem("auth_token");
         }
-      } else if (response.status === 401) {
+      } else {
         localStorage.removeItem("auth_token");
       }
     } catch (error) {
-      console.error("Auth check failed:", error);
+      console.error("Failed to verify session:", error);
+      localStorage.removeItem("auth_token");
     } finally {
       setIsLoading(false);
     }
@@ -106,16 +108,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       
       const response = await originalFetch(input, init);
       
-      // Auto-logout on unauthorized
+      // Auto-logout on token expiry or invalidation
       if (response.status === 401 && url.startsWith("/api/") && !url.includes("/api/auth/")) {
         localStorage.removeItem("auth_token");
-        setUser(null);
-        setIsAuthenticated(false);
-        // Force redirect to login page if currently on protected route
-        const path = window.location.pathname;
-        if (path === "/" || path === "/cves" || path === "/dns-visualizer") {
-          window.location.href = `/login?redirect=${encodeURIComponent(path)}`;
-        }
+        window.location.href = "/login";
       }
       
       return response;
@@ -129,7 +125,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const loginWithGithub = async () => {
     if (githubConfigured && clientId) {
       const redirectUri = `${window.location.origin}/auth/callback`;
-      window.location.href = `https://github.com/login/oauth/authorize?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=read:user`;
+      const state = crypto.randomUUID();
+      sessionStorage.setItem('oauth_state', state);
+      window.location.href = `https://github.com/login/oauth/authorize?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=read:user&state=${state}`;
     } else {
       toast({
         title: "Erro de Configuração",
@@ -182,8 +180,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setUser(null);
     setIsAuthenticated(false);
     toast({
-      title: "Logoff efetuado",
-      description: "Você foi desconectado com sucesso.",
+      title: "Sessão encerrada",
+      description: "Sua sessão foi encerrada com sucesso.",
     });
     window.location.href = "/login";
   };

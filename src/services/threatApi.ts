@@ -446,6 +446,24 @@ export const checkDNSBL = async (ip: string, provider: string): Promise<{ listed
     }
 };
 
+export const checkDNSBLBatch = async (ip: string, providers: string[]): Promise<Record<string, { listed: boolean; addresses?: string[]; status: string; error?: string }>> => {
+    try {
+        const response = await fetch('/api/dnsbl/batch', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ query: ip, providers })
+        });
+        if (!response.ok) throw new Error("API Error");
+        return await response.json();
+    } catch (error) {
+        const fallback: Record<string, { listed: boolean; addresses?: string[]; status: string; error?: string }> = {};
+        providers.forEach(p => {
+            fallback[p] = { listed: false, status: "Error", error: (error as Error).message };
+        });
+        return fallback;
+    }
+};
+
 export const fetchThreatData = async (query: string, selectedVendors?: string[]): Promise<ThreatIntelligenceResult> => {
     // Map vendor names to their fetch functions
     const vendorMap: Record<string, () => Promise<VendorData>> = {
@@ -633,13 +651,30 @@ export const fetchThreatDataProgressive = async (
     });
 
     // Create promises that call onProgress when they complete
+    // Each vendor is wrapped in try/catch + timeout so one failure doesn't lose the whole IP
+    const VENDOR_TIMEOUT_MS = 30_000;
+
     const fetchPromises = vendorsToQuery
         .filter(vendor => vendorMap[vendor])
         .map(vendor => {
-            return vendorMap[vendor]().then(data => {
-                onProgress(data);
-                return data;
-            });
+            const timeoutPromise = new Promise<never>((_, reject) =>
+                setTimeout(() => reject(new Error(`${vendor} timed out after ${VENDOR_TIMEOUT_MS / 1000}s`)), VENDOR_TIMEOUT_MS)
+            );
+
+            return Promise.race([vendorMap[vendor](), timeoutPromise])
+                .then(data => {
+                    onProgress(data);
+                    return data;
+                })
+                .catch(err => {
+                    const errorData: VendorData = {
+                        name: vendor,
+                        data: { "Status": "Error" },
+                        error: err?.message || "Request failed",
+                    };
+                    onProgress(errorData);
+                    return errorData;
+                });
         });
 
     const results = await Promise.all(fetchPromises);
@@ -748,6 +783,7 @@ export interface DnsLookupResult {
         NS: string[];
         CNAME: string[];
     };
+    dnsDumpster?: any;
 }
 
 export const fetchDnsLookup = async (domain: string): Promise<DnsLookupResult> => {

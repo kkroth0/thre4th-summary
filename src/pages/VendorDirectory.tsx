@@ -142,7 +142,7 @@ const VendorDirectory = () => {
                     <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-card/20 p-6 rounded-3xl border border-primary/10 backdrop-blur-md">
                         <div>
                             <h1 className="text-2xl font-bold flex items-center gap-2">
-                                Vendor Directory
+                                {t('vendors') || 'API Integrations'}
                                 <Badge variant="secondary" className="bg-primary/10 text-primary border-primary/20">
                                     {vendorsList.length} integrated
                                 </Badge>

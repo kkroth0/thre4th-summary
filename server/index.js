@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import rateLimit from 'express-rate-limit';
+import helmet from 'helmet';
 import dotenv from 'dotenv';
 import axios from 'axios';
 import path from 'path';
@@ -8,25 +9,39 @@ import { fileURLToPath } from 'url';
 import dns from 'dns';
 import fs from 'fs';
 import crypto from 'crypto';
+import compression from 'compression';
 
 dotenv.config({ path: '../.env' });
 
 const app = express();
+app.use(compression());
 const PORT = process.env.PORT || 3001;
+
+// Security headers
+app.use(helmet({
+    contentSecurityPolicy: false, // CSP is handled by Nginx in production
+    crossOriginEmbedderPolicy: false, // Allow loading external resources
+}));
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Session and Auth Configuration
-const SESSION_SECRET = process.env.SESSION_SECRET || 'threatsummary-jwt-signature-secret-key-998877';
+const SESSION_SECRET = process.env.SESSION_SECRET;
+if (!SESSION_SECRET) {
+    console.error('FATAL: SESSION_SECRET environment variable is required. Generate one with: node -e "console.log(require(\'crypto\').randomBytes(64).toString(\'hex\'))"');
+    process.exit(1);
+}
 const GITHUB_CLIENT_ID = process.env.GITHUB_CLIENT_ID || '';
 const GITHUB_CLIENT_SECRET = process.env.GITHUB_CLIENT_SECRET || '';
 const ALLOW_MOCK_AUTH = process.env.ALLOW_MOCK_AUTH !== 'false';
+const TOKEN_EXPIRY_MS = 8 * 60 * 60 * 1000; // 8 hours
 
 // Token utilities
 function generateToken(payload) {
-    const data = Buffer.from(JSON.stringify(payload)).toString('base64');
-    const signature = crypto.createHmac('sha256', SESSION_SECRET).update(data).digest('base64');
+    const tokenPayload = { ...payload, iat: Date.now(), exp: Date.now() + TOKEN_EXPIRY_MS };
+    const data = Buffer.from(JSON.stringify(tokenPayload)).toString('base64url');
+    const signature = crypto.createHmac('sha256', SESSION_SECRET).update(data).digest('base64url');
     return `${data}.${signature}`;
 }
 
@@ -35,10 +50,16 @@ function verifyToken(token) {
     const parts = token.split('.');
     if (parts.length !== 2) return null;
     const [data, signature] = parts;
-    const expectedSignature = crypto.createHmac('sha256', SESSION_SECRET).update(data).digest('base64');
-    if (signature !== expectedSignature) return null;
+    const expectedSignature = crypto.createHmac('sha256', SESSION_SECRET).update(data).digest('base64url');
+    // Timing-safe comparison to prevent timing attacks
+    const sigBuffer = Buffer.from(signature, 'base64url');
+    const expectedBuffer = Buffer.from(expectedSignature, 'base64url');
+    if (sigBuffer.length !== expectedBuffer.length || !crypto.timingSafeEqual(sigBuffer, expectedBuffer)) return null;
     try {
-        return JSON.parse(Buffer.from(data, 'base64').toString('utf8'));
+        const payload = JSON.parse(Buffer.from(data, 'base64url').toString('utf8'));
+        // Check token expiration
+        if (payload.exp && Date.now() > payload.exp) return null;
+        return payload;
     } catch {
         return null;
     }
@@ -48,7 +69,7 @@ function verifyToken(token) {
 const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',') || ['http://localhost:8080'];
 app.use(cors({
     origin: (origin, callback) => {
-        if (!origin || allowedOrigins.includes(origin) || origin === 'null') {
+        if (!origin || allowedOrigins.includes(origin)) {
             callback(null, true);
         } else {
             callback(new Error('Not allowed by CORS'));
@@ -64,12 +85,23 @@ app.use(express.json({ limit: '10kb' }));
 app.use(express.urlencoded({ extended: false, limit: '10kb' }));
 
 // Rate limiting
+const skipRateLimit = (req) => {
+    // Skip rate limiting only if DISABLE_RATE_LIMIT is explicitly set to 'true'
+    // Rate limiting is ON by default for security
+    const disableRateLimit = process.env.DISABLE_RATE_LIMIT === 'true';
+    if (disableRateLimit) return true;
+    
+    // Always skip DNSBL checks as they perform 400+ concurrent requests for a single query page
+    return req.path === '/dnsbl' || req.originalUrl?.includes('/dnsbl');
+};
+
 const limiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
     max: 150,
     message: { error: 'Too many requests, please try again later.' },
     standardHeaders: true,
-    legacyHeaders: false
+    legacyHeaders: false,
+    skip: skipRateLimit
 });
 app.use('/api/', limiter);
 
@@ -78,29 +110,24 @@ const scanLimiter = rateLimit({
     max: 60,
     message: { error: 'Scan rate limit exceeded. Please wait a minute.' },
     standardHeaders: true,
-    legacyHeaders: false
+    legacyHeaders: false,
+    skip: skipRateLimit
 });
 
 // Dynamic DNSBL whitelist parser
 let allowedDnsblProviders = new Set();
 const loadDnsblProviders = () => {
     try {
-        const filePath = path.join(__dirname, '../src/pages/DnsblCheck.tsx');
+        const filePath = path.join(__dirname, '../src/config/dnsblProviders.json');
         if (fs.existsSync(filePath)) {
-            const content = fs.readFileSync(filePath, 'utf8');
-            const match = content.match(/const DNSBL_PROVIDERS = \[[^\]]+\]/s);
-            if (match) {
-                const matches = match[0].match(/["']([^"']+)["']/g);
-                if (matches) {
-                    matches.forEach(m => {
-                        allowedDnsblProviders.add(m.replace(/["']/g, ''));
-                    });
-                }
+            const providers = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+            if (Array.isArray(providers)) {
+                providers.forEach(p => allowedDnsblProviders.add(p));
             }
         }
-        console.log(`Loaded ${allowedDnsblProviders.size} DNSBL providers from DnsblCheck.tsx`);
+        console.log(`Loaded ${allowedDnsblProviders.size} DNSBL providers from dnsblProviders.json`);
     } catch (err) {
-        console.error('Failed to parse DNSBL providers:', err.message);
+        console.error('Failed to load DNSBL providers:', err.message);
     }
     // Ensure we have standard fallbacks if parsing failed or was empty
     if (allowedDnsblProviders.size === 0) {
@@ -221,11 +248,16 @@ app.use(validateRequest);
 
 // Error Sanitization Utility
 const sanitizeError = (error) => {
-    const status = error.response?.status || 500;
+    let status = error.response?.status || 500;
+    
+    // Map upstream 401/403 to 502 (Bad Gateway) to prevent frontend from treating it as session authentication failure
+    if (status === 401 || status === 403) {
+        status = 502;
+    }
+    
     const safeMessages = {
         400: 'Bad request',
-        401: 'Upstream authentication failed',
-        403: 'Access denied by upstream provider',
+        502: 'Upstream authentication or access configuration failed',
         404: 'Resource not found',
         429: 'Rate limit exceeded on upstream provider',
     };
@@ -247,16 +279,16 @@ const escapeHtml = (unsafe) => {
 
 // Auth middleware
 const requireAuth = (req, res, next) => {
-    const authHeader = req.headers['authorization'];
-    if (!authHeader) {
-        return res.status(401).json({ error: 'Unauthorized: No token provided' });
+    const authHeader = req.headers.authorization;
+    if (!authHeader?.startsWith('Bearer ')) {
+        return res.status(401).json({ error: 'Authentication required' });
     }
     const token = authHeader.split(' ')[1];
-    const user = verifyToken(token);
-    if (!user) {
-        return res.status(401).json({ error: 'Unauthorized: Invalid or expired token' });
+    const payload = verifyToken(token);
+    if (!payload) {
+        return res.status(401).json({ error: 'Invalid or expired token' });
     }
-    req.user = user;
+    req.user = payload;
     next();
 };
 
@@ -696,7 +728,7 @@ app.post('/api/ipgeo', requireAuth, scanLimiter, async (req, res) => {
 });
 
 // Generic DNSBL Endpoint (Whitelist check added)
-app.post('/api/dnsbl', scanLimiter, async (req, res) => {
+app.post('/api/dnsbl', requireAuth, scanLimiter, async (req, res) => {
     const { query, provider } = req.body;
     try {
         const queryType = detectQueryType(query);
@@ -726,6 +758,30 @@ app.post('/api/dnsbl', scanLimiter, async (req, res) => {
             timeoutPromise
         ])
         .then(addresses => {
+            // Check for loopback error codes (e.g. Spamhaus public DNS block: 127.255.255.254)
+            const hasErrorAddress = addresses.some(addr => 
+                addr === '127.255.255.252' || 
+                addr === '127.255.255.254' || 
+                addr === '127.255.255.255'
+            );
+
+            if (hasErrorAddress) {
+                let errMsg = "Query blocked/errored";
+                if (addresses.includes('127.255.255.254')) {
+                    errMsg = "Blocked: Public DNS resolver";
+                } else if (addresses.includes('127.255.255.255')) {
+                    errMsg = "Blocked: Quota exceeded";
+                } else if (addresses.includes('127.255.255.252')) {
+                    errMsg = "Blocked: Invalid zone name";
+                }
+                return res.json({ 
+                    listed: false, 
+                    addresses, 
+                    status: "Blocked", 
+                    error: errMsg 
+                });
+            }
+
             res.json({ listed: true, addresses, status: `Listed on ${provider}` });
         })
         .catch(error => {
@@ -741,6 +797,82 @@ app.post('/api/dnsbl', scanLimiter, async (req, res) => {
     }
 });
 
+// Generic DNSBL Batch Endpoint
+app.post('/api/dnsbl/batch', requireAuth, scanLimiter, async (req, res) => {
+    const { query, providers } = req.body;
+    try {
+        const queryType = detectQueryType(query);
+        if (queryType !== "ip") {
+            return res.json({});
+        }
+        const sanitized = sanitizeQuery(query, 'ip');
+
+        if (!Array.isArray(providers)) {
+            return res.status(400).json({ error: "Providers must be an array" });
+        }
+
+        // Validate all providers against the allowed set
+        const invalid = providers.filter(p => !allowedDnsblProviders.has(p));
+        if (invalid.length > 0) {
+            return res.status(400).json({ error: `Invalid/unauthorized DNSBL providers: ${invalid.join(', ')}` });
+        }
+
+        const reversed = sanitized.split('.').reverse().join('.');
+
+        // Resolve all in parallel
+        const resolvePromises = providers.map(async (provider) => {
+            const dnsQuery = `${reversed}.${provider}`;
+            const timeoutPromise = new Promise((_, reject) => 
+                setTimeout(() => reject(new Error('DNS Timeout')), 3000)
+            );
+
+            try {
+                const addresses = await Promise.race([
+                    dns.promises.resolve4(dnsQuery),
+                    timeoutPromise
+                ]);
+
+                const hasErrorAddress = addresses.some(addr => 
+                    addr === '127.255.255.252' || 
+                    addr === '127.255.255.254' || 
+                    addr === '127.255.255.255'
+                );
+
+                if (hasErrorAddress) {
+                    let errMsg = "Query blocked/errored";
+                    if (addresses.includes('127.255.255.254')) {
+                        errMsg = "Blocked: Public DNS resolver";
+                    } else if (addresses.includes('127.255.255.255')) {
+                        errMsg = "Blocked: Quota exceeded";
+                    } else if (addresses.includes('127.255.255.252')) {
+                        errMsg = "Blocked: Invalid zone name";
+                    }
+                    return { provider, result: { listed: false, addresses, status: "Blocked", error: errMsg } };
+                }
+
+                return { provider, result: { listed: true, addresses, status: `Listed on ${provider}` } };
+            } catch (error) {
+                if (error.message === 'DNS Timeout') {
+                    return { provider, result: { listed: false, status: "Timeout", error: "Query timed out" } };
+                } else {
+                    return { provider, result: { listed: false, status: "Not listed" } };
+                }
+            }
+        });
+
+        const results = await Promise.all(resolvePromises);
+        const responseData = {};
+        results.forEach(r => {
+            responseData[r.provider] = r.result;
+        });
+
+        res.json(responseData);
+    } catch (error) {
+        const { status, message } = sanitizeError(error);
+        res.status(status).json({ error: message });
+    }
+});
+
 // OpenPhish
 app.post('/api/openphish', requireAuth, scanLimiter, async (req, res) => {
     const { query } = req.body;
@@ -749,9 +881,26 @@ app.post('/api/openphish', requireAuth, scanLimiter, async (req, res) => {
         if (queryType !== "url" && queryType !== "domain") return res.json({ data: { "Status": "URL/Domain only" } });
         const sanitized = sanitizeQuery(query, queryType);
 
-        const response = await axios.get('https://openphish.com/feed.txt');
-        const urls = response.data.split('\n');
-        const found = urls.some(url => url.includes(sanitized));
+        const now = Date.now();
+        if (memoryCache.openphish.expiresAt < now || memoryCache.openphish.urls.size === 0) {
+            const response = await axios.get('https://openphish.com/feed.txt', { timeout: 8000 });
+            const urls = response.data.split('\n').map(u => u.trim()).filter(Boolean);
+            memoryCache.openphish.urls = new Set(urls);
+            memoryCache.openphish.expiresAt = now + memoryCache.openphish.ttl;
+        }
+
+        let found = false;
+        if (memoryCache.openphish.urls.has(sanitized)) {
+            found = true;
+        } else {
+            // Substring match for domains/directories
+            for (const url of memoryCache.openphish.urls) {
+                if (url.includes(sanitized)) {
+                    found = true;
+                    break;
+                }
+            }
+        }
 
         res.json({
             listed: found,
@@ -988,27 +1137,32 @@ function parseFeed(xmlText, sourceName, layer) {
     return items;
 }
 
-// Simple in-memory cache for external feeds
+// Simple in-memory cache for external feeds & APIs
 const memoryCache = {
     newsletter: {
         data: null,
         expiresAt: 0,
-        ttl: 5 * 60 * 1000 // 5 minutes
+        ttl: 10 * 60 * 1000 // 10 minutes
     },
     recentCves: {
         data: null,
         expiresAt: 0,
         ttl: 10 * 60 * 1000 // 10 minutes
+    },
+    exploitedCves: {
+        data: null,
+        expiresAt: 0,
+        ttl: 12 * 60 * 60 * 1000 // 12 hours
+    },
+    openphish: {
+        urls: new Set(),
+        expiresAt: 0,
+        ttl: 60 * 60 * 1000 // 1 hour
     }
 };
 
-// CTI News feed endpoint
-app.get('/api/newsletter', async (req, res) => {
-    const now = Date.now();
-    if (memoryCache.newsletter.data && memoryCache.newsletter.expiresAt > now) {
-        return res.json(memoryCache.newsletter.data);
-    }
-
+// Background newsletter feed refresher
+async function refreshNewsletterFeed() {
     try {
         const feeds = [
             // Layer 1 - PSIRT & Vendor Advisories
@@ -1053,11 +1207,23 @@ app.get('/api/newsletter', async (req, res) => {
         const unifiedFeed = successfulFeeds.sort((a, b) => new Date(b.pubDate) - new Date(a.pubDate));
 
         memoryCache.newsletter.data = unifiedFeed;
-        memoryCache.newsletter.expiresAt = now + memoryCache.newsletter.ttl;
-
-        res.json(unifiedFeed);
+        memoryCache.newsletter.expiresAt = Date.now() + memoryCache.newsletter.ttl;
     } catch (error) {
-        res.status(500).json({ error: error.message });
+        console.error("Failed to background refresh newsletter feeds:", error.message);
+    }
+}
+
+// CTI News feed endpoint
+app.get('/api/newsletter', requireAuth, async (req, res) => {
+    try {
+        if (!memoryCache.newsletter.data) {
+            // Cold start fallback
+            await refreshNewsletterFeed();
+        }
+        res.json(memoryCache.newsletter.data || []);
+    } catch (error) {
+        const { status, message } = sanitizeError(error);
+        res.status(status).json({ error: message });
     }
 });
 
@@ -1140,16 +1306,24 @@ app.post('/api/auth/mock', (req, res) => {
 
 // Get profile details
 app.get('/api/auth/me', (req, res) => {
-    const authHeader = req.headers['authorization'];
-    if (!authHeader) {
-        return res.json({ authenticated: false });
+    const authHeader = req.headers.authorization;
+    if (!authHeader?.startsWith('Bearer ')) {
+        return res.json({ authenticated: false, user: null });
     }
     const token = authHeader.split(' ')[1];
-    const user = verifyToken(token);
-    if (!user) {
-        return res.json({ authenticated: false });
+    const payload = verifyToken(token);
+    if (!payload) {
+        return res.json({ authenticated: false, user: null });
     }
-    res.json({ authenticated: true, user });
+    res.json({
+        authenticated: true,
+        user: {
+            username: payload.username,
+            name: payload.name,
+            avatar_url: payload.avatar_url,
+            id: payload.id
+        }
+    });
 });
 
 
@@ -1321,12 +1495,20 @@ app.get('/api/cves/recent', requireAuth, async (req, res) => {
 
 // Exploited CVEs from CISA KEV
 app.get('/api/cves/exploited', requireAuth, async (req, res) => {
+    const now = Date.now();
+    if (memoryCache.exploitedCves.data && memoryCache.exploitedCves.expiresAt > now) {
+        return res.json(memoryCache.exploitedCves.data);
+    }
+
     try {
         const response = await axios.get('https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json', { timeout: 8000 });
         if (response.data && Array.isArray(response.data.vulnerabilities)) {
             const sorted = response.data.vulnerabilities
                 .sort((a, b) => new Date(b.dateAdded) - new Date(a.dateAdded))
                 .slice(0, 50);
+
+            memoryCache.exploitedCves.data = sorted;
+            memoryCache.exploitedCves.expiresAt = now + memoryCache.exploitedCves.ttl;
             return res.json(sorted);
         }
         throw new Error("Invalid response format from CISA");
@@ -1350,13 +1532,27 @@ app.post('/api/dns/lookup', requireAuth, scanLimiter, async (req, res) => {
             }
         };
 
-        const [a, aaaa, mx, txt, ns, cname] = await Promise.all([
+        const [a, aaaa, mx, txt, ns, cname, dumpster] = await Promise.all([
             resolveSafe(dns.promises.resolve4),
             resolveSafe(dns.promises.resolve6),
             resolveSafe(dns.promises.resolveMx),
             resolveSafe(dns.promises.resolveTxt),
             resolveSafe(dns.promises.resolveNs),
             resolveSafe(dns.promises.resolveCname),
+            (async () => {
+                try {
+                    const key = process.env.DNSDUMPSTER_API_KEY;
+                    if (!key) return null;
+                    const response = await axios.get(`https://api.dnsdumpster.com/domain/${sanitized}`, {
+                        headers: { 'X-API-Key': key },
+                        timeout: 12000
+                    });
+                    return response.data;
+                } catch (err) {
+                    console.error("DNSDumpster API error:", err.message || err);
+                    return null;
+                }
+            })()
         ]);
 
         const flatTxt = txt.map(record => record.join(' '));
@@ -1370,7 +1566,8 @@ app.post('/api/dns/lookup', requireAuth, scanLimiter, async (req, res) => {
                 TXT: flatTxt,
                 NS: ns,
                 CNAME: cname
-            }
+            },
+            dnsDumpster: dumpster
         });
     } catch (error) {
         const { status, message } = sanitizeError(error);
@@ -1379,7 +1576,7 @@ app.post('/api/dns/lookup', requireAuth, scanLimiter, async (req, res) => {
 });
 
 // Vendors API Status
-app.get('/api/vendors/status', (req, res) => {
+app.get('/api/vendors/status', requireAuth, (req, res) => {
     const status = {
         "VirusTotal": !!process.env.VIRUSTOTAL_API_KEY,
         "AbuseIPDB": !!process.env.ABUSEIPDB_API_KEY,
@@ -1403,4 +1600,7 @@ if (process.env.NODE_ENV === 'production') {
 
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
+    // Prime the newsletter RSS feed cache and schedule background updates
+    refreshNewsletterFeed();
+    setInterval(refreshNewsletterFeed, memoryCache.newsletter.ttl);
 });

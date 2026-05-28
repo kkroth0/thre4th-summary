@@ -64,7 +64,9 @@ export default function Login() {
             className="h-16 w-16 rounded-full bg-muted border border-border flex items-center justify-center p-2.5 overflow-hidden shadow-sm hover:scale-[1.02] active:scale-[0.98] transition-transform focus:outline-none"
             title="ThreatSumm4ry Logo"
           >
-            <img src="/logo.png" alt="Logo" className="h-full w-full object-contain" />
+            <div className="h-full w-full bg-indigo-600 rounded flex items-center justify-center font-black text-white text-3xl shadow-lg select-none">
+              T
+            </div>
           </button>
           <div className="space-y-1">
             <h1 className="text-2xl font-bold tracking-tight text-foreground">

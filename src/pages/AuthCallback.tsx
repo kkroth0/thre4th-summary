@@ -11,6 +11,21 @@ export default function AuthCallback() {
   useEffect(() => {
     const searchParams = new URLSearchParams(location.search);
     const code = searchParams.get("code");
+    const state = searchParams.get("state");
+    const savedState = sessionStorage.getItem("oauth_state");
+
+    // Verify CSRF state parameter
+    if (state && savedState && state !== savedState) {
+      sessionStorage.removeItem("oauth_state");
+      toast({
+        title: "Erro de Segurança",
+        description: "Parâmetro de estado OAuth inválido. Possível ataque CSRF.",
+        variant: "destructive",
+      });
+      navigate("/login");
+      return;
+    }
+    sessionStorage.removeItem("oauth_state");
 
     if (!code) {
       toast({

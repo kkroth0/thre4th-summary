@@ -107,16 +107,16 @@ export function VendorFilter({ selectedVendors, onVendorsChange, className }: Ve
         <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
                 <Button 
-                    variant="outline" 
+                    variant="ghost" 
                     size="sm" 
                     className={cn(
-                        "h-8 rounded-full border border-primary/20 hover:bg-primary/10 shadow-sm transition-all px-3 group", 
+                        "h-9 rounded-full hover:bg-white/5 transition-all px-3 group text-slate-400 hover:text-white shadow-none border-0", 
                         className
                     )}
                 >
-                    <Filter className="h-4 w-4 sm:mr-2 text-muted-foreground/80 group-hover:text-foreground transition-colors" />
-                    <span className="hidden sm:inline">Filter Vendors</span>
-                    <span className="text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-full ml-1 sm:ml-1.5 font-bold border border-primary/15 font-mono">
+                    <Filter className="h-3.5 w-3.5 mr-1.5 text-slate-400 group-hover:text-white transition-colors" />
+                    <span className="text-xs font-semibold">Filter Vendors</span>
+                    <span className="text-[10px] bg-slate-900 text-slate-200 px-2 py-0.5 rounded-full ml-2 font-bold border border-slate-800 font-mono shadow-inner">
                         {selectedVendors.length}
                     </span>
                 </Button>

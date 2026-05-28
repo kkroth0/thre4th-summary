@@ -1,12 +1,14 @@
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, useRef } from "react";
 import { 
-  Globe, Shield, AlertTriangle, Database, Info, Copy, Server, Link2, ExternalLink
+  Globe, Shield, AlertTriangle, Database, Info, Copy, Server, Link2, ExternalLink,
+  ZoomIn, ZoomOut, Maximize2
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { toast } from "sonner";
+import { forceSimulation, forceLink, forceManyBody, forceCenter, forceCollide } from "d3-force";
 
 interface VendorData {
   name: string;
@@ -30,13 +32,17 @@ interface GraphNode {
   type: 'target' | 'vendor' | 'country' | 'isp' | 'asn' | 'port' | 'verdict' | 'misc';
   x: number;
   y: number;
+  vx?: number;
+  vy?: number;
+  fx?: number | null;
+  fy?: number | null;
   value: string;
   connectedVendors: string[];
 }
 
 interface GraphLink {
-  source: string;
-  target: string;
+  source: string | any;
+  target: string | any;
   type: string;
 }
 
@@ -52,6 +58,18 @@ export const ThreatCorrelationGraph = ({
   const [activeNode, setActiveNode] = useState<GraphNode | null>(null);
   const [hoveredNode, setHoveredNode] = useState<GraphNode | null>(null);
 
+  // Simulation state
+  const [animatedNodes, setAnimatedNodes] = useState<GraphNode[]>([]);
+  const [animatedLinks, setAnimatedLinks] = useState<GraphLink[]>([]);
+  const simulationRef = useRef<any>(null);
+
+  // Zoom & Pan state
+  const [zoom, setZoom] = useState({ x: 0, y: 0, k: 1 });
+  const [isPanning, setIsPanning] = useState(false);
+  const [panStart, setPanStart] = useState({ x: 0, y: 0 });
+  const [draggedNodeId, setDraggedNodeId] = useState<string | null>(null);
+  const svgRef = useRef<SVGSVGElement>(null);
+
   // Helper to normalize values for correlation matching
   const normalizeIsp = (isp: string): string => {
     if (!isp) return "";
@@ -64,10 +82,8 @@ export const ThreatCorrelationGraph = ({
 
   const normalizeCountry = (country: string): string => {
     if (!country) return "";
-    // If format is "France (FR)", extract "France"
     const match = country.match(/^([^\(]+)/);
     const name = match ? match[1].trim() : country.trim();
-    // Use common 2-letter to full name mappings if needed, or simple lowercase comparison
     return name.toLowerCase();
   };
 
@@ -77,7 +93,7 @@ export const ThreatCorrelationGraph = ({
     return match ? match[0] : "";
   };
 
-  // Compile the graph structure
+  // Compile the initial graph structure
   const graph = useMemo(() => {
     const nodes: GraphNode[] = [];
     const links: GraphLink[] = [];
@@ -95,14 +111,12 @@ export const ThreatCorrelationGraph = ({
       connectedVendors: vendorData.map(v => v.name)
     });
 
-    // We will collect fact candidates and build relations to map duplicates
     const asnMap: Record<string, { rawLabel: string; vendors: string[] }> = {};
     const countryMap: Record<string, { rawLabel: string; vendors: string[] }> = {};
     const ispMap: Record<string, { rawLabel: string; vendors: string[] }> = {};
     const portMap: Record<string, { rawLabel: string; vendors: string[] }> = {};
     const verdictMap: Record<string, { rawLabel: string; vendors: string[] }> = {};
 
-    // Filter out Geolocation vendor to keep core analysis engines in center ring (if we want, or keep all)
     const activeVendors = vendorData.filter(v => Object.keys(v.data).length > 0 || v.error);
 
     // 2. Position Vendor Nodes in a circle
@@ -131,7 +145,6 @@ export const ThreatCorrelationGraph = ({
         type: "vendor-link"
       });
 
-      // Scan vendor fields for facts to correlate
       if (vendor.error) {
         verdictMap["error"] = verdictMap["error"] || { rawLabel: "Error", vendors: [] };
         verdictMap["error"].vendors.push(vendor.name);
@@ -187,7 +200,6 @@ export const ThreatCorrelationGraph = ({
       if (ispVal && ispVal !== "Unknown" && ispVal !== "N/A") {
         const normIsp = normalizeIsp(String(ispVal));
         if (normIsp && normIsp.length > 2) {
-          // Simple duplicate check (if one contains another, merge them)
           let matchKey = normIsp;
           const existingKey = Object.keys(ispMap).find(k => k.includes(normIsp) || normIsp.includes(k));
           if (existingKey) {
@@ -206,7 +218,7 @@ export const ThreatCorrelationGraph = ({
       if (portsVal) {
         const ports = String(portsVal).split(/[\s,]+/);
         ports.forEach(p => {
-          const cleanPort = p.trim().replace(/\/\w+$/, ""); // remove tcp/udp suffix
+          const cleanPort = p.trim().replace(/\/\w+$/, "");
           if (cleanPort && /^\d+$/.test(cleanPort)) {
             portMap[cleanPort] = portMap[cleanPort] || { rawLabel: `Port ${cleanPort}`, vendors: [] };
             if (!portMap[cleanPort].vendors.includes(vendor.name)) {
@@ -218,12 +230,6 @@ export const ThreatCorrelationGraph = ({
     });
 
     // 3. Position Fact Nodes in their sectors (Outer circle radius R2 = 240)
-    // We group sectors logically:
-    // - Verdicts: top sector (around 1.5 * PI)
-    // - Countries: right sector (around 0 * PI)
-    // - ISPs & ASNs: left sector (around 1.0 * PI)
-    // - Open Ports: bottom sector (around 0.5 * PI)
-
     // Position Verdict nodes
     const verdictKeys = Object.keys(verdictMap);
     verdictKeys.forEach((key, idx) => {
@@ -283,7 +289,7 @@ export const ThreatCorrelationGraph = ({
     });
 
     // Position ISP & ASN nodes
-    const ispKeys = Object.keys(ispMap).slice(0, 5); // Cap to avoid clutter
+    const ispKeys = Object.keys(ispMap).slice(0, 5);
     const asnKeys = Object.keys(asnMap).slice(0, 5);
     const leftKeys = [...ispKeys.map(k => ({ key: k, type: 'isp', info: ispMap[k] })), ...asnKeys.map(k => ({ key: k, type: 'asn', info: asnMap[k] }))];
 
@@ -345,12 +351,191 @@ export const ThreatCorrelationGraph = ({
     return { nodes, links };
   }, [query, vendorData]);
 
-  // Set default active node
+  // Setup force-directed simulation
   useEffect(() => {
-    if (graph.nodes.length > 0) {
-      setActiveNode(graph.nodes[0]);
+    // Deep copy nodes and links for simulation mutating
+    const nodesCopy: GraphNode[] = graph.nodes.map(node => ({
+      ...node,
+      // Anchor target initially in center
+      fx: node.type === "target" ? 300 : undefined,
+      fy: node.type === "target" ? 300 : undefined
+    }));
+    const linksCopy: GraphLink[] = graph.links.map(link => ({ ...link }));
+
+    const simulation = forceSimulation<GraphNode>(nodesCopy)
+      .force("link", forceLink<GraphNode, GraphLink>(linksCopy).id((d) => d.id).distance((link) => {
+        if (link.type === "vendor-link") return 110;
+        return 75;
+      }))
+      .force("charge", forceManyBody().strength((node: any) => {
+        if (node.type === "target") return -450;
+        if (node.type === "vendor") return -200;
+        return -90;
+      }))
+      .force("center", forceCenter(300, 300))
+      .force("collide", forceCollide().radius((node: any) => {
+        if (node.type === "target") return 35;
+        if (node.type === "vendor") return 22;
+        return 18;
+      }).iterations(2));
+
+    simulationRef.current = simulation;
+
+    simulation.on("tick", () => {
+      setAnimatedNodes([...nodesCopy]);
+      setAnimatedLinks([...linksCopy]);
+    });
+
+    // Make sure we select the target node on data changes
+    const targetNode = nodesCopy.find(n => n.type === "target");
+    if (targetNode) {
+      setActiveNode(targetNode);
+    } else if (nodesCopy.length > 0) {
+      setActiveNode(nodesCopy[0]);
     }
+
+    return () => {
+      simulation.stop();
+    };
   }, [graph]);
+
+  // Register non-passive wheel event on mount
+  useEffect(() => {
+    const svgEl = svgRef.current;
+    if (!svgEl) return;
+
+    const handleWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const zoomFactor = 1.08;
+
+      setZoom(prev => {
+        const nextK = e.deltaY < 0 ? prev.k * zoomFactor : prev.k / zoomFactor;
+        const k = Math.max(0.3, Math.min(5, nextK));
+
+        const rect = svgEl.getBoundingClientRect();
+        const mouseX = e.clientX - rect.left;
+        const mouseY = e.clientY - rect.top;
+
+        const factor = k / prev.k;
+        const x = mouseX - (mouseX - prev.x) * factor;
+        const y = mouseY - (mouseY - prev.y) * factor;
+
+        return { x, y, k };
+      });
+    };
+
+    svgEl.addEventListener("wheel", handleWheel, { passive: false });
+    return () => {
+      svgEl.removeEventListener("wheel", handleWheel);
+    };
+  }, []);
+
+  // Zoom Button Handlers
+  const handleZoomIn = () => {
+    setZoom(prev => {
+      const k = Math.min(5, prev.k * 1.25);
+      const factor = k / prev.k;
+      const x = 300 - (300 - prev.x) * factor;
+      const y = 300 - (300 - prev.y) * factor;
+      return { x, y, k };
+    });
+  };
+
+  const handleZoomOut = () => {
+    setZoom(prev => {
+      const k = Math.max(0.3, prev.k / 1.25);
+      const factor = k / prev.k;
+      const x = 300 - (300 - prev.x) * factor;
+      const y = 300 - (300 - prev.y) * factor;
+      return { x, y, k };
+    });
+  };
+
+  const handleZoomReset = () => {
+    setZoom({ x: 0, y: 0, k: 1 });
+  };
+
+  // Node Drag handlers
+  const handleNodePointerDown = (e: React.PointerEvent<SVGGElement>, node: GraphNode) => {
+    e.stopPropagation();
+    if (e.button !== 0) return; // Only drag with left click
+
+    e.currentTarget.setPointerCapture(e.pointerId);
+    setDraggedNodeId(node.id);
+
+    node.fx = node.x;
+    node.fy = node.y;
+
+    if (simulationRef.current) {
+      simulationRef.current.alphaTarget(0.3).restart();
+    }
+  };
+
+  const handleNodePointerMove = (e: React.PointerEvent<SVGGElement>, node: GraphNode) => {
+    if (draggedNodeId !== node.id) return;
+    e.stopPropagation();
+
+    const svg = e.currentTarget.ownerSVGElement;
+    if (!svg) return;
+
+    const point = svg.createSVGPoint();
+    point.x = e.clientX;
+    point.y = e.clientY;
+
+    const zoomGroup = svg.getElementById("zoom-group");
+    const matrix = zoomGroup?.getScreenCTM()?.inverse();
+    if (matrix) {
+      const transformedPoint = point.matrixTransform(matrix);
+      node.fx = transformedPoint.x;
+      node.fy = transformedPoint.y;
+    } else {
+      const ctm = svg.getScreenCTM()?.inverse();
+      if (ctm) {
+        const transformedPoint = point.matrixTransform(ctm);
+        node.fx = transformedPoint.x;
+        node.fy = transformedPoint.y;
+      }
+    }
+  };
+
+  const handleNodePointerUp = (e: React.PointerEvent<SVGGElement>, node: GraphNode) => {
+    e.stopPropagation();
+    if (draggedNodeId !== node.id) return;
+
+    e.currentTarget.releasePointerCapture(e.pointerId);
+    setDraggedNodeId(null);
+
+    // Keep it fixed at its drop destination
+    node.fx = node.x;
+    node.fy = node.y;
+
+    if (simulationRef.current) {
+      simulationRef.current.alphaTarget(0);
+    }
+  };
+
+  // Panning handlers
+  const handleSvgMouseDown = (e: React.MouseEvent<SVGSVGElement>) => {
+    if (e.button !== 0) return;
+    const target = e.target as SVGElement;
+    if (target.tagName === "svg" || target.id === "zoom-bg" || target.id === "grid-overlay") {
+      setIsPanning(true);
+      setPanStart({ x: e.clientX - zoom.x, y: e.clientY - zoom.y });
+    }
+  };
+
+  const handleSvgMouseMove = (e: React.MouseEvent<SVGSVGElement>) => {
+    if (!isPanning) return;
+    setZoom(prev => ({
+      ...prev,
+      x: e.clientX - panStart.x,
+      y: e.clientY - panStart.y
+    }));
+  };
+
+  const handleSvgMouseUp = () => {
+    setIsPanning(false);
+  };
 
   const getNodeColor = (type: string) => {
     switch (type) {
@@ -381,9 +566,11 @@ export const ThreatCorrelationGraph = ({
   const getLinkColor = (link: GraphLink, activeNodeId?: string) => {
     if (!activeNodeId) return "stroke-border/20 opacity-30";
     
-    // Highlight lines connected to active node
-    const isConnected = link.source === activeNodeId || link.target === activeNodeId ||
-      (activeNodeId === "target" && link.source === "target");
+    const sourceId = typeof link.source === "object" ? link.source.id : link.source;
+    const targetId = typeof link.target === "object" ? link.target.id : link.target;
+
+    const isConnected = sourceId === activeNodeId || targetId === activeNodeId ||
+      (activeNodeId === "target" && sourceId === "target");
 
     if (isConnected) {
       if (link.type === "vendor-link") return "stroke-primary stroke-[2] opacity-80";
@@ -423,132 +610,170 @@ export const ThreatCorrelationGraph = ({
   };
 
   return (
-    <Card className="border-primary/10 bg-card/45 backdrop-blur-xl shadow-lg rounded-3xl overflow-hidden animate-fade-in">
-      <CardHeader className="pb-3 border-b border-border/40">
-        <CardTitle className="text-lg font-bold flex items-center justify-between">
-          <span>{language === "pt" ? "Grafo de Correlação de Ameaças" : "Threat Correlation Graph"}</span>
-          <Badge variant={threatLevel === "malicious" ? "destructive" : "secondary"}>
-            Score: {overallScore}/100 ({threatLevel.toUpperCase()})
-          </Badge>
-        </CardTitle>
-        <CardDescription className="text-xs">
-          {language === "pt"
-            ? "Mapeamento interativo de bancos de dados de segurança. Linhas convergentes indicam correlação de dados entre diferentes fontes."
-            : "Interactive mapping of security databases. Converging lines indicate data correlation across different vendors."}
-        </CardDescription>
-      </CardHeader>
+    <Card className="border-white/[0.04] bg-[#0B0E1A]/80 backdrop-blur-xl shadow-lg rounded-2xl overflow-hidden animate-fade-in">
+      <div className="flex items-center justify-between px-5 py-3 border-b border-white/[0.04]">
+        <div className="flex items-center gap-3">
+          <h3 className="text-sm font-bold text-foreground">{language === "pt" ? "Correlação de Ameaças" : "Threat Correlation"}</h3>
+          <span className="text-[10px] text-muted-foreground/50">Drag · Scroll · Click</span>
+        </div>
+        <Badge variant={threatLevel === "malicious" ? "destructive" : "secondary"} className="text-[10px] font-bold">
+          {overallScore}/100 · {threatLevel.toUpperCase()}
+        </Badge>
+      </div>
       
-      <CardContent className="p-0 grid grid-cols-1 lg:grid-cols-12 min-h-[500px]">
-        {/* Left Grid: SVG Canvas Graph */}
-        <div className="lg:col-span-8 flex items-center justify-center p-4 border-b lg:border-b-0 lg:border-r border-border/40 bg-muted/5 relative select-none">
-          <svg className="w-full h-full max-w-[560px] max-h-[560px]" viewBox="0 0 600 600">
-            {/* Links / Connecting Lines */}
-            {graph.links.map((link, idx) => (
-              <line
-                key={idx}
-                x1={graph.nodes.find(n => n.id === link.source)?.x}
-                y1={graph.nodes.find(n => n.id === link.source)?.y}
-                x2={graph.nodes.find(n => n.id === link.target)?.x}
-                y2={graph.nodes.find(n => n.id === link.target)?.y}
-                className={`stroke-[1.5] transition-all duration-300 ${getLinkColor(link, displayNode?.id)}`}
-              />
-            ))}
+      <CardContent className="p-0 grid grid-cols-1 lg:grid-cols-12 min-h-[420px]">
+        {/* SVG Canvas */}
+        <div className="lg:col-span-8 flex items-center justify-center p-2 border-b lg:border-b-0 lg:border-r border-white/[0.04] bg-black/20 relative select-none">
+          
+          {/* Zoom controls */}
+          <div className="absolute top-2 right-2 flex gap-0.5 bg-white/[0.03] backdrop-blur-md p-0.5 border border-white/[0.06] rounded-lg z-10">
+            <Button variant="ghost" size="icon" className="h-6 w-6 rounded-md hover:bg-white/[0.06] text-muted-foreground/50" onClick={handleZoomIn}><ZoomIn className="h-3 w-3" /></Button>
+            <Button variant="ghost" size="icon" className="h-6 w-6 rounded-md hover:bg-white/[0.06] text-muted-foreground/50" onClick={handleZoomOut}><ZoomOut className="h-3 w-3" /></Button>
+            <Button variant="ghost" size="icon" className="h-6 w-6 rounded-md hover:bg-white/[0.06] text-muted-foreground/50" onClick={handleZoomReset}><Maximize2 className="h-3 w-3" /></Button>
+          </div>
 
-            {/* Nodes / Circles */}
-            {graph.nodes.map((node) => {
-              const isActive = activeNode?.id === node.id;
-              const isHovered = hoveredNode?.id === node.id;
-              const isTarget = node.type === "target";
-              const size = isTarget ? 24 : 12;
+          <svg 
+            ref={svgRef}
+            className="w-full h-full max-w-[560px] max-h-[560px] cursor-grab active:cursor-grabbing overflow-hidden" 
+            viewBox="0 0 600 600"
+            onMouseDown={handleSvgMouseDown}
+            onMouseMove={handleSvgMouseMove}
+            onMouseUp={handleSvgMouseUp}
+            onMouseLeave={handleSvgMouseUp}
+          >
+            <defs>
+              <pattern id="grid-pattern" width="40" height="40" patternUnits="userSpaceOnUse">
+                <path d="M 40 0 L 0 0 0 40" fill="none" stroke="currentColor" className="text-foreground/[0.04]" strokeWidth="1" />
+              </pattern>
+            </defs>
 
-              return (
-                <g 
-                  key={node.id}
-                  transform={`translate(${node.x}, ${node.y})`}
-                  onClick={() => setActiveNode(node)}
-                  onMouseEnter={() => setHoveredNode(node)}
-                  onMouseLeave={() => setHoveredNode(null)}
-                  className="cursor-pointer"
-                >
-                  {/* Glowing Pulse */}
-                  {(isHovered || isActive) && (
-                    <circle
-                      r={size + 6}
-                      className={`animate-ping opacity-15 fill-current ${getNodeColor(node.type)}`}
-                      style={{ animationDuration: '3.5s' }}
-                    />
-                  )}
+            {/* Transparent background to capture panning events anywhere */}
+            <rect id="zoom-bg" width="100%" height="100%" fill="transparent" />
 
-                  {/* Main Node Circle */}
-                  <circle
-                    r={size}
-                    className={`stroke-2 transition-all duration-300 fill-card ${getNodeColor(node.type)} ${
-                      isActive || isHovered 
-                        ? `${getStrokeColor(node.type)} stroke-3 scale-105 filter drop-shadow-[0_0_8px_rgba(139,92,246,0.3)]` 
-                        : "stroke-border/70 hover:stroke-foreground/60"
-                    }`}
+            <g id="zoom-group" transform={`translate(${zoom.x}, ${zoom.y}) scale(${zoom.k})`}>
+              {/* Scalable background grid */}
+              <rect id="grid-overlay" width="2000" height="2000" x="-700" y="-700" fill="url(#grid-pattern)" pointerEvents="none" />
+
+              {/* Links / Connecting Lines */}
+              {animatedLinks.map((link, idx) => {
+                const x1 = typeof link.source === "object" ? link.source.x : animatedNodes.find(n => n.id === link.source)?.x;
+                const y1 = typeof link.source === "object" ? link.source.y : animatedNodes.find(n => n.id === link.source)?.y;
+                const x2 = typeof link.target === "object" ? link.target.x : animatedNodes.find(n => n.id === link.target)?.x;
+                const y2 = typeof link.target === "object" ? link.target.y : animatedNodes.find(n => n.id === link.target)?.y;
+                
+                if (x1 === undefined || y1 === undefined || x2 === undefined || y2 === undefined) return null;
+                
+                return (
+                  <line
+                    key={idx}
+                    x1={x1}
+                    y1={y1}
+                    x2={x2}
+                    y2={y2}
+                    className={`stroke-[1.5] transition-all duration-300 ${getLinkColor(link, displayNode?.id)}`}
                   />
+                );
+              })}
 
-                  {/* Inner Node Icon */}
-                  <g transform="translate(-8, -8)" className="scale-[0.8] pointer-events-none">
-                    {getNodeIcon(node.type, node.label)}
-                  </g>
+              {/* Nodes / Circles */}
+              {animatedNodes.map((node) => {
+                const isActive = activeNode?.id === node.id;
+                const isHovered = hoveredNode?.id === node.id;
+                const isTarget = node.type === "target";
+                const size = isTarget ? 24 : 12;
 
-                  {/* Bubble labels on active/hover */}
-                  {(isTarget || isHovered || isActive) && (
-                    <g transform={`translate(0, ${size + 14})`}>
-                      <rect
-                        x={-Math.min(100, node.label.length * 3.5 + 8)}
-                        y={-9}
-                        width={Math.min(200, node.label.length * 7 + 16)}
-                        height={16}
-                        rx={8}
-                        className="fill-popover/90 stroke-border/40 stroke-[0.5]"
+                return (
+                  <g 
+                    key={node.id}
+                    transform={`translate(${node.x}, ${node.y})`}
+                    onClick={() => setActiveNode(node)}
+                    onMouseEnter={() => setHoveredNode(node)}
+                    onMouseLeave={() => setHoveredNode(null)}
+                    onPointerDown={(e) => handleNodePointerDown(e, node)}
+                    onPointerMove={(e) => handleNodePointerMove(e, node)}
+                    onPointerUp={(e) => handleNodePointerUp(e, node)}
+                    className="cursor-grab active:cursor-grabbing select-none"
+                  >
+                    {/* Glowing Pulse */}
+                    {(isHovered || isActive) && (
+                      <circle
+                        r={size + 6}
+                        className={`animate-ping opacity-15 fill-current ${getNodeColor(node.type)}`}
+                        style={{ animationDuration: '3.5s' }}
                       />
-                      <text
-                        textAnchor="middle"
-                        className="text-[9px] font-bold font-mono fill-popover-foreground pointer-events-none"
-                        y={2}
-                      >
-                        {node.label.length > 25 ? `${node.label.substring(0, 22)}...` : node.label}
-                      </text>
+                    )}
+
+                    {/* Main Node Circle */}
+                    <circle
+                      r={size}
+                      className={`stroke-2 transition-all duration-300 fill-card ${getNodeColor(node.type)} ${
+                        isActive || isHovered 
+                          ? `${getStrokeColor(node.type)} stroke-3 scale-105 filter drop-shadow-[0_0_8px_rgba(139,92,246,0.3)]` 
+                          : "stroke-border/70 hover:stroke-foreground/60"
+                      }`}
+                    />
+
+                    {/* Inner Node Icon */}
+                    <g transform="translate(-8, -8)" className="scale-[0.8] pointer-events-none">
+                      {getNodeIcon(node.type, node.label)}
                     </g>
-                  )}
-                </g>
-              );
-            })}
+
+                    {/* Bubble labels on active/hover */}
+                    {(isTarget || isHovered || isActive) && (
+                      <g transform={`translate(0, ${size + 14})`}>
+                        <rect
+                          x={-Math.min(100, node.label.length * 3.5 + 8)}
+                          y={-9}
+                          width={Math.min(200, node.label.length * 7 + 16)}
+                          height={16}
+                          rx={8}
+                          className="fill-popover/90 stroke-border/40 stroke-[0.5]"
+                        />
+                        <text
+                          textAnchor="middle"
+                          className="text-[9px] font-bold font-mono fill-popover-foreground pointer-events-none"
+                          y={2}
+                        >
+                          {node.label.length > 25 ? `${node.label.substring(0, 22)}...` : node.label}
+                        </text>
+                      </g>
+                    )}
+                  </g>
+                );
+              })}
+            </g>
           </svg>
 
-          {/* Simple Legend Overlay */}
-          <div className="absolute bottom-4 left-4 bg-background/80 backdrop-blur-md p-3 border rounded-2xl space-y-1 text-[9px] font-semibold text-muted-foreground/80 max-w-[140px] shadow-sm">
-            <div className="flex items-center gap-1.5"><div className="h-2 w-2 rounded-full bg-primary/10 border border-primary" />Target IoC</div>
-            <div className="flex items-center gap-1.5"><div className="h-2 w-2 rounded-full bg-muted/10 border border-muted-foreground" />Security Vendor</div>
-            <div className="flex items-center gap-1.5"><div className="h-2 w-2 rounded-full bg-indigo-500/10 border border-indigo-500" />Status Verdict</div>
-            <div className="flex items-center gap-1.5"><div className="h-2 w-2 rounded-full bg-rose-500/10 border border-rose-500" />Country</div>
-            <div className="flex items-center gap-1.5"><div className="h-2 w-2 rounded-full bg-amber-500/10 border border-amber-500" />ISP/Org</div>
-            <div className="flex items-center gap-1.5"><div className="h-2 w-2 rounded-full bg-purple-500/10 border border-purple-500" />ASN</div>
-            <div className="flex items-center gap-1.5"><div className="h-2 w-2 rounded-full bg-emerald-500/10 border border-emerald-500" />Open Port</div>
+          {/* Compact inline legend */}
+          <div className="absolute bottom-2 left-2 flex items-center gap-2 bg-black/40 backdrop-blur-md px-2.5 py-1.5 border border-white/[0.04] rounded-lg z-10">
+            {[
+              { color: "bg-primary", label: "Target" },
+              { color: "bg-muted-foreground", label: "Vendor" },
+              { color: "bg-indigo-500", label: "Verdict" },
+              { color: "bg-rose-500", label: "Country" },
+              { color: "bg-amber-500", label: "ISP" },
+              { color: "bg-purple-500", label: "ASN" },
+              { color: "bg-emerald-500", label: "Port" },
+            ].map(l => (
+              <div key={l.label} className="flex items-center gap-1">
+                <div className={`h-1.5 w-1.5 rounded-full ${l.color}`} />
+                <span className="text-[8px] font-semibold text-muted-foreground/50">{l.label}</span>
+              </div>
+            ))}
           </div>
         </div>
 
-        {/* Right Grid: Inspector Sidebar */}
-        <div className="lg:col-span-4 p-5 flex flex-col justify-between bg-muted/5 min-h-[300px]">
+        {/* Inspector Sidebar */}
+        <div className="lg:col-span-4 p-4 flex flex-col justify-between bg-white/[0.01] min-h-[300px]">
           {displayNode ? (
-            <div className="space-y-5">
-              <div className="space-y-1.5">
-                <Badge variant="outline" className="text-[10px] font-bold uppercase tracking-wider">
-                  {displayNode.type} Node Details
-                </Badge>
-                <h3 className="text-base font-bold font-mono break-all leading-tight text-foreground flex items-center justify-between gap-3">
-                  <span>{displayNode.label}</span>
-                  <Button 
-                    variant="ghost" 
-                    size="icon" 
-                    className="h-8 w-8 rounded-full hover:bg-muted"
-                    onClick={() => handleCopy(displayNode.value)}
-                  >
-                    <Copy className="h-3.5 w-3.5" />
-                  </Button>
+            <div className="space-y-3">
+              <div className="space-y-1">
+                <span className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground/40">{displayNode.type}</span>
+                <h3 className="text-sm font-bold font-mono break-all leading-tight text-foreground flex items-center justify-between gap-2">
+                  <span className="truncate">{displayNode.label}</span>
+                  <button className="p-1 rounded text-muted-foreground/30 hover:text-foreground shrink-0" onClick={() => handleCopy(displayNode.value)}>
+                    <Copy className="h-3 w-3" />
+                  </button>
                 </h3>
               </div>
 
@@ -643,8 +868,8 @@ export const ThreatCorrelationGraph = ({
             </div>
           )}
 
-          <div className="text-[10px] text-muted-foreground/60 text-center border-t border-border/40 pt-4 mt-6">
-            ThreatSumm4ry Correlation Graph Engine
+          <div className="text-[8px] text-muted-foreground/30 text-center border-t border-white/[0.04] pt-3 mt-4">
+            Correlation Engine
           </div>
         </div>
       </CardContent>

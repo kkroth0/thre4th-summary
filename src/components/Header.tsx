@@ -36,6 +36,7 @@ export function Header({ actions, logoAddon, onLogoClick, showBackButton = false
     { path: "/phishing-analyzer", label: language === "pt" ? "Análise de Phishing" : "Phishing Analyzer", icon: MailWarning },
     { path: "/newsletter", label: language === "pt" ? "Feed de Advisories" : "Advisory Feed", icon: Mail },
     { path: "/cves", label: language === "pt" ? "Painel de CVEs" : "CVE Dashboard", icon: Shield },
+    { path: "/features", label: language === "pt" ? "Funcionalidades" : "Features", icon: Terminal },
   ];
 
   const renderNavItem = (item: typeof navItems[0], isActive: boolean) => {
@@ -102,7 +103,7 @@ export function Header({ actions, logoAddon, onLogoClick, showBackButton = false
               onClick={handleLogoClick}
               className="flex items-center gap-2"
             >
-              <img src="/logo.png" alt="Logo" className="h-6 w-6 object-contain" />
+              <div className="h-6 w-6 rounded bg-indigo-600 flex items-center justify-center font-black text-white text-[10px] shadow-sm shadow-indigo-600/30 select-none shrink-0">T</div>
               <span className="font-bold tracking-tight text-xl bg-gradient-to-r from-primary via-primary/80 to-primary/50 bg-clip-text text-transparent hover:opacity-95 transition-all">
                 {t("appName") || "ThreatSumm4ry"}
               </span>
@@ -167,7 +168,7 @@ export function Header({ actions, logoAddon, onLogoClick, showBackButton = false
               onClick={handleLogoClick}
               className="flex items-center gap-2.5"
             >
-              <img src="/logo.png" alt="Logo" className="h-6 w-6 object-contain shrink-0" />
+              <div className="h-6 w-6 rounded bg-indigo-600 flex items-center justify-center font-black text-white text-[10px] shadow-sm shadow-indigo-600/30 select-none shrink-0">T</div>
               {!isCollapsed && (
                 <span className="font-bold tracking-tight text-[17px] bg-gradient-to-r from-primary via-primary/80 to-primary/50 bg-clip-text text-transparent hover:opacity-95 transition-all">
                   {t("appName") || "ThreatSumm4ry"}

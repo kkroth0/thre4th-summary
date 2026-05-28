@@ -85,7 +85,29 @@ const Newsletter = () => {
     const cached = localStorage.getItem("cached_cti_advisories");
     if (cached) {
       try {
-        setAdvisories(JSON.parse(cached));
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed)) {
+          // Schema/Integrity validation check (LOW-07)
+          const validated: Advisory[] = parsed.filter((item: any): item is Advisory => {
+            return (
+              item &&
+              typeof item === "object" &&
+              typeof item.title === "string" &&
+              typeof item.link === "string" &&
+              typeof item.pubDate === "string" &&
+              typeof item.description === "string" &&
+              typeof item.source === "string"
+            );
+          }).map(item => ({
+            title: item.title,
+            link: item.link,
+            pubDate: item.pubDate,
+            description: item.description,
+            source: item.source,
+            layer: typeof item.layer === "number" ? item.layer : undefined
+          }));
+          setAdvisories(validated);
+        }
       } catch (e) {
         console.error("Failed to parse cached advisories", e);
       }
