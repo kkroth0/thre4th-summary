@@ -1297,12 +1297,12 @@ const Index = () => {
 
           {/* Center Links */}
           <div className="flex items-center gap-5 flex-wrap justify-center">
-            <a
-              href="#features"
+            <Link
+              to="/features"
               className="text-xs font-semibold text-muted-foreground hover:text-foreground hover:underline underline-offset-4 transition-all duration-200"
             >
               {t('features') || 'Features'}
-            </a>
+            </Link>
             <Link
               to="/vendors"
               className="text-xs font-semibold text-muted-foreground hover:text-foreground hover:underline underline-offset-4 transition-all duration-200"

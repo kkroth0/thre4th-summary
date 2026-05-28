@@ -27,7 +27,27 @@ interface Advisory {
   description: string;
   source: string;
   layer?: number;
+  titlePt?: string;
+  descriptionPt?: string;
 }
+
+const translateText = async (text: string): Promise<string> => {
+  if (!text) return "";
+  const textToTranslate = text.length > 500 ? text.substring(0, 500) : text;
+  try {
+    const res = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(textToTranslate)}&langpair=en|pt`);
+    if (!res.ok) return text;
+    const data = await res.json();
+    let translated = data.responseData?.translatedText || text;
+    if (text.length > 500) {
+      translated += "...";
+    }
+    return translated;
+  } catch (err) {
+    console.error("Translation error:", err);
+    return text;
+  }
+};
 
 const Newsletter = () => {
   const { isCollapsed } = useSidebar();
@@ -39,6 +59,7 @@ const Newsletter = () => {
   const [selectedNews, setSelectedNews] = useState<Record<string, boolean>>({});
   const [loadingNews, setLoadingNews] = useState(true);
   const [newsError, setNewsError] = useState<string | null>(null);
+  const [translatingIds, setTranslatingIds] = useState<Record<string, boolean>>({});
   const [isDigestOpen, setIsDigestOpen] = useState(false);
   const [selectedLayer, setSelectedLayer] = useState<string>("all");
 
@@ -104,7 +125,9 @@ const Newsletter = () => {
             pubDate: item.pubDate,
             description: item.description,
             source: item.source,
-            layer: typeof item.layer === "number" ? item.layer : undefined
+            layer: typeof item.layer === "number" ? item.layer : undefined,
+            titlePt: typeof item.titlePt === "string" ? item.titlePt : undefined,
+            descriptionPt: typeof item.descriptionPt === "string" ? item.descriptionPt : undefined
           }));
           setAdvisories(validated);
         }
@@ -137,6 +160,13 @@ const Newsletter = () => {
           if (!seenKeys.has(key)) {
             merged.push(item);
             seenKeys.add(key);
+          } else {
+            const index = merged.findIndex(m => `${m.link}_${m.title}_${m.source}` === key);
+            if (index !== -1) {
+              if (merged[index].titlePt && !item.titlePt) item.titlePt = merged[index].titlePt;
+              if (merged[index].descriptionPt && !item.descriptionPt) item.descriptionPt = merged[index].descriptionPt;
+              merged[index] = { ...merged[index], ...item };
+            }
           }
         });
         
@@ -309,6 +339,67 @@ const Newsletter = () => {
       return true;
     });
   }, [advisories, selectedMonth, selectedYear, searchNews, selectedLayer]);
+
+  useEffect(() => {
+    if (language !== "pt") return;
+
+    const toTranslate = filteredAdvisories.filter(
+      item => !item.titlePt || !item.descriptionPt
+    );
+
+    if (toTranslate.length === 0) return;
+
+    let active = true;
+
+    const performTranslations = async () => {
+      const itemsToProcess = toTranslate.slice(0, 5);
+
+      for (const item of itemsToProcess) {
+        if (!active) break;
+        
+        const key = item.title;
+        setTranslatingIds(prev => ({ ...prev, [key]: true }));
+
+        try {
+          const [transTitle, transDesc] = await Promise.all([
+            item.titlePt ? Promise.resolve(item.titlePt) : translateText(item.title),
+            item.descriptionPt ? Promise.resolve(item.descriptionPt) : translateText(item.description)
+          ]);
+
+          if (!active) break;
+
+          setAdvisories(prev => {
+            const updated = prev.map(adv => {
+              if (adv.title === item.title && adv.source === item.source) {
+                return {
+                  ...adv,
+                  titlePt: transTitle || item.title,
+                  descriptionPt: transDesc || item.description
+                };
+              }
+              return adv;
+            });
+            localStorage.setItem("cached_cti_advisories", JSON.stringify(updated));
+            return updated;
+          });
+        } catch (e) {
+          console.error("Failed to translate advisory", item.title, e);
+        } finally {
+          setTranslatingIds(prev => {
+            const next = { ...prev };
+            delete next[key];
+            return next;
+          });
+        }
+      }
+    };
+
+    performTranslations();
+
+    return () => {
+      active = false;
+    };
+  }, [language, filteredAdvisories]);
 
   const selectedCount = Object.values(selectedNews).filter(Boolean).length;
   const selectedAdvisoriesList = advisories.filter(item => selectedNews[item.title]);
@@ -589,9 +680,9 @@ const Newsletter = () => {
                                 }`}>
                                   {item.source}
                                 </span>
-                                <div className="title font-bold text-base text-foreground">{item.title}</div>
+                                <div className="title font-bold text-base text-foreground">{language === "pt" ? (item.titlePt || item.title) : item.title}</div>
                                 <div className="date text-xs text-muted-foreground">{new Date(item.pubDate).toLocaleString()}</div>
-                                <div className="description text-sm text-muted-foreground leading-relaxed">{renderHighlightedDescription(item.description)}</div>
+                                <div className="description text-sm text-muted-foreground leading-relaxed">{renderHighlightedDescription(language === "pt" ? (item.descriptionPt || item.description) : item.description)}</div>
                               </div>
                             ))}
                           </div>
@@ -681,14 +772,25 @@ const Newsletter = () => {
                             </span>
                           </div>
                           
-                          <h3 className="font-bold text-lg text-foreground hover:text-primary transition-colors">
+                          <h3 className="font-bold text-lg text-foreground hover:text-primary transition-colors flex items-center gap-2 flex-wrap">
                             <a href={item.link} target="_blank" rel="noopener noreferrer">
-                              {item.title}
+                              {language === "pt" ? (item.titlePt || item.title) : item.title}
                             </a>
+                            {translatingIds[item.title] && (
+                              <Badge variant="outline" className="text-[9px] px-1.5 py-px bg-purple-500/10 text-purple-400 border-purple-500/20 font-medium tracking-wide animate-pulse">
+                                <RefreshCw className="h-2 w-2 animate-spin mr-1 inline" />
+                                Traduzindo...
+                              </Badge>
+                            )}
+                            {language === "pt" && item.titlePt && !translatingIds[item.title] && (
+                              <Badge variant="outline" className="text-[9px] px-1.5 py-px bg-purple-500/5 text-purple-400 border-purple-500/15 font-normal tracking-wide">
+                                Traduzido
+                              </Badge>
+                            )}
                           </h3>
                           
                           <div className="text-sm text-muted-foreground leading-relaxed">
-                            {renderHighlightedDescription(item.description)}
+                            {renderHighlightedDescription(language === "pt" ? (item.descriptionPt || item.description) : item.description)}
                           </div>
 
                           <div className="pt-2 flex items-center justify-between">

@@ -44,6 +44,160 @@ const parseCountry = (s: string) => {
     return { name: s, code: "" };
 };
 
+const getVendorDomain = (name: string) => {
+    switch (name) {
+        case "VirusTotal": return "virustotal.com";
+        case "AbuseIPDB": return "abuseipdb.com";
+        case "AlienVault OTX": return "alienvault.com";
+        case "Shodan": return "shodan.io";
+        case "Censys": return "censys.io";
+        case "WHOIS": return "who.is";
+        case "IP Geolocation": return "ip-api.com";
+        case "URLhaus": return "abuse.ch";
+        case "MalwareBazaar": return "abuse.ch";
+        case "Google Safe Browsing": return "google.com";
+        case "PhishTank": return "phishtank.com";
+        case "Pulsedive": return "pulsedive.com";
+        case "Hybrid Analysis": return "hybrid-analysis.com";
+        case "CIRCL hashlookup": return "circl.lu";
+        case "Criminal IP": return "criminalip.io";
+        case "MetaDefender": return "opswat.com";
+        case "PhishStats": return "phishstats.info";
+        case "Ransomware.live": return "ransomware.live";
+        case "OpenPhish": return "openphish.com";
+        case "DShield": return "dshield.org";
+        case "Team Cymru": return "team-cymru.com";
+        default: return "google.com";
+    }
+};
+
+const getVendorShortName = (name: string) => {
+    switch (name) {
+        case "VirusTotal": return "VT";
+        case "AbuseIPDB": return "Abuse";
+        case "AlienVault OTX": return "OTX";
+        case "Google Safe Browsing": return "Safe Browsing";
+        case "Hybrid Analysis": return "Hybrid";
+        default: return name;
+    }
+};
+
+const getVendorDisplayInfo = (vendorName: string, data: any) => {
+    if (!data || Object.keys(data).length === 0 || data.error) return null;
+
+    let scoreText = "";
+    let isThreat = false;
+    let isSafe = true;
+
+    switch (vendorName) {
+        case "VirusTotal": {
+            const rate = data["Detection Rate"];
+            if (rate) {
+                const parts = rate.split("/");
+                const detected = parseInt(parts[0]) || 0;
+                scoreText = rate;
+                isThreat = detected > 0;
+                isSafe = detected === 0;
+            }
+            break;
+        }
+        case "AbuseIPDB": {
+            const conf = data["Abuse Confidence Score"];
+            if (conf !== undefined) {
+                const num = Number(conf) || 0;
+                scoreText = `${num}%`;
+                isThreat = num > 20;
+                isSafe = num <= 10;
+            }
+            break;
+        }
+        case "AlienVault OTX": {
+            const pulses = data["Pulse Count"];
+            if (pulses !== undefined) {
+                const num = Number(pulses) || 0;
+                scoreText = `${num} pulse${num !== 1 ? "s" : ""}`;
+                isThreat = num > 0;
+                isSafe = num === 0;
+            }
+            break;
+        }
+        case "Shodan": {
+            const vulns = data["Vulnerabilities"];
+            const ports = data["Total Ports"];
+            if (vulns && vulns !== "0 CVEs") {
+                scoreText = vulns;
+                isThreat = true;
+                isSafe = false;
+            } else if (ports !== undefined && ports > 0) {
+                scoreText = `${ports} port${ports !== 1 ? "s" : ""}`;
+                isThreat = false;
+                isSafe = true;
+            }
+            break;
+        }
+        case "Pulsedive": {
+            const risk = data["Risk"];
+            if (risk) {
+                scoreText = risk.toUpperCase();
+                isThreat = risk === "high" || risk === "medium";
+                isSafe = risk === "low" || risk === "none";
+            }
+            break;
+        }
+        case "Criminal IP": {
+            const score = data["Score"];
+            if (score !== undefined) {
+                const num = Number(score) || 0;
+                scoreText = `${num}/100`;
+                isThreat = num > 50;
+                isSafe = num <= 20;
+            }
+            break;
+        }
+        case "Hybrid Analysis": {
+            const score = data["Threat Score"];
+            if (score !== undefined) {
+                const num = Number(score) || 0;
+                scoreText = `${num}/100`;
+                isThreat = num > 50;
+                isSafe = num <= 20;
+            }
+            break;
+        }
+        default: {
+            if (data["Score"] !== undefined) {
+                scoreText = String(data["Score"]);
+            } else if (data["Fraud Score"] !== undefined) {
+                scoreText = `${data["Fraud Score"]}%`;
+                const num = Number(data["Fraud Score"]) || 0;
+                isThreat = num > 50;
+                isSafe = num <= 20;
+            } else if (data["Status"]) {
+                scoreText = String(data["Status"]);
+                const statusLower = scoreText.toLowerCase();
+                isThreat = statusLower.includes("malicious") || statusLower.includes("suspicious") || statusLower.includes("unsafe") || statusLower.includes("high risk");
+                isSafe = statusLower.includes("safe") || statusLower.includes("clean") || statusLower.includes("low risk");
+            }
+            break;
+        }
+    }
+
+    if (!scoreText) return null;
+
+    let colorClass = "text-emerald-400";
+    if (isThreat) {
+        colorClass = "text-red-400";
+    } else if (!isSafe) {
+        colorClass = "text-amber-400";
+    }
+
+    return {
+        scoreText,
+        colorClass,
+    };
+};
+
+
 /* ── Component ───────────────────────────────────────────────────── */
 interface MultiIpSummaryProps {
     results: ThreatIntelligenceResult[];
@@ -189,21 +343,38 @@ export const MultiIpSummary = ({ results, onViewDetails }: MultiIpSummaryProps) 
                         </div>
 
                         {/* Inline stats */}
-                        <div className="hidden sm:flex items-center gap-3 shrink-0">
-                            {/* VT */}
-                            {vtScore && (
-                                <div className="flex items-center gap-1.5 text-[10px]">
-                                    <span className="text-muted-foreground/40 font-semibold">VT</span>
-                                    <span className={`font-mono font-bold ${parseInt(vtScore.split("/")[0]) > 0 ? "text-red-400" : "text-emerald-400"}`}>{vtScore}</span>
-                                </div>
-                            )}
-                            {/* AbuseIPDB */}
-                            {abuseScore !== null && (
-                                <div className="flex items-center gap-1.5 text-[10px]">
-                                    <span className="text-muted-foreground/40 font-semibold">Abuse</span>
-                                    <span className={`font-mono font-bold ${Number(abuseScore) > 50 ? "text-red-400" : Number(abuseScore) > 10 ? "text-amber-400" : "text-emerald-400"}`}>{abuseScore}%</span>
-                                </div>
-                            )}
+                        <div className="hidden sm:flex items-center gap-2 flex-wrap max-w-[45%] justify-end shrink-0">
+                            {result.vendorData.map((vendor) => {
+                                if (vendor.name === "IP Geolocation" || vendor.name === "WHOIS") return null;
+                                if (vendor.error || !vendor.data) return null;
+
+                                const info = getVendorDisplayInfo(vendor.name, vendor.data);
+                                if (!info) return null;
+
+                                const domain = getVendorDomain(vendor.name);
+                                const shortName = getVendorShortName(vendor.name);
+
+                                return (
+                                    <div
+                                        key={vendor.name}
+                                        className="flex items-center gap-1.5 bg-white/[0.02] border border-white/[0.04] px-2 py-0.5 rounded-md text-[9px] hover:bg-white/[0.05] transition-colors"
+                                        title={`${vendor.name}: ${info.scoreText}`}
+                                    >
+                                        <img
+                                            src={`https://www.google.com/s2/favicons?sz=32&domain=${domain}`}
+                                            alt=""
+                                            className="w-3.5 h-3.5 rounded-sm object-contain shrink-0"
+                                            onError={(e) => {
+                                                (e.target as HTMLElement).style.display = "none";
+                                            }}
+                                        />
+                                        <span className="text-muted-foreground/60 font-semibold">{shortName}</span>
+                                        <span className={`font-mono font-bold ${info.colorClass}`}>
+                                            {info.scoreText}
+                                        </span>
+                                    </div>
+                                );
+                            })}
                         </div>
 
                         {/* Detection count */}
