@@ -182,6 +182,7 @@ npm run deploy
 2. **Add Environment Variables:**
    - Go to the "Environment" tab.
    - Add all your API keys (without `VITE_` prefix if you updated them, or map them in `server/index.js`):
+     - `SESSION_SECRET` (generate using: `node -e "console.log(require('crypto').randomBytes(64).toString('hex'))"`)
      - `VIRUSTOTAL_API_KEY`
      - `ABUSEIPDB_API_KEY`
      - ...and so on.
@@ -335,6 +336,9 @@ npm run deploy
 Create `.env` file (NEVER commit this):
 
 ```env
+# Session Security
+SESSION_SECRET=your_generated_64_character_hex_string
+
 # Threat Intelligence API Keys
 VITE_VIRUSTOTAL_API_KEY=your_key_here
 VITE_ABUSEIPDB_API_KEY=your_key_here

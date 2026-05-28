@@ -26,45 +26,6 @@ app.use(helmet({
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Session and Auth Configuration
-const SESSION_SECRET = process.env.SESSION_SECRET;
-if (!SESSION_SECRET) {
-    console.error('FATAL: SESSION_SECRET environment variable is required. Generate one with: node -e "console.log(require(\'crypto\').randomBytes(64).toString(\'hex\'))"');
-    process.exit(1);
-}
-const GITHUB_CLIENT_ID = process.env.GITHUB_CLIENT_ID || '';
-const GITHUB_CLIENT_SECRET = process.env.GITHUB_CLIENT_SECRET || '';
-const ALLOW_MOCK_AUTH = process.env.ALLOW_MOCK_AUTH !== 'false';
-const TOKEN_EXPIRY_MS = 8 * 60 * 60 * 1000; // 8 hours
-
-// Token utilities
-function generateToken(payload) {
-    const tokenPayload = { ...payload, iat: Date.now(), exp: Date.now() + TOKEN_EXPIRY_MS };
-    const data = Buffer.from(JSON.stringify(tokenPayload)).toString('base64url');
-    const signature = crypto.createHmac('sha256', SESSION_SECRET).update(data).digest('base64url');
-    return `${data}.${signature}`;
-}
-
-function verifyToken(token) {
-    if (!token) return null;
-    const parts = token.split('.');
-    if (parts.length !== 2) return null;
-    const [data, signature] = parts;
-    const expectedSignature = crypto.createHmac('sha256', SESSION_SECRET).update(data).digest('base64url');
-    // Timing-safe comparison to prevent timing attacks
-    const sigBuffer = Buffer.from(signature, 'base64url');
-    const expectedBuffer = Buffer.from(expectedSignature, 'base64url');
-    if (sigBuffer.length !== expectedBuffer.length || !crypto.timingSafeEqual(sigBuffer, expectedBuffer)) return null;
-    try {
-        const payload = JSON.parse(Buffer.from(data, 'base64url').toString('utf8'));
-        // Check token expiration
-        if (payload.exp && Date.now() > payload.exp) return null;
-        return payload;
-    } catch {
-        return null;
-    }
-}
-
 // CORS Config
 const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',') || ['http://localhost:8080'];
 app.use(cors({
@@ -277,21 +238,6 @@ const escapeHtml = (unsafe) => {
          .replace(/'/g, "&#039;");
 };
 
-// Auth middleware
-const requireAuth = (req, res, next) => {
-    const authHeader = req.headers.authorization;
-    if (!authHeader?.startsWith('Bearer ')) {
-        return res.status(401).json({ error: 'Authentication required' });
-    }
-    const token = authHeader.split(' ')[1];
-    const payload = verifyToken(token);
-    if (!payload) {
-        return res.status(401).json({ error: 'Invalid or expired token' });
-    }
-    req.user = payload;
-    next();
-};
-
 // Helper to extract quota info
 const sendResponseWithQuota = (res, axiosResponse) => {
     const headers = axiosResponse.headers;
@@ -312,7 +258,7 @@ const sendResponseWithQuota = (res, axiosResponse) => {
 // --- API Endpoints ---
 
 // VirusTotal
-app.post('/api/virustotal', requireAuth, scanLimiter, async (req, res) => {
+app.post('/api/virustotal', scanLimiter, async (req, res) => {
     const { query } = req.body;
     if (!process.env.VIRUSTOTAL_API_KEY) return res.status(500).json({ error: "API Key missing" });
 
@@ -337,7 +283,7 @@ app.post('/api/virustotal', requireAuth, scanLimiter, async (req, res) => {
 });
 
 // AbuseIPDB
-app.post('/api/abuseipdb', requireAuth, scanLimiter, async (req, res) => {
+app.post('/api/abuseipdb', scanLimiter, async (req, res) => {
     const { query } = req.body;
     if (!process.env.ABUSEIPDB_API_KEY) return res.status(500).json({ error: "API Key missing" });
 
@@ -362,7 +308,7 @@ app.post('/api/abuseipdb', requireAuth, scanLimiter, async (req, res) => {
 });
 
 // AbuseIPDB Check-Block
-app.post('/api/abuseipdb/check-block', requireAuth, scanLimiter, async (req, res) => {
+app.post('/api/abuseipdb/check-block', scanLimiter, async (req, res) => {
     const { query } = req.body;
     if (!process.env.ABUSEIPDB_API_KEY) return res.status(500).json({ error: "API Key missing" });
     if (!query) return res.status(400).json({ error: "Network parameter 'query' is required" });
@@ -384,7 +330,7 @@ app.post('/api/abuseipdb/check-block', requireAuth, scanLimiter, async (req, res
 });
 
 // AlienVault OTX
-app.post('/api/alienvault', requireAuth, scanLimiter, async (req, res) => {
+app.post('/api/alienvault', scanLimiter, async (req, res) => {
     const { query } = req.body;
     const headers = {};
     if (process.env.ALIENVAULT_API_KEY) headers["X-OTX-API-KEY"] = process.env.ALIENVAULT_API_KEY;
@@ -408,7 +354,7 @@ app.post('/api/alienvault', requireAuth, scanLimiter, async (req, res) => {
 });
 
 // Shodan
-app.post('/api/shodan', requireAuth, scanLimiter, async (req, res) => {
+app.post('/api/shodan', scanLimiter, async (req, res) => {
     const { query } = req.body;
     if (!process.env.SHODAN_API_KEY) return res.status(500).json({ error: "API Key missing" });
 
@@ -428,7 +374,7 @@ app.post('/api/shodan', requireAuth, scanLimiter, async (req, res) => {
 });
 
 // URLhaus
-app.post('/api/urlhaus', requireAuth, scanLimiter, async (req, res) => {
+app.post('/api/urlhaus', scanLimiter, async (req, res) => {
     const { query } = req.body;
     try {
         const queryType = detectQueryType(query);
@@ -453,7 +399,7 @@ app.post('/api/urlhaus', requireAuth, scanLimiter, async (req, res) => {
 });
 
 // MalwareBazaar
-app.post('/api/malwarebazaar', requireAuth, scanLimiter, async (req, res) => {
+app.post('/api/malwarebazaar', scanLimiter, async (req, res) => {
     const { query } = req.body;
     try {
         const queryType = detectQueryType(query);
@@ -478,7 +424,7 @@ app.post('/api/malwarebazaar', requireAuth, scanLimiter, async (req, res) => {
 });
 
 // PhishTank
-app.post('/api/phishtank', requireAuth, scanLimiter, async (req, res) => {
+app.post('/api/phishtank', scanLimiter, async (req, res) => {
     const { query } = req.body;
     try {
         const queryType = detectQueryType(query);
@@ -510,7 +456,7 @@ app.post('/api/phishtank', requireAuth, scanLimiter, async (req, res) => {
 });
 
 // Pulsedive
-app.post('/api/pulsedive', requireAuth, scanLimiter, async (req, res) => {
+app.post('/api/pulsedive', scanLimiter, async (req, res) => {
     const { query } = req.body;
     const key = process.env.PULSEDIVE_API_KEY || "free";
     try {
@@ -531,7 +477,7 @@ app.post('/api/pulsedive', requireAuth, scanLimiter, async (req, res) => {
 });
 
 // Hybrid Analysis
-app.post('/api/hybridanalysis', requireAuth, scanLimiter, async (req, res) => {
+app.post('/api/hybridanalysis', scanLimiter, async (req, res) => {
     const { query } = req.body;
     if (!process.env.HYBRID_ANALYSIS_API_KEY) return res.status(500).json({ error: "API Key missing" });
 
@@ -561,7 +507,7 @@ app.post('/api/hybridanalysis', requireAuth, scanLimiter, async (req, res) => {
 });
 
 // CIRCL hashlookup
-app.post('/api/circl', requireAuth, scanLimiter, async (req, res) => {
+app.post('/api/circl', scanLimiter, async (req, res) => {
     const { query } = req.body;
     try {
         const queryType = detectQueryType(query);
@@ -577,7 +523,7 @@ app.post('/api/circl', requireAuth, scanLimiter, async (req, res) => {
 });
 
 // Criminal IP
-app.post('/api/criminalip', requireAuth, scanLimiter, async (req, res) => {
+app.post('/api/criminalip', scanLimiter, async (req, res) => {
     const { query } = req.body;
     if (!process.env.CRIMINALIP_API_KEY) return res.status(500).json({ error: "API Key missing" });
 
@@ -602,7 +548,7 @@ app.post('/api/criminalip', requireAuth, scanLimiter, async (req, res) => {
 });
 
 // MetaDefender
-app.post('/api/metadefender', requireAuth, scanLimiter, async (req, res) => {
+app.post('/api/metadefender', scanLimiter, async (req, res) => {
     const { query } = req.body;
     if (!process.env.METADEFENDER_API_KEY) return res.status(500).json({ error: "API Key missing" });
 
@@ -626,7 +572,7 @@ app.post('/api/metadefender', requireAuth, scanLimiter, async (req, res) => {
 });
 
 // PhishStats
-app.post('/api/phishstats', requireAuth, scanLimiter, async (req, res) => {
+app.post('/api/phishstats', scanLimiter, async (req, res) => {
     const { query } = req.body;
     try {
         const queryType = detectQueryType(query);
@@ -648,7 +594,7 @@ app.post('/api/phishstats', requireAuth, scanLimiter, async (req, res) => {
 });
 
 // Ransomware.live
-app.post('/api/ransomwarelive', requireAuth, scanLimiter, async (req, res) => {
+app.post('/api/ransomwarelive', scanLimiter, async (req, res) => {
     try {
         const response = await axios.get(`https://api.ransomware.live/recentvictims`);
         res.json(response.data);
@@ -659,7 +605,7 @@ app.post('/api/ransomwarelive', requireAuth, scanLimiter, async (req, res) => {
 });
 
 // WHOIS
-app.post('/api/whois', requireAuth, scanLimiter, async (req, res) => {
+app.post('/api/whois', scanLimiter, async (req, res) => {
     const { query } = req.body;
     try {
         const queryType = detectQueryType(query);
@@ -681,7 +627,7 @@ app.post('/api/whois', requireAuth, scanLimiter, async (req, res) => {
 });
 
 // IP Geolocation (Mitigated HTTP/No TLS)
-app.post('/api/ipgeo', requireAuth, scanLimiter, async (req, res) => {
+app.post('/api/ipgeo', scanLimiter, async (req, res) => {
     const { query } = req.body;
     try {
         const queryType = detectQueryType(query);
@@ -728,7 +674,7 @@ app.post('/api/ipgeo', requireAuth, scanLimiter, async (req, res) => {
 });
 
 // Generic DNSBL Endpoint (Whitelist check added)
-app.post('/api/dnsbl', requireAuth, scanLimiter, async (req, res) => {
+app.post('/api/dnsbl', scanLimiter, async (req, res) => {
     const { query, provider } = req.body;
     try {
         const queryType = detectQueryType(query);
@@ -798,7 +744,7 @@ app.post('/api/dnsbl', requireAuth, scanLimiter, async (req, res) => {
 });
 
 // Generic DNSBL Batch Endpoint
-app.post('/api/dnsbl/batch', requireAuth, scanLimiter, async (req, res) => {
+app.post('/api/dnsbl/batch', scanLimiter, async (req, res) => {
     const { query, providers } = req.body;
     try {
         const queryType = detectQueryType(query);
@@ -874,7 +820,7 @@ app.post('/api/dnsbl/batch', requireAuth, scanLimiter, async (req, res) => {
 });
 
 // OpenPhish
-app.post('/api/openphish', requireAuth, scanLimiter, async (req, res) => {
+app.post('/api/openphish', scanLimiter, async (req, res) => {
     const { query } = req.body;
     try {
         const queryType = detectQueryType(query);
@@ -913,7 +859,7 @@ app.post('/api/openphish', requireAuth, scanLimiter, async (req, res) => {
 });
 
 // DShield (SANS ISC)
-app.post('/api/dshield', requireAuth, scanLimiter, async (req, res) => {
+app.post('/api/dshield', scanLimiter, async (req, res) => {
     const { query } = req.body;
     try {
         const queryType = detectQueryType(query);
@@ -929,7 +875,7 @@ app.post('/api/dshield', requireAuth, scanLimiter, async (req, res) => {
 });
 
 // Team Cymru
-app.post('/api/teamcymru', requireAuth, scanLimiter, async (req, res) => {
+app.post('/api/teamcymru', scanLimiter, async (req, res) => {
     const { query } = req.body;
     try {
         const queryType = detectQueryType(query);
@@ -980,7 +926,7 @@ app.post('/api/teamcymru', requireAuth, scanLimiter, async (req, res) => {
 });
 
 // Censys (Platform API v3)
-app.post('/api/censys', requireAuth, scanLimiter, async (req, res) => {
+app.post('/api/censys', scanLimiter, async (req, res) => {
     const { query } = req.body;
     if (!process.env.CENSYS_API_KEY) return res.status(500).json({ error: "API Key missing" });
 
@@ -1214,7 +1160,7 @@ async function refreshNewsletterFeed() {
 }
 
 // CTI News feed endpoint
-app.get('/api/newsletter', requireAuth, async (req, res) => {
+app.get('/api/newsletter', async (req, res) => {
     try {
         if (!memoryCache.newsletter.data) {
             // Cold start fallback
@@ -1227,108 +1173,8 @@ app.get('/api/newsletter', requireAuth, async (req, res) => {
     }
 });
 
-// --- Authentication Endpoints ---
-
-// Check Auth Config
-app.get('/api/auth/config', (req, res) => {
-    res.json({
-        githubConfigured: !!(GITHUB_CLIENT_ID && GITHUB_CLIENT_SECRET),
-        clientId: GITHUB_CLIENT_ID,
-        allowMock: ALLOW_MOCK_AUTH
-    });
-});
-
-// GitHub OAuth Login/Exchange code
-app.post('/api/auth/github', async (req, res) => {
-    const { code } = req.body;
-    if (!code) {
-        return res.status(400).json({ error: 'Code parameter is required' });
-    }
-
-    if (!GITHUB_CLIENT_ID || !GITHUB_CLIENT_SECRET) {
-        return res.status(500).json({ error: 'GitHub OAuth is not configured on the server' });
-    }
-
-    try {
-        // Exchange code for token
-        const tokenResponse = await axios.post('https://github.com/login/oauth/access_token', {
-            client_id: GITHUB_CLIENT_ID,
-            client_secret: GITHUB_CLIENT_SECRET,
-            code
-        }, {
-            headers: {
-                Accept: 'application/json'
-            }
-        });
-
-        const { access_token, error: oauthError } = tokenResponse.data;
-        if (oauthError) {
-            throw new Error(`GitHub token exchange failed: ${oauthError}`);
-        }
-
-        // Fetch user profile info
-        const userResponse = await axios.get('https://api.github.com/user', {
-            headers: {
-                Authorization: `token ${access_token}`
-            }
-        });
-
-        const githubUser = userResponse.data;
-        const user = {
-            username: githubUser.login,
-            name: githubUser.name || githubUser.login,
-            avatar_url: githubUser.avatar_url,
-            id: githubUser.id
-        };
-
-        const token = generateToken(user);
-        res.json({ token, user });
-    } catch (err) {
-        console.error('GitHub Auth Error:', err.message);
-        res.status(401).json({ error: 'GitHub authentication failed' });
-    }
-});
-
-// Mock Auth endpoint for development
-app.post('/api/auth/mock', (req, res) => {
-    if (!ALLOW_MOCK_AUTH) {
-        return res.status(403).json({ error: 'Mock authentication is disabled' });
-    }
-    const user = {
-        username: 'mock_security_analyst',
-        name: 'Mock Analyst (Dev Mode)',
-        avatar_url: 'https://avatars.githubusercontent.com/u/9919?v=4',
-        id: 999999
-    };
-    const token = generateToken(user);
-    res.json({ token, user });
-});
-
-// Get profile details
-app.get('/api/auth/me', (req, res) => {
-    const authHeader = req.headers.authorization;
-    if (!authHeader?.startsWith('Bearer ')) {
-        return res.json({ authenticated: false, user: null });
-    }
-    const token = authHeader.split(' ')[1];
-    const payload = verifyToken(token);
-    if (!payload) {
-        return res.json({ authenticated: false, user: null });
-    }
-    res.json({
-        authenticated: true,
-        user: {
-            username: payload.username,
-            name: payload.name,
-            avatar_url: payload.avatar_url,
-            id: payload.id
-        }
-    });
-});
-
-
 // Latest CVEs from CIRCL
-app.get('/api/cves/recent', requireAuth, async (req, res) => {
+app.get('/api/cves/recent', async (req, res) => {
     const now = Date.now();
     if (memoryCache.recentCves.data && memoryCache.recentCves.expiresAt > now) {
         return res.json(memoryCache.recentCves.data);
@@ -1494,7 +1340,7 @@ app.get('/api/cves/recent', requireAuth, async (req, res) => {
 });
 
 // Exploited CVEs from CISA KEV
-app.get('/api/cves/exploited', requireAuth, async (req, res) => {
+app.get('/api/cves/exploited', async (req, res) => {
     const now = Date.now();
     if (memoryCache.exploitedCves.data && memoryCache.exploitedCves.expiresAt > now) {
         return res.json(memoryCache.exploitedCves.data);
@@ -1519,7 +1365,7 @@ app.get('/api/cves/exploited', requireAuth, async (req, res) => {
 });
 
 // DNS Record Lookup
-app.post('/api/dns/lookup', requireAuth, scanLimiter, async (req, res) => {
+app.post('/api/dns/lookup', scanLimiter, async (req, res) => {
     const { query } = req.body;
     try {
         const sanitized = sanitizeQuery(query, 'domain');
@@ -1576,7 +1422,7 @@ app.post('/api/dns/lookup', requireAuth, scanLimiter, async (req, res) => {
 });
 
 // Vendors API Status
-app.get('/api/vendors/status', requireAuth, (req, res) => {
+app.get('/api/vendors/status', (req, res) => {
     const status = {
         "VirusTotal": !!process.env.VIRUSTOTAL_API_KEY,
         "AbuseIPDB": !!process.env.ABUSEIPDB_API_KEY,
