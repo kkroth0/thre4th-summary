@@ -418,7 +418,7 @@ const DnsblCheck = () => {
                                                         />
                                                         <div 
                                                             style={{ width: `${Math.max(0, (latencyStats.normal / totalChecked) * 100)}%` }} 
-                                                            className="bg-indigo-500/80 transition-all duration-300"
+                                                            className="bg-primary/80 transition-all duration-300"
                                                             title={`Normal (500-1000ms): ${latencyStats.normal}`}
                                                         />
                                                         <div 
@@ -446,7 +446,7 @@ const DnsblCheck = () => {
                                                 <span className="font-bold font-mono">{latencyStats.fast}</span>
                                             </div>
                                             <div className="flex items-center gap-1.5">
-                                                <span className="h-2 w-2 rounded-full bg-indigo-500" />
+                                                <span className="h-2 w-2 rounded-full bg-primary" />
                                                 <span className="font-medium text-muted-foreground">{language === 'pt' ? "Normal (0.5-1s):" : "Normal (0.5-1s):"}</span>
                                                 <span className="font-bold font-mono">{latencyStats.normal}</span>
                                             </div>

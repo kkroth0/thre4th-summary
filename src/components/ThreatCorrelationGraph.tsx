@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect, useRef } from "react";
 import { 
   Globe, Shield, AlertTriangle, Database, Info, Copy, Server, Link2, ExternalLink,
-  ZoomIn, ZoomOut, Maximize2
+  ZoomIn, ZoomOut, Maximize2, Network, Terminal, Activity
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -29,7 +29,7 @@ interface ThreatCorrelationGraphProps {
 interface GraphNode {
   id: string;
   label: string;
-  type: 'target' | 'vendor' | 'country' | 'isp' | 'asn' | 'port' | 'verdict' | 'misc';
+  type: 'target' | 'vendor' | 'country' | 'isp' | 'asn' | 'port' | 'verdict' | 'misc' | 'category';
   x: number;
   y: number;
   vx?: number;
@@ -115,82 +115,69 @@ export const ThreatCorrelationGraph = ({
     const countryMap: Record<string, { rawLabel: string; vendors: string[] }> = {};
     const ispMap: Record<string, { rawLabel: string; vendors: string[] }> = {};
     const portMap: Record<string, { rawLabel: string; vendors: string[] }> = {};
-    const verdictMap: Record<string, { rawLabel: string; vendors: string[] }> = {};
+    const verdictMap: Record<string, { rawLabel: string; vendors: string[]; status: 'safe' | 'suspicious' | 'malicious' | 'muted' }> = {};
 
     const activeVendors = vendorData.filter(v => Object.keys(v.data).length > 0 || v.error);
 
-    // 2. Position Vendor Nodes in a circle
-    const numVendors = activeVendors.length;
-    const r1 = 120; // Inner circle radius
-
-    activeVendors.forEach((vendor, idx) => {
-      const angle = (2 * Math.PI * idx) / numVendors;
-      const vx = cx + r1 * Math.cos(angle);
-      const vy = cy + r1 * Math.sin(angle);
-      const vendorNodeId = `vendor-${vendor.name}`;
-
-      nodes.push({
-        id: vendorNodeId,
-        label: vendor.name,
-        type: "vendor",
-        value: vendor.name,
-        x: vx,
-        y: vy,
-        connectedVendors: [vendor.name]
-      });
-
-      links.push({
-        source: "target",
-        target: vendorNodeId,
-        type: "vendor-link"
-      });
-
+    activeVendors.forEach((vendor) => {
       if (vendor.error) {
-        verdictMap["error"] = verdictMap["error"] || { rawLabel: "Error", vendors: [] };
-        verdictMap["error"].vendors.push(vendor.name);
+        verdictMap[vendor.name] = { 
+          rawLabel: `${vendor.name}: Error`, 
+          vendors: [vendor.name],
+          status: 'muted'
+        };
         return;
       }
 
       const data = vendor.data;
 
       // Extract Status / Verdict
-      const status = data["Status"] || data["Verdict"] || data["Risk"];
+      const status = data["Status"] || data["Verdict"] || data["Risk"] || data["Abuse Score"] || data["Detections"];
+      let verdictStatus: 'safe' | 'suspicious' | 'malicious' | 'muted' = 'safe';
+      let statusText = "Clean";
       if (status) {
         const lowerStatus = String(status).toLowerCase();
-        let key = "clean";
-        let label = "Clean / Safe";
-        if (lowerStatus.includes("malicious") || lowerStatus.includes("unsafe") || lowerStatus.includes("phishing") || lowerStatus.includes("high") || lowerStatus.includes("malware") || lowerStatus.includes("sample")) {
-          key = "malicious";
-          label = "Malicious / Danger";
-        } else if (lowerStatus.includes("suspicious") || lowerStatus.includes("risk") || lowerStatus.includes("medium")) {
-          key = "suspicious";
-          label = "Suspicious / Warning";
+        if (lowerStatus.includes("malicious") || lowerStatus.includes("unsafe") || lowerStatus.includes("phishing") || lowerStatus.includes("danger") || lowerStatus.includes("malware") || lowerStatus.includes("sample")) {
+          verdictStatus = 'malicious';
+          statusText = language === "pt" ? "Malicioso" : "Malicious";
+        } else if (lowerStatus.includes("suspicious") || lowerStatus.includes("risk") || lowerStatus.includes("medium") || lowerStatus.includes("warning") || (typeof status === 'number' && status > 0) || (lowerStatus.includes("%") && parseInt(lowerStatus) > 0)) {
+          verdictStatus = 'suspicious';
+          statusText = language === "pt" ? "Suspeito" : "Suspicious";
+        } else {
+          statusText = language === "pt" ? "Limpo" : "Clean";
         }
-        
-        verdictMap[key] = verdictMap[key] || { rawLabel: label, vendors: [] };
-        if (!verdictMap[key].vendors.includes(vendor.name)) {
-          verdictMap[key].vendors.push(vendor.name);
-        }
+      } else {
+        statusText = language === "pt" ? "Limpo" : "Clean";
       }
+
+      verdictMap[vendor.name] = {
+        rawLabel: `${vendor.name}: ${statusText}`,
+        vendors: [vendor.name],
+        status: verdictStatus
+      };
 
       // Extract ASN
       const asnVal = data["ASN"] || data["AS"] || data["AS Owner"];
       const asnNum = extractAsnNumber(asnVal);
       if (asnNum) {
-        asnMap[asnNum] = asnMap[asnNum] || { rawLabel: `ASN ${asnNum}`, vendors: [] };
+        asnMap[asnNum] = asnMap[asnNum] || { rawLabel: `AS${asnNum}`, vendors: [] };
         if (!asnMap[asnNum].vendors.includes(vendor.name)) {
           asnMap[asnNum].vendors.push(vendor.name);
         }
       }
 
       // Extract Country
-      const countryVal = data["Country"] || data["Country Code"] || data["Location"] || data["Geo Location"];
+      const countryVal = data["Country"] || data["Country Code"] || data["Location"] || data["Geo Location"] || data["Country Name"];
       if (countryVal && countryVal !== "Unknown" && countryVal !== "N/A") {
         const normCountry = normalizeCountry(String(countryVal));
         if (normCountry) {
-          countryMap[normCountry] = countryMap[normCountry] || { rawLabel: String(countryVal), vendors: [] };
-          if (!countryMap[normCountry].vendors.includes(vendor.name)) {
-            countryMap[normCountry].vendors.push(vendor.name);
+          let cCode = normCountry.toUpperCase();
+          if (cCode.length > 3) {
+            cCode = cCode.substring(0, 2);
+          }
+          countryMap[cCode] = countryMap[cCode] || { rawLabel: String(countryVal), vendors: [] };
+          if (!countryMap[cCode].vendors.includes(vendor.name)) {
+            countryMap[cCode].vendors.push(vendor.name);
           }
         }
       }
@@ -229,127 +216,181 @@ export const ThreatCorrelationGraph = ({
       }
     });
 
-    // 3. Position Fact Nodes in their sectors (Outer circle radius R2 = 240)
-    // Position Verdict nodes
-    const verdictKeys = Object.keys(verdictMap);
-    verdictKeys.forEach((key, idx) => {
-      const info = verdictMap[key];
-      const sectorCenter = 1.5 * Math.PI; // Top
-      const angle = sectorCenter + (idx - (verdictKeys.length - 1) / 2) * 0.15;
-      const x = cx + 220 * Math.cos(angle);
-      const y = cy + 220 * Math.sin(angle);
-      const id = `verdict-${key}`;
+    // 2. Create Category Nodes and connect them to Target
+    const categoryList: { id: string; label: string; value: string; iconType: string; initialPos: { x: number; y: number } }[] = [];
+
+    // Verdicts Category (always included)
+    categoryList.push({
+      id: "category-verdicts",
+      label: language === "pt" ? "Vereditos" : "Security Verdicts",
+      value: "verdicts",
+      iconType: "verdicts",
+      initialPos: { x: cx, y: cy - 100 }
+    });
+
+    // Geo Category
+    const countryKeys = Object.keys(countryMap);
+    if (countryKeys.length > 0) {
+      categoryList.push({
+        id: "category-geo",
+        label: language === "pt" ? "Geolocalização" : "Geographic Info",
+        value: "geo",
+        iconType: "geo",
+        initialPos: { x: cx + 100, y: cy }
+      });
+    }
+
+    // Network Category
+    const ispKeys = Object.keys(ispMap).slice(0, 4);
+    const asnKeys = Object.keys(asnMap).slice(0, 4);
+    if (ispKeys.length > 0 || asnKeys.length > 0) {
+      categoryList.push({
+        id: "category-net",
+        label: language === "pt" ? "Infraestrutura" : "Network Owner",
+        value: "network",
+        iconType: "network",
+        initialPos: { x: cx - 100, y: cy }
+      });
+    }
+
+    // Ports Category
+    const portKeys = Object.keys(portMap).slice(0, 5);
+    if (portKeys.length > 0) {
+      categoryList.push({
+        id: "category-ports",
+        label: language === "pt" ? "Portas Ativas" : "Active Services",
+        value: "ports",
+        iconType: "ports",
+        initialPos: { x: cx, y: cy + 100 }
+      });
+    }
+
+    // Add category nodes to graph
+    categoryList.forEach(cat => {
+      nodes.push({
+        id: cat.id,
+        label: cat.label,
+        type: "category" as any,
+        value: cat.value,
+        x: cat.initialPos.x,
+        y: cat.initialPos.y,
+        connectedVendors: []
+      });
+
+      links.push({
+        source: "target",
+        target: cat.id,
+        type: "category-link"
+      });
+    });
+
+    // 3. Create Leaf nodes for each category
+    // 3.1 Verdict Leaves -> connect to category-verdicts
+    const verdictVendors = Object.keys(verdictMap);
+    verdictVendors.forEach((vendorName, idx) => {
+      const info = verdictMap[vendorName];
+      const angle = (2 * Math.PI * idx) / verdictVendors.length;
+      const lx = cx + 120 * Math.cos(angle);
+      const ly = (cy - 100) + 50 * Math.sin(angle);
+      const leafId = `verdict-${vendorName}`;
 
       nodes.push({
-        id,
+        id: leafId,
         label: info.rawLabel,
         type: "verdict",
         value: info.rawLabel,
-        x,
-        y,
+        x: lx,
+        y: ly,
         connectedVendors: info.vendors
       });
 
-      info.vendors.forEach(v => {
-        links.push({
-          source: `vendor-${v}`,
-          target: id,
-          type: "verdict-link"
-        });
+      links.push({
+        source: "category-verdicts",
+        target: leafId,
+        type: "detail-link"
       });
     });
 
-    // Position Country nodes
-    const countryKeys = Object.keys(countryMap);
-    countryKeys.forEach((key, idx) => {
-      const info = countryMap[key];
-      const sectorCenter = 0 * Math.PI; // Right
-      const angle = sectorCenter + (idx - (countryKeys.length - 1) / 2) * 0.12;
-      const x = cx + 240 * Math.cos(angle);
-      const y = cy + 240 * Math.sin(angle);
-      const id = `country-${key}`;
+    // 3.2 Geo Leaves -> connect to category-geo
+    countryKeys.forEach((cCode, idx) => {
+      const info = countryMap[cCode];
+      const angle = (2 * Math.PI * idx) / countryKeys.length;
+      const lx = (cx + 100) + 50 * Math.cos(angle);
+      const ly = cy + 50 * Math.sin(angle);
+      const leafId = `country-${cCode}`;
 
       nodes.push({
-        id,
+        id: leafId,
         label: info.rawLabel,
         type: "country",
         value: info.rawLabel,
-        x,
-        y,
+        x: lx,
+        y: ly,
         connectedVendors: info.vendors
       });
 
-      info.vendors.forEach(v => {
-        links.push({
-          source: `vendor-${v}`,
-          target: id,
-          type: "country-link"
-        });
+      links.push({
+        source: "category-geo",
+        target: leafId,
+        type: "detail-link"
       });
     });
 
-    // Position ISP & ASN nodes
-    const ispKeys = Object.keys(ispMap).slice(0, 5);
-    const asnKeys = Object.keys(asnMap).slice(0, 5);
-    const leftKeys = [...ispKeys.map(k => ({ key: k, type: 'isp', info: ispMap[k] })), ...asnKeys.map(k => ({ key: k, type: 'asn', info: asnMap[k] }))];
-
-    leftKeys.forEach((item, idx) => {
-      const sectorCenter = 1.0 * Math.PI; // Left
-      const angle = sectorCenter + (idx - (leftKeys.length - 1) / 2) * 0.10;
-      const x = cx + 240 * Math.cos(angle);
-      const y = cy + 240 * Math.sin(angle);
-      const id = `${item.type}-${item.key}`;
+    // 3.3 Network Leaves -> connect to category-net
+    const netLeaves = [
+      ...ispKeys.map(k => ({ key: k, type: 'isp' as const, info: ispMap[k] })),
+      ...asnKeys.map(k => ({ key: k, type: 'asn' as const, info: asnMap[k] }))
+    ];
+    netLeaves.forEach((item, idx) => {
+      const angle = (2 * Math.PI * idx) / netLeaves.length;
+      const lx = (cx - 100) + 50 * Math.cos(angle);
+      const ly = cy + 50 * Math.sin(angle);
+      const leafId = `${item.type}-${item.key}`;
 
       nodes.push({
-        id,
+        id: leafId,
         label: item.info.rawLabel,
-        type: item.type as any,
+        type: item.type,
         value: item.info.rawLabel,
-        x,
-        y,
+        x: lx,
+        y: ly,
         connectedVendors: item.info.vendors
       });
 
-      item.info.vendors.forEach(v => {
-        links.push({
-          source: `vendor-${v}`,
-          target: id,
-          type: `${item.type}-link`
-        });
+      links.push({
+        source: "category-net",
+        target: leafId,
+        type: "detail-link"
       });
     });
 
-    // Position Port nodes
-    const portKeys = Object.keys(portMap).slice(0, 6);
-    portKeys.forEach((key, idx) => {
-      const info = portMap[key];
-      const sectorCenter = 0.5 * Math.PI; // Bottom
-      const angle = sectorCenter + (idx - (portKeys.length - 1) / 2) * 0.12;
-      const x = cx + 240 * Math.cos(angle);
-      const y = cy + 240 * Math.sin(angle);
-      const id = `port-${key}`;
+    // 3.4 Ports Leaves -> connect to category-ports
+    portKeys.forEach((pCode, idx) => {
+      const info = portMap[pCode];
+      const angle = (2 * Math.PI * idx) / portKeys.length;
+      const lx = cx + 50 * Math.cos(angle);
+      const ly = (cy + 100) + 50 * Math.sin(angle);
+      const leafId = `port-${pCode}`;
 
       nodes.push({
-        id,
+        id: leafId,
         label: info.rawLabel,
         type: "port",
         value: info.rawLabel,
-        x,
-        y,
+        x: lx,
+        y: ly,
         connectedVendors: info.vendors
       });
 
-      info.vendors.forEach(v => {
-        links.push({
-          source: `vendor-${v}`,
-          target: id,
-          type: "port-link"
-        });
+      links.push({
+        source: "category-ports",
+        target: leafId,
+        type: "detail-link"
       });
     });
 
     return { nodes, links };
-  }, [query, vendorData]);
+  }, [query, vendorData, language]);
 
   // Setup force-directed simulation
   useEffect(() => {
@@ -364,19 +405,19 @@ export const ThreatCorrelationGraph = ({
 
     const simulation = forceSimulation<GraphNode>(nodesCopy)
       .force("link", forceLink<GraphNode, GraphLink>(linksCopy).id((d) => d.id).distance((link) => {
-        if (link.type === "vendor-link") return 110;
-        return 75;
+        if (link.type === "category-link") return 110;
+        return 65;
       }))
       .force("charge", forceManyBody().strength((node: any) => {
-        if (node.type === "target") return -450;
-        if (node.type === "vendor") return -200;
-        return -90;
+        if (node.type === "target") return -400;
+        if (node.type === "category") return -250;
+        return -80;
       }))
       .force("center", forceCenter(300, 300))
       .force("collide", forceCollide().radius((node: any) => {
         if (node.type === "target") return 35;
-        if (node.type === "vendor") return 22;
-        return 18;
+        if (node.type === "category") return 24;
+        return 16;
       }).iterations(2));
 
     simulationRef.current = simulation;
@@ -537,11 +578,24 @@ export const ThreatCorrelationGraph = ({
     setIsPanning(false);
   };
 
+  const getFlagEmoji = (countryCode: string) => {
+    if (!countryCode) return "🌐";
+    const codePoints = countryCode
+      .toUpperCase()
+      .split('')
+      .map(char => 127397 + char.charCodeAt(0));
+    try {
+      return String.fromCodePoint(...codePoints);
+    } catch (e) {
+      return "🌐";
+    }
+  };
+
   const getNodeColor = (type: string) => {
     switch (type) {
       case "target": return "text-primary fill-primary/10 border-primary";
-      case "vendor": return "text-muted-foreground fill-muted/10 border-muted-foreground";
-      case "verdict": return "text-indigo-500 fill-indigo-500/10 border-indigo-500";
+      case "category": return "text-blue-500 fill-blue-500/5 border-blue-500/40";
+      case "verdict": return "text-blue-500 fill-blue-500/10 border-blue-500";
       case "country": return "text-rose-500 fill-rose-500/10 border-rose-500";
       case "isp": return "text-amber-500 fill-amber-500/10 border-amber-500";
       case "asn": return "text-purple-500 fill-purple-500/10 border-purple-500";
@@ -553,8 +607,8 @@ export const ThreatCorrelationGraph = ({
   const getStrokeColor = (type: string) => {
     switch (type) {
       case "target": return "stroke-primary";
-      case "vendor": return "stroke-muted-foreground/60";
-      case "verdict": return "stroke-indigo-500";
+      case "category": return "stroke-blue-500";
+      case "verdict": return "stroke-blue-500";
       case "country": return "stroke-rose-500";
       case "isp": return "stroke-amber-500";
       case "asn": return "stroke-purple-500";
@@ -564,41 +618,57 @@ export const ThreatCorrelationGraph = ({
   };
 
   const getLinkColor = (link: GraphLink, activeNodeId?: string) => {
-    if (!activeNodeId) return "stroke-border/20 opacity-30";
-    
     const sourceId = typeof link.source === "object" ? link.source.id : link.source;
     const targetId = typeof link.target === "object" ? link.target.id : link.target;
 
-    const isConnected = sourceId === activeNodeId || targetId === activeNodeId ||
-      (activeNodeId === "target" && sourceId === "target");
+    const isCategoryLink = link.type === "category-link";
+    const isHighlighted = activeNodeId && (sourceId === activeNodeId || targetId === activeNodeId);
 
-    if (isConnected) {
-      if (link.type === "vendor-link") return "stroke-primary stroke-[2] opacity-80";
-      if (link.type === "verdict-link") return "stroke-indigo-500 stroke-[2] opacity-80";
-      if (link.type === "country-link") return "stroke-rose-500 stroke-[2] opacity-80";
-      if (link.type === "isp-link") return "stroke-amber-500 stroke-[2] opacity-80";
-      if (link.type === "asn-link") return "stroke-purple-500 stroke-[2] opacity-80";
-      if (link.type === "port-link") return "stroke-emerald-500 stroke-[2] opacity-80";
+    if (isCategoryLink) {
+      return isHighlighted 
+        ? "stroke-blue-500 stroke-[2.5] opacity-100" 
+        : "stroke-blue-600/70 stroke-[2] opacity-85";
     }
-    return "stroke-border/10 opacity-15";
+
+    // Detail links
+    return isHighlighted
+      ? "stroke-blue-500/70 stroke-[1.5] opacity-90"
+      : "stroke-zinc-800/80 stroke-[1] opacity-50 dark:stroke-zinc-700/60";
   };
 
   const getNodeIcon = (type: string, label: string) => {
-    if (type === "verdict") {
-      if (label.toLowerCase().includes("malicious") || label.toLowerCase().includes("danger")) {
-        return <AlertTriangle className="h-5 w-5 text-red-500" />;
+    if (type === "category") {
+      if (label.toLowerCase().includes("verdict") || label.toLowerCase().includes("veredito")) {
+        return <Shield className="h-6 w-6 text-blue-500" />;
       }
-      return <Shield className="h-5 w-5 text-green-500" />;
+      if (label.toLowerCase().includes("geo")) {
+        return <Globe className="h-6 w-6 text-rose-500" />;
+      }
+      if (label.toLowerCase().includes("network") || label.toLowerCase().includes("infra")) {
+        return <Server className="h-6 w-6 text-amber-500" />;
+      }
+      return <Activity className="h-6 w-6 text-emerald-500" />;
+    }
+
+    if (type === "verdict") {
+      if (label.toLowerCase().includes("malicious") || label.toLowerCase().includes("malicioso")) {
+        return <AlertTriangle className="h-6 w-6 text-red-500" />;
+      }
+      if (label.toLowerCase().includes("suspicious") || label.toLowerCase().includes("suspeito")) {
+        return <AlertTriangle className="h-6 w-6 text-yellow-500" />;
+      }
+      if (label.toLowerCase().includes("error")) {
+        return <Info className="h-6 w-6 text-muted-foreground" />;
+      }
+      return <Shield className="h-6 w-6 text-green-500" />;
     }
 
     switch (type) {
-      case "target": return <Globe className="h-5 w-5 text-primary" />;
-      case "vendor": return <Database className="h-5 w-5 text-muted-foreground" />;
-      case "country": return <Globe className="h-5 w-5 text-rose-500" />;
-      case "isp": return <Server className="h-5 w-5 text-amber-500" />;
-      case "asn": return <Link2 className="h-5 w-5 text-purple-500" />;
-      case "port": return <Server className="h-5 w-5 text-emerald-500" />;
-      default: return <Info className="h-5 w-5 text-muted-foreground" />;
+      case "target": return <Globe className="h-6 w-6 text-primary" />;
+      case "isp": return <Server className="h-6 w-6 text-amber-400" />;
+      case "asn": return <Link2 className="h-6 w-6 text-purple-400" />;
+      case "port": return <Terminal className="h-6 w-6 text-emerald-400" />;
+      default: return <Info className="h-6 w-6 text-muted-foreground" />;
     }
   };
 
@@ -680,7 +750,8 @@ export const ThreatCorrelationGraph = ({
                 const isActive = activeNode?.id === node.id;
                 const isHovered = hoveredNode?.id === node.id;
                 const isTarget = node.type === "target";
-                const size = isTarget ? 24 : 12;
+                const isCategory = node.type === "category";
+                const size = isTarget ? 22 : isCategory ? 16 : 12;
 
                 return (
                   <g 
@@ -708,36 +779,36 @@ export const ThreatCorrelationGraph = ({
                       r={size}
                       className={`stroke-2 transition-all duration-300 fill-card ${getNodeColor(node.type)} ${
                         isActive || isHovered 
-                          ? `${getStrokeColor(node.type)} stroke-3 scale-105 filter drop-shadow-[0_0_8px_rgba(139,92,246,0.3)]` 
-                          : "stroke-border/70 hover:stroke-foreground/60"
+                          ? `${getStrokeColor(node.type)} stroke-3 scale-105 filter drop-shadow-[0_0_8px_rgba(30,96,255,0.35)]` 
+                          : "stroke-border/75 hover:stroke-foreground/60"
                       }`}
                     />
 
-                    {/* Inner Node Icon */}
-                    <g transform="translate(-8, -8)" className="scale-[0.8] pointer-events-none">
-                      {getNodeIcon(node.type, node.label)}
-                    </g>
-
-                    {/* Bubble labels on active/hover */}
-                    {(isTarget || isHovered || isActive) && (
-                      <g transform={`translate(0, ${size + 14})`}>
-                        <rect
-                          x={-Math.min(100, node.label.length * 3.5 + 8)}
-                          y={-9}
-                          width={Math.min(200, node.label.length * 7 + 16)}
-                          height={16}
-                          rx={8}
-                          className="fill-popover/90 stroke-border/40 stroke-[0.5]"
-                        />
-                        <text
-                          textAnchor="middle"
-                          className="text-[9px] font-bold font-mono fill-popover-foreground pointer-events-none"
-                          y={2}
-                        >
-                          {node.label.length > 25 ? `${node.label.substring(0, 22)}...` : node.label}
-                        </text>
+                    {/* Inner Node Icon / Flag Emoji */}
+                    {node.type === "country" ? (
+                      <text textAnchor="middle" y="4" className="text-[12px] select-none pointer-events-none font-sans">
+                        {getFlagEmoji(node.id.replace("country-", ""))}
+                      </text>
+                    ) : (
+                      <g transform={`scale(${(size * 1.1) / 24}) translate(-12, -12)`} className="pointer-events-none">
+                        {getNodeIcon(node.type, node.label)}
                       </g>
                     )}
+
+                    {/* Permanent Label next to node (VirusTotal style) */}
+                    <text
+                      dx={size + 6}
+                      dy="3.5"
+                      className={`text-[9px] pointer-events-none font-mono select-none transition-colors ${
+                        isTarget 
+                          ? "fill-foreground font-bold text-[10.5px]" 
+                          : node.type === "category"
+                            ? "fill-blue-400 font-bold"
+                            : "fill-zinc-400 font-semibold"
+                      }`}
+                    >
+                      {node.label.length > 22 ? `${node.label.substring(0, 20)}...` : node.label}
+                    </text>
                   </g>
                 );
               })}
@@ -748,8 +819,8 @@ export const ThreatCorrelationGraph = ({
           <div className="absolute bottom-2 left-2 flex items-center gap-2 bg-black/40 backdrop-blur-md px-2.5 py-1.5 border border-white/[0.04] rounded-lg z-10">
             {[
               { color: "bg-primary", label: "Target" },
-              { color: "bg-muted-foreground", label: "Vendor" },
-              { color: "bg-indigo-500", label: "Verdict" },
+              { color: "bg-blue-500", label: "Category" },
+              { color: "bg-blue-500/60", label: "Verdict" },
               { color: "bg-rose-500", label: "Country" },
               { color: "bg-amber-500", label: "ISP" },
               { color: "bg-purple-500", label: "ASN" },
@@ -778,6 +849,52 @@ export const ThreatCorrelationGraph = ({
               </div>
 
               {/* Node Type Details */}
+              {displayNode.type === "category" && (
+                <div className="space-y-3 text-xs leading-relaxed">
+                  <p className="text-muted-foreground">
+                    {language === "pt"
+                      ? `Esta categoria agrupa os detalhes correlacionados do IoC sob o tema de "${displayNode.label}".`
+                      : `This category groups the correlated details of the IoC under the theme of "${displayNode.label}".`}
+                  </p>
+                  {(() => {
+                    // Find all leaf nodes connected to this category
+                    const leaves = animatedNodes.filter(n => 
+                      graph.links.some(l => {
+                        const sId = typeof l.source === "object" ? l.source.id : l.source;
+                        const tId = typeof l.target === "object" ? l.target.id : l.target;
+                        return sId === displayNode.id && tId === n.id;
+                      })
+                    );
+                    
+                    if (leaves.length === 0) return null;
+                    
+                    return (
+                      <div className="space-y-2 border-t border-white/[0.04] pt-2.5">
+                        <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-1.5">
+                          {language === "pt" ? "Itens Identificados:" : "Identified Items:"}
+                        </div>
+                        <div className="space-y-1.5">
+                          {leaves.map(leaf => (
+                            <div key={leaf.id} className="flex items-center gap-2 text-xs border-b border-border/10 pb-1.5">
+                              {leaf.type === "country" ? (
+                                <span className="text-base leading-none">
+                                  {getFlagEmoji(leaf.id.replace("country-", ""))}
+                                </span>
+                              ) : (
+                                <div className="h-3.5 w-3.5 flex items-center justify-center shrink-0 [&_svg]:h-3.5 [&_svg]:w-3.5">
+                                  {getNodeIcon(leaf.type, leaf.label)}
+                                </div>
+                              )}
+                              <span className="font-mono text-foreground truncate flex-1">{leaf.label}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
+
               {displayNode.type === "target" && (
                 <div className="space-y-2 text-xs leading-relaxed text-muted-foreground">
                   <p>

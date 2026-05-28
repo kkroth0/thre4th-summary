@@ -103,7 +103,7 @@ export function Header({ actions, logoAddon, onLogoClick, showBackButton = false
               onClick={handleLogoClick}
               className="flex items-center gap-2"
             >
-              <div className="h-6 w-6 rounded bg-indigo-600 flex items-center justify-center font-black text-white text-[10px] shadow-sm shadow-indigo-600/30 select-none shrink-0">T</div>
+              <div className="h-6 w-6 rounded bg-primary flex items-center justify-center font-black text-primary-foreground text-[10px] shadow-sm shadow-primary/30 select-none shrink-0">T</div>
               <span className="font-bold tracking-tight text-xl bg-gradient-to-r from-primary via-primary/80 to-primary/50 bg-clip-text text-transparent hover:opacity-95 transition-all">
                 {t("appName") || "ThreatSumm4ry"}
               </span>
@@ -168,7 +168,7 @@ export function Header({ actions, logoAddon, onLogoClick, showBackButton = false
               onClick={handleLogoClick}
               className="flex items-center gap-2.5"
             >
-              <div className="h-6 w-6 rounded bg-indigo-600 flex items-center justify-center font-black text-white text-[10px] shadow-sm shadow-indigo-600/30 select-none shrink-0">T</div>
+              <div className="h-6 w-6 rounded bg-primary flex items-center justify-center font-black text-primary-foreground text-[10px] shadow-sm shadow-primary/30 select-none shrink-0">T</div>
               {!isCollapsed && (
                 <span className="font-bold tracking-tight text-[17px] bg-gradient-to-r from-primary via-primary/80 to-primary/50 bg-clip-text text-transparent hover:opacity-95 transition-all">
                   {t("appName") || "ThreatSumm4ry"}

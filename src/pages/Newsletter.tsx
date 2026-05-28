@@ -609,7 +609,7 @@ const Newsletter = () => {
             {/* Top Banner: Digest Builder Tool */}
             <Card className="border border-primary/10 shadow-lg bg-card/45 backdrop-blur-lg relative overflow-hidden group">
               {/* Premium gradient accent top bar */}
-              <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-primary via-purple-500 to-blue-500" />
+              <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-primary via-blue-500 to-cyan-500" />
               
               <CardContent className="p-4 md:p-6 flex flex-col md:flex-row md:items-center justify-between gap-6">
                 <div className="flex items-start gap-3.5 flex-1 min-w-0">
@@ -635,7 +635,7 @@ const Newsletter = () => {
                       <Button
                         className={`w-full md:w-auto gap-2 text-xs h-9 px-5 transition-all duration-300 ${
                           selectedCount > 0 
-                            ? "bg-gradient-to-r from-primary to-purple-600 hover:from-primary/90 hover:to-purple-600/90 text-primary-foreground shadow-md shadow-primary/15 hover:shadow-lg hover:shadow-primary/25 hover:scale-[1.02] active:scale-[0.98]" 
+                            ? "bg-gradient-to-r from-primary to-blue-600 hover:from-primary/90 hover:to-blue-600/90 text-primary-foreground shadow-md shadow-primary/15 hover:shadow-lg hover:shadow-primary/25 hover:scale-[1.02] active:scale-[0.98]" 
                             : "bg-muted/50 text-muted-foreground cursor-not-allowed"
                         }`}
                         disabled={selectedCount === 0}

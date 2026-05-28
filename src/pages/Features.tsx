@@ -125,7 +125,7 @@ export default function Features() {
   const t = content[language as "en" | "pt"] || content.en;
 
   return (
-    <div className={`min-h-screen bg-[#0c0c0e] text-slate-200 flex flex-col transition-all duration-300 ${isCollapsed ? "lg:pl-20" : "lg:pl-64"}`}>
+    <div className={`min-h-screen bg-background text-slate-200 flex flex-col transition-all duration-300 ${isCollapsed ? "lg:pl-20" : "lg:pl-64"}`}>
       <Header />
 
       <style>{`
@@ -145,7 +145,7 @@ export default function Features() {
         <section className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-16 items-start">
           <div className="lg:col-span-5 space-y-6">
             <h2 className="text-3xl md:text-4.5xl font-bold tracking-tight text-white leading-tight">
-              {t.whyTitle} <span className="text-orange-500">{t.whyTitleHighlight}</span>?
+              {t.whyTitle} <span className="text-blue-500">{t.whyTitleHighlight}</span>?
             </h2>
             <div className="space-y-4 text-sm md:text-base text-zinc-400 leading-relaxed font-sans">
               <p>{t.whyPara1}</p>
@@ -156,7 +156,7 @@ export default function Features() {
           <div className="lg:col-span-7 grid grid-cols-1 sm:grid-cols-2 gap-4">
             {/* Foundation Card */}
             <div className="bg-white/[0.01] hover:bg-white/[0.02] border border-white/[0.04] rounded-2xl p-5 transition-all duration-200 space-y-3">
-              <div className="h-9 w-9 rounded-lg bg-orange-500/10 border border-orange-500/20 flex items-center justify-center text-orange-500 shrink-0">
+              <div className="h-9 w-9 rounded-lg bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-500 shrink-0">
                 <Layers className="h-4.5 w-4.5" />
               </div>
               <h3 className="text-sm font-bold text-white tracking-wide">{t.foundationTitle}</h3>
@@ -165,7 +165,7 @@ export default function Features() {
 
             {/* Plug Card */}
             <div className="bg-white/[0.01] hover:bg-white/[0.02] border border-white/[0.04] rounded-2xl p-5 transition-all duration-200 space-y-3">
-              <div className="h-9 w-9 rounded-lg bg-orange-500/10 border border-orange-500/20 flex items-center justify-center text-orange-500 shrink-0">
+              <div className="h-9 w-9 rounded-lg bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-500 shrink-0">
                 <Cable className="h-4.5 w-4.5" />
               </div>
               <h3 className="text-sm font-bold text-white tracking-wide">{t.plugTitle}</h3>
@@ -174,7 +174,7 @@ export default function Features() {
 
             {/* Silos Card */}
             <div className="bg-white/[0.01] hover:bg-white/[0.02] border border-white/[0.04] rounded-2xl p-5 transition-all duration-200 space-y-3">
-              <div className="h-9 w-9 rounded-lg bg-orange-500/10 border border-orange-500/20 flex items-center justify-center text-orange-500 shrink-0">
+              <div className="h-9 w-9 rounded-lg bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-500 shrink-0">
                 <Network className="h-4.5 w-4.5" />
               </div>
               <h3 className="text-sm font-bold text-white tracking-wide">{t.silosTitle}</h3>
@@ -183,7 +183,7 @@ export default function Features() {
 
             {/* Speed Card */}
             <div className="bg-white/[0.01] hover:bg-white/[0.02] border border-white/[0.04] rounded-2xl p-5 transition-all duration-200 space-y-3">
-              <div className="h-9 w-9 rounded-lg bg-orange-500/10 border border-orange-500/20 flex items-center justify-center text-orange-500 shrink-0">
+              <div className="h-9 w-9 rounded-lg bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-500 shrink-0">
                 <RefreshCw className="h-4.5 w-4.5" />
               </div>
               <h3 className="text-sm font-bold text-white tracking-wide">{t.changeTitle}</h3>
@@ -196,7 +196,7 @@ export default function Features() {
         <section className="space-y-12">
           <div className="text-center space-y-3 max-w-2xl mx-auto">
             <h2 className="text-3xl md:text-4.5xl font-bold tracking-tight text-white">
-              {t.keyFeaturesTitle} <span className="text-orange-500">{t.keyFeaturesHighlight}</span>
+              {t.keyFeaturesTitle} <span className="text-blue-500">{t.keyFeaturesHighlight}</span>
             </h2>
             <p className="text-xs md:text-sm text-zinc-400 leading-relaxed font-sans">
               {t.keyFeaturesSub}
@@ -208,7 +208,7 @@ export default function Features() {
             {/* Left: Interactive graph exploration mockup */}
             <div className="lg:col-span-7 space-y-4">
               <div className="flex items-center gap-2 mb-1">
-                <Eye className="h-4.5 w-4.5 text-orange-500" />
+                <Eye className="h-4.5 w-4.5 text-blue-500" />
                 <h3 className="text-sm font-bold text-white tracking-wide">{t.leftFeatureTitle}</h3>
               </div>
               <p className="text-[11px] text-zinc-400 leading-relaxed font-sans max-w-xl">
@@ -220,7 +220,7 @@ export default function Features() {
                 {/* Mock header */}
                 <div className="absolute top-3 left-4 right-4 flex items-center justify-between border-b border-white/[0.04] pb-2 text-[9px] text-zinc-500 font-mono">
                   <div className="flex items-center gap-1.5">
-                    <span className="h-1.5 w-1.5 rounded-full bg-orange-500" />
+                    <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />
                     <span>CTI_GRAPH_EXPLORER</span>
                   </div>
                   <span>14.103.115.208 // Target_Scan</span>
@@ -273,7 +273,7 @@ export default function Features() {
             {/* Right: Flexible entity modeling list */}
             <div className="lg:col-span-5 space-y-6">
               <div className="flex items-center gap-2 mb-1">
-                <Settings className="h-4.5 w-4.5 text-orange-500" />
+                <Settings className="h-4.5 w-4.5 text-blue-500" />
                 <h3 className="text-sm font-bold text-white tracking-wide">{t.rightFeatureTitle}</h3>
               </div>
               
@@ -312,7 +312,7 @@ export default function Features() {
         <section className="space-y-12">
           <div className="text-center space-y-3 max-w-2xl mx-auto">
             <h2 className="text-3xl md:text-4.5xl font-bold tracking-tight text-white">
-              {t.whoTitle} <span className="text-orange-500">{t.whoTitleHighlight}</span>?
+              {t.whoTitle} <span className="text-blue-500">{t.whoTitleHighlight}</span>?
             </h2>
             <p className="text-xs md:text-sm text-zinc-400 leading-relaxed font-sans">
               {t.whoSub}
@@ -323,7 +323,7 @@ export default function Features() {
             
             {/* Role 1: Threat Analysts */}
             <div className="bg-white/[0.01] hover:bg-white/[0.02] border border-white/[0.04] rounded-2xl p-5 transition-all duration-200 flex gap-4">
-              <div className="h-9 w-9 rounded-lg bg-orange-500/10 border border-orange-500/20 flex items-center justify-center text-orange-500 shrink-0">
+              <div className="h-9 w-9 rounded-lg bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-500 shrink-0">
                 <Shield className="h-4.5 w-4.5" />
               </div>
               <div className="space-y-1">
@@ -334,7 +334,7 @@ export default function Features() {
 
             {/* Role 2: OSINT Researchers */}
             <div className="bg-white/[0.01] hover:bg-white/[0.02] border border-white/[0.04] rounded-2xl p-5 transition-all duration-200 flex gap-4">
-              <div className="h-9 w-9 rounded-lg bg-orange-500/10 border border-orange-500/20 flex items-center justify-center text-orange-500 shrink-0">
+              <div className="h-9 w-9 rounded-lg bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-500 shrink-0">
                 <Search className="h-4.5 w-4.5" />
               </div>
               <div className="space-y-1">
@@ -345,7 +345,7 @@ export default function Features() {
 
             {/* Role 3: Incident Responders */}
             <div className="bg-white/[0.01] hover:bg-white/[0.02] border border-white/[0.04] rounded-2xl p-5 transition-all duration-200 flex gap-4">
-              <div className="h-9 w-9 rounded-lg bg-orange-500/10 border border-orange-500/20 flex items-center justify-center text-orange-500 shrink-0">
+              <div className="h-9 w-9 rounded-lg bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-500 shrink-0">
                 <Zap className="h-4.5 w-4.5" />
               </div>
               <div className="space-y-1">
@@ -356,7 +356,7 @@ export default function Features() {
 
             {/* Role 4: Corporate security teams */}
             <div className="bg-white/[0.01] hover:bg-white/[0.02] border border-white/[0.04] rounded-2xl p-5 transition-all duration-200 flex gap-4">
-              <div className="h-9 w-9 rounded-lg bg-orange-500/10 border border-orange-500/20 flex items-center justify-center text-orange-500 shrink-0">
+              <div className="h-9 w-9 rounded-lg bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-500 shrink-0">
                 <Building className="h-4.5 w-4.5" />
               </div>
               <div className="space-y-1">
@@ -367,7 +367,7 @@ export default function Features() {
 
             {/* Role 5: SOC Engineers */}
             <div className="bg-white/[0.01] hover:bg-white/[0.02] border border-white/[0.04] rounded-2xl p-5 transition-all duration-200 flex gap-4">
-              <div className="h-9 w-9 rounded-lg bg-orange-500/10 border border-orange-500/20 flex items-center justify-center text-orange-500 shrink-0">
+              <div className="h-9 w-9 rounded-lg bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-500 shrink-0">
                 <Cpu className="h-4.5 w-4.5" />
               </div>
               <div className="space-y-1">
@@ -378,7 +378,7 @@ export default function Features() {
 
             {/* Role 6: Anyone mapping relationships */}
             <div className="bg-white/[0.01] hover:bg-white/[0.02] border border-white/[0.04] rounded-2xl p-5 transition-all duration-200 flex gap-4">
-              <div className="h-9 w-9 rounded-lg bg-orange-500/10 border border-orange-500/20 flex items-center justify-center text-orange-500 shrink-0">
+              <div className="h-9 w-9 rounded-lg bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-500 shrink-0">
                 <UserCheck className="h-4.5 w-4.5" />
               </div>
               <div className="space-y-1">
@@ -402,7 +402,7 @@ export default function Features() {
           </p>
           <div className="flex flex-wrap justify-center gap-3">
             <Link to="/">
-              <Button className="h-9.5 rounded-xl font-bold text-xs bg-orange-500 hover:bg-orange-600 text-white shadow-md shadow-orange-500/15">
+              <Button className="h-9.5 rounded-xl font-bold text-xs bg-blue-500 hover:bg-blue-600 text-white shadow-md shadow-blue-500/15">
                 {language === "pt" ? "Análise CTI" : "CTI Main Console"}
               </Button>
             </Link>

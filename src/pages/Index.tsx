@@ -105,7 +105,7 @@ const TypingTitle = ({ language }: { language: string }) => {
       {text1 === line1 && <br />}
       {text2Prefix}
       {dynamicWord}
-      <span className="animate-pulse inline-block w-[4px] h-[0.9em] bg-indigo-500 ml-1.5 translate-y-[2px]" />
+      <span className="animate-pulse inline-block w-[4px] h-[0.9em] bg-primary ml-1.5 translate-y-[2px]" />
     </>
   );
 };
@@ -223,7 +223,7 @@ const SearchForm = ({
       <form onSubmit={onSubmit} className="w-full">
         <div className="space-y-3">
           {/* Search bar */}
-          <div className="relative flex items-center bg-[#0B0E1C]/90 backdrop-blur-2xl border border-white/[0.06] hover:border-indigo-500/25 focus-within:border-indigo-500/40 transition-all duration-500 shadow-[0_8px_40px_-12px_rgba(0,0,0,0.6)] focus-within:shadow-[0_8px_50px_-8px_rgba(99,102,241,0.15)] max-w-2xl mx-auto w-full rounded-full p-1.5 pl-5 flex-row items-center gap-2">
+          <div className="relative flex items-center bg-[#0B0E1C]/90 backdrop-blur-2xl border border-white/[0.06] hover:border-primary/25 focus-within:border-primary/40 transition-all duration-500 shadow-[0_8px_40px_-12px_rgba(0,0,0,0.6)] focus-within:shadow-[0_8px_50px_-8px_rgba(30,96,255,0.15)] max-w-2xl mx-auto w-full rounded-full p-1.5 pl-5 flex-row items-center gap-2">
 
             {/* Search icon */}
             <div className="flex items-center shrink-0">
@@ -253,8 +253,8 @@ const SearchForm = ({
             <div className="flex items-center gap-1.5 shrink-0 pr-0.5">
               {/* IOC count badge */}
               {extractedIocs.length > 1 && (
-                <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/15 text-[10px] font-bold text-indigo-400 font-mono tracking-wide">
-                  <div className="h-1.5 w-1.5 rounded-full bg-indigo-400 animate-pulse" />
+                <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-primary/10 border border-primary/15 text-[10px] font-bold text-primary font-mono tracking-wide">
+                  <div className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
                   {extractedIocs.length} IOCs
                 </div>
               )}
@@ -281,7 +281,7 @@ const SearchForm = ({
                 type="submit"
                 disabled={isLoading || !query.trim()}
                 size="icon"
-                className="h-9 w-9 rounded-full bg-indigo-500 hover:bg-indigo-400 transition-all duration-200 flex items-center justify-center shrink-0 border-0 shadow-lg shadow-indigo-500/20 hover:shadow-indigo-400/30 disabled:opacity-30 disabled:shadow-none"
+                className="h-9 w-9 rounded-full bg-primary hover:bg-blue-600 transition-all duration-200 flex items-center justify-center shrink-0 border-0 shadow-lg shadow-primary/20 hover:shadow-blue-600/30 disabled:opacity-30 disabled:shadow-none"
                 title={language === "pt" ? "Analisar" : "Analyze"}
               >
                 {isLoading ? (
@@ -530,7 +530,7 @@ const Index = () => {
       // ── Color Palette ──
       const COLORS = {
         headerBg: [18, 18, 18] as [number, number, number],
-        accent: [99, 102, 241] as [number, number, number],   // indigo
+        accent: [30, 96, 255] as [number, number, number],   // cyber blue
         safe: [34, 197, 94] as [number, number, number],
         suspicious: [245, 158, 11] as [number, number, number],
         malicious: [239, 68, 68] as [number, number, number],
@@ -1279,7 +1279,7 @@ const Index = () => {
     return (
       <div className={`min-h-screen bg-background flex flex-col transition-all duration-300 relative overflow-hidden ${isCollapsed ? "lg:pl-20" : "lg:pl-64"}`}>
         {/* Glowing background gradient mesh */}
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-indigo-900/10 via-background to-background pointer-events-none z-0" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-blue-950/15 via-background to-background pointer-events-none z-0" />
 
         <Header onLogoClick={handleReset} />
 
@@ -1287,7 +1287,7 @@ const Index = () => {
         <div className="relative z-10 flex justify-between items-center w-full max-w-7xl mx-auto py-6 px-4 md:px-8 border-b border-primary/5 hidden md:flex">
           {/* Brand/Logo */}
           <div className="flex items-center gap-2.5">
-            <div className="h-7 w-7 rounded bg-indigo-600 flex items-center justify-center font-black text-white text-[11px] shadow-md shadow-indigo-600/30 select-none">
+            <div className="h-7 w-7 rounded bg-primary flex items-center justify-center font-black text-primary-foreground text-[11px] shadow-md shadow-primary/30 select-none">
               T
             </div>
             <span className="font-extrabold tracking-tight text-base text-slate-100 font-sans">
@@ -1384,7 +1384,7 @@ const Index = () => {
                   <button
                     key={ip}
                     onClick={() => setQuery(prev => prev ? `${prev}\n${ip}` : ip)}
-                    className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-semibold border border-primary/10 bg-muted/20 hover:bg-indigo-500/5 hover:border-indigo-500/30 text-muted-foreground hover:text-foreground hover:scale-[1.03] active:scale-[0.97] transition-all cursor-pointer shadow-sm"
+                    className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-semibold border border-primary/10 bg-muted/20 hover:bg-primary/5 hover:border-primary/30 text-muted-foreground hover:text-foreground hover:scale-[1.03] active:scale-[0.97] transition-all cursor-pointer shadow-sm"
                   >
                     <span>{flag}</span>
                     <span>{ip}</span>
@@ -1420,8 +1420,8 @@ const Index = () => {
                 ].map((feat, index) => {
                   const Icon = feat.icon;
                   return (
-                    <div key={index} className="flex flex-col items-center gap-2 p-4 rounded-xl border border-white/[0.04] bg-white/[0.015] hover:bg-white/[0.03] hover:border-indigo-500/15 transition-all duration-300">
-                      <div className="h-8 w-8 rounded-lg bg-indigo-500/8 border border-indigo-500/15 flex items-center justify-center text-indigo-400">
+                    <div key={index} className="flex flex-col items-center gap-2 p-4 rounded-xl border border-white/[0.04] bg-white/[0.015] hover:bg-white/[0.03] hover:border-primary/15 transition-all duration-300">
+                      <div className="h-8 w-8 rounded-lg bg-primary/8 border border-primary/15 flex items-center justify-center text-primary">
                         <Icon className="h-4 w-4" />
                       </div>
                       <div>
