@@ -28,18 +28,30 @@ const __dirname = path.dirname(__filename);
 
 // CORS Config
 const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',') || ['http://localhost:8080'];
-app.use(cors({
-    origin: (origin, callback) => {
-        if (!origin || allowedOrigins.includes(origin)) {
-            callback(null, true);
-        } else {
-            callback(new Error('Not allowed by CORS'));
+const corsOptionsDelegate = (req, callback) => {
+    const origin = req.header('Origin');
+    const host = req.get('host') || '';
+    
+    let isAllowed = false;
+    if (!origin) {
+        isAllowed = true;
+    } else if (allowedOrigins.includes(origin)) {
+        isAllowed = true;
+    } else {
+        const originHost = origin.replace(/^https?:\/\//, '');
+        if (originHost && host && originHost === host) {
+            isAllowed = true;
         }
-    },
-    methods: ['GET', 'POST', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
-    credentials: true
-}));
+    }
+
+    callback(null, {
+        origin: isAllowed,
+        methods: ['GET', 'POST', 'OPTIONS'],
+        allowedHeaders: ['Content-Type', 'Authorization'],
+        credentials: true
+    });
+};
+app.use(cors(corsOptionsDelegate));
 
 // Express Settings - Payload Limits
 app.use(express.json({ limit: '10kb' }));
