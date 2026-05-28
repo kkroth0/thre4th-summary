@@ -25,6 +25,14 @@ import {
     DialogTitle,
     DialogTrigger,
 } from "@/components/ui/dialog";
+import {
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
+} from "@/components/ui/table";
 
 /* ── Helpers ─────────────────────────────────────────────────────── */
 const getFlagEmoji = (code: string) => {
@@ -232,10 +240,12 @@ export const MultiIpSummary = ({ results, onViewDetails }: MultiIpSummaryProps) 
     };
 
     return (
-        <div className="space-y-2">
+        <div className="space-y-4">
             {/* Header */}
-            <div className="flex items-center gap-2 px-1 mb-1">
-                <span className="text-xs font-bold text-foreground/80 tracking-wide">{results.length} Target{results.length !== 1 ? "s" : ""} Scanned</span>
+            <div className="flex items-center gap-2 px-1">
+                <span className="text-xs font-bold text-foreground/80 tracking-wide">
+                    {results.length} Target{results.length !== 1 ? "s" : ""} Scanned
+                </span>
                 <Dialog>
                     <DialogTrigger asChild>
                         <Button variant="ghost" size="icon" className="h-4 w-4 rounded-full text-muted-foreground/40 hover:text-foreground">
@@ -261,146 +271,258 @@ export const MultiIpSummary = ({ results, onViewDetails }: MultiIpSummaryProps) 
                 </Dialog>
             </div>
 
-            {/* Result rows */}
-            {results.map((result) => {
-                const vt = result.vendorData.find(v => v.name === "VirusTotal")?.data;
-                const ab = result.vendorData.find(v => v.name === "AbuseIPDB")?.data;
-                const geo = result.vendorData.find(v => v.name === "IP Geolocation")?.data;
-
-                const vtScore = vt?.["Detection Rate"] ?? null;
-                const abuseScore = ab?.["Abuse Confidence Score"] ?? null;
-                const country = geo?.["Country"] || ab?.["Country"] || null;
-                const isp = geo?.["ISP"] || ab?.["ISP"] || null;
-
-                const { name: countryName, code: countryCode } = parseCountry(country ?? "");
-                const flag = getFlagEmoji(countryCode);
-
-                const isM = result.threatLevel === "malicious";
-                const isS = result.threatLevel === "suspicious";
-                const accentColor = isM ? "#ef4444" : isS ? "#f59e0b" : "#10b981";
-                const accentClass = isM ? "text-red-400" : isS ? "text-amber-400" : "text-emerald-400";
-                const accentBg = isM ? "bg-red-500" : isS ? "bg-amber-500" : "bg-emerald-500";
-                const accentBorder = isM ? "border-red-500/15" : isS ? "border-amber-500/15" : "border-emerald-500/15";
-                const accentBgSoft = isM ? "bg-red-500/8" : isS ? "bg-amber-500/8" : "bg-emerald-500/8";
-                const labelText = isM ? (t('malicious') || "Malicious") : isS ? (t('suspicious') || "Suspicious") : (t('safe') || "Safe");
-
-                return (
-                    <div
-                        key={result.query}
-                        className={`group relative flex items-center gap-3 rounded-xl border ${accentBorder} bg-white/[0.02] hover:bg-white/[0.04] transition-all duration-200 cursor-pointer px-3 py-2.5`}
-                        onClick={() => onViewDetails(result.query)}
-                    >
-                        {/* Score ring — compact */}
-                        <div className="relative shrink-0">
-                            <svg width="40" height="40" viewBox="0 0 40 40" className="transform -rotate-90">
-                                <circle cx="20" cy="20" r="16" fill="none" stroke="currentColor" strokeWidth="2.5" className="text-white/[0.04]" />
-                                <circle
-                                    cx="20" cy="20" r="16" fill="none"
-                                    strokeWidth="2.5"
-                                    strokeLinecap="round"
-                                    stroke={accentColor}
-                                    strokeDasharray={`${(result.overallScore / 100) * 100.5} 100.5`}
-                                    className="transition-all duration-700"
-                                    style={{ filter: `drop-shadow(0 0 3px ${accentColor}50)` }}
-                                />
-                            </svg>
-                            <div className="absolute inset-0 flex items-center justify-center">
-                                <span className={`text-[11px] font-black font-mono ${accentClass}`}>
-                                    {result.overallScore}
-                                </span>
-                            </div>
-                        </div>
-
-                        {/* Target info */}
-                        <div className="min-w-0 flex-1">
-                            <div className="flex items-center gap-2">
-                                <span className="font-mono font-bold text-sm text-foreground truncate">{result.query}</span>
-                                <span className={`inline-flex items-center gap-1 px-2 py-px rounded-full text-[10px] font-bold ${accentBgSoft} ${accentClass} border ${accentBorder}`}>
-                                    <span className={`h-1 w-1 rounded-full ${accentBg}`} />
-                                    {labelText}
-                                </span>
-                                <button
-                                    onClick={(e) => { e.stopPropagation(); handleCopy(result.query); }}
-                                    className="p-0.5 rounded text-muted-foreground/30 hover:text-foreground transition-colors"
-                                    title="Copy"
-                                >
-                                    {copiedIp === result.query
-                                        ? <Check className="h-3 w-3 text-emerald-500" />
-                                        : <Copy className="h-3 w-3" />}
-                                </button>
-                            </div>
-                            <div className="flex items-center gap-2 mt-0.5 text-[11px] text-muted-foreground/50">
-                                {country && countryName !== "—" && (
-                                    <span className="flex items-center gap-1">
-                                        {flag && <span className="text-xs">{flag}</span>}
-                                        <span>{countryName}</span>
-                                    </span>
-                                )}
-                                {isp && (
-                                    <span className="truncate max-w-[160px]">{isp}</span>
-                                )}
-                            </div>
-                        </div>
-
-                        {/* Inline stats */}
-                        <div className="hidden sm:flex items-center gap-2 flex-wrap max-w-[45%] justify-end shrink-0">
-                            {result.vendorData.map((vendor) => {
-                                if (vendor.name === "IP Geolocation" || vendor.name === "WHOIS") return null;
-                                if (vendor.error || !vendor.data) return null;
-
-                                const info = getVendorDisplayInfo(vendor.name, vendor.data);
-                                if (!info) return null;
-
-                                const domain = getVendorDomain(vendor.name);
-                                const shortName = getVendorShortName(vendor.name);
-
-                                return (
-                                    <div
-                                        key={vendor.name}
-                                        className="flex items-center gap-1.5 bg-white/[0.02] border border-white/[0.04] px-2 py-0.5 rounded-md text-[9px] hover:bg-white/[0.05] transition-colors"
-                                        title={`${vendor.name}: ${info.scoreText}`}
-                                    >
-                                        <img
-                                            src={`https://www.google.com/s2/favicons?sz=32&domain=${domain}`}
-                                            alt=""
-                                            className="w-3.5 h-3.5 rounded-sm object-contain shrink-0"
-                                            onError={(e) => {
-                                                (e.target as HTMLElement).style.display = "none";
-                                            }}
-                                        />
-                                        <span className="text-muted-foreground/60 font-semibold">{shortName}</span>
-                                        <span className={`font-mono font-bold ${info.colorClass}`}>
-                                            {info.scoreText}
-                                        </span>
-                                    </div>
-                                );
-                            })}
-                        </div>
-
-                        {/* Detection count */}
-                        <div className="flex items-center gap-2 shrink-0">
-                            <div className="text-center min-w-[32px]">
-                                <div className="flex items-baseline justify-center gap-px">
-                                    <span className={`text-sm font-black font-mono ${result.detections > 0 ? "text-red-400" : "text-emerald-400"}`}>
-                                        {result.detections}
-                                    </span>
-                                    <span className="text-muted-foreground/30 text-[9px] font-mono">/{result.totalVendors}</span>
+            {/* Table Container */}
+            <div className="rounded-xl border border-white/[0.04] bg-[#0c0c0e] overflow-hidden shadow-2xl">
+                <Table>
+                    <TableHeader className="bg-white/[0.01] border-b border-white/[0.04]">
+                        <TableRow className="hover:bg-transparent border-b border-white/[0.04]">
+                            <TableHead className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/60 h-10 px-4 py-2">
+                                Target
+                            </TableHead>
+                            <TableHead className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/60 h-10 px-4 py-2">
+                                <div className="flex items-center gap-1">
+                                    <span>Threat Level</span>
+                                    <Dialog>
+                                        <DialogTrigger asChild>
+                                            <button className="p-0.5 rounded text-muted-foreground/40 hover:text-foreground transition-colors">
+                                                <Info className="h-3 w-3" />
+                                            </button>
+                                        </DialogTrigger>
+                                        <DialogContent className="max-w-md">
+                                            <DialogHeader>
+                                                <DialogTitle>{t('threatLevelScoringMethodology')}</DialogTitle>
+                                            </DialogHeader>
+                                            <div className="space-y-4 text-sm mt-2">
+                                                <p className="text-muted-foreground text-xs">{t('threatEngineExplanation')}</p>
+                                                <div className="space-y-2">
+                                                    <h4 className="font-semibold border-b pb-1 text-xs uppercase tracking-wider">{t('scoringThresholds')}</h4>
+                                                    <ul className="space-y-1 list-disc pl-4 text-xs text-muted-foreground">
+                                                        <li><strong className="text-emerald-500">SAFE (0–30):</strong> {t('safeDesc')}</li>
+                                                        <li><strong className="text-amber-500">SUSPICIOUS (31–70):</strong> {t('suspiciousDesc')}</li>
+                                                        <li><strong className="text-red-500">MALICIOUS (71–100):</strong> {t('maliciousDesc')}</li>
+                                                    </ul>
+                                                </div>
+                                            </div>
+                                        </DialogContent>
+                                    </Dialog>
                                 </div>
-                                <span className="text-[8px] uppercase tracking-widest text-muted-foreground/30 font-bold">det.</span>
-                            </div>
+                            </TableHead>
+                            <TableHead className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/60 h-10 px-4 py-2">
+                                Score
+                            </TableHead>
+                            <TableHead className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/60 h-10 px-4 py-2">
+                                <div className="flex items-center gap-1.5">
+                                    <img
+                                        src="https://www.google.com/s2/favicons?sz=32&domain=virustotal.com"
+                                        alt=""
+                                        className="w-3.5 h-3.5 rounded-sm object-contain shrink-0"
+                                        onError={(e) => { (e.target as HTMLElement).style.display = "none"; }}
+                                    />
+                                    <span>VirusTotal</span>
+                                </div>
+                            </TableHead>
+                            <TableHead className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/60 h-10 px-4 py-2">
+                                <div className="flex items-center gap-1.5">
+                                    <img
+                                        src="https://www.google.com/s2/favicons?sz=32&domain=abuseipdb.com"
+                                        alt=""
+                                        className="w-3.5 h-3.5 rounded-sm object-contain shrink-0"
+                                        onError={(e) => { (e.target as HTMLElement).style.display = "none"; }}
+                                    />
+                                    <span>AbuseIPDB</span>
+                                </div>
+                            </TableHead>
+                            <TableHead className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/60 h-10 px-4 py-2">
+                                <div className="flex items-center gap-1.5">
+                                    <img
+                                        src="https://www.google.com/s2/favicons?sz=32&domain=alienvault.com"
+                                        alt=""
+                                        className="w-3.5 h-3.5 rounded-sm object-contain shrink-0"
+                                        onError={(e) => { (e.target as HTMLElement).style.display = "none"; }}
+                                    />
+                                    <span>OTX</span>
+                                </div>
+                            </TableHead>
+                            <TableHead className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/60 h-10 px-4 py-2">
+                                <div className="flex items-center gap-1.5">
+                                    <Globe className="h-3.5 w-3.5 text-muted-foreground/50" />
+                                    <span>Country</span>
+                                </div>
+                            </TableHead>
+                            <TableHead className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/60 h-10 px-4 py-2">
+                                <div className="flex items-center gap-1.5">
+                                    <Server className="h-3.5 w-3.5 text-muted-foreground/50" />
+                                    <span>ISP</span>
+                                </div>
+                            </TableHead>
+                            <TableHead className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/60 h-10 px-4 py-2">
+                                Detections
+                            </TableHead>
+                            <TableHead className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/60 h-10 px-4 py-2 text-right">
+                                Actions
+                            </TableHead>
+                        </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                        {results.map((result) => {
+                            const vt = result.vendorData.find(v => v.name === "VirusTotal")?.data;
+                            const ab = result.vendorData.find(v => v.name === "AbuseIPDB")?.data;
+                            const geo = result.vendorData.find(v => v.name === "IP Geolocation")?.data;
+                            const otxData = result.vendorData.find(v => v.name === "AlienVault OTX")?.data;
 
-                            <button
-                                onClick={(e) => { e.stopPropagation(); copyReport(result); }}
-                                className="p-1.5 rounded-lg text-muted-foreground/30 hover:text-foreground hover:bg-white/[0.04] transition-all"
-                                title="Copy report"
-                            >
-                                <Copy className="h-3 w-3" />
-                            </button>
-                            <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/20 group-hover:text-foreground/40 group-hover:translate-x-0.5 transition-all duration-200" />
-                        </div>
-                    </div>
-                );
-            })}
+                            const vtScore = vt?.["Detection Rate"] ?? "—";
+                            const abuseScore = ab?.["Abuse Confidence Score"] ?? null;
+                            const country = geo?.["Country"] || ab?.["Country"] || "—";
+                            const isp = geo?.["ISP"] || ab?.["ISP"] || "—";
+                            const hostname = ab?.["Hostnames"] && ab["Hostnames"] !== "None" ? ab["Hostnames"].split(",")[0] : null;
+
+                            const pulseCount = otxData && otxData["Pulse Count"] !== undefined ? Number(otxData["Pulse Count"]) : null;
+                            const pulseText = pulseCount !== null ? (pulseCount > 0 ? `Suspicious (${pulseCount} pulses)` : `Clean (0 pulses)`) : "—";
+                            const pulseColor = pulseCount !== null ? (pulseCount > 0 ? "text-red-400" : "text-emerald-400") : "text-muted-foreground/60";
+
+                            const { name: countryName, code: countryCode } = parseCountry(country);
+                            const flag = getFlagEmoji(countryCode);
+
+                            const isM = result.threatLevel === "malicious";
+                            const isS = result.threatLevel === "suspicious";
+                            const accentColor = isM ? "#ef4444" : isS ? "#f59e0b" : "#10b981";
+                            const accentClass = isM ? "text-red-400" : isS ? "text-amber-400" : "text-emerald-400";
+                            const accentBg = isM ? "bg-red-500" : isS ? "bg-amber-500" : "bg-emerald-500";
+                            const accentBorder = isM ? "border-red-500/15" : isS ? "border-amber-500/15" : "border-emerald-500/15";
+                            const accentBgSoft = isM ? "bg-red-500/8" : isS ? "bg-amber-500/8" : "bg-emerald-500/8";
+                            const labelText = isM ? (t('malicious') || "Malicious") : isS ? (t('suspicious') || "Suspicious") : (t('safe') || "Safe");
+
+                            const abuseText = abuseScore !== null ? `${abuseScore}%` : "—";
+                            const abuseColor = abuseScore !== null ? (abuseScore > 50 ? "text-red-400" : abuseScore > 10 ? "text-amber-400" : "text-emerald-400") : "text-muted-foreground/60";
+
+                            return (
+                                <TableRow
+                                    key={result.query}
+                                    className="border-b border-white/[0.04] hover:bg-white/[0.02] transition-colors cursor-pointer"
+                                    onClick={() => onViewDetails(result.query)}
+                                >
+                                    {/* Target */}
+                                    <TableCell className="px-4 py-3 align-middle">
+                                        <div className="flex flex-col min-w-[120px]">
+                                            <div className="flex items-center gap-1.5">
+                                                <span className="font-mono font-bold text-xs text-foreground truncate">{result.query}</span>
+                                                <button
+                                                    onClick={(e) => { e.stopPropagation(); handleCopy(result.query); }}
+                                                    className="p-0.5 rounded text-muted-foreground/30 hover:text-foreground transition-colors"
+                                                    title="Copy IP"
+                                                >
+                                                    {copiedIp === result.query
+                                                        ? <Check className="h-3 w-3 text-emerald-500" />
+                                                        : <Copy className="h-3 w-3" />}
+                                                </button>
+                                            </div>
+                                            {hostname && (
+                                                <span className="text-[10px] text-muted-foreground/50 font-mono tracking-tight mt-0.5 truncate max-w-[150px]" title={hostname}>
+                                                    {hostname}
+                                                </span>
+                                            )}
+                                        </div>
+                                    </TableCell>
+
+                                    {/* Threat Level */}
+                                    <TableCell className="px-4 py-3 align-middle">
+                                        <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold ${accentBgSoft} ${accentClass} border ${accentBorder}`}>
+                                            <span className={`h-1 w-1 rounded-full ${accentBg}`} />
+                                            {labelText}
+                                        </span>
+                                    </TableCell>
+
+                                    {/* Score */}
+                                    <TableCell className="px-4 py-3 align-middle">
+                                        <div className="space-y-1 min-w-[75px] max-w-[95px]">
+                                            <div className="flex items-baseline gap-px font-mono">
+                                                <span className={`text-xs font-black ${accentClass}`}>{result.overallScore}</span>
+                                                <span className="text-muted-foreground/30 text-[9px]">/100</span>
+                                            </div>
+                                            <div className="w-full bg-muted/40 h-1 rounded-full overflow-hidden border border-muted/20 relative shadow-inner">
+                                                <div
+                                                    className="h-full rounded-full transition-all duration-1000 ease-out"
+                                                    style={{
+                                                        width: `${result.overallScore}%`,
+                                                        backgroundColor: accentColor,
+                                                        boxShadow: `0 0 4px ${accentColor}80`
+                                                    }}
+                                                />
+                                            </div>
+                                        </div>
+                                    </TableCell>
+
+                                    {/* VirusTotal */}
+                                    <TableCell className="px-4 py-3 align-middle">
+                                        <span className={`font-mono font-bold text-xs ${parseInt(vtScore.split("/")[0]) > 0 ? "text-red-400" : "text-emerald-400"}`}>
+                                            {vtScore}
+                                        </span>
+                                    </TableCell>
+
+                                    {/* AbuseIPDB */}
+                                    <TableCell className="px-4 py-3 align-middle">
+                                        <span className={`font-mono font-bold text-xs ${abuseColor}`}>
+                                            {abuseText}
+                                        </span>
+                                    </TableCell>
+
+                                    {/* OTX */}
+                                    <TableCell className="px-4 py-3 align-middle">
+                                        <span className={`font-bold text-xs ${pulseColor}`}>
+                                            {pulseText}
+                                        </span>
+                                    </TableCell>
+
+                                    {/* Country */}
+                                    <TableCell className="px-4 py-3 align-middle">
+                                        <div className="flex items-center gap-1.5 text-xs text-foreground font-medium max-w-[130px] truncate" title={countryName}>
+                                            {flag && <span className="text-sm shrink-0">{flag}</span>}
+                                            <span className="truncate">{countryName}</span>
+                                        </div>
+                                    </TableCell>
+
+                                    {/* ISP */}
+                                    <TableCell className="px-4 py-3 align-middle">
+                                        <span className="text-xs text-muted-foreground/70 font-medium max-w-[130px] truncate block" title={isp}>
+                                            {isp}
+                                        </span>
+                                    </TableCell>
+
+                                    {/* Detections */}
+                                    <TableCell className="px-4 py-3 align-middle">
+                                        <div className="flex items-baseline gap-px font-mono">
+                                            <span className={`text-xs font-black ${result.detections > 0 ? "text-red-400" : "text-emerald-400"}`}>
+                                                {result.detections}
+                                            </span>
+                                            <span className="text-muted-foreground/30 text-[9px]">/{result.totalVendors}</span>
+                                        </div>
+                                    </TableCell>
+
+                                    {/* Actions */}
+                                    <TableCell className="px-4 py-3 align-middle text-right">
+                                        <div className="flex items-center justify-end gap-1" onClick={(e) => e.stopPropagation()}>
+                                            <button
+                                                onClick={() => copyReport(result)}
+                                                className="p-1.5 rounded-lg text-muted-foreground/40 hover:text-foreground hover:bg-white/[0.04] transition-all"
+                                                title="Copy report"
+                                            >
+                                                <Copy className="h-3.5 w-3.5" />
+                                            </button>
+                                            <button
+                                                onClick={() => onViewDetails(result.query)}
+                                                className="p-1.5 rounded-lg text-muted-foreground/40 hover:text-foreground hover:bg-white/[0.04] transition-all"
+                                                title="View details"
+                                            >
+                                                <ArrowRight className="h-3.5 w-3.5" />
+                                            </button>
+                                        </div>
+                                    </TableCell>
+                                </TableRow>
+                            );
+                        })}
+                    </TableBody>
+                </Table>
+            </div>
         </div>
     );
 };
