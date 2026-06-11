@@ -15,6 +15,10 @@ import { scoreArticle, CTI_FEEDS } from './ctiIntel.js';
 dotenv.config({ path: '../.env' });
 
 const app = express();
+// Trust a single front reverse proxy (Render/nginx) so express-rate-limit keys
+// off the real client IP. Use 1 (a known hop), NOT true (which would trust
+// client-supplied X-Forwarded-For and make the per-IP limit spoofable).
+app.set('trust proxy', 1);
 app.use(compression());
 const PORT = process.env.PORT || 3001;
 
@@ -31,25 +35,15 @@ const __dirname = path.dirname(__filename);
 const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',') || ['http://localhost:8080'];
 const corsOptionsDelegate = (req, callback) => {
     const origin = req.header('Origin');
-    const host = req.get('host') || '';
-    
-    let isAllowed = false;
-    if (!origin) {
-        isAllowed = true;
-    } else if (allowedOrigins.includes(origin)) {
-        isAllowed = true;
-    } else {
-        const originHost = origin.replace(/^https?:\/\//, '');
-        if (originHost && host && originHost === host) {
-            isAllowed = true;
-        }
-    }
+    // Allow same-origin / non-browser requests (no Origin header) and explicitly
+    // allowlisted origins only. No credentials are used (no cookie/session auth),
+    // and we no longer reflect arbitrary origins via a host-match fallback.
+    const isAllowed = !origin || allowedOrigins.includes(origin);
 
     callback(null, {
         origin: isAllowed,
         methods: ['GET', 'POST', 'OPTIONS'],
         allowedHeaders: ['Content-Type', 'Authorization'],
-        credentials: true
     });
 };
 app.use(cors(corsOptionsDelegate));
@@ -64,9 +58,14 @@ const skipRateLimit = (req) => {
     // Rate limiting is ON by default for security
     const disableRateLimit = process.env.DISABLE_RATE_LIMIT === 'true';
     if (disableRateLimit) return true;
-    
-    // Always skip DNSBL checks as they perform 400+ concurrent requests for a single query page
-    return req.path === '/dnsbl' || req.originalUrl?.includes('/dnsbl');
+
+    // Always skip DNSBL checks (a single page issues many concurrent lookups).
+    // Match on req.path ONLY — it never contains the query string, so appending
+    // "?x=/dnsbl" to another endpoint can no longer bypass the limiter. The path
+    // is relative under the '/api/' mount ('/dnsbl') and absolute on the
+    // per-route scanLimiter ('/api/dnsbl'); accept both exact forms.
+    const p = req.path || '';
+    return p === '/dnsbl' || p === '/dnsbl/batch' || p === '/api/dnsbl' || p === '/api/dnsbl/batch';
 };
 
 const limiter = rateLimit({
@@ -770,8 +769,13 @@ app.post('/api/dnsbl/batch', scanLimiter, async (req, res) => {
             return res.status(400).json({ error: "Providers must be an array" });
         }
 
+        // De-duplicate first: this collapses amplification attempts (the same
+        // allowed provider repeated thousands of times) and naturally bounds the
+        // number of DNS lookups to at most the size of the allowlist.
+        const uniqueProviders = [...new Set(providers)];
+
         // Validate all providers against the allowed set
-        const invalid = providers.filter(p => !allowedDnsblProviders.has(p));
+        const invalid = uniqueProviders.filter(p => !allowedDnsblProviders.has(p));
         if (invalid.length > 0) {
             return res.status(400).json({ error: `Invalid/unauthorized DNSBL providers: ${invalid.join(', ')}` });
         }
@@ -779,7 +783,7 @@ app.post('/api/dnsbl/batch', scanLimiter, async (req, res) => {
         const reversed = sanitized.split('.').reverse().join('.');
 
         // Resolve all in parallel
-        const resolvePromises = providers.map(async (provider) => {
+        const resolvePromises = uniqueProviders.map(async (provider) => {
             const dnsQuery = `${reversed}.${provider}`;
             const timeoutPromise = new Promise((_, reject) => 
                 setTimeout(() => reject(new Error('DNS Timeout')), 3000)
