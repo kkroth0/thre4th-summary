@@ -527,6 +527,31 @@ const Index = () => {
       const reportDate = new Date().toLocaleString();
       const reportId = `TS-${Date.now().toString(36).toUpperCase()}`;
 
+      // ── Text sanitizer for jsPDF standard fonts (WinAnsi/Latin-1) ──
+      // Vendor/scraped data sometimes arrives with HTML entities (&#8217;, &nbsp;)
+      // or Unicode typography that the built-in font can't render, producing
+      // garbage. Decode entities and normalize to Latin-1-safe characters so the
+      // content stays legible.
+      const decodeHtmlEntities = (s: string): string => s
+        .replace(/&#x([0-9a-fA-F]+);/g, (_, h) => String.fromCodePoint(parseInt(h, 16)))
+        .replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(parseInt(n, 10)))
+        .replace(/&nbsp;/gi, ' ').replace(/&amp;/gi, '&').replace(/&lt;/gi, '<')
+        .replace(/&gt;/gi, '>').replace(/&quot;/gi, '"').replace(/&(?:apos|#39);/gi, "'")
+        .replace(/&hellip;/gi, '...').replace(/&mdash;/gi, '-').replace(/&ndash;/gi, '-');
+      const S = (v: unknown): string => {
+        let s = decodeHtmlEntities(String(v ?? ''));
+        s = s
+          .replace(/[‘’‚‛]/g, "'")
+          .replace(/[“”„‟]/g, '"')
+          .replace(/[\u2010\u2011\u2012\u2013\u2014\u2015\u2212]/g, '-')
+          .replace(/…/g, '...')
+          .replace(/[•·]/g, '-')
+          .replace(/ /g, ' ')
+          .replace(/[​-‍﻿]/g, '');
+        // Keep printable ASCII + Latin-1 (accented PT/EU letters), drop the rest
+        return s.replace(/[^\t\n\r\x20-\x7E¡-ÿ]/g, '');
+      };
+
       // ── Color Palette ──
       const COLORS = {
         headerBg: [18, 18, 18] as [number, number, number],
@@ -716,18 +741,18 @@ const Index = () => {
         if (!vendor || vendor.error) return "N/A";
         const val = vendor.data[field];
         if (val === undefined || val === null) return "N/A";
-        if (Array.isArray(val)) return val.join(", ");
-        return String(val);
+        if (Array.isArray(val)) return S(val.join(", "));
+        return S(val);
       };
 
       // Helper: extract hostname
       const getHostname = (res: ThreatIntelligenceResult): string => {
         const abuse = res.vendorData.find(v => v.name === "AbuseIPDB");
-        if (abuse?.data?.["Domain"]) return String(abuse.data["Domain"]);
+        if (abuse?.data?.["Domain"]) return S(abuse.data["Domain"]);
         const vt = res.vendorData.find(v => v.name === "VirusTotal");
         if (vt?.data?.["Hostnames"]) {
           const h = vt.data["Hostnames"];
-          return Array.isArray(h) ? h[0] || "N/A" : String(h);
+          return S(Array.isArray(h) ? h[0] || "N/A" : String(h));
         }
         return "N/A";
       };
@@ -802,7 +827,7 @@ const Index = () => {
 
       // ── Executive narrative ──
       y = drawSectionTitle(y, "Risk Posture");
-      const malicious = results.filter(r => r.threatLevel === "malicious").map(r => String(r.query));
+      const malicious = results.filter(r => r.threatLevel === "malicious").map(r => S(r.query));
       const narrative =
         `This report consolidates multi-vendor threat intelligence for ${results.length} indicator(s). ` +
         `${malCount} were classified as MALICIOUS, ${suspCount} as SUSPICIOUS and ${safeCount} as SAFE, ` +
@@ -831,7 +856,7 @@ const Index = () => {
       });
 
       const overviewRows = sortedResults.map(r => [
-        r.query || 'N/A',
+        S(r.query) || 'N/A',
         getHostname(r) || 'N/A',
         (r.threatLevel || 'UNKNOWN').toUpperCase(),
         `${r.overallScore ?? 0}/100`,
@@ -986,7 +1011,7 @@ const Index = () => {
       for (let i = 0; i < results.length; i++) {
         const res = results[i];
         doc.addPage();
-        drawPageHeader(`IOC Analysis: ${res.query}`, `Target ${i + 1} of ${results.length}`);
+        drawPageHeader(`IOC Analysis: ${S(res.query)}`, `Target ${i + 1} of ${results.length}`);
         let y = 42;
 
         // ── IOC Identity Card (Gauge Style - Clean) ──
@@ -1004,7 +1029,7 @@ const Index = () => {
         doc.setFont("helvetica", "bold");
         doc.setFontSize(16);
         doc.setTextColor(30, 35, 50);
-        doc.text(String(res.query || ''), M + 8, y + 12);
+        doc.text(S(res.query), M + 8, y + 12);
 
         // Status Pill with '!' Icon
         const statusColor = (getThreatColor(res.threatLevel) || [100, 100, 100]) as [number, number, number];
@@ -1089,7 +1114,7 @@ const Index = () => {
         const addNetField = (label: string, value: any) => {
           const valStr = String(value || '');
           if (valStr && valStr !== "N/A" && valStr !== "Unknown" && valStr !== "0") {
-            networkData.push([label, valStr]);
+            networkData.push([label, S(valStr)]);
           }
         };
 
@@ -1171,7 +1196,7 @@ const Index = () => {
               if (["Status", "All Vendors", "Hostnames"].includes(k)) return;
               const cat = getFieldCategory(k);
               if (!grouped[cat]) grouped[cat] = [];
-              grouped[cat].push(`${k}: ${val}`);
+              grouped[cat].push(S(`${k}: ${val}`));
             });
 
             const details = CATEGORY_ORDER
@@ -1179,7 +1204,7 @@ const Index = () => {
               .map(cat => `► ${cat.toUpperCase()}\n${grouped[cat].join("\n")}`)
               .join("\n\n");
 
-            return [v.name, status, details || 'No notable findings', v.link || ''];
+            return [S(v.name), S(status), S(details) || 'No notable findings', v.link || ''];
           });
 
         autoTable(doc, {
@@ -1217,7 +1242,7 @@ const Index = () => {
             // CRITICAL: Only draw "cont." if the table actually overflowed onto a NEW page
             // @ts-ignore
             if (data.pageNumber > data.settings.startYPage) {
-              drawPageHeader(`IOC ANALYSIS: ${res.query} (cont.)`, `Target ${i + 1} of ${results.length}`);
+              drawPageHeader(`IOC ANALYSIS: ${S(res.query)} (cont.)`, `Target ${i + 1} of ${results.length}`);
             }
           }
         });
