@@ -10,6 +10,7 @@ import dns from 'dns';
 import fs from 'fs';
 import crypto from 'crypto';
 import compression from 'compression';
+import { scoreArticle, CTI_FEEDS } from './ctiIntel.js';
 
 dotenv.config({ path: '../.env' });
 
@@ -1132,26 +1133,9 @@ const memoryCache = {
 // Background newsletter feed refresher
 async function refreshNewsletterFeed() {
     try {
-        const feeds = [
-            // Layer 1 - PSIRT & Vendor Advisories
-            { url: 'https://filestore.fortinet.com/fortiguard/rss/ir.xml', source: 'FortiGuard PSIRT', layer: 1 },
-            { url: 'https://filestore.fortinet.com/fortiguard/rss/outbreakalert.xml', source: 'FortiGuard Outbreak', layer: 1 },
-            { url: 'https://security.paloaltonetworks.com/rss.xml', source: 'Palo Alto PSIRT', layer: 1 },
-            { url: 'https://www.jenkins.io/security/advisories/rss.xml', source: 'Jenkins PSIRT', layer: 1 },
-            { url: 'https://about.gitlab.com/security-releases.xml', source: 'GitLab Security', layer: 1 },
-            { url: 'https://feeds.feedburner.com/GoogleChromeReleases', source: 'Chrome Releases', layer: 1 },
-            { url: 'https://www.cisa.gov/cybersecurity-advisories/all.xml', source: 'CISA Alert', layer: 1 },
-
-            // Layer 2 - TI Research
-            { url: 'https://www.bleepingcomputer.com/feed/', source: 'BleepingComputer', layer: 2 },
-            { url: 'https://feeds.feedburner.com/TheHackerNews', source: 'The Hacker News', layer: 2 },
-            { url: 'https://isc.sans.edu/rssfeed.xml', source: 'SANS ISC', layer: 2 },
-            { url: 'https://www.securityweek.com/feed', source: 'SecurityWeek', layer: 2 },
-
-            // Layer 3 - LATAM/BR Regional Blogs
-            { url: 'https://www.cisoadvisor.com.br/feed', source: 'CISO Advisor BR', layer: 3 },
-            { url: 'https://thehack.com.br/feed', source: 'The Hack', layer: 3 }
-        ];
+        // Specialized feed catalog with per-source confidence (weight_boost),
+        // ported from the soc-sentinela CTI bot.
+        const feeds = CTI_FEEDS;
 
         const feedPromises = feeds.map(async (f) => {
             try {
@@ -1159,7 +1143,11 @@ async function refreshNewsletterFeed() {
                     headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36' },
                     timeout: 8000
                 });
-                return parseFeed(response.data, f.source, f.layer);
+                // Enrich each item with the CTI relevance score + categorization
+                return parseFeed(response.data, f.source, f.layer).map((item) => {
+                    const intel = scoreArticle(`${item.title} ${item.description}`, f.weight_boost);
+                    return { ...item, weight_boost: f.weight_boost, ...intel };
+                });
             } catch (err) {
                 console.error(`Error fetching feed ${f.source}:`, err.message);
                 return [];
@@ -1172,7 +1160,17 @@ async function refreshNewsletterFeed() {
             .map(r => r.value)
             .flat();
 
-        const unifiedFeed = successfulFeeds.sort((a, b) => new Date(b.pubDate) - new Date(a.pubDate));
+        // De-duplicate by normalized URL (strip tracking params) — the same story
+        // is often syndicated across multiple feeds; keep the highest-scoring copy.
+        const byUrl = new Map();
+        for (const item of successfulFeeds) {
+            const key = (item.link || '').replace(/[?&](utm_[^&]+|fbclid=[^&]+|feature=[^&]+)/gi, '').replace(/[?&]$/, '').toLowerCase();
+            const existing = byUrl.get(key);
+            if (!existing || (item.score || 0) > (existing.score || 0)) byUrl.set(key, item);
+        }
+
+        // Default order: most recent first (the route can re-sort by relevance).
+        const unifiedFeed = [...byUrl.values()].sort((a, b) => new Date(b.pubDate) - new Date(a.pubDate));
 
         memoryCache.newsletter.data = unifiedFeed;
         memoryCache.newsletter.expiresAt = Date.now() + memoryCache.newsletter.ttl;
@@ -1181,14 +1179,33 @@ async function refreshNewsletterFeed() {
     }
 }
 
-// CTI News feed endpoint
+// CTI News feed endpoint.
+// Optional query params: minScore (0-100), severity (Critical|High|Medium|Low),
+// category (substring of a category label), layer (1-4), sort (relevance|date).
 app.get('/api/newsletter', async (req, res) => {
     try {
         if (!memoryCache.newsletter.data) {
             // Cold start fallback
             await refreshNewsletterFeed();
         }
-        res.json(memoryCache.newsletter.data || []);
+        let data = memoryCache.newsletter.data || [];
+
+        const minScore = parseInt(req.query.minScore, 10);
+        const severity = (req.query.severity || '').toString();
+        const category = (req.query.category || '').toString().toLowerCase();
+        const layer = parseInt(req.query.layer, 10);
+        const sort = (req.query.sort || 'date').toString();
+
+        if (!Number.isNaN(minScore)) data = data.filter((i) => (i.score || 0) >= minScore);
+        if (severity) data = data.filter((i) => i.severity === severity);
+        if (layer) data = data.filter((i) => i.layer === layer);
+        if (category) data = data.filter((i) => (i.categories || []).some((c) => c.toLowerCase().includes(category)));
+
+        if (sort === 'relevance') {
+            data = [...data].sort((a, b) => (b.score || 0) - (a.score || 0) || new Date(b.pubDate) - new Date(a.pubDate));
+        }
+
+        res.json(data);
     } catch (error) {
         const { status, message } = sanitizeError(error);
         res.status(status).json({ error: message });
