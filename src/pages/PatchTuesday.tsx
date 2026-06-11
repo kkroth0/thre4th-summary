@@ -16,6 +16,7 @@ import {
     ChevronLeft,
     ChevronRight,
     X,
+    ExternalLink,
 } from "lucide-react";
 import { Header } from "@/components/Header";
 import { Button } from "@/components/ui/button";
@@ -465,6 +466,7 @@ const PatchTuesday = () => {
                                                 <th className="px-4 py-2.5 font-semibold hidden xl:table-cell">{isPt ? "Família" : "Family"}</th>
                                                 <th className="px-4 py-2.5 font-semibold hidden lg:table-cell">Status</th>
                                                 <th className="px-4 py-2.5 font-semibold">{isPt ? "Título" : "Title"}</th>
+                                                <th className="px-4 py-2.5 font-semibold">Links</th>
                                             </tr>
                                         </thead>
                                         <tbody>
@@ -507,11 +509,33 @@ const PatchTuesday = () => {
                                                     <td className="px-4 py-2.5 text-muted-foreground max-w-[340px] truncate" title={v.title}>
                                                         {v.title}
                                                     </td>
+                                                    <td className="px-4 py-2.5">
+                                                        <div className="flex items-center gap-1.5">
+                                                            <a
+                                                                href={`https://msrc.microsoft.com/update-guide/vulnerability/${v.cve}`}
+                                                                target="_blank"
+                                                                rel="noreferrer"
+                                                                title={isPt ? "Microsoft Security Update Guide" : "Microsoft Security Update Guide"}
+                                                                className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded border border-primary/20 text-primary hover:bg-primary/10 transition-colors whitespace-nowrap"
+                                                            >
+                                                                MSRC <ExternalLink className="h-2.5 w-2.5" />
+                                                            </a>
+                                                            <a
+                                                                href={`https://nvd.nist.gov/vuln/detail/${v.cve}`}
+                                                                target="_blank"
+                                                                rel="noreferrer"
+                                                                title={isPt ? "Registro oficial da CVE (NVD/NIST)" : "Official CVE record (NVD/NIST)"}
+                                                                className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded border border-border text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors whitespace-nowrap"
+                                                            >
+                                                                NVD <ExternalLink className="h-2.5 w-2.5" />
+                                                            </a>
+                                                        </div>
+                                                    </td>
                                                 </tr>
                                             ))}
                                             {pageRows.length === 0 && (
                                                 <tr>
-                                                    <td colSpan={7} className="px-4 py-10 text-center text-muted-foreground">
+                                                    <td colSpan={8} className="px-4 py-10 text-center text-muted-foreground">
                                                         <ListFilter className="h-5 w-5 mx-auto mb-2 opacity-50" />
                                                         {isPt ? "Nenhum CVE corresponde aos filtros." : "No CVEs match the current filters."}
                                                     </td>
