@@ -29,7 +29,20 @@ interface Advisory {
   layer?: number;
   titlePt?: string;
   descriptionPt?: string;
+  // CTI relevance enrichment (from the specialized collector)
+  score?: number;
+  severity?: string; // Critical | High | Medium | Low
+  categories?: string[];
+  cves?: string[];
+  cvss?: number | null;
 }
+
+const SEVERITY_STYLES: Record<string, string> = {
+  Critical: "bg-red-500/10 text-red-500 border-red-500/20",
+  High: "bg-orange-500/10 text-orange-500 border-orange-500/20",
+  Medium: "bg-yellow-500/10 text-yellow-600 border-yellow-500/20",
+  Low: "bg-slate-500/10 text-slate-400 border-slate-500/20",
+};
 
 const translateText = async (text: string): Promise<string> => {
   if (!text) return "";
@@ -62,6 +75,8 @@ const Newsletter = () => {
   const [translatingIds, setTranslatingIds] = useState<Record<string, boolean>>({});
   const [isDigestOpen, setIsDigestOpen] = useState(false);
   const [selectedLayer, setSelectedLayer] = useState<string>("all");
+  const [selectedSeverity, setSelectedSeverity] = useState<string>("all");
+  const [sortByRelevance, setSortByRelevance] = useState<boolean>(false);
 
   // Calendar Month Selector States
   const [selectedMonth, setSelectedMonth] = useState<number>(new Date().getMonth());
@@ -316,7 +331,7 @@ const Newsletter = () => {
 
   // Filter Advisories / News
   const filteredAdvisories = useMemo(() => {
-    return advisories.filter(item => {
+    const filtered = advisories.filter(item => {
       // 1. Month/Year filter
       const d = new Date(item.pubDate);
       if (d.getMonth() !== selectedMonth || d.getFullYear() !== selectedYear) {
@@ -331,14 +346,23 @@ const Newsletter = () => {
 
       if (!matchesSearch) return false;
 
-      // 3. Layer filter
-      if (selectedLayer === "all") return true;
-      if (selectedLayer === "l1") return item.layer === 1;
-      if (selectedLayer === "l2") return item.layer === 2;
-      if (selectedLayer === "l3") return item.layer === 3;
+      // 3. Severity filter (CTI relevance)
+      if (selectedSeverity !== "all" && item.severity !== selectedSeverity) return false;
+
+      // 4. Layer filter
+      if (selectedLayer === "l1" && item.layer !== 1) return false;
+      if (selectedLayer === "l2" && item.layer !== 2) return false;
+      // L3 captures research labs (3) and LATAM/BR regional (4)
+      if (selectedLayer === "l3" && (item.layer ?? 0) < 3) return false;
+
       return true;
     });
-  }, [advisories, selectedMonth, selectedYear, searchNews, selectedLayer]);
+
+    // 5. Ordering: relevance (score) or recency
+    return sortByRelevance
+      ? [...filtered].sort((a, b) => (b.score ?? 0) - (a.score ?? 0) || new Date(b.pubDate).getTime() - new Date(a.pubDate).getTime())
+      : filtered;
+  }, [advisories, selectedMonth, selectedYear, searchNews, selectedLayer, selectedSeverity, sortByRelevance]);
 
   useEffect(() => {
     if (language !== "pt") return;
@@ -574,7 +598,35 @@ const Newsletter = () => {
                 onClick={() => setSelectedLayer("l3")}
               >
                 <span className="h-2 w-2 rounded-full bg-blue-500" />
-                L3: Blogs
+                L3: Research/BR
+              </Button>
+
+              <div className="h-4 w-px bg-border/60 mx-1 shrink-0" />
+
+              {/* Severity filter (CTI relevance) */}
+              <Select value={selectedSeverity} onValueChange={setSelectedSeverity}>
+                <SelectTrigger className="h-9 w-[140px] text-xs font-semibold shrink-0">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">{language === "pt" ? "Toda Severidade" : "All Severity"}</SelectItem>
+                  <SelectItem value="Critical">Critical</SelectItem>
+                  <SelectItem value="High">High</SelectItem>
+                  <SelectItem value="Medium">Medium</SelectItem>
+                  <SelectItem value="Low">Low</SelectItem>
+                </SelectContent>
+              </Select>
+
+              {/* Relevance sort toggle */}
+              <Button
+                variant={sortByRelevance ? "default" : "outline"}
+                size="sm"
+                className="h-9 text-xs font-semibold px-3 gap-1.5 shrink-0"
+                onClick={() => setSortByRelevance(v => !v)}
+                title={language === "pt" ? "Ordenar por relevância" : "Sort by relevance"}
+              >
+                <Sparkles className="h-3.5 w-3.5" />
+                {language === "pt" ? "Relevância" : "Relevance"}
               </Button>
 
               <div className="h-4 w-px bg-border/60 mx-1 shrink-0" />
@@ -767,6 +819,23 @@ const Newsletter = () => {
                             <Badge variant="outline" className={badgeColor}>
                               {item.source}
                             </Badge>
+                            {item.severity && (
+                              <Badge variant="outline" className={`text-[10px] font-bold ${SEVERITY_STYLES[item.severity] || SEVERITY_STYLES.Low}`}>
+                                {item.severity}
+                                {typeof item.score === "number" && <span className="ml-1 opacity-70">{item.score}</span>}
+                              </Badge>
+                            )}
+                            {(item.cves ?? []).slice(0, 3).map((cve) => (
+                              <a
+                                key={cve}
+                                href={`https://nvd.nist.gov/vuln/detail/${cve}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded border border-primary/20 text-primary hover:bg-primary/10 transition-colors"
+                              >
+                                {cve}
+                              </a>
+                            ))}
                             <span className="text-xs text-muted-foreground">
                               {new Date(item.pubDate).toLocaleString()}
                             </span>
@@ -792,6 +861,19 @@ const Newsletter = () => {
                           <div className="text-sm text-muted-foreground leading-relaxed">
                             {renderHighlightedDescription(language === "pt" ? (item.descriptionPt || item.description) : item.description)}
                           </div>
+
+                          {(item.categories ?? []).length > 0 && (
+                            <div className="flex flex-wrap gap-1.5 pt-1">
+                              {(item.categories ?? []).map((cat) => (
+                                <span
+                                  key={cat}
+                                  className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-muted/50 text-muted-foreground border border-border/40"
+                                >
+                                  {cat}
+                                </span>
+                              ))}
+                            </div>
+                          )}
 
                           <div className="pt-2 flex items-center justify-between">
                             <a
