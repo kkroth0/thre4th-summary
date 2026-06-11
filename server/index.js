@@ -1101,6 +1101,20 @@ function parseFeed(xmlText, sourceName, layer) {
     return items;
 }
 
+// Insert into a Map-backed cache with a hard size cap, evicting the oldest
+// entries (insertion order) so these in-memory stores can't grow unbounded.
+function cacheSet(store, key, value, max) {
+    store.set(key, value);
+    if (store.size > max) {
+        const excess = store.size - max;
+        let i = 0;
+        for (const k of store.keys()) {
+            if (i++ >= excess) break;
+            store.delete(k);
+        }
+    }
+}
+
 // Simple in-memory cache for external feeds & APIs
 const memoryCache = {
     newsletter: {
@@ -1153,9 +1167,11 @@ async function refreshNewsletterFeed() {
                     headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36' },
                     timeout: 8000
                 });
-                // Enrich each item with the CTI relevance score + categorization
+                // Enrich each item with the CTI relevance score + categorization.
+                // Drop `reasons` (debug-only) so it doesn't bloat memory/payload.
                 return parseFeed(response.data, f.source, f.layer).map((item) => {
-                    const intel = scoreArticle(`${item.title} ${item.description}`, f.weight_boost);
+                    const { reasons, ...intel } = scoreArticle(`${item.title} ${item.description}`, f.weight_boost);
+                    void reasons;
                     return { ...item, weight_boost: f.weight_boost, ...intel };
                 });
             } catch (err) {
@@ -1215,6 +1231,7 @@ app.get('/api/newsletter', async (req, res) => {
             data = [...data].sort((a, b) => (b.score || 0) - (a.score || 0) || new Date(b.pubDate) - new Date(a.pubDate));
         }
 
+        res.set('Cache-Control', 'public, max-age=300');
         res.json(data);
     } catch (error) {
         const { status, message } = sanitizeError(error);
@@ -1423,7 +1440,7 @@ app.post('/api/newsletter/enrich', scanLimiter, async (req, res) => {
             }
         }
 
-        memoryCache.newsletterEnrich.store.set(cacheKey, { data: payload, expiresAt: now + memoryCache.newsletterEnrich.ttl });
+        cacheSet(memoryCache.newsletterEnrich.store, cacheKey, { data: payload, expiresAt: now + memoryCache.newsletterEnrich.ttl }, 500);
         res.json(payload);
     } catch (error) {
         const { status, message } = sanitizeError(error);
@@ -1790,7 +1807,7 @@ async function fetchAndCacheSummary(id) {
         timeout: 20000
     });
     const summary = normalizeCvrf(response.data);
-    memoryCache.patchTuesday.store.set(id, { data: summary, expiresAt: Date.now() + memoryCache.patchTuesday.ttl });
+    cacheSet(memoryCache.patchTuesday.store, id, { data: summary, expiresAt: Date.now() + memoryCache.patchTuesday.ttl }, 36);
     return summary;
 }
 
@@ -1813,9 +1830,11 @@ async function refreshPatchTuesday() {
 app.get('/api/patch-tuesday/months', async (req, res) => {
     const now = Date.now();
     if (memoryCache.patchTuesdayMonths.data && memoryCache.patchTuesdayMonths.expiresAt > now) {
+        res.set('Cache-Control', 'public, max-age=21600');
         return res.json(memoryCache.patchTuesdayMonths.data);
     }
     try {
+        res.set('Cache-Control', 'public, max-age=21600');
         res.json(await fetchAndCacheMonths());
     } catch (error) {
         const { status, message } = sanitizeError(error);
@@ -1833,10 +1852,12 @@ app.get('/api/patch-tuesday/:id', async (req, res) => {
     const now = Date.now();
     const cached = memoryCache.patchTuesday.store.get(id);
     if (cached && cached.expiresAt > now) {
+        res.set('Cache-Control', 'public, max-age=3600');
         return res.json(cached.data);
     }
 
     try {
+        res.set('Cache-Control', 'public, max-age=3600');
         res.json(await fetchAndCacheSummary(id));
     } catch (error) {
         const { status, message } = sanitizeError(error);

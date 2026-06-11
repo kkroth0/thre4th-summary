@@ -252,10 +252,16 @@ const Newsletter = () => {
           }
         });
         
-        // Sort newest first
+        // Sort newest first, then cap the persisted set so localStorage can't
+        // grow past its quota as advisories accumulate across fetches/months.
         merged.sort((a, b) => new Date(b.pubDate).getTime() - new Date(a.pubDate).getTime());
-        localStorage.setItem("cached_cti_advisories", JSON.stringify(merged));
-        return merged;
+        const capped = merged.slice(0, 400);
+        try {
+          localStorage.setItem("cached_cti_advisories", JSON.stringify(capped));
+        } catch {
+          /* quota exceeded — keep the in-memory list, skip persistence */
+        }
+        return capped;
       });
 
       setLastUpdatedNews(new Date());
