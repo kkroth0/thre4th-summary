@@ -124,9 +124,10 @@ const Newsletter = () => {
         const parsed = JSON.parse(cached);
         if (Array.isArray(parsed)) {
           // Schema/Integrity validation check (LOW-07)
-          const validated: Advisory[] = parsed.filter((item: any): item is Advisory => {
+          const validated: Advisory[] = parsed.filter((raw: unknown): raw is Record<string, unknown> => {
+            const item = raw as Record<string, unknown>;
             return (
-              item &&
+              !!item &&
               typeof item === "object" &&
               typeof item.title === "string" &&
               typeof item.link === "string" &&
@@ -134,15 +135,20 @@ const Newsletter = () => {
               typeof item.description === "string" &&
               typeof item.source === "string"
             );
-          }).map(item => ({
-            title: item.title,
-            link: item.link,
-            pubDate: item.pubDate,
-            description: item.description,
-            source: item.source,
+          }).map((item) => ({
+            title: item.title as string,
+            link: item.link as string,
+            pubDate: item.pubDate as string,
+            description: item.description as string,
+            source: item.source as string,
             layer: typeof item.layer === "number" ? item.layer : undefined,
-            titlePt: typeof item.titlePt === "string" ? item.titlePt : undefined,
-            descriptionPt: typeof item.descriptionPt === "string" ? item.descriptionPt : undefined
+            titlePt: typeof item.titlePt === "string" ? (item.titlePt as string) : undefined,
+            descriptionPt: typeof item.descriptionPt === "string" ? (item.descriptionPt as string) : undefined,
+            score: typeof item.score === "number" ? item.score : undefined,
+            severity: typeof item.severity === "string" ? (item.severity as string) : undefined,
+            categories: Array.isArray(item.categories) ? (item.categories as string[]) : undefined,
+            cves: Array.isArray(item.cves) ? (item.cves as string[]) : undefined,
+            cvss: typeof item.cvss === "number" ? item.cvss : undefined,
           }));
           setAdvisories(validated);
         }
@@ -192,10 +198,10 @@ const Newsletter = () => {
       });
 
       setLastUpdatedNews(new Date());
-    } catch (err: any) {
+    } catch (err) {
       console.error(err);
       if (!isBackground) {
-        setNewsError(err.message);
+        setNewsError(err instanceof Error ? err.message : "Failed to load threat advisories");
       } else {
         toast.error(language === "pt" ? "Erro ao atualizar notícias em segundo plano" : "Failed to background refresh news");
       }
@@ -222,6 +228,8 @@ const Newsletter = () => {
     return () => {
       clearInterval(countdownInterval);
     };
+    // loadNews is stable for the component lifetime; run once on mount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Time formatting helper
