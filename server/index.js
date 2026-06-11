@@ -1259,6 +1259,59 @@ async function googleTranslate(text, targetLang) {
     return text || '';
 }
 
+// Advanced collection: fetch the full article and extract its readable body
+// text (paragraphs), mirroring the bot's deep-content step. Dependency-free
+// heuristic; returns '' if the page can't be fetched/parsed (then we fall back
+// to the RSS summary). Best-effort and tolerant of WAF/JS-heavy sites.
+function extractReadableText(html) {
+    let h = String(html || '')
+        .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+        .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+        .replace(/<noscript[\s\S]*?<\/noscript>/gi, ' ')
+        .replace(/<!--[\s\S]*?-->/g, ' ');
+    const article = h.match(/<article\b[\s\S]*?<\/article>/i);
+    if (article) h = article[0];
+    const paras = [...h.matchAll(/<p\b[^>]*>([\s\S]*?)<\/p>/gi)]
+        .map((m) => decodeEntities(m[1].replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ').trim())
+        .filter((p) => p.length > 45);
+    return paras.join('\n\n');
+}
+
+async function fetchArticleText(url) {
+    try {
+        const resp = await axios.get(url, {
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                Accept: 'text/html,application/xhtml+xml',
+            },
+            timeout: 10000,
+            maxRedirects: 3,
+            responseType: 'text',
+        });
+        return extractReadableText(resp.data).slice(0, 8000);
+    } catch (err) {
+        console.warn(`Article fetch failed for ${url}: ${err.message}`);
+        return '';
+    }
+}
+
+// First N paragraphs (used as a fallback Executive Summary).
+function firstParagraphs(text, n = 2) {
+    return String(text || '').split(/\n\n+/).filter(Boolean).slice(0, n).join('\n\n');
+}
+
+// Heuristic Impact & Mitigation: sentences mentioning impact/remediation.
+function extractMitigation(text) {
+    const sentences = String(text || '').replace(/\n+/g, ' ').split(/(?<=[.!?])\s+/);
+    const kw = /\b(mitigat\w*|patch\w*|updat\w*|upgrad\w*|workaround|remediat\w*|disabl\w*|recommend\w*|advisory|hotfix|fixed in|affected|impact\w*|exploit\w*)\b/i;
+    const hits = [];
+    for (const s of sentences) {
+        if (s.length > 45 && kw.test(s)) hits.push(s.trim());
+        if (hits.length >= 4) break;
+    }
+    return hits.join(' ');
+}
+
 // Call Groq chat completions with a small model fallback chain; returns parsed JSON or null.
 async function groqAnalyze(title, content, lang) {
     if (!process.env.GROQ_API_KEY) return null;
@@ -1304,7 +1357,11 @@ app.post('/api/newsletter/enrich', scanLimiter, async (req, res) => {
         const cached = memoryCache.newsletterEnrich.store.get(cacheKey);
         if (cached && cached.expiresAt > now) return res.json(cached.data);
 
-        const ai = await groqAnalyze(item.title, item.description, lang);
+        // Advanced collection: pull the full article body; fall back to RSS summary.
+        const fullText = await fetchArticleText(item.link);
+        const content = fullText || item.description || '';
+
+        const ai = await groqAnalyze(item.title, content, lang);
 
         let payload;
         if (ai && ai.summary) {
@@ -1312,36 +1369,33 @@ app.post('/api/newsletter/enrich', scanLimiter, async (req, res) => {
             payload = {
                 available: true,
                 source: 'groq',
+                scraped: !!fullText,
                 title: ai.title || item.title,
                 executiveSummary: paras[0] || String(ai.summary),
                 impactMitigation: paras.slice(1).join('\n\n'),
                 iocs: ai.iocs || null,
             };
-        } else if (lang === 'pt') {
-            // No LLM: translate the RSS content to Portuguese via Google Translate
-            // so it is at least readable/actionable in the user's language.
-            const [translatedTitle, translatedSummary] = await Promise.all([
-                googleTranslate(item.title, 'pt'),
-                googleTranslate(item.description, 'pt'),
-            ]);
-            payload = {
-                available: false,
-                source: 'translate',
-                title: translatedTitle || item.title,
-                executiveSummary: translatedSummary || item.description || '',
-                impactMitigation: '',
-                iocs: null,
-            };
         } else {
-            // English UI with no LLM — the source content is already English.
-            payload = {
-                available: false,
-                source: 'rss',
-                title: item.title,
-                executiveSummary: item.description || '',
-                impactMitigation: '',
-                iocs: null,
-            };
+            // No LLM: build a structured report from the scraped article —
+            // Executive Summary (lead paragraphs) + heuristic Impact & Mitigation.
+            const execRaw = firstParagraphs(content, 2) || item.description || '';
+            const mitRaw = extractMitigation(fullText);
+            if (lang === 'pt') {
+                const [t, ex, mit] = await Promise.all([
+                    googleTranslate(item.title, 'pt'),
+                    googleTranslate(execRaw, 'pt'),
+                    mitRaw ? googleTranslate(mitRaw, 'pt') : Promise.resolve(''),
+                ]);
+                payload = {
+                    available: false, source: 'translate', scraped: !!fullText,
+                    title: t || item.title, executiveSummary: ex || execRaw, impactMitigation: mit || '', iocs: null,
+                };
+            } else {
+                payload = {
+                    available: false, source: 'rss', scraped: !!fullText,
+                    title: item.title, executiveSummary: execRaw, impactMitigation: mitRaw || '', iocs: null,
+                };
+            }
         }
 
         memoryCache.newsletterEnrich.store.set(cacheKey, { data: payload, expiresAt: now + memoryCache.newsletterEnrich.ttl });

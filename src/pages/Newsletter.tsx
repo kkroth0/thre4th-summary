@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { Link } from "react-router-dom";
-import { ArrowLeft, Globe, BookOpen, AlertTriangle, Search, Mail, Eye, Sparkles, Filter, CheckCircle2, ChevronLeft, ChevronRight, ChevronDown, Download, Layers, RefreshCw, Calendar, Share2, Loader2, Crosshair, Target, Building2 } from "lucide-react";
+import { ArrowLeft, Globe, BookOpen, AlertTriangle, Search, Mail, Eye, Sparkles, Filter, CheckCircle2, ChevronLeft, ChevronRight, ChevronDown, Download, Layers, RefreshCw, Calendar, Share2, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -77,13 +77,11 @@ const buildShareText = (item: Advisory, e: EnrichData | undefined, lang: string)
     out.push("", `[ ${isPt ? "Resumo Executivo" : "Executive Summary"} ]`, e.executiveSummary);
   }
   if (e?.impactMitigation) {
-    out.push("", `[ ${isPt ? "Impacto & Mitigação" : "Impact & Mitigation"} ]`, e.impactMitigation);
+    out.push("", `[ ${isPt ? "IMPACTO & MITIGAÇÃO" : "IMPACT & MITIGATION"} ]`, e.impactMitigation);
   }
-  if (item.cves?.length) {
-    out.push("", "[ Related CVEs ]");
-    item.cves.forEach((c) => out.push(`• ${c}`));
-  }
-  out.push("", `🔗 ${item.link}`);
+  out.push("", `🔗 Source (${item.link})`);
+  const refs = (item.cves ?? []).map((c) => `https://nvd.nist.gov/vuln/detail/${c}`).join(", ");
+  out.push(`📎 ${isPt ? "Referências" : "References"}: ${refs}`);
   return out.join("\n");
 };
 
@@ -1031,35 +1029,20 @@ const Newsletter = () => {
 
                           {/* Collapsible actionable analysis */}
                           {expanded[item.link] && (
-                            <div className="mt-2 rounded-xl border border-border/50 bg-muted/20 p-4 space-y-3.5 text-sm">
-                              {/* Deterministic mapping */}
-                              {(item.assets?.length || item.threats?.length || item.sectors?.length) ? (
-                                <div className="space-y-1.5">
-                                  {item.assets?.length ? (
-                                    <div className="flex gap-2 items-start">
-                                      <span className="shrink-0 text-[11px] font-bold text-muted-foreground/70 uppercase tracking-wide flex items-center gap-1 w-36"><Target className="h-3 w-3" /> Monitored Assets</span>
-                                      <span className="font-medium">{item.assets.join(", ")}</span>
-                                    </div>
-                                  ) : null}
-                                  {item.threats?.length ? (
-                                    <div className="flex gap-2 items-start">
-                                      <span className="shrink-0 text-[11px] font-bold text-muted-foreground/70 uppercase tracking-wide flex items-center gap-1 w-36"><Crosshair className="h-3 w-3" /> Threats</span>
-                                      <span className="font-medium">{item.threats.join(", ")}</span>
-                                    </div>
-                                  ) : null}
-                                  {item.sectors?.length ? (
-                                    <div className="flex gap-2 items-start">
-                                      <span className="shrink-0 text-[11px] font-bold text-muted-foreground/70 uppercase tracking-wide flex items-center gap-1 w-36"><Building2 className="h-3 w-3" /> Targeted Sectors</span>
-                                      <span className="font-medium">{item.sectors.join(", ")}</span>
-                                    </div>
-                                  ) : null}
-                                </div>
-                              ) : null}
+                            <div className="mt-2 rounded-xl border border-border/50 bg-muted/20 p-4 space-y-3 text-sm font-sans">
+                              {/* Metadata block (mirrors the SOC bot card) */}
+                              <div className="space-y-0.5 text-[13px] text-foreground/90">
+                                <div><span className="font-bold">Source:</span> {item.source}</div>
+                                <div><span className="font-bold">Date:</span> {new Date(item.pubDate).toISOString().slice(0, 10)}</div>
+                                {item.assets?.length ? <div><span className="font-bold">Monitored Assets:</span> {item.assets.join(", ")}</div> : null}
+                                {item.threats?.length ? <div><span className="font-bold">Threats:</span> {item.threats.join(", ")}</div> : null}
+                                {item.sectors?.length ? <div><span className="font-bold">Targeted Sectors:</span> {item.sectors.join(", ")}</div> : null}
+                              </div>
 
                               {/* MITRE ATT&CK */}
                               {item.ttps?.length ? (
                                 <div>
-                                  <div className="text-[11px] font-bold text-muted-foreground/70 uppercase tracking-wide mb-1">[ MITRE ATT&CK ]</div>
+                                  <div className="text-[11px] font-bold text-muted-foreground/80 tracking-wide mb-1">[ MITRE ATT&CK ]</div>
                                   <ul className="space-y-0.5">
                                     {item.ttps.map((tp) => (
                                       <li key={tp} className="text-xs font-mono">• {tp}</li>
@@ -1068,50 +1051,53 @@ const Newsletter = () => {
                                 </div>
                               ) : null}
 
-                              {/* LLM analysis (lazy) */}
-                              <div>
-                                <div className="text-[11px] font-bold text-muted-foreground/70 uppercase tracking-wide mb-1">[ {language === "pt" ? "Resumo Executivo" : "Executive Summary"} ]</div>
-                                {enrichment[item.link]?.loading ? (
-                                  <div className="flex items-center gap-2 text-xs text-muted-foreground py-1">
-                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                    {language === "pt" ? "Gerando análise..." : "Generating analysis..."}
-                                  </div>
-                                ) : (
-                                  <>
+                              {/* Analysis (LLM, or scraped + translated) */}
+                              {enrichment[item.link]?.loading ? (
+                                <div className="flex items-center gap-2 text-xs text-muted-foreground py-1">
+                                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                  {language === "pt" ? "Coletando artigo e gerando análise..." : "Fetching article and generating analysis..."}
+                                </div>
+                              ) : (
+                                <>
+                                  <div>
+                                    <div className="text-[11px] font-bold text-muted-foreground/80 tracking-wide mb-1">[ {language === "pt" ? "Resumo Executivo" : "Executive Summary"} ]</div>
                                     <p className="text-sm leading-relaxed text-foreground/90 whitespace-pre-line">
                                       {enrichment[item.link]?.data?.executiveSummary
                                         || renderHighlightedDescription(language === "pt" ? (item.descriptionPt || item.description) : item.description)}
                                     </p>
-                                    {enrichment[item.link]?.data?.impactMitigation ? (
-                                      <>
-                                        <div className="text-[11px] font-bold text-muted-foreground/70 uppercase tracking-wide mt-3 mb-1">[ {language === "pt" ? "Impacto & Mitigação" : "Impact & Mitigation"} ]</div>
-                                        <p className="text-sm leading-relaxed text-foreground/90 whitespace-pre-line">{enrichment[item.link]?.data?.impactMitigation}</p>
-                                      </>
-                                    ) : null}
-                                    {enrichment[item.link]?.data?.source === "translate" ? (
-                                      <p className="text-[10px] text-muted-foreground/60 mt-1.5 italic">
-                                        {language === "pt" ? "Tradução automática (Google Translate) — análise por IA desativada" : "Auto-translated (Google Translate) — AI analysis off"}
-                                      </p>
-                                    ) : enrichment[item.link]?.data?.source === "rss" ? (
-                                      <p className="text-[10px] text-muted-foreground/60 mt-1.5 italic">
-                                        {language === "pt" ? "Resumo do RSS (análise por IA indisponível)" : "RSS summary (AI analysis unavailable)"}
-                                      </p>
-                                    ) : null}
-                                  </>
-                                )}
-                              </div>
+                                  </div>
+                                  {enrichment[item.link]?.data?.impactMitigation ? (
+                                    <div>
+                                      <div className="text-[11px] font-bold text-muted-foreground/80 tracking-wide mb-1">[ {language === "pt" ? "IMPACTO & MITIGAÇÃO" : "IMPACT & MITIGATION"} ]</div>
+                                      <p className="text-sm leading-relaxed text-foreground/90 whitespace-pre-line">{enrichment[item.link]?.data?.impactMitigation}</p>
+                                    </div>
+                                  ) : null}
+                                  {enrichment[item.link]?.data?.source === "translate" ? (
+                                    <p className="text-[10px] text-muted-foreground/60 italic">
+                                      {language === "pt" ? "Conteúdo do artigo traduzido (Google Translate) — análise por IA desativada" : "Article content translated (Google Translate) — AI analysis off"}
+                                    </p>
+                                  ) : enrichment[item.link]?.data?.source === "rss" ? (
+                                    <p className="text-[10px] text-muted-foreground/60 italic">
+                                      {language === "pt" ? "Resumo do artigo (análise por IA indisponível)" : "Article summary (AI analysis unavailable)"}
+                                    </p>
+                                  ) : null}
+                                </>
+                              )}
 
-                              {/* CVEs */}
-                              {item.cves?.length ? (
+                              {/* Source + References footer */}
+                              <div className="pt-2 border-t border-border/40 space-y-1 text-[12px]">
                                 <div>
-                                  <div className="text-[11px] font-bold text-muted-foreground/70 uppercase tracking-wide mb-1">[ Related CVEs ]</div>
-                                  <div className="flex flex-wrap gap-1.5">
+                                  🔗 <a href={item.link} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline font-semibold">Source</a>
+                                </div>
+                                {item.cves?.length ? (
+                                  <div className="flex flex-wrap items-center gap-1.5">
+                                    <span>📎 {language === "pt" ? "Referências:" : "References:"}</span>
                                     {item.cves.map((cve) => (
-                                      <a key={cve} href={`https://nvd.nist.gov/vuln/detail/${cve}`} target="_blank" rel="noopener noreferrer" className="text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded border border-primary/20 text-primary hover:bg-primary/10">{cve}</a>
+                                      <a key={cve} href={`https://nvd.nist.gov/vuln/detail/${cve}`} target="_blank" rel="noopener noreferrer" className="font-mono font-semibold px-1.5 py-0.5 rounded border border-primary/20 text-primary hover:bg-primary/10">{cve}</a>
                                     ))}
                                   </div>
-                                </div>
-                              ) : null}
+                                ) : null}
+                              </div>
                             </div>
                           )}
                         </div>
