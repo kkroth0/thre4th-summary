@@ -1107,6 +1107,11 @@ const memoryCache = {
         expiresAt: 0,
         ttl: 10 * 60 * 1000 // 10 minutes
     },
+    // LLM-generated actionable analysis per advisory, keyed by `${lang}|${url}`
+    newsletterEnrich: {
+        store: new Map(),
+        ttl: 7 * 24 * 60 * 60 * 1000 // 7 days
+    },
     recentCves: {
         data: null,
         expiresAt: 0,
@@ -1210,6 +1215,99 @@ app.get('/api/newsletter', async (req, res) => {
         }
 
         res.json(data);
+    } catch (error) {
+        const { status, message } = sanitizeError(error);
+        res.status(status).json({ error: message });
+    }
+});
+
+// ─── Groq-powered on-demand advisory analysis ─────────────────────────────
+const GROQ_BASE_URL = 'https://api.groq.com/openai/v1';
+const GROQ_MODELS = ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'gemma2-9b-it'];
+
+const newsIntelPrompt = (lang) => (
+    'You are a senior Cyber Threat Intelligence analyst. Produce a concise, technical report. ' +
+    'Respond ONLY with a JSON object with these keys:\n' +
+    '1. "title": the advisory title, professionally normalized.\n' +
+    '2. "summary": EXACTLY TWO paragraphs separated by \\n\\n. Paragraph 1 technically describes WHAT happened ' +
+    '(the threat, incident or fact). Paragraph 2 depends on the type: for a vulnerability/incident give the IMPACT ' +
+    'and concrete MITIGATION measures; for market/regulatory/geopolitical/regional news give the STRATEGIC RELEVANCE ' +
+    'for a SOC/CTI operation. NEVER invent mitigations for non-technical facts.\n' +
+    '3. "iocs": an object with keys "IPs", "Domains", "Hashes" listing every technical indicator found, ' +
+    'or "None identified" when there are none.\n' +
+    `OUTPUT LANGUAGE: ${lang === 'en' ? 'English' : 'Português (Brasil)'}. Respond ONLY the JSON, no extra text.`
+);
+
+// Call Groq chat completions with a small model fallback chain; returns parsed JSON or null.
+async function groqAnalyze(title, content, lang) {
+    if (!process.env.GROQ_API_KEY) return null;
+    const userPrompt = `Title: ${title}\nOriginal content: ${(content || '').slice(0, 12000)}`;
+    for (const model of GROQ_MODELS) {
+        try {
+            const resp = await axios.post(`${GROQ_BASE_URL}/chat/completions`, {
+                model,
+                temperature: 0.1,
+                response_format: { type: 'json_object' },
+                messages: [
+                    { role: 'system', content: newsIntelPrompt(lang) },
+                    { role: 'user', content: userPrompt },
+                ],
+            }, {
+                headers: { Authorization: `Bearer ${process.env.GROQ_API_KEY}`, 'Content-Type': 'application/json' },
+                timeout: 20000,
+            });
+            const text = resp.data?.choices?.[0]?.message?.content;
+            if (text) return JSON.parse(text);
+        } catch (err) {
+            console.warn(`Groq model ${model} failed: ${err.message}. Trying next...`);
+        }
+    }
+    return null;
+}
+
+// On-demand actionable analysis for a single advisory (looked up in the live feed
+// by URL to prevent arbitrary LLM abuse). Returns Executive Summary + Impact/
+// Mitigation. Degrades gracefully to the RSS description when Groq is unavailable.
+app.post('/api/newsletter/enrich', scanLimiter, async (req, res) => {
+    try {
+        const url = (req.body?.url || '').toString();
+        const lang = req.body?.lang === 'en' ? 'en' : 'pt';
+        if (!url) return res.status(400).json({ error: 'Missing advisory url' });
+
+        const feed = memoryCache.newsletter.data || [];
+        const item = feed.find((i) => i.link === url);
+        if (!item) return res.status(404).json({ error: 'Advisory not found in current feed' });
+
+        const cacheKey = `${lang}|${url}`;
+        const now = Date.now();
+        const cached = memoryCache.newsletterEnrich.store.get(cacheKey);
+        if (cached && cached.expiresAt > now) return res.json(cached.data);
+
+        const ai = await groqAnalyze(item.title, item.description, lang);
+
+        let payload;
+        if (ai && ai.summary) {
+            const paras = String(ai.summary).split(/\n\n+/).map((p) => p.trim()).filter(Boolean);
+            payload = {
+                available: true,
+                title: ai.title || item.title,
+                executiveSummary: paras[0] || String(ai.summary),
+                impactMitigation: paras.slice(1).join('\n\n'),
+                iocs: ai.iocs || null,
+            };
+        } else {
+            // Graceful fallback: no LLM configured/available — use the RSS description.
+            payload = {
+                available: false,
+                title: item.title,
+                executiveSummary: item.description || '',
+                impactMitigation: '',
+                iocs: null,
+            };
+        }
+
+        memoryCache.newsletterEnrich.store.set(cacheKey, { data: payload, expiresAt: now + memoryCache.newsletterEnrich.ttl });
+        res.json(payload);
     } catch (error) {
         const { status, message } = sanitizeError(error);
         res.status(status).json({ error: message });

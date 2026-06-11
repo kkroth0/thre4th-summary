@@ -118,6 +118,72 @@ const CVSS_RE = /cvss\b[:\s]*(?:v?[234](?:\.\d)?\b[:/\s]*)?[a-z\s:()/_-]*?(10(?:
 const CVSS_FALLBACK_RE = /score[^\d]{0,15}(\d{1,2}\.\d+)/gi;
 const CVE_RE = /\bcve-\d{4}-\d+\b/gi;
 
+// ─── Deterministic enrichment maps (ported from soc-sentinela core/constants.py)
+// Granular threat labels (keyword -> label)
+const THREAT_KEYWORDS = {
+    ransomware: 'Ransomware', trojan: 'Trojan', infostealer: 'Infostealer', stealer: 'Infostealer',
+    wiper: 'Wiper', botnet: 'Botnet', spyware: 'Spyware', rootkit: 'Rootkit', backdoor: 'Backdoor',
+    phishing: 'Phishing', 'zero-day': 'Zero-Day', '0-day': 'Zero-Day', exploit: 'Exploitation',
+};
+
+// Targeted/victim sectors (label -> keywords)
+const TARGET_SECTORS = {
+    Healthcare: ['healthcare', 'hospital', 'hospitals', 'health system', 'medical', 'saúde', 'hospitalar'],
+    Financial: ['bank', 'banks', 'banking', 'financial', 'finance', 'fintech', 'banco', 'bancário', 'financeiro'],
+    Government: ['government', 'governmental', 'ministry', 'public sector', 'governo', 'governamental', 'setor público'],
+    Energy: ['energy', 'power grid', 'electric', 'oil and gas', 'utility', 'utilities', 'energia', 'elétrica', 'petróleo'],
+    Education: ['education', 'university', 'universities', 'school', 'academic', 'educação', 'universidade', 'escola'],
+    Manufacturing: ['manufacturing', 'industrial', 'factory', 'ics', 'ot security', 'indústria', 'fábrica', 'manufatura'],
+    Retail: ['retail', 'e-commerce', 'ecommerce', 'varejo', 'comércio eletrônico'],
+    Telecom: ['telecom', 'telecommunications', 'telco', 'telecomunicações', 'operadora'],
+    Technology: ['technology sector', 'software vendor', 'saas', 'cloud provider', 'provedor de nuvem'],
+    Transportation: ['transportation', 'aviation', 'airline', 'logistics', 'transporte', 'aviação', 'logística'],
+    Defense: ['defense', 'defence', 'military', 'defesa', 'militar'],
+};
+
+// MITRE ATT&CK techniques ("Txxxx — Name" -> keywords)
+const ATTACK_TTPS = {
+    'T1566 — Phishing': ['phishing', 'phishing email', 'campanha de phishing'],
+    'T1566.001 — Spearphishing Attachment': ['spearphishing', 'spear phishing', 'spear-phishing', 'malicious attachment', 'anexo malicioso'],
+    'T1190 — Exploit Public-Facing Application': ['public-facing application', 'remote code execution', 'rce', 'execução remota de código', 'exploração de vulnerabilidade'],
+    'T1204 — User Execution': ['malicious macro', 'macro-enabled', 'malicious document', 'macro maliciosa', 'documento malicioso'],
+    'T1486 — Data Encrypted for Impact': ['ransomware', 'encrypts files', 'file-encrypting', 'criptografa arquivos'],
+    'T1485 — Data Destruction': ['wiper', 'data wiping', 'destructive malware', 'malware destrutivo'],
+    'T1003 — OS Credential Dumping': ['credential dumping', 'mimikatz', 'lsass', 'dump de credenciais'],
+    'T1555 — Credentials from Password Stores': ['stolen credentials', 'credential theft', 'roubo de credenciais', 'credenciais roubadas'],
+    'T1110 — Brute Force': ['brute force', 'brute-force', 'password spraying', 'credential stuffing', 'força bruta'],
+    'T1059.001 — PowerShell': ['powershell'],
+    'T1053 — Scheduled Task/Job': ['scheduled task', 'tarefa agendada'],
+    'T1055 — Process Injection': ['process injection', 'dll injection', 'code injection', 'injeção de processo', 'injeção de código'],
+    'T1068 — Exploitation for Privilege Escalation': ['privilege escalation', 'elevation of privilege', 'escalonamento de privilégio', 'elevação de privilégio'],
+    'T1547 — Boot or Logon Autostart Execution': ['autostart', 'registry run key', 'chave de execução'],
+    'T1021.001 — Remote Desktop Protocol': ['rdp', 'remote desktop', 'área de trabalho remota'],
+    'T1021 — Remote Services': ['lateral movement', 'movimentação lateral', 'movimento lateral'],
+    'T1071 — Application Layer Protocol (C2)': ['command and control', 'command-and-control', 'c2 server', 'c2 infrastructure', 'servidor c2'],
+    'T1041 — Exfiltration Over C2 Channel': ['data exfiltration', 'exfiltrate', 'exfiltrated', 'exfiltração de dados'],
+    'T1195 — Supply Chain Compromise': ['supply chain', 'supply-chain', 'cadeia de suprimentos'],
+    'T1505.003 — Web Shell': ['web shell', 'webshell'],
+    'T1078 — Valid Accounts': ['valid accounts', 'compromised account', 'conta comprometida', 'contas válidas'],
+    'T1498 — Network Denial of Service': ['ddos', 'denial of service', 'dos attack', 'negação de serviço'],
+    'T1496 — Resource Hijacking': ['cryptojacking', 'cryptomining', 'cryptocurrency miner', 'coinminer', 'criptomineração'],
+    'T1027 — Obfuscated Files or Information': ['obfuscation', 'obfuscated', 'ofuscação', 'ofuscado'],
+};
+
+// Pre-compile each label -> single word-boundary regex over its keywords
+const compileLabelMap = (map) =>
+    Object.entries(map).map(([label, terms]) => ({ label, re: buildRe(terms, true) }));
+const SECTOR_RULES = compileLabelMap(TARGET_SECTORS);
+const TTP_RULES = compileLabelMap(ATTACK_TTPS);
+const THREAT_RULES = Object.entries(
+    // collapse duplicate labels (stealer/infostealer, zero-day/0-day) into one regex each
+    Object.entries(THREAT_KEYWORDS).reduce((acc, [kw, label]) => {
+        (acc[label] = acc[label] || []).push(kw);
+        return acc;
+    }, {})
+).map(([label, terms]) => ({ label, re: buildRe(terms, true) }));
+
+const matchLabels = (text, rules) => rules.filter((r) => r.re.exec(text)).map((r) => r.label);
+
 const severityFromScore = (s) => (s >= 70 ? 'Critical' : s >= 50 ? 'High' : s >= 30 ? 'Medium' : 'Low');
 
 /**
@@ -131,6 +197,7 @@ export function scoreArticle(text, weightBoost = 0) {
     let raw = 0;
     const reasons = [];
     const categories = [];
+    const assets = [];
 
     // Keyword categories (includes the negative NOISE_* buckets)
     for (const c of COMPILED) {
@@ -139,6 +206,8 @@ export function scoreArticle(text, weightBoost = 0) {
         raw += c.score;
         categories.push(c.label);
         reasons.push(`${c.label} (${m[0]})`);
+        // Surface the matched critical vendor as a "monitored asset"
+        if (c.id === 'CAT7_CRITICAL_VENDORS') assets.push(m[0]);
     }
 
     // Regional relevance (BR/LATAM)
@@ -189,6 +258,11 @@ export function scoreArticle(text, weightBoost = 0) {
         cves,
         cvss,
         reasons,
+        // Deterministic actionable enrichment
+        threats: matchLabels(lower, THREAT_RULES),
+        sectors: matchLabels(lower, SECTOR_RULES),
+        ttps: matchLabels(lower, TTP_RULES),
+        assets: [...new Set(assets)],
     };
 }
 

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { Link } from "react-router-dom";
-import { ArrowLeft, Globe, BookOpen, AlertTriangle, Search, Mail, Eye, Sparkles, Filter, CheckCircle2, ChevronLeft, ChevronRight, Download, Layers, RefreshCw, Calendar } from "lucide-react";
+import { ArrowLeft, Globe, BookOpen, AlertTriangle, Search, Mail, Eye, Sparkles, Filter, CheckCircle2, ChevronLeft, ChevronRight, ChevronDown, Download, Layers, RefreshCw, Calendar, Share2, Loader2, Crosshair, Target, Building2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -35,6 +35,11 @@ interface Advisory {
   categories?: string[];
   cves?: string[];
   cvss?: number | null;
+  // Deterministic actionable enrichment
+  threats?: string[];
+  sectors?: string[];
+  ttps?: string[];
+  assets?: string[];
 }
 
 const SEVERITY_STYLES: Record<string, string> = {
@@ -42,6 +47,43 @@ const SEVERITY_STYLES: Record<string, string> = {
   High: "bg-orange-500/10 text-orange-500 border-orange-500/20",
   Medium: "bg-yellow-500/10 text-yellow-600 border-yellow-500/20",
   Low: "bg-slate-500/10 text-slate-400 border-slate-500/20",
+};
+
+interface EnrichData {
+  available: boolean;
+  title?: string;
+  executiveSummary?: string;
+  impactMitigation?: string;
+  iocs?: Record<string, unknown> | null;
+}
+
+// Build a well-organized, shareable text block (mirrors the SOC bot card layout)
+const buildShareText = (item: Advisory, e: EnrichData | undefined, lang: string): string => {
+  const isPt = lang === "pt";
+  const out: string[] = [];
+  out.push(`🚨 ${(e?.title || item.titlePt || item.title || "").trim()}`);
+  out.push("");
+  out.push(`Source: ${item.source}`);
+  out.push(`Date: ${new Date(item.pubDate).toISOString().slice(0, 10)}`);
+  if (item.assets?.length) out.push(`Monitored Assets: ${item.assets.join(", ")}`);
+  if (item.threats?.length) out.push(`Threats: ${item.threats.join(", ")}`);
+  if (item.sectors?.length) out.push(`Targeted Sectors: ${item.sectors.join(", ")}`);
+  if (item.ttps?.length) {
+    out.push("", "[ MITRE ATT&CK ]");
+    item.ttps.forEach((tp) => out.push(`• ${tp}`));
+  }
+  if (e?.executiveSummary) {
+    out.push("", `[ ${isPt ? "Resumo Executivo" : "Executive Summary"} ]`, e.executiveSummary);
+  }
+  if (e?.impactMitigation) {
+    out.push("", `[ ${isPt ? "Impacto & Mitigação" : "Impact & Mitigation"} ]`, e.impactMitigation);
+  }
+  if (item.cves?.length) {
+    out.push("", "[ Related CVEs ]");
+    item.cves.forEach((c) => out.push(`• ${c}`));
+  }
+  out.push("", `🔗 ${item.link}`);
+  return out.join("\n");
 };
 
 const translateText = async (text: string): Promise<string> => {
@@ -149,6 +191,10 @@ const Newsletter = () => {
             categories: Array.isArray(item.categories) ? (item.categories as string[]) : undefined,
             cves: Array.isArray(item.cves) ? (item.cves as string[]) : undefined,
             cvss: typeof item.cvss === "number" ? item.cvss : undefined,
+            threats: Array.isArray(item.threats) ? (item.threats as string[]) : undefined,
+            sectors: Array.isArray(item.sectors) ? (item.sectors as string[]) : undefined,
+            ttps: Array.isArray(item.ttps) ? (item.ttps as string[]) : undefined,
+            assets: Array.isArray(item.assets) ? (item.assets as string[]) : undefined,
           }));
           setAdvisories(validated);
         }
@@ -321,7 +367,13 @@ const Newsletter = () => {
             .source-hacker { background-color: #fef3c7; color: #b45309; }
             .title { font-weight: bold; font-size: 16px; margin-bottom: 6px; color: #0f172a; }
             .date { color: #94a3b8; font-size: 11px; margin-bottom: 10px; }
-            .description { font-size: 13px; line-height: 1.6; color: #334155; }
+            .description { font-size: 13px; line-height: 1.6; color: #334155; white-space: pre-line; }
+            .sev { display: inline-block; margin-left: 6px; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: bold; background-color: #fee2e2; color: #b91c1c; }
+            .kv { font-size: 12px; color: #334155; margin: 2px 0; }
+            .kv strong { color: #0f172a; }
+            .section { font-size: 11px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.05em; color: #6366f1; margin-top: 12px; margin-bottom: 4px; }
+            .ttp-block ul { margin: 0; padding-left: 18px; }
+            .ttp-block li { font-size: 12px; color: #334155; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
             .footer { margin-top: 50px; font-size: 10px; color: #94a3b8; border-top: 1px solid #e2e8f0; padding-top: 15px; text-align: center; }
           </style>
         </head>
@@ -335,6 +387,54 @@ const Newsletter = () => {
       </html>
     `);
     printWindow.document.close();
+  };
+
+  // ── Actionable analysis: expand + lazy LLM enrichment + share ──
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [enrichment, setEnrichment] = useState<Record<string, { loading: boolean; data?: EnrichData }>>({});
+
+  const getEnrichment = async (item: Advisory): Promise<EnrichData> => {
+    const cached = enrichment[item.link]?.data;
+    if (cached) return cached;
+    setEnrichment(p => ({ ...p, [item.link]: { loading: true } }));
+    try {
+      const res = await fetch("/api/newsletter/enrich", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: item.link, lang: language }),
+      });
+      if (!res.ok) throw new Error("enrich failed");
+      const data: EnrichData = await res.json();
+      setEnrichment(p => ({ ...p, [item.link]: { loading: false, data } }));
+      return data;
+    } catch {
+      const fallback: EnrichData = { available: false, executiveSummary: item.description, impactMitigation: "" };
+      setEnrichment(p => ({ ...p, [item.link]: { loading: false, data: fallback } }));
+      return fallback;
+    }
+  };
+
+  const toggleExpand = (item: Advisory) => {
+    setExpanded(p => {
+      const open = !p[item.link];
+      if (open && !enrichment[item.link]) void getEnrichment(item);
+      return { ...p, [item.link]: open };
+    });
+  };
+
+  const shareAdvisory = async (item: Advisory) => {
+    const data = enrichment[item.link]?.data ?? (await getEnrichment(item));
+    const text = buildShareText(item, data, language);
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: item.title, text });
+      } else {
+        await navigator.clipboard.writeText(text);
+        toast.success(language === "pt" ? "Análise copiada para a área de transferência" : "Analysis copied to clipboard");
+      }
+    } catch {
+      /* user dismissed the share sheet — no-op */
+    }
   };
 
   // Filter Advisories / News
@@ -435,6 +535,16 @@ const Newsletter = () => {
 
   const selectedCount = Object.values(selectedNews).filter(Boolean).length;
   const selectedAdvisoriesList = advisories.filter(item => selectedNews[item.title]);
+
+  // Pre-load the LLM analysis for selected items when the digest opens, so the
+  // exported PDF includes the Executive Summary + Impact & Mitigation.
+  useEffect(() => {
+    if (!isDigestOpen) return;
+    selectedAdvisoriesList.forEach(item => {
+      if (!enrichment[item.link]) void getEnrichment(item);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isDigestOpen]);
 
   return (
     <div className={`min-h-screen bg-background flex flex-col transition-all duration-300 ${isCollapsed ? "lg:pl-20" : "lg:pl-64"}`}>
@@ -729,7 +839,9 @@ const Newsletter = () => {
                           </p>
 
                           <div className="space-y-4">
-                            {selectedAdvisoriesList.map((item, idx) => (
+                            {selectedAdvisoriesList.map((item, idx) => {
+                              const e = enrichment[item.link]?.data;
+                              return (
                               <div key={idx} className="advisory p-4 border rounded-lg space-y-2 bg-card">
                                 <span className={`source text-xs font-bold px-2 py-0.5 rounded ${
                                   item.source.toLowerCase().includes("cisa")
@@ -740,11 +852,30 @@ const Newsletter = () => {
                                 }`}>
                                   {item.source}
                                 </span>
-                                <div className="title font-bold text-base text-foreground">{language === "pt" ? (item.titlePt || item.title) : item.title}</div>
+                                {item.severity && <span className="sev">{item.severity}{typeof item.score === "number" ? ` · ${item.score}` : ""}</span>}
+                                <div className="title font-bold text-base text-foreground">{e?.title || (language === "pt" ? (item.titlePt || item.title) : item.title)}</div>
                                 <div className="date text-xs text-muted-foreground">{new Date(item.pubDate).toLocaleString()}</div>
-                                <div className="description text-sm text-muted-foreground leading-relaxed">{renderHighlightedDescription(language === "pt" ? (item.descriptionPt || item.description) : item.description)}</div>
+                                {item.assets?.length ? <div className="kv"><strong>Monitored Assets:</strong> {item.assets.join(", ")}</div> : null}
+                                {item.threats?.length ? <div className="kv"><strong>Threats:</strong> {item.threats.join(", ")}</div> : null}
+                                {item.sectors?.length ? <div className="kv"><strong>Targeted Sectors:</strong> {item.sectors.join(", ")}</div> : null}
+                                {item.ttps?.length ? (
+                                  <div className="ttp-block">
+                                    <div className="section">[ MITRE ATT&CK ]</div>
+                                    <ul>{item.ttps.map((tp) => <li key={tp}>{tp}</li>)}</ul>
+                                  </div>
+                                ) : null}
+                                <div className="section">[ {language === "pt" ? "Resumo Executivo" : "Executive Summary"} ]</div>
+                                <div className="description text-sm text-muted-foreground leading-relaxed whitespace-pre-line">{e?.executiveSummary || renderHighlightedDescription(language === "pt" ? (item.descriptionPt || item.description) : item.description)}</div>
+                                {e?.impactMitigation ? (
+                                  <>
+                                    <div className="section">[ {language === "pt" ? "Impacto & Mitigação" : "Impact & Mitigation"} ]</div>
+                                    <div className="description text-sm text-muted-foreground leading-relaxed whitespace-pre-line">{e.impactMitigation}</div>
+                                  </>
+                                ) : null}
+                                {item.cves?.length ? <div className="kv"><strong>Related CVEs:</strong> {item.cves.join(", ")}</div> : null}
                               </div>
-                            ))}
+                              );
+                            })}
                           </div>
                         </div>
                       </div>
@@ -866,34 +997,118 @@ const Newsletter = () => {
                             )}
                           </h3>
                           
-                          <div className="text-sm text-muted-foreground leading-relaxed">
-                            {renderHighlightedDescription(language === "pt" ? (item.descriptionPt || item.description) : item.description)}
-                          </div>
-
-                          {(item.categories ?? []).length > 0 && (
-                            <div className="flex flex-wrap gap-1.5 pt-1">
-                              {(item.categories ?? []).map((cat) => (
-                                <span
-                                  key={cat}
-                                  className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-muted/50 text-muted-foreground border border-border/40"
-                                >
-                                  {cat}
-                                </span>
-                              ))}
-                            </div>
-                          )}
-
-                          <div className="pt-2 flex items-center justify-between">
+                          {/* Action row (collapsed view = title + source + these) */}
+                          <div className="pt-1 flex items-center gap-1.5 flex-wrap">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => toggleExpand(item)}
+                              className="h-7 text-xs gap-1.5 px-2.5 rounded-lg text-foreground hover:bg-muted/50"
+                            >
+                              <ChevronDown className={`h-3.5 w-3.5 transition-transform ${expanded[item.link] ? "rotate-180" : ""}`} />
+                              {language === "pt" ? "Análise acionável" : "Actionable analysis"}
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => shareAdvisory(item)}
+                              className="h-7 text-xs gap-1.5 px-2.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                            >
+                              <Share2 className="h-3.5 w-3.5" />
+                              {language === "pt" ? "Compartilhar" : "Share"}
+                            </Button>
                             <a
                               href={item.link}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="text-xs text-primary hover:underline font-semibold flex items-center gap-1"
+                              className="text-xs text-primary hover:underline font-semibold flex items-center gap-1 ml-auto"
                             >
                               {t("viewFullArticle") || "View full article"}
                               <ChevronRight className="h-3 w-3" />
                             </a>
                           </div>
+
+                          {/* Collapsible actionable analysis */}
+                          {expanded[item.link] && (
+                            <div className="mt-2 rounded-xl border border-border/50 bg-muted/20 p-4 space-y-3.5 text-sm">
+                              {/* Deterministic mapping */}
+                              {(item.assets?.length || item.threats?.length || item.sectors?.length) ? (
+                                <div className="space-y-1.5">
+                                  {item.assets?.length ? (
+                                    <div className="flex gap-2 items-start">
+                                      <span className="shrink-0 text-[11px] font-bold text-muted-foreground/70 uppercase tracking-wide flex items-center gap-1 w-36"><Target className="h-3 w-3" /> Monitored Assets</span>
+                                      <span className="font-medium">{item.assets.join(", ")}</span>
+                                    </div>
+                                  ) : null}
+                                  {item.threats?.length ? (
+                                    <div className="flex gap-2 items-start">
+                                      <span className="shrink-0 text-[11px] font-bold text-muted-foreground/70 uppercase tracking-wide flex items-center gap-1 w-36"><Crosshair className="h-3 w-3" /> Threats</span>
+                                      <span className="font-medium">{item.threats.join(", ")}</span>
+                                    </div>
+                                  ) : null}
+                                  {item.sectors?.length ? (
+                                    <div className="flex gap-2 items-start">
+                                      <span className="shrink-0 text-[11px] font-bold text-muted-foreground/70 uppercase tracking-wide flex items-center gap-1 w-36"><Building2 className="h-3 w-3" /> Targeted Sectors</span>
+                                      <span className="font-medium">{item.sectors.join(", ")}</span>
+                                    </div>
+                                  ) : null}
+                                </div>
+                              ) : null}
+
+                              {/* MITRE ATT&CK */}
+                              {item.ttps?.length ? (
+                                <div>
+                                  <div className="text-[11px] font-bold text-muted-foreground/70 uppercase tracking-wide mb-1">[ MITRE ATT&CK ]</div>
+                                  <ul className="space-y-0.5">
+                                    {item.ttps.map((tp) => (
+                                      <li key={tp} className="text-xs font-mono">• {tp}</li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              ) : null}
+
+                              {/* LLM analysis (lazy) */}
+                              <div>
+                                <div className="text-[11px] font-bold text-muted-foreground/70 uppercase tracking-wide mb-1">[ {language === "pt" ? "Resumo Executivo" : "Executive Summary"} ]</div>
+                                {enrichment[item.link]?.loading ? (
+                                  <div className="flex items-center gap-2 text-xs text-muted-foreground py-1">
+                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                    {language === "pt" ? "Gerando análise..." : "Generating analysis..."}
+                                  </div>
+                                ) : (
+                                  <>
+                                    <p className="text-sm leading-relaxed text-foreground/90 whitespace-pre-line">
+                                      {enrichment[item.link]?.data?.executiveSummary
+                                        || renderHighlightedDescription(language === "pt" ? (item.descriptionPt || item.description) : item.description)}
+                                    </p>
+                                    {enrichment[item.link]?.data?.impactMitigation ? (
+                                      <>
+                                        <div className="text-[11px] font-bold text-muted-foreground/70 uppercase tracking-wide mt-3 mb-1">[ {language === "pt" ? "Impacto & Mitigação" : "Impact & Mitigation"} ]</div>
+                                        <p className="text-sm leading-relaxed text-foreground/90 whitespace-pre-line">{enrichment[item.link]?.data?.impactMitigation}</p>
+                                      </>
+                                    ) : null}
+                                    {enrichment[item.link]?.data && enrichment[item.link]?.data?.available === false ? (
+                                      <p className="text-[10px] text-muted-foreground/60 mt-1.5 italic">
+                                        {language === "pt" ? "Resumo do RSS (análise por IA indisponível)" : "RSS summary (AI analysis unavailable)"}
+                                      </p>
+                                    ) : null}
+                                  </>
+                                )}
+                              </div>
+
+                              {/* CVEs */}
+                              {item.cves?.length ? (
+                                <div>
+                                  <div className="text-[11px] font-bold text-muted-foreground/70 uppercase tracking-wide mb-1">[ Related CVEs ]</div>
+                                  <div className="flex flex-wrap gap-1.5">
+                                    {item.cves.map((cve) => (
+                                      <a key={cve} href={`https://nvd.nist.gov/vuln/detail/${cve}`} target="_blank" rel="noopener noreferrer" className="text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded border border-primary/20 text-primary hover:bg-primary/10">{cve}</a>
+                                    ))}
+                                  </div>
+                                </div>
+                              ) : null}
+                            </div>
+                          )}
                         </div>
                       </div>
                     );
