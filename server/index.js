@@ -1238,6 +1238,27 @@ const newsIntelPrompt = (lang) => (
     `OUTPUT LANGUAGE: ${lang === 'en' ? 'English' : 'Português (Brasil)'}. Respond ONLY the JSON, no extra text.`
 );
 
+// Free Google Translate endpoint (no key). Returns translated text, or the
+// original on any failure. Used as the no-Groq fallback so advisories are at
+// least readable in the user's language.
+async function googleTranslate(text, targetLang) {
+    const input = (text || '').slice(0, 1800);
+    if (!input.trim()) return text || '';
+    try {
+        const resp = await axios.get('https://translate.googleapis.com/translate_a/single', {
+            params: { client: 'gtx', sl: 'auto', tl: targetLang, dt: 't', q: input },
+            timeout: 8000,
+        });
+        const segments = resp.data?.[0];
+        if (Array.isArray(segments)) {
+            return segments.map((s) => (Array.isArray(s) ? s[0] : '')).join('');
+        }
+    } catch (err) {
+        console.warn(`Google Translate failed: ${err.message}`);
+    }
+    return text || '';
+}
+
 // Call Groq chat completions with a small model fallback chain; returns parsed JSON or null.
 async function groqAnalyze(title, content, lang) {
     if (!process.env.GROQ_API_KEY) return null;
@@ -1290,15 +1311,32 @@ app.post('/api/newsletter/enrich', scanLimiter, async (req, res) => {
             const paras = String(ai.summary).split(/\n\n+/).map((p) => p.trim()).filter(Boolean);
             payload = {
                 available: true,
+                source: 'groq',
                 title: ai.title || item.title,
                 executiveSummary: paras[0] || String(ai.summary),
                 impactMitigation: paras.slice(1).join('\n\n'),
                 iocs: ai.iocs || null,
             };
-        } else {
-            // Graceful fallback: no LLM configured/available — use the RSS description.
+        } else if (lang === 'pt') {
+            // No LLM: translate the RSS content to Portuguese via Google Translate
+            // so it is at least readable/actionable in the user's language.
+            const [translatedTitle, translatedSummary] = await Promise.all([
+                googleTranslate(item.title, 'pt'),
+                googleTranslate(item.description, 'pt'),
+            ]);
             payload = {
                 available: false,
+                source: 'translate',
+                title: translatedTitle || item.title,
+                executiveSummary: translatedSummary || item.description || '',
+                impactMitigation: '',
+                iocs: null,
+            };
+        } else {
+            // English UI with no LLM — the source content is already English.
+            payload = {
+                available: false,
+                source: 'rss',
                 title: item.title,
                 executiveSummary: item.description || '',
                 impactMitigation: '',

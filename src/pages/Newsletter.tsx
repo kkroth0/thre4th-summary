@@ -51,6 +51,7 @@ const SEVERITY_STYLES: Record<string, string> = {
 
 interface EnrichData {
   available: boolean;
+  source?: string; // groq | translate | rss
   title?: string;
   executiveSummary?: string;
   impactMitigation?: string;
@@ -1087,7 +1088,11 @@ const Newsletter = () => {
                                         <p className="text-sm leading-relaxed text-foreground/90 whitespace-pre-line">{enrichment[item.link]?.data?.impactMitigation}</p>
                                       </>
                                     ) : null}
-                                    {enrichment[item.link]?.data && enrichment[item.link]?.data?.available === false ? (
+                                    {enrichment[item.link]?.data?.source === "translate" ? (
+                                      <p className="text-[10px] text-muted-foreground/60 mt-1.5 italic">
+                                        {language === "pt" ? "Tradução automática (Google Translate) — análise por IA desativada" : "Auto-translated (Google Translate) — AI analysis off"}
+                                      </p>
+                                    ) : enrichment[item.link]?.data?.source === "rss" ? (
                                       <p className="text-[10px] text-muted-foreground/60 mt-1.5 italic">
                                         {language === "pt" ? "Resumo do RSS (análise por IA indisponível)" : "RSS summary (AI analysis unavailable)"}
                                       </p>
