@@ -4,7 +4,7 @@ import { jsPDF } from 'jspdf';
 import autoTable, { type CellHookData } from 'jspdf-autotable';
 import PptxGenJS from 'pptxgenjs';
 import ExcelJS from 'exceljs';
-import type { PatchTuesdaySummary, PatchVulnerability } from '@/services/msrcApi';
+import type { PatchTuesdaySummary, PatchVulnerability, PatchTuesdayTotals, NamedCount } from '@/services/msrcApi';
 
 // ---- Shared palette / helpers -------------------------------------------------
 
@@ -25,6 +25,77 @@ const hex = (h: string) => `#${h}`;
 // jspdf-autotable augments the jsPDF instance with this at runtime
 type AutoTableDoc = jsPDF & { lastAutoTable: { finalY: number } };
 const finalY = (doc: jsPDF) => (doc as AutoTableDoc).lastAutoTable.finalY;
+
+const rgb = (h: string): [number, number, number] => [
+    parseInt(h.substr(0, 2), 16),
+    parseInt(h.substr(2, 2), 16),
+    parseInt(h.substr(4, 2), 16),
+];
+
+// 100% stacked horizontal severity bar with legend underneath; returns next y
+function drawSeverityBar(doc: jsPDF, x: number, y: number, w: number, totals: PatchTuesdayTotals): number {
+    const segs = [
+        { label: 'Critical', value: totals.critical, hex: SEVERITY_HEX.Critical },
+        { label: 'Important', value: totals.important, hex: SEVERITY_HEX.Important },
+        { label: 'Moderate', value: totals.moderate, hex: SEVERITY_HEX.Moderate },
+        { label: 'Low', value: totals.low, hex: SEVERITY_HEX.Low },
+        { label: 'Unrated/Edge', value: totals.unknown, hex: SEVERITY_HEX.Unknown },
+    ];
+    const total = totals.total || 1;
+    const h = 8;
+    let cx = x;
+    segs.forEach((s) => {
+        const segW = (s.value / total) * w;
+        if (segW <= 0) return;
+        const [r, g, b] = rgb(s.hex);
+        doc.setFillColor(r, g, b);
+        doc.rect(cx, y, segW, h, 'F');
+        cx += segW;
+    });
+    // Legend chips
+    const ly = y + h + 5;
+    let lx = x;
+    doc.setFontSize(7.5);
+    segs.forEach((s) => {
+        const [r, g, b] = rgb(s.hex);
+        doc.setFillColor(r, g, b);
+        doc.roundedRect(lx, ly - 2.6, 3, 3, 0.5, 0.5, 'F');
+        doc.setTextColor(71, 85, 105);
+        doc.setFont('helvetica', 'normal');
+        const text = `${s.label} (${s.value})`;
+        doc.text(text, lx + 4.2, ly);
+        lx += 4.2 + doc.getTextWidth(text) + 6;
+    });
+    return ly + 4;
+}
+
+// Horizontal bar chart with labels + values; returns next y
+function drawHBars(doc: jsPDF, x: number, y: number, w: number, rows: NamedCount[], colorHex: string): number {
+    const max = Math.max(1, ...rows.map((r) => r.count));
+    const labelW = 46;
+    const valW = 12;
+    const trackX = x + labelW;
+    const trackW = w - labelW - valW;
+    const rowH = 6;
+    const [cr, cg, cb] = rgb(colorHex);
+    doc.setFontSize(7.5);
+    rows.forEach((r) => {
+        doc.setTextColor(51, 65, 85);
+        doc.setFont('helvetica', 'normal');
+        const label = r.name.length > 28 ? `${r.name.slice(0, 27)}…` : r.name;
+        doc.text(label, x, y + 3.3);
+        doc.setFillColor(241, 245, 249);
+        doc.roundedRect(trackX, y, trackW, 4, 1, 1, 'F');
+        const bw = Math.max(0.8, (r.count / max) * trackW);
+        doc.setFillColor(cr, cg, cb);
+        doc.roundedRect(trackX, y, bw, 4, 1, 1, 'F');
+        doc.setTextColor(15, 23, 42);
+        doc.setFont('helvetica', 'bold');
+        doc.text(String(r.count), trackX + trackW + 2, y + 3.3);
+        y += rowH;
+    });
+    return y;
+}
 
 const fmtDate = (iso: string | null): string => {
     if (!iso) return 'N/A';
@@ -113,52 +184,52 @@ export function exportPatchTuesdayPDF(summary: PatchTuesdaySummary): void {
         y += 5;
     };
 
-    // ---- Severity + Impact + Family tables (two columns) ----
+    // ---- Severity distribution (stacked bar chart) ----
     sectionTitle('Severity Distribution');
-    autoTable(doc, {
-        startY: y,
-        head: [['Severity', 'CVEs', 'Share']],
-        body: [
-            ['Critical', summary.totals.critical, pct(summary.totals.critical, summary.totals.total)],
-            ['Important', summary.totals.important, pct(summary.totals.important, summary.totals.total)],
-            ['Moderate', summary.totals.moderate, pct(summary.totals.moderate, summary.totals.total)],
-            ['Low', summary.totals.low, pct(summary.totals.low, summary.totals.total)],
-            ['Unrated / Edge', summary.totals.unknown, pct(summary.totals.unknown, summary.totals.total)],
-        ],
-        theme: 'grid',
-        headStyles: { fillColor: [15, 23, 42], fontSize: 8.5 },
-        bodyStyles: { fontSize: 8.5 },
-        margin: { left: margin, right: margin },
-    });
-    y = finalY(doc) + 8;
+    y = drawSeverityBar(doc, margin, y + 2, pageW - margin * 2, summary.totals) + 5;
 
+    // ---- By Impact (horizontal bar chart) ----
     sectionTitle('Vulnerabilities by Impact');
-    autoTable(doc, {
-        startY: y,
-        head: [['Impact / Category', 'CVEs', 'Share']],
-        body: summary.byImpact.map((i) => [i.name, i.count, pct(i.count, summary.totals.total)]),
-        theme: 'striped',
-        headStyles: { fillColor: [37, 99, 235], fontSize: 8.5 },
-        bodyStyles: { fontSize: 8.5 },
-        margin: { left: margin, right: margin },
-    });
-    y = finalY(doc) + 8;
+    y = drawHBars(doc, margin, y + 2, pageW - margin * 2, summary.byImpact, BRAND) + 6;
 
-    if (y > pageH - 60) {
+    if (y > pageH - 70) {
         doc.addPage();
         y = 20;
     }
+    // ---- Affected product families (horizontal bar chart) ----
     sectionTitle('Affected Product Families');
-    autoTable(doc, {
-        startY: y,
-        head: [['Product Family', 'CVEs', 'Share']],
-        body: summary.byFamily.map((f) => [f.name, f.count, pct(f.count, summary.totals.total)]),
-        theme: 'striped',
-        headStyles: { fillColor: [37, 99, 235], fontSize: 8.5 },
-        bodyStyles: { fontSize: 8.5 },
-        margin: { left: margin, right: margin },
+    y = drawHBars(doc, margin, y + 2, pageW - margin * 2, summary.byFamily, '1E3A8A') + 6;
+
+    // ---- References ----
+    if (y > pageH - 50) {
+        doc.addPage();
+        y = 20;
+    }
+    sectionTitle('References & Sources');
+    const refs = [
+        { label: 'Microsoft Security Update Guide', url: `https://msrc.microsoft.com/update-guide/releaseNote/${summary.id}` },
+        { label: 'MSRC CVRF v3.0 API (source document)', url: `https://api.msrc.microsoft.com/cvrf/v3.0/cvrf/${summary.id}` },
+        { label: 'Microsoft Update Catalog', url: 'https://catalog.update.microsoft.com/' },
+    ];
+    refs.forEach((r) => {
+        doc.setFontSize(8.5);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(15, 23, 42);
+        doc.text(`• ${r.label}:`, margin, y);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(37, 99, 235);
+        doc.textWithLink(r.url, margin + 4, y + 4.5, { url: r.url });
+        y += 11;
     });
-    y = finalY(doc) + 8;
+    doc.setFontSize(7.5);
+    doc.setFont('helvetica', 'italic');
+    doc.setTextColor(100, 116, 139);
+    doc.text(
+        `Data retrieved from the official Microsoft Security Response Center (MSRC) on ${generated}. Each CVE can be reviewed at https://msrc.microsoft.com/update-guide/vulnerability/<CVE-ID>.`,
+        margin,
+        y + 1,
+        { maxWidth: pageW - margin * 2 }
+    );
 
     // ---- Priority CVEs ----
     doc.addPage();
@@ -222,8 +293,6 @@ export function exportPatchTuesdayPDF(summary: PatchTuesdaySummary): void {
 
     doc.save(`${baseFilename(summary)}.pdf`);
 }
-
-const pct = (n: number, total: number) => (total ? `${((n / total) * 100).toFixed(1)}%` : '0%');
 
 const severityCellColor = (data: CellHookData, col: number) => {
     if (data.section !== 'body' || data.column.index !== col) return;

@@ -1526,6 +1526,53 @@ const normalizeCvrf = (doc) => {
     };
 };
 
+// Fetch the live list of monthly "Security Updates" from MSRC and cache it
+async function fetchAndCacheMonths() {
+    const response = await axios.get(`${MSRC_BASE}/updates`, {
+        headers: { Accept: 'application/json' },
+        timeout: 12000
+    });
+    const months = (response.data?.value || [])
+        .filter(m => /Security Updates/i.test(m.DocumentTitle || ''))
+        .map(m => ({
+            id: m.ID,
+            title: m.DocumentTitle,
+            initialReleaseDate: m.InitialReleaseDate,
+            currentReleaseDate: m.CurrentReleaseDate
+        }))
+        .sort((a, b) => new Date(b.initialReleaseDate) - new Date(a.initialReleaseDate));
+
+    memoryCache.patchTuesdayMonths.data = months;
+    memoryCache.patchTuesdayMonths.expiresAt = Date.now() + memoryCache.patchTuesdayMonths.ttl;
+    return months;
+}
+
+// Fetch + normalize the CVRF document for one month and cache it
+async function fetchAndCacheSummary(id) {
+    const response = await axios.get(`${MSRC_BASE}/cvrf/${id}`, {
+        headers: { Accept: 'application/json' },
+        timeout: 20000
+    });
+    const summary = normalizeCvrf(response.data);
+    memoryCache.patchTuesday.store.set(id, { data: summary, expiresAt: Date.now() + memoryCache.patchTuesday.ttl });
+    return summary;
+}
+
+// Background refresher: keeps the month list current (detects each new Patch
+// Tuesday within one TTL) and re-normalizes the latest month so mid-month
+// revisions by Microsoft are reflected and the cache stays warm.
+async function refreshPatchTuesday() {
+    try {
+        const months = await fetchAndCacheMonths();
+        if (months.length) {
+            await fetchAndCacheSummary(months[0].id);
+            console.log(`[PatchTuesday] Refreshed. Latest month: ${months[0].id}`);
+        }
+    } catch (error) {
+        console.error('Failed to refresh Patch Tuesday data:', error.message);
+    }
+}
+
 // List available Patch Tuesday months
 app.get('/api/patch-tuesday/months', async (req, res) => {
     const now = Date.now();
@@ -1533,23 +1580,7 @@ app.get('/api/patch-tuesday/months', async (req, res) => {
         return res.json(memoryCache.patchTuesdayMonths.data);
     }
     try {
-        const response = await axios.get(`${MSRC_BASE}/updates`, {
-            headers: { Accept: 'application/json' },
-            timeout: 12000
-        });
-        const months = (response.data?.value || [])
-            .filter(m => /Security Updates/i.test(m.DocumentTitle || ''))
-            .map(m => ({
-                id: m.ID,
-                title: m.DocumentTitle,
-                initialReleaseDate: m.InitialReleaseDate,
-                currentReleaseDate: m.CurrentReleaseDate
-            }))
-            .sort((a, b) => new Date(b.initialReleaseDate) - new Date(a.initialReleaseDate));
-
-        memoryCache.patchTuesdayMonths.data = months;
-        memoryCache.patchTuesdayMonths.expiresAt = now + memoryCache.patchTuesdayMonths.ttl;
-        res.json(months);
+        res.json(await fetchAndCacheMonths());
     } catch (error) {
         const { status, message } = sanitizeError(error);
         res.status(status).json({ error: message });
@@ -1570,13 +1601,7 @@ app.get('/api/patch-tuesday/:id', async (req, res) => {
     }
 
     try {
-        const response = await axios.get(`${MSRC_BASE}/cvrf/${id}`, {
-            headers: { Accept: 'application/json' },
-            timeout: 20000
-        });
-        const summary = normalizeCvrf(response.data);
-        memoryCache.patchTuesday.store.set(id, { data: summary, expiresAt: now + memoryCache.patchTuesday.ttl });
-        res.json(summary);
+        res.json(await fetchAndCacheSummary(id));
     } catch (error) {
         const { status, message } = sanitizeError(error);
         res.status(status).json({ error: message });
@@ -1668,4 +1693,9 @@ app.listen(PORT, () => {
     // Prime the newsletter RSS feed cache and schedule background updates
     refreshNewsletterFeed();
     setInterval(refreshNewsletterFeed, memoryCache.newsletter.ttl);
+
+    // Prime the Patch Tuesday cache and refresh it so each new monthly release
+    // (and mid-month revisions) is picked up automatically.
+    refreshPatchTuesday();
+    setInterval(refreshPatchTuesday, memoryCache.patchTuesdayMonths.ttl);
 });

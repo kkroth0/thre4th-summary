@@ -11,10 +11,16 @@ import {
     Download,
     AlertCircle,
     CalendarDays,
+    Search,
+    ListFilter,
+    ChevronLeft,
+    ChevronRight,
+    X,
 } from "lucide-react";
 import { Header } from "@/components/Header";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import {
     Select,
     SelectContent,
@@ -61,6 +67,15 @@ const PatchTuesday = () => {
     const [loadingSummary, setLoadingSummary] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [exporting, setExporting] = useState<ExportKind | null>(null);
+
+    // CVE explorer filters
+    const [fSeverity, setFSeverity] = useState("ALL");
+    const [fImpact, setFImpact] = useState("ALL");
+    const [fStatus, setFStatus] = useState("ALL"); // ALL | priority | exploited | disclosed | moreLikely
+    const [fCvss, setFCvss] = useState("0"); // minimum base score threshold
+    const [search, setSearch] = useState("");
+    const [page, setPage] = useState(1);
+    const PAGE_SIZE = 25;
 
     // Load available Patch Tuesday months once
     useEffect(() => {
@@ -109,6 +124,43 @@ const PatchTuesday = () => {
         () => (summary ? Math.max(1, ...summary.byImpact.map((i) => i.count)) : 1),
         [summary]
     );
+
+    // Reset to first page whenever filters or the loaded month change
+    useEffect(() => {
+        setPage(1);
+    }, [fSeverity, fImpact, fStatus, fCvss, search, selectedId]);
+
+    // Apply all active filters to the full vulnerability catalog
+    const filtered = useMemo(() => {
+        if (!summary) return [];
+        const q = search.trim().toLowerCase();
+        const minCvss = parseFloat(fCvss);
+        return summary.vulnerabilities.filter((v) => {
+            if (fSeverity !== "ALL" && v.severity !== fSeverity) return false;
+            if (fImpact !== "ALL" && v.impact !== fImpact) return false;
+            if (minCvss > 0 && (v.cvss ?? 0) < minCvss) return false;
+            const moreLikely = /more likely/i.test(v.exploitability);
+            if (fStatus === "exploited" && !v.exploited) return false;
+            if (fStatus === "disclosed" && !v.publiclyDisclosed) return false;
+            if (fStatus === "moreLikely" && !moreLikely) return false;
+            if (fStatus === "priority" && !(v.exploited || v.publiclyDisclosed || moreLikely)) return false;
+            if (q && !(v.cve.toLowerCase().includes(q) || v.title.toLowerCase().includes(q))) return false;
+            return true;
+        });
+    }, [summary, fSeverity, fImpact, fStatus, fCvss, search]);
+
+    const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+    const pageClamped = Math.min(page, totalPages);
+    const pageRows = filtered.slice((pageClamped - 1) * PAGE_SIZE, pageClamped * PAGE_SIZE);
+    const filtersActive = fSeverity !== "ALL" || fImpact !== "ALL" || fStatus !== "ALL" || fCvss !== "0" || search.trim() !== "";
+
+    const clearFilters = () => {
+        setFSeverity("ALL");
+        setFImpact("ALL");
+        setFStatus("ALL");
+        setFCvss("0");
+        setSearch("");
+    };
 
     const runExport = async (kind: ExportKind) => {
         if (!summary) return;
@@ -310,15 +362,98 @@ const PatchTuesday = () => {
                                 />
                             </div>
 
-                            {/* Priority CVEs */}
+                            {/* CVE Explorer */}
                             <div className="rounded-2xl border border-primary/10 bg-card/30 overflow-hidden">
-                                <div className="px-5 py-3.5 border-b border-primary/10 flex items-center gap-2">
+                                <div className="px-5 py-3.5 border-b border-primary/10 flex flex-wrap items-center gap-2">
                                     <ShieldAlert className="h-4 w-4 text-primary" />
-                                    <h2 className="text-sm font-bold">{isPt ? "CVEs Prioritários" : "Priority CVEs"}</h2>
+                                    <h2 className="text-sm font-bold">{isPt ? "Explorador de CVEs" : "CVE Explorer"}</h2>
                                     <span className="text-[11px] text-muted-foreground">
-                                        {isPt ? "explorados, divulgados e maior CVSS" : "exploited, disclosed & highest CVSS"}
+                                        {isPt
+                                            ? `${filtered.length} de ${summary.vulnerabilities.length} CVEs`
+                                            : `${filtered.length} of ${summary.vulnerabilities.length} CVEs`}
                                     </span>
                                 </div>
+
+                                {/* Filter bar */}
+                                <div className="px-4 py-3 border-b border-primary/10 bg-card/20 flex flex-wrap items-center gap-2">
+                                    <div className="relative flex-1 min-w-[180px]">
+                                        <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground/60" />
+                                        <Input
+                                            type="text"
+                                            placeholder={isPt ? "Buscar CVE ou título..." : "Search CVE or title..."}
+                                            value={search}
+                                            onChange={(e) => setSearch(e.target.value)}
+                                            className="pl-9 h-9 text-xs rounded-xl bg-background border-primary/15"
+                                        />
+                                    </div>
+
+                                    <Select value={fSeverity} onValueChange={setFSeverity}>
+                                        <SelectTrigger className="w-[140px] h-9 text-xs rounded-xl bg-background border-primary/15">
+                                            <SelectValue placeholder={isPt ? "Severidade" : "Severity"} />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="ALL">{isPt ? "Toda severidade" : "All severities"}</SelectItem>
+                                            <SelectItem value="Critical">Critical</SelectItem>
+                                            <SelectItem value="Important">Important</SelectItem>
+                                            <SelectItem value="Moderate">Moderate</SelectItem>
+                                            <SelectItem value="Low">Low</SelectItem>
+                                            <SelectItem value="Unknown">{isPt ? "Sem classificação" : "Unrated / Edge"}</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+
+                                    <Select value={fCvss} onValueChange={setFCvss}>
+                                        <SelectTrigger className="w-[130px] h-9 text-xs rounded-xl bg-background border-primary/15">
+                                            <SelectValue placeholder="CVSS" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="0">{isPt ? "Qualquer CVSS" : "Any CVSS"}</SelectItem>
+                                            <SelectItem value="9">CVSS ≥ 9.0</SelectItem>
+                                            <SelectItem value="7">CVSS ≥ 7.0</SelectItem>
+                                            <SelectItem value="4">CVSS ≥ 4.0</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+
+                                    <Select value={fImpact} onValueChange={setFImpact}>
+                                        <SelectTrigger className="w-[170px] h-9 text-xs rounded-xl bg-background border-primary/15">
+                                            <SelectValue placeholder={isPt ? "Impacto" : "Impact"} />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="ALL">{isPt ? "Todo impacto" : "All impacts"}</SelectItem>
+                                            {summary.byImpact.map((i) => (
+                                                <SelectItem key={i.name} value={i.name}>
+                                                    {i.name} ({i.count})
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+
+                                    <Select value={fStatus} onValueChange={setFStatus}>
+                                        <SelectTrigger className="w-[160px] h-9 text-xs rounded-xl bg-background border-primary/15">
+                                            <SelectValue placeholder="Status" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="ALL">{isPt ? "Todo status" : "All statuses"}</SelectItem>
+                                            <SelectItem value="priority">{isPt ? "Prioritários" : "Priority"}</SelectItem>
+                                            <SelectItem value="exploited">{isPt ? "Explorados" : "Exploited"}</SelectItem>
+                                            <SelectItem value="disclosed">{isPt ? "Divulgados" : "Publicly Disclosed"}</SelectItem>
+                                            <SelectItem value="moreLikely">{isPt ? "Exploração provável" : "Exploitation More Likely"}</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+
+                                    {filtersActive && (
+                                        <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            onClick={clearFilters}
+                                            className="h-9 rounded-xl text-xs gap-1.5 text-muted-foreground hover:text-foreground"
+                                        >
+                                            <X className="h-3.5 w-3.5" />
+                                            {isPt ? "Limpar" : "Clear"}
+                                        </Button>
+                                    )}
+                                </div>
+
+                                {/* Table */}
                                 <div className="overflow-x-auto">
                                     <table className="w-full text-xs">
                                         <thead>
@@ -327,12 +462,13 @@ const PatchTuesday = () => {
                                                 <th className="px-4 py-2.5 font-semibold">{isPt ? "Severidade" : "Severity"}</th>
                                                 <th className="px-4 py-2.5 font-semibold">CVSS</th>
                                                 <th className="px-4 py-2.5 font-semibold hidden md:table-cell">{isPt ? "Impacto" : "Impact"}</th>
+                                                <th className="px-4 py-2.5 font-semibold hidden xl:table-cell">{isPt ? "Família" : "Family"}</th>
                                                 <th className="px-4 py-2.5 font-semibold hidden lg:table-cell">Status</th>
                                                 <th className="px-4 py-2.5 font-semibold">{isPt ? "Título" : "Title"}</th>
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            {summary.topCves.map((v) => (
+                                            {pageRows.map((v) => (
                                                 <tr key={v.cve} className="border-b border-primary/5 last:border-0 hover:bg-muted/20">
                                                     <td className="px-4 py-2.5 font-mono font-semibold whitespace-nowrap">
                                                         <a
@@ -351,6 +487,7 @@ const PatchTuesday = () => {
                                                     </td>
                                                     <td className="px-4 py-2.5 font-semibold tabular-nums">{v.cvss ?? "—"}</td>
                                                     <td className="px-4 py-2.5 hidden md:table-cell text-muted-foreground">{v.impact}</td>
+                                                    <td className="px-4 py-2.5 hidden xl:table-cell text-muted-foreground">{v.family}</td>
                                                     <td className="px-4 py-2.5 hidden lg:table-cell">
                                                         <div className="flex gap-1">
                                                             {v.exploited && (
@@ -359,7 +496,10 @@ const PatchTuesday = () => {
                                                             {v.publiclyDisclosed && (
                                                                 <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-violet-500/15 text-violet-500">DISCLOSED</span>
                                                             )}
-                                                            {!v.exploited && !v.publiclyDisclosed && (
+                                                            {!v.exploited && !v.publiclyDisclosed && /more likely/i.test(v.exploitability) && (
+                                                                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-orange-500/15 text-orange-500">LIKELY</span>
+                                                            )}
+                                                            {!v.exploited && !v.publiclyDisclosed && !/more likely/i.test(v.exploitability) && (
                                                                 <span className="text-muted-foreground/50">—</span>
                                                             )}
                                                         </div>
@@ -369,13 +509,52 @@ const PatchTuesday = () => {
                                                     </td>
                                                 </tr>
                                             ))}
+                                            {pageRows.length === 0 && (
+                                                <tr>
+                                                    <td colSpan={7} className="px-4 py-10 text-center text-muted-foreground">
+                                                        <ListFilter className="h-5 w-5 mx-auto mb-2 opacity-50" />
+                                                        {isPt ? "Nenhum CVE corresponde aos filtros." : "No CVEs match the current filters."}
+                                                    </td>
+                                                </tr>
+                                            )}
                                         </tbody>
                                     </table>
                                 </div>
-                                <div className="px-5 py-2.5 border-t border-primary/10 text-[11px] text-muted-foreground">
-                                    {isPt
-                                        ? `Catálogo completo com ${summary.vulnerabilities.length} CVEs disponível nos arquivos exportados.`
-                                        : `Full catalog of ${summary.vulnerabilities.length} CVEs available in the exported files.`}
+
+                                {/* Pagination */}
+                                <div className="px-5 py-2.5 border-t border-primary/10 flex items-center justify-between gap-3 text-[11px] text-muted-foreground">
+                                    <span>
+                                        {filtered.length > 0
+                                            ? isPt
+                                                ? `Mostrando ${(pageClamped - 1) * PAGE_SIZE + 1}–${Math.min(pageClamped * PAGE_SIZE, filtered.length)} de ${filtered.length}`
+                                                : `Showing ${(pageClamped - 1) * PAGE_SIZE + 1}–${Math.min(pageClamped * PAGE_SIZE, filtered.length)} of ${filtered.length}`
+                                            : isPt
+                                                ? "Nenhum resultado"
+                                                : "No results"}
+                                    </span>
+                                    <div className="flex items-center gap-2">
+                                        <Button
+                                            variant="outline"
+                                            size="icon"
+                                            disabled={pageClamped <= 1}
+                                            onClick={() => setPage((p) => Math.max(1, p - 1))}
+                                            className="h-7 w-7 rounded-lg border-primary/15"
+                                        >
+                                            <ChevronLeft className="h-4 w-4" />
+                                        </Button>
+                                        <span className="font-semibold text-foreground tabular-nums">
+                                            {pageClamped} / {totalPages}
+                                        </span>
+                                        <Button
+                                            variant="outline"
+                                            size="icon"
+                                            disabled={pageClamped >= totalPages}
+                                            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                                            className="h-7 w-7 rounded-lg border-primary/15"
+                                        >
+                                            <ChevronRight className="h-4 w-4" />
+                                        </Button>
+                                    </div>
                                 </div>
                             </div>
                         </>
