@@ -10,6 +10,7 @@ import dns from 'dns';
 import fs from 'fs';
 import crypto from 'crypto';
 import compression from 'compression';
+import * as cheerio from 'cheerio';
 import { scoreArticle, CTI_FEEDS } from './ctiIntel.js';
 
 dotenv.config({ path: '../.env' });
@@ -1263,18 +1264,28 @@ async function googleTranslate(text, targetLang) {
 // text (paragraphs), mirroring the bot's deep-content step. Dependency-free
 // heuristic; returns '' if the page can't be fetched/parsed (then we fall back
 // to the RSS summary). Best-effort and tolerant of WAF/JS-heavy sites.
+const ARTICLE_BOILERPLATE = /^(advertisement|scroll to continue|related\s*:|written by|subscribe|sign up|sponsored|©|cookie|share this|read more|tags:|follow us|newsletter|sign up to)/i;
+
 function extractReadableText(html) {
-    let h = String(html || '')
-        .replace(/<script[\s\S]*?<\/script>/gi, ' ')
-        .replace(/<style[\s\S]*?<\/style>/gi, ' ')
-        .replace(/<noscript[\s\S]*?<\/noscript>/gi, ' ')
-        .replace(/<!--[\s\S]*?-->/g, ' ');
-    const article = h.match(/<article\b[\s\S]*?<\/article>/i);
-    if (article) h = article[0];
-    const paras = [...h.matchAll(/<p\b[^>]*>([\s\S]*?)<\/p>/gi)]
-        .map((m) => decodeEntities(m[1].replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ').trim())
-        .filter((p) => p.length > 45);
-    return paras.join('\n\n');
+    try {
+        const $ = cheerio.load(html);
+        // Strip non-content chrome
+        $('script,style,noscript,nav,aside,footer,header,form,iframe,figure,figcaption,.ad,.ads,.advertisement,.related,.newsletter,.share,.social,[class*="promo"],[class*="sidebar"]').remove();
+        // Pick the densest content root (article/main, else body)
+        let root = $('article').first();
+        if (!root.length) root = $('main').first();
+        if (!root.length) root = $('body');
+        const paras = [];
+        root.find('p').each((_, el) => {
+            const t = $(el).text().replace(/\s+/g, ' ').trim();
+            if (t.length > 45 && !ARTICLE_BOILERPLATE.test(t) && !/\(@\w+\)\s+is\s+(a|the|senior|managing)/i.test(t)) {
+                paras.push(t);
+            }
+        });
+        return paras.join('\n\n');
+    } catch {
+        return '';
+    }
 }
 
 async function fetchArticleText(url) {
@@ -1295,19 +1306,26 @@ async function fetchArticleText(url) {
     }
 }
 
-// First N paragraphs (used as a fallback Executive Summary).
-function firstParagraphs(text, n = 2) {
-    return String(text || '').split(/\n\n+/).filter(Boolean).slice(0, n).join('\n\n');
+// Split readable text into clean sentences (>30 chars).
+function splitSentences(text) {
+    return String(text || '').replace(/\s+/g, ' ').split(/(?<=[.!?])\s+/).map((s) => s.trim()).filter((s) => s.length > 30);
 }
 
-// Heuristic Impact & Mitigation: sentences mentioning impact/remediation.
-function extractMitigation(text) {
-    const sentences = String(text || '').replace(/\n+/g, ' ').split(/(?<=[.!?])\s+/);
-    const kw = /\b(mitigat\w*|patch\w*|updat\w*|upgrad\w*|workaround|remediat\w*|disabl\w*|recommend\w*|advisory|hotfix|fixed in|affected|impact\w*|exploit\w*)\b/i;
+// Concise Executive Summary: the first N lead sentences (capped).
+function firstSentences(text, n = 3) {
+    return splitSentences(text).slice(0, n).join(' ').slice(0, 650);
+}
+
+// Heuristic Impact & Mitigation: sentences about remediation, excluding any
+// already used in the Executive Summary (so the two sections don't repeat).
+function extractMitigation(text, exclude = '') {
+    const used = new Set(splitSentences(exclude));
+    const kw = /\b(mitigat\w*|patch\w*|workaround|remediat\w*|disabl\w*|recommend\w*|advisory|hotfix|fixed in|update to|upgrade to|apply the|high-priority|immediate action|affected versions?)\b/i;
     const hits = [];
-    for (const s of sentences) {
-        if (s.length > 45 && kw.test(s)) hits.push(s.trim());
-        if (hits.length >= 4) break;
+    for (const s of splitSentences(text)) {
+        if (used.has(s)) continue;
+        if (kw.test(s)) hits.push(s);
+        if (hits.length >= 3) break;
     }
     return hits.join(' ');
 }
@@ -1361,25 +1379,32 @@ app.post('/api/newsletter/enrich', scanLimiter, async (req, res) => {
         const fullText = await fetchArticleText(item.link);
         const content = fullText || item.description || '';
 
+        // Re-run deterministic enrichment over the FULL article so MITRE ATT&CK,
+        // threats, sectors, assets and CVEs reflect the whole story, not just the
+        // (often short) RSS summary.
+        const intel = scoreArticle(`${item.title} ${item.description || ''} ${content}`, item.weight_boost || 0);
+        const enriched = {
+            threats: intel.threats, sectors: intel.sectors, ttps: intel.ttps,
+            assets: intel.assets, cves: intel.cves,
+        };
+
         const ai = await groqAnalyze(item.title, content, lang);
 
         let payload;
         if (ai && ai.summary) {
             const paras = String(ai.summary).split(/\n\n+/).map((p) => p.trim()).filter(Boolean);
             payload = {
-                available: true,
-                source: 'groq',
-                scraped: !!fullText,
+                available: true, source: 'groq', scraped: !!fullText,
                 title: ai.title || item.title,
                 executiveSummary: paras[0] || String(ai.summary),
                 impactMitigation: paras.slice(1).join('\n\n'),
-                iocs: ai.iocs || null,
+                iocs: ai.iocs || null, ...enriched,
             };
         } else {
-            // No LLM: build a structured report from the scraped article —
-            // Executive Summary (lead paragraphs) + heuristic Impact & Mitigation.
-            const execRaw = firstParagraphs(content, 2) || item.description || '';
-            const mitRaw = extractMitigation(fullText);
+            // No LLM: concise Executive Summary (lead sentences) + a distinct
+            // heuristic Impact & Mitigation built from the scraped article.
+            const execRaw = firstSentences(content, 3) || item.description || '';
+            const mitRaw = extractMitigation(fullText, execRaw);
             if (lang === 'pt') {
                 const [t, ex, mit] = await Promise.all([
                     googleTranslate(item.title, 'pt'),
@@ -1388,12 +1413,12 @@ app.post('/api/newsletter/enrich', scanLimiter, async (req, res) => {
                 ]);
                 payload = {
                     available: false, source: 'translate', scraped: !!fullText,
-                    title: t || item.title, executiveSummary: ex || execRaw, impactMitigation: mit || '', iocs: null,
+                    title: t || item.title, executiveSummary: ex || execRaw, impactMitigation: mit || '', iocs: null, ...enriched,
                 };
             } else {
                 payload = {
                     available: false, source: 'rss', scraped: !!fullText,
-                    title: item.title, executiveSummary: execRaw, impactMitigation: mitRaw || '', iocs: null,
+                    title: item.title, executiveSummary: execRaw, impactMitigation: mitRaw || '', iocs: null, ...enriched,
                 };
             }
         }

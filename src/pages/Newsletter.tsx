@@ -52,11 +52,22 @@ const SEVERITY_STYLES: Record<string, string> = {
 interface EnrichData {
   available: boolean;
   source?: string; // groq | translate | rss
+  scraped?: boolean;
   title?: string;
   executiveSummary?: string;
   impactMitigation?: string;
   iocs?: Record<string, unknown> | null;
+  // Deterministic enrichment recomputed over the full article
+  threats?: string[];
+  sectors?: string[];
+  ttps?: string[];
+  assets?: string[];
+  cves?: string[];
 }
+
+// Prefer the richer full-article enrichment, fall back to the collection-time item
+const mergedField = (item: Advisory, e: EnrichData | undefined, key: "threats" | "sectors" | "ttps" | "assets" | "cves"): string[] =>
+  (e?.[key]?.length ? e[key] : item[key]) ?? [];
 
 // Build a well-organized, shareable text block (mirrors the SOC bot card layout)
 const buildShareText = (item: Advisory, e: EnrichData | undefined, lang: string): string => {
@@ -64,14 +75,19 @@ const buildShareText = (item: Advisory, e: EnrichData | undefined, lang: string)
   const out: string[] = [];
   out.push(`🚨 ${(e?.title || item.titlePt || item.title || "").trim()}`);
   out.push("");
+  const assets = mergedField(item, e, "assets");
+  const threats = mergedField(item, e, "threats");
+  const sectors = mergedField(item, e, "sectors");
+  const ttps = mergedField(item, e, "ttps");
+  const cves = mergedField(item, e, "cves");
   out.push(`Source: ${item.source}`);
   out.push(`Date: ${new Date(item.pubDate).toISOString().slice(0, 10)}`);
-  if (item.assets?.length) out.push(`Monitored Assets: ${item.assets.join(", ")}`);
-  if (item.threats?.length) out.push(`Threats: ${item.threats.join(", ")}`);
-  if (item.sectors?.length) out.push(`Targeted Sectors: ${item.sectors.join(", ")}`);
-  if (item.ttps?.length) {
+  if (assets.length) out.push(`Monitored Assets: ${assets.join(", ")}`);
+  if (threats.length) out.push(`Threats: ${threats.join(", ")}`);
+  if (sectors.length) out.push(`Targeted Sectors: ${sectors.join(", ")}`);
+  if (ttps.length) {
     out.push("", "[ MITRE ATT&CK ]");
-    item.ttps.forEach((tp) => out.push(`• ${tp}`));
+    ttps.forEach((tp) => out.push(`• ${tp}`));
   }
   if (e?.executiveSummary) {
     out.push("", `[ ${isPt ? "Resumo Executivo" : "Executive Summary"} ]`, e.executiveSummary);
@@ -80,7 +96,7 @@ const buildShareText = (item: Advisory, e: EnrichData | undefined, lang: string)
     out.push("", `[ ${isPt ? "IMPACTO & MITIGAÇÃO" : "IMPACT & MITIGATION"} ]`, e.impactMitigation);
   }
   out.push("", `🔗 Source (${item.link})`);
-  const refs = (item.cves ?? []).map((c) => `https://nvd.nist.gov/vuln/detail/${c}`).join(", ");
+  const refs = cves.map((c) => `https://nvd.nist.gov/vuln/detail/${c}`).join(", ");
   out.push(`📎 ${isPt ? "Referências" : "References"}: ${refs}`);
   return out.join("\n");
 };
@@ -854,13 +870,13 @@ const Newsletter = () => {
                                 {item.severity && <span className="sev">{item.severity}{typeof item.score === "number" ? ` · ${item.score}` : ""}</span>}
                                 <div className="title font-bold text-base text-foreground">{e?.title || (language === "pt" ? (item.titlePt || item.title) : item.title)}</div>
                                 <div className="date text-xs text-muted-foreground">{new Date(item.pubDate).toLocaleString()}</div>
-                                {item.assets?.length ? <div className="kv"><strong>Monitored Assets:</strong> {item.assets.join(", ")}</div> : null}
-                                {item.threats?.length ? <div className="kv"><strong>Threats:</strong> {item.threats.join(", ")}</div> : null}
-                                {item.sectors?.length ? <div className="kv"><strong>Targeted Sectors:</strong> {item.sectors.join(", ")}</div> : null}
-                                {item.ttps?.length ? (
+                                {mergedField(item, e, "assets").length ? <div className="kv"><strong>Monitored Assets:</strong> {mergedField(item, e, "assets").join(", ")}</div> : null}
+                                {mergedField(item, e, "threats").length ? <div className="kv"><strong>Threats:</strong> {mergedField(item, e, "threats").join(", ")}</div> : null}
+                                {mergedField(item, e, "sectors").length ? <div className="kv"><strong>Targeted Sectors:</strong> {mergedField(item, e, "sectors").join(", ")}</div> : null}
+                                {mergedField(item, e, "ttps").length ? (
                                   <div className="ttp-block">
                                     <div className="section">[ MITRE ATT&CK ]</div>
-                                    <ul>{item.ttps.map((tp) => <li key={tp}>{tp}</li>)}</ul>
+                                    <ul>{mergedField(item, e, "ttps").map((tp) => <li key={tp}>{tp}</li>)}</ul>
                                   </div>
                                 ) : null}
                                 <div className="section">[ {language === "pt" ? "Resumo Executivo" : "Executive Summary"} ]</div>
@@ -871,7 +887,7 @@ const Newsletter = () => {
                                     <div className="description text-sm text-muted-foreground leading-relaxed whitespace-pre-line">{e.impactMitigation}</div>
                                   </>
                                 ) : null}
-                                {item.cves?.length ? <div className="kv"><strong>Related CVEs:</strong> {item.cves.join(", ")}</div> : null}
+                                {mergedField(item, e, "cves").length ? <div className="kv"><strong>Related CVEs:</strong> {mergedField(item, e, "cves").join(", ")}</div> : null}
                               </div>
                               );
                             })}
@@ -931,6 +947,12 @@ const Newsletter = () => {
               ) : (
                 <div className="grid grid-cols-1 gap-4">
                   {filteredAdvisories.map((item, idx) => {
+                    const enr = enrichment[item.link]?.data;
+                    const mThreats = mergedField(item, enr, "threats");
+                    const mSectors = mergedField(item, enr, "sectors");
+                    const mTtps = mergedField(item, enr, "ttps");
+                    const mAssets = mergedField(item, enr, "assets");
+                    const mCves = mergedField(item, enr, "cves");
                     const isCisa = item.source.toLowerCase().includes("cisa");
                     const isBleeping = item.source.toLowerCase().includes("bleeping");
                     const badgeColor = isCisa
@@ -1034,17 +1056,17 @@ const Newsletter = () => {
                               <div className="space-y-0.5 text-[13px] text-foreground/90">
                                 <div><span className="font-bold">Source:</span> {item.source}</div>
                                 <div><span className="font-bold">Date:</span> {new Date(item.pubDate).toISOString().slice(0, 10)}</div>
-                                {item.assets?.length ? <div><span className="font-bold">Monitored Assets:</span> {item.assets.join(", ")}</div> : null}
-                                {item.threats?.length ? <div><span className="font-bold">Threats:</span> {item.threats.join(", ")}</div> : null}
-                                {item.sectors?.length ? <div><span className="font-bold">Targeted Sectors:</span> {item.sectors.join(", ")}</div> : null}
+                                {mAssets.length ? <div><span className="font-bold">Monitored Assets:</span> {mAssets.join(", ")}</div> : null}
+                                {mThreats.length ? <div><span className="font-bold">Threats:</span> {mThreats.join(", ")}</div> : null}
+                                {mSectors.length ? <div><span className="font-bold">Targeted Sectors:</span> {mSectors.join(", ")}</div> : null}
                               </div>
 
                               {/* MITRE ATT&CK */}
-                              {item.ttps?.length ? (
+                              {mTtps.length ? (
                                 <div>
                                   <div className="text-[11px] font-bold text-muted-foreground/80 tracking-wide mb-1">[ MITRE ATT&CK ]</div>
                                   <ul className="space-y-0.5">
-                                    {item.ttps.map((tp) => (
+                                    {mTtps.map((tp) => (
                                       <li key={tp} className="text-xs font-mono">• {tp}</li>
                                     ))}
                                   </ul>
@@ -1089,10 +1111,10 @@ const Newsletter = () => {
                                 <div>
                                   🔗 <a href={item.link} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline font-semibold">Source</a>
                                 </div>
-                                {item.cves?.length ? (
+                                {mCves.length ? (
                                   <div className="flex flex-wrap items-center gap-1.5">
                                     <span>📎 {language === "pt" ? "Referências:" : "References:"}</span>
-                                    {item.cves.map((cve) => (
+                                    {mCves.map((cve) => (
                                       <a key={cve} href={`https://nvd.nist.gov/vuln/detail/${cve}`} target="_blank" rel="noopener noreferrer" className="font-mono font-semibold px-1.5 py-0.5 rounded border border-primary/20 text-primary hover:bg-primary/10">{cve}</a>
                                     ))}
                                   </div>
