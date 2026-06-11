@@ -14,6 +14,7 @@ const Newsletter = lazy(() => import("./pages/Newsletter"));
 const CveDashboard = lazy(() => import("./pages/CveDashboard"));
 const PhishingAnalyzer = lazy(() => import("./pages/PhishingAnalyzer"));
 const DnsVisualizer = lazy(() => import("./pages/DnsVisualizer"));
+const PatchTuesday = lazy(() => import("./pages/PatchTuesday"));
 const Features = lazy(() => import("./pages/Features"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
@@ -38,6 +39,7 @@ const App = () => (
                 <Route path="/" element={<Index />} />
                 <Route path="/cves" element={<CveDashboard />} />
                 <Route path="/dns-visualizer" element={<DnsVisualizer />} />
+                <Route path="/patch-tuesday" element={<PatchTuesday />} />
                 <Route path="/features" element={<Features />} />
 
                 {/* Tool Routes */}

@@ -1116,6 +1116,16 @@ const memoryCache = {
         urls: new Set(),
         expiresAt: 0,
         ttl: 60 * 60 * 1000 // 1 hour
+    },
+    patchTuesdayMonths: {
+        data: null,
+        expiresAt: 0,
+        ttl: 6 * 60 * 60 * 1000 // 6 hours
+    },
+    // Per-month normalized Patch Tuesday summaries, keyed by id (e.g. "2026-Jun")
+    patchTuesday: {
+        store: new Map(),
+        ttl: 24 * 60 * 60 * 1000 // 24 hours
     }
 };
 
@@ -1370,6 +1380,203 @@ app.get('/api/cves/exploited', async (req, res) => {
             return res.json(sorted);
         }
         throw new Error("Invalid response format from CISA");
+    } catch (error) {
+        const { status, message } = sanitizeError(error);
+        res.status(status).json({ error: message });
+    }
+});
+
+// ============================================================
+//  Microsoft Patch Tuesday (MSRC CVRF v3.0) Summary
+// ============================================================
+
+const MSRC_BASE = 'https://api.msrc.microsoft.com/cvrf/v3.0';
+const SEVERITY_RANK = { Critical: 4, Important: 3, Moderate: 2, Low: 1 };
+
+const stripHtml = (str) => (str || '').replace(/<[^>]*>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim();
+
+// Classify a vulnerability into a single product family using its title + affected product names
+const classifyFamily = (title, productNames) => {
+    const hay = `${title || ''} ${productNames.join(' ')}`.toLowerCase();
+    if (/azure|microsoft entra|defender for/.test(hay)) return 'Azure & Cloud';
+    if (/sharepoint/.test(hay)) return 'SharePoint';
+    if (/exchange/.test(hay)) return 'Exchange Server';
+    if (/sql server/.test(hay)) return 'SQL Server';
+    if (/\.net|visual studio|asp\.net|nuget|powershell/.test(hay)) return 'Developer Tools & .NET';
+    if (/office|word|excel|powerpoint|outlook|visio|onenote|\baccess\b|publisher/.test(hay)) return 'Microsoft Office';
+    if (/\bedge\b|chromium/.test(hay)) return 'Microsoft Edge';
+    if (/dynamics/.test(hay)) return 'Dynamics 365';
+    if (/system center/.test(hay)) return 'System Center';
+    if (/windows|win32|kernel|hyper-v|\brdp\b|smb|\bdns\b|tcp\/ip|active directory/.test(hay)) return 'Windows';
+    return 'Other Microsoft Products';
+};
+
+const parseExploitStatus = (str) => {
+    const s = str || '';
+    const m = (re) => (s.match(re)?.[1] || '').trim();
+    return {
+        exploited: /Exploited:\s*Yes/i.test(s),
+        publiclyDisclosed: /Publicly Disclosed:\s*Yes/i.test(s),
+        exploitability: m(/Latest Software Release:\s*([^;]+)/i) || 'N/A'
+    };
+};
+
+// Transform a raw CVRF document into a compact, presentation-ready summary
+const normalizeCvrf = (doc) => {
+    const productNameById = {};
+    for (const p of (doc.ProductTree?.FullProductName || [])) {
+        productNameById[p.ProductID] = p.Value;
+    }
+
+    const totals = { total: 0, critical: 0, important: 0, moderate: 0, low: 0, unknown: 0, exploited: 0, disclosed: 0, exploitMoreLikely: 0 };
+    const byImpact = {};
+    const byFamily = {};
+    const vulnerabilities = [];
+
+    for (const v of (doc.Vulnerability || [])) {
+        if (!v.CVE) continue;
+        const threats = v.Threats || [];
+
+        // Highest severity across products (Threat Type 3)
+        let severity = null, sevRank = 0;
+        for (const t of threats) {
+            if (t.Type !== 3) continue;
+            const val = t.Description?.Value;
+            if (val && SEVERITY_RANK[val] && SEVERITY_RANK[val] > sevRank) { severity = val; sevRank = SEVERITY_RANK[val]; }
+        }
+
+        // Impact / vulnerability category (Threat Type 0)
+        const impact = threats.find(t => t.Type === 0 && t.Description?.Value)?.Description?.Value || 'Other';
+
+        // Exploit status (Threat Type 1)
+        const ex = parseExploitStatus(threats.find(t => t.Type === 1)?.Description?.Value);
+
+        // Highest CVSS base score + its vector
+        let cvss = 0, vector = '';
+        for (const c of (v.CVSSScoreSets || [])) {
+            if ((c.BaseScore || 0) > cvss) { cvss = c.BaseScore; vector = c.Vector || ''; }
+        }
+
+        const affectedIds = (v.ProductStatuses || []).find(s => s.Type === 3)?.ProductID || [];
+        const productNames = affectedIds.map(id => productNameById[id]).filter(Boolean);
+        const family = classifyFamily(v.Title?.Value, productNames);
+
+        // KB / vendor fixes (Remediation Type 2)
+        const kbSet = new Map();
+        for (const r of (v.Remediations || [])) {
+            if (r.Type === 2 && r.Description?.Value) {
+                kbSet.set(r.Description.Value, r.URL || `https://catalog.update.microsoft.com/v7/site/Search.aspx?q=KB${r.Description.Value}`);
+            }
+        }
+
+        const description = stripHtml((v.Notes || []).find(n => n.Type === 2)?.Value).slice(0, 600);
+        const cwe = Array.isArray(v.CWE) ? (v.CWE[0]?.Value || '') : (v.CWE?.Value || '');
+
+        // Tallies
+        totals.total++;
+        if (severity === 'Critical') totals.critical++;
+        else if (severity === 'Important') totals.important++;
+        else if (severity === 'Moderate') totals.moderate++;
+        else if (severity === 'Low') totals.low++;
+        else totals.unknown++;
+        if (ex.exploited) totals.exploited++;
+        if (ex.publiclyDisclosed) totals.disclosed++;
+        if (/More Likely/i.test(ex.exploitability)) totals.exploitMoreLikely++;
+        byImpact[impact] = (byImpact[impact] || 0) + 1;
+        byFamily[family] = (byFamily[family] || 0) + 1;
+
+        vulnerabilities.push({
+            cve: v.CVE,
+            title: v.Title?.Value || '',
+            description,
+            cwe,
+            severity: severity || 'Unknown',
+            impact,
+            cvss: cvss || null,
+            vector,
+            exploited: ex.exploited,
+            publiclyDisclosed: ex.publiclyDisclosed,
+            exploitability: ex.exploitability,
+            family,
+            productCount: affectedIds.length,
+            kbs: [...kbSet.entries()].map(([kb, url]) => ({ kb, url })),
+            releaseDate: v.ReleaseDate || null
+        });
+    }
+
+    // Sort by exploited, then disclosed, then CVSS desc
+    vulnerabilities.sort((a, b) =>
+        (b.exploited - a.exploited) ||
+        (b.publiclyDisclosed - a.publiclyDisclosed) ||
+        ((b.cvss || 0) - (a.cvss || 0))
+    );
+
+    const sortEntries = (obj) => Object.entries(obj).sort((a, b) => b[1] - a[1]).map(([name, count]) => ({ name, count }));
+
+    return {
+        id: doc.DocumentTracking?.Identification?.ID?.Value || '',
+        title: doc.DocumentTitle?.Value || '',
+        initialReleaseDate: doc.DocumentTracking?.InitialReleaseDate || null,
+        currentReleaseDate: doc.DocumentTracking?.CurrentReleaseDate || null,
+        totals,
+        byImpact: sortEntries(byImpact),
+        byFamily: sortEntries(byFamily),
+        topCves: vulnerabilities.slice(0, 12),
+        vulnerabilities
+    };
+};
+
+// List available Patch Tuesday months
+app.get('/api/patch-tuesday/months', async (req, res) => {
+    const now = Date.now();
+    if (memoryCache.patchTuesdayMonths.data && memoryCache.patchTuesdayMonths.expiresAt > now) {
+        return res.json(memoryCache.patchTuesdayMonths.data);
+    }
+    try {
+        const response = await axios.get(`${MSRC_BASE}/updates`, {
+            headers: { Accept: 'application/json' },
+            timeout: 12000
+        });
+        const months = (response.data?.value || [])
+            .filter(m => /Security Updates/i.test(m.DocumentTitle || ''))
+            .map(m => ({
+                id: m.ID,
+                title: m.DocumentTitle,
+                initialReleaseDate: m.InitialReleaseDate,
+                currentReleaseDate: m.CurrentReleaseDate
+            }))
+            .sort((a, b) => new Date(b.initialReleaseDate) - new Date(a.initialReleaseDate));
+
+        memoryCache.patchTuesdayMonths.data = months;
+        memoryCache.patchTuesdayMonths.expiresAt = now + memoryCache.patchTuesdayMonths.ttl;
+        res.json(months);
+    } catch (error) {
+        const { status, message } = sanitizeError(error);
+        res.status(status).json({ error: message });
+    }
+});
+
+// Normalized summary for a single Patch Tuesday month (e.g. /api/patch-tuesday/2026-Jun)
+app.get('/api/patch-tuesday/:id', async (req, res) => {
+    const id = req.params.id;
+    if (!/^\d{4}-[A-Za-z]{3}$/.test(id)) {
+        return res.status(400).json({ error: 'Invalid month identifier. Expected format YYYY-Mon (e.g. 2026-Jun).' });
+    }
+
+    const now = Date.now();
+    const cached = memoryCache.patchTuesday.store.get(id);
+    if (cached && cached.expiresAt > now) {
+        return res.json(cached.data);
+    }
+
+    try {
+        const response = await axios.get(`${MSRC_BASE}/cvrf/${id}`, {
+            headers: { Accept: 'application/json' },
+            timeout: 20000
+        });
+        const summary = normalizeCvrf(response.data);
+        memoryCache.patchTuesday.store.set(id, { data: summary, expiresAt: now + memoryCache.patchTuesday.ttl });
+        res.json(summary);
     } catch (error) {
         const { status, message } = sanitizeError(error);
         res.status(status).json({ error: message });

@@ -1,5 +1,5 @@
 import { Link, useLocation } from "react-router-dom";
-import { BookOpen, Shield, Mail, Activity, Terminal, ArrowLeft, ShieldAlert, MailWarning, ChevronLeft, ChevronRight, Globe } from "lucide-react";
+import { BookOpen, Shield, Mail, Activity, Terminal, ArrowLeft, ShieldAlert, MailWarning, ChevronLeft, ChevronRight, Globe, CalendarCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { LanguageToggle } from "@/components/LanguageToggle";
@@ -36,6 +36,7 @@ export function Header({ actions, logoAddon, onLogoClick, showBackButton = false
     { path: "/phishing-analyzer", label: language === "pt" ? "Análise de Phishing" : "Phishing Analyzer", icon: MailWarning },
     { path: "/newsletter", label: language === "pt" ? "Feed de Advisories" : "Advisory Feed", icon: Mail },
     { path: "/cves", label: language === "pt" ? "Painel de CVEs" : "CVE Dashboard", icon: Shield },
+    { path: "/patch-tuesday", label: language === "pt" ? "Patch Tuesday" : "Patch Tuesday", icon: CalendarCheck },
     { path: "/features", label: language === "pt" ? "Funcionalidades" : "Features", icon: Terminal },
   ];
 
@@ -204,7 +205,7 @@ export function Header({ actions, logoAddon, onLogoClick, showBackButton = false
                 <div className="h-px bg-primary/10 my-3.5 mx-2" />
               )}
               <div className="flex flex-col gap-1">
-                {navItems.filter(item => !item.isHome && item.path !== "/newsletter" && item.path !== "/cves").map((item) => renderNavItem(item, pathname === item.path))}
+                {navItems.filter(item => !item.isHome && item.path !== "/newsletter" && item.path !== "/cves" && item.path !== "/patch-tuesday").map((item) => renderNavItem(item, pathname === item.path))}
               </div>
             </div>
 
@@ -218,7 +219,7 @@ export function Header({ actions, logoAddon, onLogoClick, showBackButton = false
                 <div className="h-px bg-primary/10 my-3.5 mx-2" />
               )}
               <div className="flex flex-col gap-1">
-                {navItems.filter(item => item.path === "/newsletter" || item.path === "/cves").map((item) => renderNavItem(item, pathname === item.path))}
+                {navItems.filter(item => item.path === "/newsletter" || item.path === "/cves" || item.path === "/patch-tuesday").map((item) => renderNavItem(item, pathname === item.path))}
               </div>
             </div>
           </div>
