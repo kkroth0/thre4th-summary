@@ -576,26 +576,6 @@ const Index = () => {
       };
 
       // ── Reusable Drawing Utilities ──
-      const drawArc = (x: number, y: number, r: number, startAngleDeg: number, endAngleDeg: number, width: number, color: [number, number, number]) => {
-        doc.setDrawColor(...color);
-        doc.setLineWidth(width);
-        const steps = 35;
-        const startRad = startAngleDeg * (Math.PI / 180);
-        const endRad = endAngleDeg * (Math.PI / 180);
-        const angleStep = (endRad - startRad) / steps;
-
-        for (let s = 0; s < steps; s++) {
-          const a1 = startRad + s * angleStep;
-          const a2 = startRad + (s + 1) * angleStep;
-          doc.line(
-            x + r * Math.cos(a1),
-            y - r * Math.sin(a1),
-            x + r * Math.cos(a2),
-            y - r * Math.sin(a2)
-          );
-        }
-      };
-
       const drawPageHeader = (title: string, subtitle?: string) => {
         doc.setFillColor(...COLORS.headerBg);
         doc.rect(0, 0, W, 32, 'F');
@@ -1014,98 +994,87 @@ const Index = () => {
         drawPageHeader(`IOC Analysis: ${S(res.query)}`, `Target ${i + 1} of ${results.length}`);
         let y = 42;
 
-        // ── IOC Identity Card (Gauge Style - Clean) ──
-        const cardHeight = 45;
+        // ── IOC Identity Card ──
+        const cardHeight = 40;
         const cardWidth = W - M * 2;
+        const statusColor = (getThreatColor(res.threatLevel) || [100, 100, 100]) as [number, number, number];
+        const score = Math.max(0, Math.min(res.overallScore ?? 0, 100));
 
-        // 1. Background & Soft Border
+        // Card background + soft border
         doc.setFillColor(248, 250, 252);
         doc.roundedRect(M, y, cardWidth, cardHeight, 4, 4, 'F');
-        doc.setDrawColor(230, 235, 245);
+        doc.setDrawColor(228, 233, 242);
         doc.setLineWidth(0.4);
         doc.roundedRect(M, y, cardWidth, cardHeight, 4, 4, 'S');
-
-        // --- LEFT SIDE: IDENTITY ---
-        doc.setFont("helvetica", "bold");
-        doc.setFontSize(16);
-        doc.setTextColor(30, 35, 50);
-        doc.text(S(res.query), M + 8, y + 12);
-
-        // Status Pill with '!' Icon
-        const statusColor = (getThreatColor(res.threatLevel) || [100, 100, 100]) as [number, number, number];
-        const pillY = y + 15.5;
+        // Left severity accent stripe
         doc.setFillColor(...statusColor);
-        doc.roundedRect(M + 8, pillY, 42, 7, 3.5, 3.5, 'F');
+        doc.roundedRect(M, y, 2.5, cardHeight, 4, 4, 'F');
+        doc.rect(M + 1.5, y, 1, cardHeight, 'F');
 
-        // White '!' Icon Circle
-        doc.setFillColor(255, 255, 255);
-        doc.circle(M + 11.5, pillY + 3.5, 2.2, 'F');
-        doc.setFontSize(5.5);
-        doc.setTextColor(...statusColor);
-        doc.text("!", M + 11.2, pillY + 4.3);
-
-        doc.setFontSize(7);
-        doc.setTextColor(255, 255, 255);
-        doc.text(String(res.threatLevel).toUpperCase(), M + 15, pillY + 4.8);
-
-        // Detections Box (Stylized Blue)
-        const detY = y + 29;
-        doc.setFillColor(242, 248, 255);
-        doc.roundedRect(M + 8, detY, 90, 10, 2, 2, 'F');
-
-        // Simple Shield Icon Simulation
-        doc.setDrawColor(70, 100, 150);
-        doc.setLineWidth(0.5);
-        doc.roundedRect(M + 12, detY + 3, 4.5, 4.5, 1, 1, 'S');
-
-        doc.setFontSize(8.5);
-        doc.setFont("helvetica", "normal");
-        doc.setTextColor(60, 80, 120);
-        doc.text(`Total Detections: ${res.detections}/${res.totalVendors}`, M + 20, detY + 6.5);
-
-        // --- RIGHT SIDE: SCORE & GAUGE ---
-        const rightEdge = W - M - 12;
-        const scoreVal = String(res.overallScore ?? 0);
-        const mutedCol = (COLORS.muted || [150, 150, 150]) as [number, number, number];
-
-        doc.setFontSize(7);
+        // --- LEFT: identity ---
+        const leftX = M + 9;
+        const rightPanelX = M + cardWidth * 0.62;
+        const leftMaxW = rightPanelX - leftX - 6;
+        const fitText = (text: string, maxW: number): string => {
+          if (doc.getTextWidth(text) <= maxW) return text;
+          let tt = text;
+          while (tt.length > 4 && doc.getTextWidth(tt + '...') > maxW) tt = tt.slice(0, -1);
+          return tt + '...';
+        };
+        const q = S(res.query);
+        let qSize = 15;
+        if (q.length > 46) qSize = 9; else if (q.length > 30) qSize = 11; else if (q.length > 20) qSize = 13;
         doc.setFont("helvetica", "bold");
-        doc.setTextColor(110, 120, 140);
-        doc.text("THREAT SCORE", rightEdge - 20, y + 10, { align: 'center' });
+        doc.setFontSize(qSize);
+        doc.setTextColor(28, 33, 48);
+        doc.text(fitText(q, leftMaxW), leftX, y + 12);
 
-        doc.setFontSize(28);
+        // Threat-level pill
+        const lvl = String(res.threatLevel || 'unknown').toUpperCase();
+        doc.setFontSize(7.5);
+        const pillW = doc.getTextWidth(lvl) + 8;
+        doc.setFillColor(...statusColor);
+        doc.roundedRect(leftX, y + 16.5, pillW, 6, 3, 3, 'F');
+        doc.setTextColor(255, 255, 255);
+        doc.setFont("helvetica", "bold");
+        doc.text(lvl, leftX + 4, y + 20.6);
+
+        // Detections line
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(9);
+        doc.setTextColor(90, 100, 120);
+        doc.text(`Detections: ${res.detections}/${res.totalVendors} vendors flagged`, leftX, y + 32);
+
+        // --- RIGHT: score panel ---
+        doc.setDrawColor(224, 229, 238);
+        doc.setLineWidth(0.3);
+        doc.line(rightPanelX, y + 6, rightPanelX, y + cardHeight - 6);
+
+        const sx = rightPanelX + 8;
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(7);
+        doc.setTextColor(120, 130, 148);
+        doc.text("THREAT SCORE", sx, y + 11);
+
+        // Big score + /100 (left-aligned, measured to avoid overlap)
+        doc.setFontSize(30);
         doc.setTextColor(...statusColor);
-        doc.text(scoreVal, rightEdge - 11, y + 24, { align: 'right' });
-        doc.setFontSize(10);
-        doc.setTextColor(...mutedCol);
-        doc.text("/100", rightEdge - 10, y + 24);
+        const scoreStr = String(score);
+        doc.text(scoreStr, sx, y + 27);
+        const sw = doc.getTextWidth(scoreStr);
+        doc.setFontSize(11);
+        doc.setTextColor(150, 158, 172);
+        doc.text("/100", sx + sw + 2, y + 27);
 
-        // --- THE GAUGE ---
-        const gX = rightEdge - 20;
-        const gY = y + 42;
-        const radius = 18;
-
-        // 1. Background Arc (Semi-circle track)
-        drawArc(gX, gY, radius, 0, 180, 4, [235, 240, 245]);
-
-        // 2. Colored Progress Arc
-        const scoreAngle = (Math.min(res.overallScore ?? 0, 100) / 100) * 180;
-        drawArc(gX, gY, radius, 180 - scoreAngle, 180, 4, statusColor);
-
-        // 3. The Needle
-        const needleRad = (180 - scoreAngle) * (Math.PI / 180);
-        const nx = gX + (radius - 3) * Math.cos(needleRad);
-        const ny = gY - (radius - 3) * Math.sin(needleRad);
-
-        doc.setDrawColor(...statusColor);
-        doc.setLineWidth(1.8);
-        doc.line(gX, gY, nx, ny);
-
-        // Needle Base (The white circle with border)
-        doc.setFillColor(255, 255, 255);
-        doc.setDrawColor(...mutedCol);
-        doc.setLineWidth(0.5);
-        doc.circle(gX, gY, 2.8, 'FD');
+        // Horizontal score bar
+        const barX = sx;
+        const barW = (W - M - 8) - barX;
+        const barY = y + 31;
+        doc.setFillColor(234, 237, 242);
+        doc.roundedRect(barX, barY, barW, 3.5, 1.75, 1.75, 'F');
+        const fillW = Math.max(2, (score / 100) * barW);
+        doc.setFillColor(...statusColor);
+        doc.roundedRect(barX, barY, fillW, 3.5, 1.75, 1.75, 'F')
 
         y += cardHeight + 10;
 
