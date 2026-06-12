@@ -11,7 +11,7 @@ import fs from 'fs';
 import crypto from 'crypto';
 import compression from 'compression';
 import * as cheerio from 'cheerio';
-import { scoreArticle, CTI_FEEDS } from './ctiIntel.js';
+import { scoreArticle, localizeEnrichment, CTI_FEEDS } from './ctiIntel.js';
 
 dotenv.config({ path: '../.env' });
 
@@ -1404,10 +1404,10 @@ app.post('/api/newsletter/enrich', scanLimiter, async (req, res) => {
         // threats, sectors, assets and CVEs reflect the whole story, not just the
         // (often short) RSS summary.
         const intel = scoreArticle(`${item.title} ${item.description || ''} ${content}`, item.weight_boost || 0);
-        const enriched = {
+        const enriched = localizeEnrichment({
             threats: intel.threats, sectors: intel.sectors, ttps: intel.ttps,
             assets: intel.assets, cves: intel.cves,
-        };
+        }, lang);
 
         const ai = await groqAnalyze(item.title, content, lang);
 

@@ -139,6 +139,8 @@ const TARGET_SECTORS = {
     Technology: ['technology sector', 'software vendor', 'saas', 'cloud provider', 'provedor de nuvem'],
     Transportation: ['transportation', 'aviation', 'airline', 'logistics', 'transporte', 'aviação', 'logística'],
     Defense: ['defense', 'defence', 'military', 'defesa', 'militar'],
+    Developers: ['developer', 'developers', 'software developer', 'devops', 'open source', 'open-source', 'package repository', 'package registry', 'npm', 'pypi', 'desenvolvedor', 'desenvolvedores'],
+    'Linux Users': ['linux user', 'linux users', 'arch linux', 'aur', 'debian', 'ubuntu', 'linux distribution', 'usuários de linux'],
 };
 
 // MITRE ATT&CK techniques ("Txxxx — Name" -> keywords)
@@ -183,6 +185,44 @@ const THREAT_RULES = Object.entries(
 ).map(([label, terms]) => ({ label, re: buildRe(terms, true) }));
 
 const matchLabels = (text, rules) => rules.filter((r) => r.re.exec(text)).map((r) => r.label);
+
+// PT-BR labels for the deterministic threat/sector chips, mirroring the
+// soc-sentinela bot output. Most threat names are technical terms kept in
+// English (Trojan, Infostealer, Rootkit, Botnet…) — only a few translate.
+// MITRE technique names and matched vendor assets are proper nouns: untouched.
+const THREAT_LABELS_PT = {
+    Exploitation: 'Exploração',
+};
+const SECTOR_LABELS_PT = {
+    Healthcare: 'Saúde',
+    Financial: 'Financeiro',
+    Government: 'Governo',
+    Energy: 'Energia',
+    Education: 'Educação',
+    Manufacturing: 'Indústria',
+    Retail: 'Varejo',
+    Telecom: 'Telecomunicações',
+    Technology: 'Tecnologia',
+    Transportation: 'Transporte',
+    Defense: 'Defesa',
+    Developers: 'Desenvolvedores',
+    'Linux Users': 'Usuários de Linux',
+};
+
+/**
+ * Localize the deterministic enrichment labels to the requested language.
+ * Only threats/sectors carry translatable labels; ttps (MITRE) and assets
+ * (vendor names) are proper nouns and pass through unchanged.
+ */
+export function localizeEnrichment(enriched, lang) {
+    if (lang !== 'pt' || !enriched) return enriched;
+    const map = (arr, dict) => (arr || []).map((l) => dict[l] || l);
+    return {
+        ...enriched,
+        threats: map(enriched.threats, THREAT_LABELS_PT),
+        sectors: map(enriched.sectors, SECTOR_LABELS_PT),
+    };
+}
 
 const severityFromScore = (s) => (s >= 70 ? 'Critical' : s >= 50 ? 'High' : s >= 30 ? 'Medium' : 'Low');
 
