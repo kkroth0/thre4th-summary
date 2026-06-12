@@ -20,6 +20,20 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
+interface IocSet {
+  ips?: string[];
+  domains?: string[];
+  hashes?: string[];
+  urls?: string[];
+}
+
+interface KevDetails {
+  cve: string;
+  dateAdded?: string;
+  dueDate?: string;
+  ransomware?: boolean;
+}
+
 interface Advisory {
   title: string;
   link: string;
@@ -35,11 +49,17 @@ interface Advisory {
   categories?: string[];
   cves?: string[];
   cvss?: number | null;
+  reasons?: string[]; // why it scored — surfaced as a tooltip
+  // Active-exploitation correlation
+  kev?: boolean;
+  kevDetails?: KevDetails;
+  epss?: number; // 0-1 exploit probability
   // Deterministic actionable enrichment
   threats?: string[];
   sectors?: string[];
   ttps?: string[];
   assets?: string[];
+  iocs?: IocSet;
 }
 
 const SEVERITY_STYLES: Record<string, string> = {
@@ -56,7 +76,7 @@ interface EnrichData {
   title?: string;
   executiveSummary?: string;
   impactMitigation?: string;
-  iocs?: Record<string, unknown> | null;
+  iocs?: IocSet | null;
   // Deterministic enrichment recomputed over the full article
   threats?: string[];
   sectors?: string[];
@@ -64,6 +84,22 @@ interface EnrichData {
   assets?: string[];
   cves?: string[];
 }
+
+// True when an IOC set carries at least one indicator.
+const hasIocs = (i?: IocSet | null): boolean =>
+  !!i && [(i.ips), (i.domains), (i.hashes), (i.urls)].some((a) => (a?.length ?? 0) > 0);
+
+// Defang an indicator for safe copy/paste/export (1.2.3.4 -> 1.2.3[.]4).
+const defang = (s: string): string =>
+  s.replace(/^http/i, "hxxp").replace(/\./g, "[.]");
+
+// Flatten an IOC set into [type, value] rows (values defanged for safety).
+const iocRows = (i: IocSet): Array<[string, string]> => [
+  ...(i.hashes ?? []).map((v) => ["hash", v] as [string, string]),
+  ...(i.ips ?? []).map((v) => ["ip", defang(v)] as [string, string]),
+  ...(i.domains ?? []).map((v) => ["domain", defang(v)] as [string, string]),
+  ...(i.urls ?? []).map((v) => ["url", defang(v)] as [string, string]),
+];
 
 // Prefer the richer full-article enrichment, fall back to the collection-time item
 const mergedField = (item: Advisory, e: EnrichData | undefined, key: "threats" | "sectors" | "ttps" | "assets" | "cves"): string[] =>
@@ -134,6 +170,7 @@ const Newsletter = () => {
   const [selectedLayer, setSelectedLayer] = useState<string>("all");
   const [selectedSeverity, setSelectedSeverity] = useState<string>("all");
   const [sortByRelevance, setSortByRelevance] = useState<boolean>(false);
+  const [kevOnly, setKevOnly] = useState<boolean>(false);
 
   // Calendar Month Selector States
   const [selectedMonth, setSelectedMonth] = useState<number>(new Date().getMonth());
@@ -206,10 +243,15 @@ const Newsletter = () => {
             categories: Array.isArray(item.categories) ? (item.categories as string[]) : undefined,
             cves: Array.isArray(item.cves) ? (item.cves as string[]) : undefined,
             cvss: typeof item.cvss === "number" ? item.cvss : undefined,
+            reasons: Array.isArray(item.reasons) ? (item.reasons as string[]) : undefined,
+            kev: typeof item.kev === "boolean" ? item.kev : undefined,
+            kevDetails: item.kevDetails as KevDetails | undefined,
+            epss: typeof item.epss === "number" ? item.epss : undefined,
             threats: Array.isArray(item.threats) ? (item.threats as string[]) : undefined,
             sectors: Array.isArray(item.sectors) ? (item.sectors as string[]) : undefined,
             ttps: Array.isArray(item.ttps) ? (item.ttps as string[]) : undefined,
             assets: Array.isArray(item.assets) ? (item.assets as string[]) : undefined,
+            iocs: item.iocs as IocSet | undefined,
           }));
           setAdvisories(validated);
         }
@@ -478,6 +520,9 @@ const Newsletter = () => {
       // 3. Severity filter (CTI relevance)
       if (selectedSeverity !== "all" && item.severity !== selectedSeverity) return false;
 
+      // 3b. KEV-only filter (actively exploited)
+      if (kevOnly && !item.kev) return false;
+
       // 4. Layer filter
       if (selectedLayer === "l1" && item.layer !== 1) return false;
       if (selectedLayer === "l2" && item.layer !== 2) return false;
@@ -491,7 +536,7 @@ const Newsletter = () => {
     return sortByRelevance
       ? [...filtered].sort((a, b) => (b.score ?? 0) - (a.score ?? 0) || new Date(b.pubDate).getTime() - new Date(a.pubDate).getTime())
       : filtered;
-  }, [advisories, selectedMonth, selectedYear, searchNews, selectedLayer, selectedSeverity, sortByRelevance]);
+  }, [advisories, selectedMonth, selectedYear, searchNews, selectedLayer, selectedSeverity, sortByRelevance, kevOnly]);
 
   useEffect(() => {
     if (language !== "pt") return;
@@ -768,6 +813,18 @@ const Newsletter = () => {
                 {language === "pt" ? "Relevância" : "Relevance"}
               </Button>
 
+              {/* KEV-only filter (actively exploited) */}
+              <Button
+                variant={kevOnly ? "default" : "outline"}
+                size="sm"
+                className={`h-9 text-xs font-semibold px-3 gap-1.5 shrink-0 ${kevOnly ? "bg-red-600 hover:bg-red-600/90 text-white" : "text-red-500 border-red-500/30 hover:bg-red-500/5"}`}
+                onClick={() => setKevOnly(v => !v)}
+                title={language === "pt" ? "Apenas explorados ativamente (CISA KEV)" : "Actively exploited only (CISA KEV)"}
+              >
+                <AlertTriangle className="h-3.5 w-3.5" />
+                {language === "pt" ? "Explorado" : "Exploited"}
+              </Button>
+
               <div className="h-4 w-px bg-border/60 mx-1 shrink-0" />
 
               <Button
@@ -959,6 +1016,9 @@ const Newsletter = () => {
                     const mTtps = mergedField(item, enr, "ttps");
                     const mAssets = mergedField(item, enr, "assets");
                     const mCves = mergedField(item, enr, "cves");
+                    // Prefer the richer full-article IOCs (enrich) over the
+                    // lightweight collection-time set.
+                    const mIocs: IocSet | undefined = hasIocs(enr?.iocs) ? (enr?.iocs ?? undefined) : item.iocs;
                     const isCisa = item.source.toLowerCase().includes("cisa");
                     const isBleeping = item.source.toLowerCase().includes("bleeping");
                     const badgeColor = isCisa
@@ -986,9 +1046,32 @@ const Newsletter = () => {
                               {item.source}
                             </Badge>
                             {item.severity && (
-                              <Badge variant="outline" className={`text-[10px] font-bold ${SEVERITY_STYLES[item.severity] || SEVERITY_STYLES.Low}`}>
+                              <Badge
+                                variant="outline"
+                                title={item.reasons?.length ? `${language === "pt" ? "Por quê" : "Why"}: ${item.reasons.join(" · ")}` : undefined}
+                                className={`text-[10px] font-bold ${item.reasons?.length ? "cursor-help" : ""} ${SEVERITY_STYLES[item.severity] || SEVERITY_STYLES.Low}`}
+                              >
                                 {item.severity}
                                 {typeof item.score === "number" && <span className="ml-1 opacity-70">{item.score}</span>}
+                              </Badge>
+                            )}
+                            {item.kev && (
+                              <Badge
+                                variant="outline"
+                                title={item.kevDetails ? `CISA KEV · ${item.kevDetails.cve}${item.kevDetails.dateAdded ? ` · ${language === "pt" ? "adicionado" : "added"} ${item.kevDetails.dateAdded}` : ""}${item.kevDetails.ransomware ? " · ransomware" : ""}` : "CISA KEV"}
+                                className="text-[10px] font-bold bg-red-600/15 text-red-500 border-red-600/30 animate-pulse cursor-help"
+                              >
+                                {language === "pt" ? "⚠ Explorado Ativamente" : "⚠ Actively Exploited"}
+                                {typeof item.epss === "number" && <span className="ml-1 opacity-80">EPSS {Math.round(item.epss * 100)}%</span>}
+                              </Badge>
+                            )}
+                            {!item.kev && typeof item.epss === "number" && item.epss >= 0.5 && (
+                              <Badge
+                                variant="outline"
+                                title={language === "pt" ? "Probabilidade de exploração (FIRST EPSS) nos próximos 30 dias" : "Exploit probability (FIRST EPSS) over the next 30 days"}
+                                className="text-[10px] font-bold bg-orange-500/10 text-orange-500 border-orange-500/20 cursor-help"
+                              >
+                                EPSS {Math.round(item.epss * 100)}%
                               </Badge>
                             )}
                             {(item.cves ?? []).slice(0, 3).map((cve) => (
@@ -1111,6 +1194,56 @@ const Newsletter = () => {
                                   ) : null}
                                 </>
                               )}
+
+                              {/* Indicators of Compromise (deterministic) */}
+                              {mIocs && hasIocs(mIocs) ? (
+                                <div>
+                                  <div className="flex items-center justify-between mb-1">
+                                    <div className="text-[11px] font-bold text-muted-foreground/80 tracking-wide">[ {language === "pt" ? "INDICADORES (IOCs)" : "INDICATORS (IOCs)"} ]</div>
+                                    <div className="flex items-center gap-1.5">
+                                      <button
+                                        onClick={() => {
+                                          const txt = iocRows(mIocs).map(([t, v]) => `${t}\t${v}`).join("\n");
+                                          navigator.clipboard.writeText(txt);
+                                          toast.success(language === "pt" ? "IOCs copiados (defanged)" : "IOCs copied (defanged)");
+                                        }}
+                                        className="text-[10px] px-1.5 py-0.5 rounded border border-border/60 text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                                      >
+                                        {language === "pt" ? "Copiar" : "Copy"}
+                                      </button>
+                                      <button
+                                        onClick={() => {
+                                          const rows = [["type", "indicator"], ...iocRows(mIocs)];
+                                          const csv = rows.map((r) => r.map((c) => `"${c.replace(/"/g, '""')}"`).join(",")).join("\n");
+                                          const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+                                          const a = document.createElement("a");
+                                          a.href = URL.createObjectURL(blob);
+                                          a.download = `iocs_${new Date(item.pubDate).toISOString().slice(0, 10)}.csv`;
+                                          a.click();
+                                          URL.revokeObjectURL(a.href);
+                                        }}
+                                        className="text-[10px] px-1.5 py-0.5 rounded border border-border/60 text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                                      >
+                                        {language === "pt" ? "Exportar CSV" : "Export CSV"}
+                                      </button>
+                                    </div>
+                                  </div>
+                                  <div className="flex flex-wrap gap-1.5">
+                                    {iocRows(mIocs).map(([type, value]) => (
+                                      <span
+                                        key={`${type}:${value}`}
+                                        title={type}
+                                        className="font-mono text-[11px] px-1.5 py-0.5 rounded border border-amber-500/25 bg-amber-500/5 text-amber-600 dark:text-amber-400 break-all"
+                                      >
+                                        {value}
+                                      </span>
+                                    ))}
+                                  </div>
+                                  <p className="text-[10px] text-muted-foreground/60 italic mt-1">
+                                    {language === "pt" ? "Indicadores defanged — valide antes de bloquear." : "Defanged indicators — validate before blocking."}
+                                  </p>
+                                </div>
+                              ) : null}
 
                               {/* Source + References footer */}
                               <div className="pt-2 border-t border-border/40 space-y-1 text-[12px]">

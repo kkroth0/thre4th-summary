@@ -224,7 +224,52 @@ export function localizeEnrichment(enriched, lang) {
     };
 }
 
-const severityFromScore = (s) => (s >= 70 ? 'Critical' : s >= 50 ? 'High' : s >= 30 ? 'Medium' : 'Low');
+export const severityFromScore = (s) => (s >= 70 ? 'Critical' : s >= 50 ? 'High' : s >= 30 ? 'Medium' : 'Low');
+
+// ─── Deterministic IOC extraction ──────────────────────────────────────────
+// High-precision indicators from advisory text. Hashes are always IOCs. Network
+// indicators are accepted when DEFANGED in the source (evil[.]com, 1.2.3[.]4,
+// hxxp://) — analysts defang on purpose, so this stays low-noise — plus plain
+// public IPv4. Returns canonical arrays consumed by the IOC panel / export.
+const RE_HASHES = [/\b[a-f0-9]{64}\b/gi, /\b[a-f0-9]{40}\b/gi, /\b[a-f0-9]{32}\b/gi];
+const RE_PRIVATE_IP = /^(0\.|10\.|127\.|169\.254\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.|22[4-9]\.|2[3-5]\d\.)/;
+
+const refang = (s) => String(s)
+    .replace(/\[\.\]|\(\.\)|\{\.\}/g, '.')
+    .replace(/\[:\]/g, ':')
+    .replace(/\[@\]|\[at\]/gi, '@')
+    .replace(/\bhxx(ps?)\b/gi, 'htt$1')
+    .replace(/\bhxx(ps?):/gi, 'htt$1:');
+
+export function extractIOCs(text) {
+    const t = String(text || '');
+    const hashes = new Set();
+    for (const re of RE_HASHES) for (const m of t.matchAll(re)) hashes.add(m[0].toLowerCase());
+
+    const urls = new Set();
+    // Only DEFANGED URLs (hxxp:// or [.]/[:] markers) — avoids harvesting every
+    // benign link in the article body.
+    for (const m of t.matchAll(/\b(?:hxxps?|https?)(?::|\[:\])\/\/[^\s<>"')]+/gi)) {
+        if (/\[\.\]|\(\.\)|\{\.\}|\[:\]|hxx/i.test(m[0])) urls.add(refang(m[0]).replace(/[.,;:]+$/, ''));
+    }
+
+    const domains = new Set();
+    // Defanged domains: a token carrying [.] / (.) / {.}
+    for (const m of t.matchAll(/\b((?:[a-z0-9-]+(?:\[\.\]|\(\.\)|\{\.\}))+[a-z]{2,})\b/gi)) {
+        const d = refang(m[1]).toLowerCase();
+        if (/^[a-z0-9.-]+\.[a-z]{2,}$/.test(d)) domains.add(d);
+    }
+
+    const ips = new Set();
+    for (const m of refang(t).matchAll(/\b(?:\d{1,3}\.){3}\d{1,3}\b/g)) {
+        const ip = m[0];
+        if (ip.split('.').some((o) => Number(o) > 255)) continue;
+        if (RE_PRIVATE_IP.test(ip)) continue;
+        ips.add(ip);
+    }
+
+    return { ips: [...ips], domains: [...domains], hashes: [...hashes], urls: [...urls] };
+}
 
 /**
  * Score a single advisory.

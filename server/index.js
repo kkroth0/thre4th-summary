@@ -11,7 +11,7 @@ import fs from 'fs';
 import crypto from 'crypto';
 import compression from 'compression';
 import * as cheerio from 'cheerio';
-import { scoreArticle, localizeEnrichment, CTI_FEEDS } from './ctiIntel.js';
+import { scoreArticle, localizeEnrichment, severityFromScore, extractIOCs, CTI_FEEDS } from './ctiIntel.js';
 
 dotenv.config({ path: '../.env' });
 
@@ -1141,6 +1141,12 @@ const memoryCache = {
         expiresAt: 0,
         ttl: 12 * 60 * 60 * 1000 // 12 hours
     },
+    // Full CISA KEV catalog as a Map<CVE, details> for advisory correlation
+    kev: {
+        map: null,
+        expiresAt: 0,
+        ttl: 12 * 60 * 60 * 1000 // 12 hours
+    },
     openphish: {
         urls: new Set(),
         expiresAt: 0,
@@ -1158,6 +1164,56 @@ const memoryCache = {
     }
 };
 
+// Full CISA KEV catalog as Map<CVE, {dateAdded,dueDate,ransomware,...}>, cached
+// 12h. Used to flag advisories whose CVEs are KNOWN-EXPLOITED in the wild.
+async function getKevMap() {
+    const now = Date.now();
+    if (memoryCache.kev.map && memoryCache.kev.expiresAt > now) return memoryCache.kev.map;
+    try {
+        const resp = await axios.get('https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json', { timeout: 10000 });
+        const map = new Map();
+        for (const v of (resp.data?.vulnerabilities || [])) {
+            if (!v.cveID) continue;
+            map.set(v.cveID.toUpperCase(), {
+                dateAdded: v.dateAdded,
+                dueDate: v.dueDate,
+                ransomware: /known/i.test(v.knownRansomwareCampaignUse || ''),
+                vendor: v.vendorProject,
+                product: v.product,
+            });
+        }
+        memoryCache.kev.map = map;
+        memoryCache.kev.expiresAt = now + memoryCache.kev.ttl;
+        return map;
+    } catch (err) {
+        console.warn(`KEV catalog fetch failed: ${err.message}`);
+        return memoryCache.kev.map || new Map();
+    }
+}
+
+// FIRST.org EPSS scores (probability a CVE is exploited in the next 30 days) for
+// a set of CVEs. Returns Map<CVE, number(0-1)>. Batched; failures degrade to {}.
+async function getEpssMap(cveIds) {
+    const map = new Map();
+    const ids = [...new Set(cveIds)].filter(Boolean);
+    for (let i = 0; i < ids.length; i += 100) {
+        const chunk = ids.slice(i, i + 100);
+        try {
+            const resp = await axios.get('https://api.first.org/data/v1/epss', {
+                params: { cve: chunk.join(',') },
+                timeout: 8000,
+            });
+            for (const r of (resp.data?.data || [])) {
+                const v = parseFloat(r.epss);
+                if (r.cve && !Number.isNaN(v)) map.set(r.cve.toUpperCase(), v);
+            }
+        } catch (err) {
+            console.warn(`EPSS fetch failed: ${err.message}`);
+        }
+    }
+    return map;
+}
+
 // Background newsletter feed refresher
 async function refreshNewsletterFeed() {
     try {
@@ -1172,10 +1228,9 @@ async function refreshNewsletterFeed() {
                     timeout: 8000
                 });
                 // Enrich each item with the CTI relevance score + categorization.
-                // Drop `reasons` (debug-only) so it doesn't bloat memory/payload.
+                // `reasons` is kept so the UI can explain WHY an item scored.
                 return parseFeed(response.data, f.source, f.layer).map((item) => {
-                    const { reasons, ...intel } = scoreArticle(`${item.title} ${item.description}`, f.weight_boost);
-                    void reasons;
+                    const intel = scoreArticle(`${item.title} ${item.description}`, f.weight_boost);
                     return { ...item, weight_boost: f.weight_boost, ...intel };
                 });
             } catch (err) {
@@ -1198,9 +1253,33 @@ async function refreshNewsletterFeed() {
             const existing = byUrl.get(key);
             if (!existing || (item.score || 0) > (existing.score || 0)) byUrl.set(key, item);
         }
+        const items = [...byUrl.values()];
+
+        // Cross-reference CVEs with CISA KEV (actively exploited) + FIRST EPSS
+        // (exploit probability). KEV is the strongest actionable signal, so it
+        // boosts the relevance score and re-derives severity. Also attach
+        // lightweight IOCs extracted from the title+summary.
+        const allCves = [...new Set(items.flatMap((i) => i.cves || []))];
+        const [kevMap, epssMap] = await Promise.all([getKevMap(), getEpssMap(allCves)]);
+        for (const item of items) {
+            const cves = item.cves || [];
+            const kevHit = cves.find((c) => kevMap.has(c));
+            if (kevHit) {
+                const d = kevMap.get(kevHit);
+                item.kev = true;
+                item.kevDetails = { cve: kevHit, dateAdded: d.dateAdded, dueDate: d.dueDate, ransomware: d.ransomware };
+                item.score = Math.min(100, (item.score || 0) + 25);
+                item.severity = severityFromScore(item.score);
+                (item.reasons = item.reasons || []).push(`CISA KEV — Actively Exploited (${kevHit})`);
+            }
+            const epssVals = cves.map((c) => epssMap.get(c)).filter((n) => typeof n === 'number');
+            if (epssVals.length) item.epss = Math.max(...epssVals);
+            const ic = extractIOCs(`${item.title} ${item.description || ''}`);
+            if (ic.ips.length || ic.domains.length || ic.hashes.length || ic.urls.length) item.iocs = ic;
+        }
 
         // Default order: most recent first (the route can re-sort by relevance).
-        const unifiedFeed = [...byUrl.values()].sort((a, b) => new Date(b.pubDate) - new Date(a.pubDate));
+        const unifiedFeed = items.sort((a, b) => new Date(b.pubDate) - new Date(a.pubDate));
 
         memoryCache.newsletter.data = unifiedFeed;
         memoryCache.newsletter.expiresAt = Date.now() + memoryCache.newsletter.ttl;
@@ -1411,6 +1490,11 @@ app.post('/api/newsletter/enrich', scanLimiter, async (req, res) => {
 
         const ai = await groqAnalyze(item.title, content, lang);
 
+        // Deterministic IOC sweep over the FULL article (richer than the
+        // title+summary set computed at collection). High-precision: hashes +
+        // defanged network indicators + public IPv4.
+        const iocs = extractIOCs(content);
+
         let payload;
         if (ai && ai.summary) {
             const paras = String(ai.summary).split(/\n\n+/).map((p) => p.trim()).filter(Boolean);
@@ -1419,7 +1503,7 @@ app.post('/api/newsletter/enrich', scanLimiter, async (req, res) => {
                 title: ai.title || item.title,
                 executiveSummary: paras[0] || String(ai.summary),
                 impactMitigation: paras.slice(1).join('\n\n'),
-                iocs: ai.iocs || null, ...enriched,
+                iocs, ...enriched,
             };
         } else {
             // No LLM: concise Executive Summary (lead sentences) + a distinct
@@ -1434,12 +1518,12 @@ app.post('/api/newsletter/enrich', scanLimiter, async (req, res) => {
                 ]);
                 payload = {
                     available: false, source: 'translate', scraped: !!fullText,
-                    title: t || item.title, executiveSummary: ex || execRaw, impactMitigation: mit || '', iocs: null, ...enriched,
+                    title: t || item.title, executiveSummary: ex || execRaw, impactMitigation: mit || '', iocs, ...enriched,
                 };
             } else {
                 payload = {
                     available: false, source: 'rss', scraped: !!fullText,
-                    title: item.title, executiveSummary: execRaw, impactMitigation: mitRaw || '', iocs: null, ...enriched,
+                    title: item.title, executiveSummary: execRaw, impactMitigation: mitRaw || '', iocs, ...enriched,
                 };
             }
         }
