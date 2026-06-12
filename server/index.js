@@ -400,9 +400,13 @@ app.post('/api/urlhaus', scanLimiter, async (req, res) => {
         const params = new URLSearchParams();
         params.append('host', sanitized);
 
+        // abuse.ch now requires an Auth-Key header on all URLhaus API queries.
+        const headers = { "Content-Type": "application/x-www-form-urlencoded" };
+        if (process.env.URLHAUS_API_KEY) headers['Auth-Key'] = process.env.URLHAUS_API_KEY;
+
         const response = await axios.post(`https://urlhaus-api.abuse.ch/v1/host/`,
             params.toString(),
-            { headers: { "Content-Type": "application/x-www-form-urlencoded" } }
+            { headers }
         );
         res.json(response.data);
     } catch (error) {
