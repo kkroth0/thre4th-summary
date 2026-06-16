@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
 import { getFieldCategory } from "@/components/VendorDataTable";
-import { Shield, AlertTriangle, Bug, FileSearch, Globe, Link as LinkIcon, Radar, Database, Eye, Search, BookOpen, Layers, LayoutGrid, CheckCircle2, Mail, ArrowRight, Upload } from "lucide-react";
+import { Shield, AlertTriangle, Bug, FileSearch, Globe, Link as LinkIcon, Radar, Database, Eye, Search, BookOpen, Layers, LayoutGrid, CheckCircle2, Mail, ArrowRight, Upload, Copy, Check, Clock } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { ThreatSummary } from "@/components/ThreatSummary";
 import { VendorCard } from "@/components/VendorCard";
@@ -336,6 +336,8 @@ const Index = () => {
   const [isExportingPDF, setIsExportingPDF] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [view, setView] = useState<"graph" | "cards">("graph");
+  const [searchHistory, setSearchHistory] = useState<string[]>([]);
+  const [copiedIocs, setCopiedIocs] = useState(false);
   const { toast } = useToast();
   const { t, language } = useLanguage();
 
@@ -355,6 +357,60 @@ const Index = () => {
       }
     }
   }, []);
+
+  // Load recent search history
+  useEffect(() => {
+    const saved = localStorage.getItem("searchHistory");
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) setSearchHistory(parsed.filter((s) => typeof s === "string").slice(0, 8));
+      } catch (e) {
+        console.error("Failed to parse search history", e);
+      }
+    }
+  }, []);
+
+  // Persist a query to the recent-search list (most-recent first, de-duped, capped at 8).
+  const pushSearchHistory = (raw: string) => {
+    const entry = raw.trim();
+    if (!entry) return;
+    setSearchHistory((prev) => {
+      const next = [entry, ...prev.filter((q) => q !== entry)].slice(0, 8);
+      localStorage.setItem("searchHistory", JSON.stringify(next));
+      return next;
+    });
+  };
+
+  const clearSearchHistory = () => {
+    setSearchHistory([]);
+    localStorage.removeItem("searchHistory");
+  };
+
+  // Defang + copy every scanned IOC to the clipboard for safe pasting into
+  // tickets, SIEM queries or firewall rules.
+  const copyAllIocs = async () => {
+    const defang = (ioc: string) =>
+      ioc.replace(/^https?:\/\//i, (m) => m.replace(/t/gi, "x")).replace(/\./g, "[.]");
+    const text = results.map((r) => defang(r.query)).join("\n");
+    if (!text) return;
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedIocs(true);
+      setTimeout(() => setCopiedIocs(false), 1500);
+      toast({
+        title: language === "pt" ? "IOCs copiados" : "IOCs copied",
+        description: language === "pt"
+          ? `${results.length} indicador(es) copiado(s) (defanged).`
+          : `${results.length} indicator(s) copied (defanged).`,
+      });
+    } catch {
+      toast({
+        title: language === "pt" ? "Falha ao copiar" : "Copy failed",
+        variant: "destructive",
+      });
+    }
+  };
 
   // Handle pivot search from CVE dashboard
   useEffect(() => {
@@ -438,6 +494,7 @@ const Index = () => {
     setError(null);
     setResults([]); // Clear previous results
     setActiveTab("overview");
+    pushSearchHistory(rawQuery);
 
     try {
       // Initialize results with loading state
@@ -1492,6 +1549,41 @@ const Index = () => {
               </div>
             </div>
 
+            {/* Recent searches */}
+            {searchHistory.length > 0 && (
+              <div className="animate-fade-in space-y-3">
+                <div className="flex items-center justify-center gap-2">
+                  <p className="text-[10px] font-bold text-muted-foreground/50 uppercase tracking-widest">
+                    {language === "pt" ? "Buscas recentes" : "Recent searches"}
+                  </p>
+                  <button
+                    onClick={clearSearchHistory}
+                    className="text-[10px] font-semibold text-muted-foreground/40 hover:text-destructive transition-colors"
+                    title={language === "pt" ? "Limpar histórico" : "Clear history"}
+                  >
+                    {language === "pt" ? "limpar" : "clear"}
+                  </button>
+                </div>
+                <div className="flex flex-wrap justify-center gap-2.5">
+                  {searchHistory.map((entry) => {
+                    const label = entry.replace(/\s+/g, " ").trim();
+                    const short = label.length > 32 ? `${label.slice(0, 32)}…` : label;
+                    return (
+                      <button
+                        key={entry}
+                        onClick={() => setQuery(entry)}
+                        title={label}
+                        className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-semibold border border-primary/10 bg-muted/20 hover:bg-primary/5 hover:border-primary/30 text-muted-foreground hover:text-foreground hover:scale-[1.03] active:scale-[0.97] transition-all cursor-pointer shadow-sm"
+                      >
+                        <Clock className="h-3 w-3 opacity-60" />
+                        <span className="font-mono">{short}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
             {/* Capabilities */}
             <div id="features" className="pt-10 border-t border-white/[0.04] mt-10 max-w-3xl mx-auto scroll-mt-6">
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-center">
@@ -1582,17 +1674,30 @@ const Index = () => {
                   ))}
                 </TabsList>
 
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-9 px-4 rounded-full border-primary/20 hover:bg-primary/10 shadow-sm flex items-center gap-2 self-start sm:self-auto"
-                  onClick={exportGlobalPDF}
-                  disabled={isExportingPDF}
-                  title={isExportingPDF ? "Building Report..." : "Global PDF Report"}
-                >
-                  <FileSearch className={`h-4 w-4 ${isExportingPDF ? "animate-pulse" : ""}`} />
-                  <span>{isExportingPDF ? "Building Report..." : "Global PDF Report"}</span>
-                </Button>
+                <div className="flex items-center gap-2 self-start sm:self-auto">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-9 px-4 rounded-full border-primary/20 hover:bg-primary/10 shadow-sm flex items-center gap-2"
+                    onClick={copyAllIocs}
+                    title={language === "pt" ? "Copiar todos os IOCs (defanged)" : "Copy all IOCs (defanged)"}
+                  >
+                    {copiedIocs ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
+                    <span>{language === "pt" ? "Copiar IOCs" : "Copy IOCs"}</span>
+                  </Button>
+
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-9 px-4 rounded-full border-primary/20 hover:bg-primary/10 shadow-sm flex items-center gap-2"
+                    onClick={exportGlobalPDF}
+                    disabled={isExportingPDF}
+                    title={isExportingPDF ? "Building Report..." : "Global PDF Report"}
+                  >
+                    <FileSearch className={`h-4 w-4 ${isExportingPDF ? "animate-pulse" : ""}`} />
+                    <span>{isExportingPDF ? "Building Report..." : "Global PDF Report"}</span>
+                  </Button>
+                </div>
               </div>
 
               <TabsContent value="overview" className="mt-6 animate-fade-in">
