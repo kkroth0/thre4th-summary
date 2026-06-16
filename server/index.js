@@ -15,6 +15,12 @@ import { scoreArticle, localizeEnrichment, severityFromScore, extractIOCs, CTI_F
 
 dotenv.config({ path: '../.env' });
 
+// Global safety net: cap every outbound request at 10s so a slow/hung upstream
+// provider can't tie up a connection indefinitely. Handlers that need a
+// different budget (feed refresh, Groq, etc.) still set their own `timeout`,
+// which overrides this default.
+axios.defaults.timeout = 10000;
+
 const app = express();
 // Trust a single front reverse proxy (Render/nginx) so express-rate-limit keys
 // off the real client IP. Use 1 (a known hop), NOT true (which would trust
@@ -1206,8 +1212,10 @@ const memoryCache = {
         expiresAt: 0,
         ttl: 12 * 60 * 60 * 1000 // 12 hours
     },
-    // Full CISA KEV catalog as a Map<CVE, details> for advisory correlation
+    // Full CISA KEV catalog: raw vulnerabilities array (shared source) plus a
+    // derived Map<CVE, details> for advisory correlation.
     kev: {
+        raw: null,
         map: null,
         expiresAt: 0,
         ttl: 12 * 60 * 60 * 1000 // 12 hours
@@ -1231,29 +1239,44 @@ const memoryCache = {
 
 // Full CISA KEV catalog as Map<CVE, {dateAdded,dueDate,ransomware,...}>, cached
 // 12h. Used to flag advisories whose CVEs are KNOWN-EXPLOITED in the wild.
-async function getKevMap() {
+// Single source of truth for the CISA KEV catalog. Fetches the raw
+// vulnerabilities array at most once per TTL; both getKevMap() (advisory
+// correlation) and /api/cves/exploited (dashboard) derive from this, so the
+// catalog is no longer fetched twice. Degrades to the last good data on error.
+async function getKevCatalog() {
     const now = Date.now();
-    if (memoryCache.kev.map && memoryCache.kev.expiresAt > now) return memoryCache.kev.map;
+    if (memoryCache.kev.raw && memoryCache.kev.expiresAt > now) return memoryCache.kev.raw;
     try {
         const resp = await axios.get('https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json', { timeout: 10000 });
-        const map = new Map();
-        for (const v of (resp.data?.vulnerabilities || [])) {
-            if (!v.cveID) continue;
-            map.set(v.cveID.toUpperCase(), {
-                dateAdded: v.dateAdded,
-                dueDate: v.dueDate,
-                ransomware: /known/i.test(v.knownRansomwareCampaignUse || ''),
-                vendor: v.vendorProject,
-                product: v.product,
-            });
-        }
-        memoryCache.kev.map = map;
+        const raw = Array.isArray(resp.data?.vulnerabilities) ? resp.data.vulnerabilities : [];
+        memoryCache.kev.raw = raw;
+        memoryCache.kev.map = null; // invalidate derived map so it rebuilds from fresh data
         memoryCache.kev.expiresAt = now + memoryCache.kev.ttl;
-        return map;
+        return raw;
     } catch (err) {
         console.warn(`KEV catalog fetch failed: ${err.message}`);
-        return memoryCache.kev.map || new Map();
+        return memoryCache.kev.raw || [];
     }
+}
+
+async function getKevMap() {
+    // Refresh the catalog first; getKevCatalog() nulls the derived map when the
+    // underlying data is refetched, so a stale map can't be returned here.
+    const raw = await getKevCatalog();
+    if (memoryCache.kev.map) return memoryCache.kev.map;
+    const map = new Map();
+    for (const v of raw) {
+        if (!v.cveID) continue;
+        map.set(v.cveID.toUpperCase(), {
+            dateAdded: v.dateAdded,
+            dueDate: v.dueDate,
+            ransomware: /known/i.test(v.knownRansomwareCampaignUse || ''),
+            vendor: v.vendorProject,
+            product: v.product,
+        });
+    }
+    memoryCache.kev.map = map;
+    return map;
 }
 
 // FIRST.org EPSS scores (probability a CVE is exploited in the next 30 days) for
@@ -1775,17 +1798,15 @@ app.get('/api/cves/exploited', async (req, res) => {
     }
 
     try {
-        const response = await axios.get('https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json', { timeout: 8000 });
-        if (response.data && Array.isArray(response.data.vulnerabilities)) {
-            const sorted = response.data.vulnerabilities
-                .sort((a, b) => new Date(b.dateAdded) - new Date(a.dateAdded))
-                .slice(0, 50);
+        // Reuse the shared KEV catalog instead of re-fetching the same CISA feed.
+        const vulnerabilities = await getKevCatalog();
+        const sorted = [...vulnerabilities]
+            .sort((a, b) => new Date(b.dateAdded) - new Date(a.dateAdded))
+            .slice(0, 50);
 
-            memoryCache.exploitedCves.data = sorted;
-            memoryCache.exploitedCves.expiresAt = now + memoryCache.exploitedCves.ttl;
-            return res.json(sorted);
-        }
-        throw new Error("Invalid response format from CISA");
+        memoryCache.exploitedCves.data = sorted;
+        memoryCache.exploitedCves.expiresAt = now + memoryCache.exploitedCves.ttl;
+        return res.json(sorted);
     } catch (error) {
         const { status, message } = sanitizeError(error);
         res.status(status).json({ error: message });
@@ -2077,14 +2098,17 @@ app.post('/api/dns/lookup', scanLimiter, async (req, res) => {
 
 // Vendors API Status
 app.get('/api/vendors/status', (req, res) => {
+    // Use getKeys() so providers configured only via numbered fallback vars
+    // (e.g. VIRUSTOTAL2_API_KEY) still report as available.
+    const hasKey = (envName) => getKeys(envName).length > 0;
     const status = {
-        "VirusTotal": !!process.env.VIRUSTOTAL_API_KEY,
-        "AbuseIPDB": !!process.env.ABUSEIPDB_API_KEY,
+        "VirusTotal": hasKey('VIRUSTOTAL_API_KEY'),
+        "AbuseIPDB": hasKey('ABUSEIPDB_API_KEY'),
         "AlienVault OTX": true,
-        "Shodan": !!process.env.SHODAN_API_KEY,
+        "Shodan": hasKey('SHODAN_API_KEY'),
         "URLhaus": true,
-        "Censys": !!process.env.CENSYS_API_KEY,
-        "WHOIS": !!process.env.WHOIS_API_KEY,
+        "Censys": hasKey('CENSYS_API_KEY'),
+        "WHOIS": hasKey('WHOIS_API_KEY'),
         "IP Geolocation": true
     };
     res.json(status);
