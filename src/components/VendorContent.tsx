@@ -13,6 +13,9 @@ interface VendorContentProps {
     onPivot?: (artifact: string) => void;
 }
 
+// Keys holding complex/nested structures that shouldn't be rendered in the generic card display
+const GENERIC_HIDDEN_KEYS = new Set(["Services Detail", "Reports", "All Vendors", "Hostnames"]);
+
 export const VendorContent = ({ vendor, onPivot }: VendorContentProps) => {
     const { name, data, error, quota } = vendor;
     const [showRaw, setShowRaw] = useState(false);
@@ -367,10 +370,65 @@ export const VendorContent = ({ vendor, onPivot }: VendorContentProps) => {
         );
     }
 
+    // Censys - Enhanced Display
+    if (name === "Censys") {
+        if (data["Status"]) {
+            return (<div className="space-y-3"><p className="text-sm text-muted-foreground">{renderValue(String(data["Status"]))}</p></div>);
+        }
+        const portsStr = (data["Open Ports"] as string) || "None";
+        const ports = portsStr === "None" ? [] : portsStr.split(", ");
+        const servicesDetail = Array.isArray(data["Services Detail"]) ? (data["Services Detail"] as any[]) : [];
+        const detailRow = (label: string, key: string) =>
+            data[key] ? (<div><p className="text-muted-foreground">{label}</p><p className="font-medium break-all">{renderValue(String(data[key]))}</p></div>) : null;
+
+        return (
+            <div className="space-y-3">
+                <div className="grid grid-cols-2 gap-3">
+                    <div><p className="text-xs text-muted-foreground">Services</p><p className="text-2xl font-bold">{data["Service Count"] || 0}</p></div>
+                    <div><p className="text-xs text-muted-foreground">Open Ports</p><p className="text-2xl font-bold">{ports.length}</p></div>
+                </div>
+                {ports.length > 0 && (<div><p className="text-sm text-muted-foreground mb-2">Ports</p><div className="flex flex-wrap gap-1">{ports.map((p, idx) => (<Badge key={idx} variant="secondary" className="text-xs">{p}</Badge>))}</div></div>)}
+                {servicesDetail.length > 0 && (
+                    <div>
+                        <p className="text-sm text-muted-foreground mb-2">Service Detail</p>
+                        <div className="space-y-2">
+                            {servicesDetail.slice(0, 8).map((s, idx) => (
+                                <div key={idx} className="rounded-md border p-2 text-xs space-y-1">
+                                    <div className="flex items-center gap-2">
+                                        <Badge variant="outline" className="font-mono">{s.port}{s.transport ? `/${s.transport}` : ""}</Badge>
+                                        {s.protocol && <span className="text-muted-foreground">{s.protocol}</span>}
+                                        {s.tls && <Badge variant="secondary" className="text-[10px]">TLS {s.tls}</Badge>}
+                                    </div>
+                                    {s.software && <p className="text-muted-foreground">Software: <span className="font-medium text-foreground">{s.software}</span></p>}
+                                    {s.http_title && <p className="text-muted-foreground truncate" title={s.http_title}>Title: <span className="font-medium text-foreground">{s.http_title}</span></p>}
+                                    {s.cert_subject && <p className="text-muted-foreground break-all">Cert: <span className="font-medium text-foreground">{s.cert_subject}</span></p>}
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                    {detailRow("Software", "Software")}
+                    {detailRow("HTTP Status", "HTTP Status")}
+                    {detailRow("HTML Title", "HTML Title")}
+                    {detailRow("TLS Version", "TLS Version")}
+                    {detailRow("Certificate Subject", "Certificate Subject")}
+                    {detailRow("Certificate Issuer", "Certificate Issuer")}
+                    {detailRow("Certificate Names", "Certificate Names")}
+                    {detailRow("Browser Trust", "Browser Trust")}
+                    {detailRow("ASN", "ASN")}
+                    {detailRow("BGP Prefix", "BGP Prefix")}
+                    {detailRow("Location", "Location")}
+                </div>
+                <div className="pt-3 border-t"><Button variant="outline" size="sm" onClick={() => setShowRaw(true)} className="w-full"><Code className="h-4 w-4 mr-2" />Show Raw Data</Button></div>
+            </div>
+        );
+    }
+
     // Generic Enhanced Display for Others
     return (
         <div className="space-y-3">
-            {Object.entries(data).slice(0, 8).map(([key, value]) => {
+            {Object.entries(data).filter(([key]) => !GENERIC_HIDDEN_KEYS.has(key)).slice(0, 8).map(([key, value]) => {
                 if (key === "Status" && typeof value === "string") {
                     return (<div key={key}><p className="text-sm text-muted-foreground mb-2">{key}</p><ThreatBadge level={value.toLowerCase().includes("malicious") || value.toLowerCase().includes("suspicious") ? "malicious" : "safe"} label={value} /></div>);
                 }
@@ -378,9 +436,12 @@ export const VendorContent = ({ vendor, onPivot }: VendorContentProps) => {
                     <div key={key}>
                         <p className="text-xs text-muted-foreground">{key}</p>
                         {Array.isArray(value) ? (
-                            <div className="flex flex-wrap gap-1 mt-1">{value.slice(0, 5).map((v: string, idx: number) => (<Badge key={idx} variant="secondary" className="text-xs">{onPivot ? <ClickableArtifact text={v} onPivot={onPivot} /> : v}</Badge>))}</div>
+                            <div className="flex flex-wrap gap-1 mt-1">{value.slice(0, 5).map((v, idx: number) => {
+                                const text = typeof v === "object" && v !== null ? JSON.stringify(v) : String(v);
+                                return (<Badge key={idx} variant="secondary" className="text-xs">{onPivot ? <ClickableArtifact text={text} onPivot={onPivot} /> : text}</Badge>);
+                            })}</div>
                         ) : (
-                            <p className="text-sm font-medium">{renderValue(String(value))}</p>
+                            <p className="text-sm font-medium">{renderValue(typeof value === "object" && value !== null ? JSON.stringify(value) : String(value))}</p>
                         )}
                     </div>
                 );
