@@ -167,7 +167,7 @@ const PatchTuesday = () => {
         if (!summary) return;
         setExporting(kind);
         try {
-            if (kind === "pdf") exportPatchTuesdayPDF(summary);
+            if (kind === "pdf") await exportPatchTuesdayPDF(summary);
             else if (kind === "pptx") await exportPatchTuesdayPPTX(summary);
             else await exportPatchTuesdayExcel(summary);
             toast({

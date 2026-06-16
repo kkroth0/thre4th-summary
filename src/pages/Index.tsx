@@ -24,8 +24,8 @@ import { MultiIpSummary } from "@/components/MultiIpSummary";
 import { fetchThreatDataProgressive } from "@/services/threatApi";
 import { useToast } from "@/hooks/use-toast";
 import { ThreatIntelligenceResult } from "@/types/threat-intelligence";
-import jsPDF from "jspdf";
-import autoTable from "jspdf-autotable";
+// jsPDF + autoTable are loaded lazily inside exportGlobalPDF (see below) so the
+// ~400KB PDF toolchain is only fetched when a user actually exports a report.
 
 const TypingTitle = ({ language }: { language: string }) => {
   const line1 = language === "pt" ? "Uma consulta." : "One query.";
@@ -520,6 +520,10 @@ const Index = () => {
     });
 
     try {
+      const [{ default: jsPDF }, { default: autoTable }] = await Promise.all([
+        import("jspdf"),
+        import("jspdf-autotable"),
+      ]);
       const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
       const W = doc.internal.pageSize.getWidth();
       const H = doc.internal.pageSize.getHeight();

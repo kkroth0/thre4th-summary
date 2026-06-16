@@ -1,9 +1,13 @@
 // Professional document generators for the Microsoft Patch Tuesday summary.
 // Produces consolidated PDF, PPTX and Excel artifacts from a normalized summary.
-import { jsPDF } from 'jspdf';
-import autoTable, { type CellHookData } from 'jspdf-autotable';
-import PptxGenJS from 'pptxgenjs';
-import ExcelJS from 'exceljs';
+// Heavy document libs (jspdf, jspdf-autotable, pptxgenjs, exceljs) are imported as
+// TYPES only and loaded lazily inside each exporter, so visiting the Patch Tuesday
+// page no longer pulls ~1.3MB of export toolchain into the route chunk — it is
+// fetched on demand when the user actually exports.
+import type { jsPDF } from 'jspdf';
+import type { CellHookData } from 'jspdf-autotable';
+import type PptxGenJS from 'pptxgenjs';
+import type ExcelJS from 'exceljs';
 import type { PatchTuesdaySummary, PatchVulnerability, PatchTuesdayTotals, NamedCount } from '@/services/msrcApi';
 
 // ---- Shared palette / helpers -------------------------------------------------
@@ -117,7 +121,11 @@ const exploitTag = (v: PatchVulnerability): string => {
 //  PDF  (jsPDF + autotable)
 // =============================================================================
 
-export function exportPatchTuesdayPDF(summary: PatchTuesdaySummary): void {
+export async function exportPatchTuesdayPDF(summary: PatchTuesdaySummary): Promise<void> {
+    const [{ jsPDF }, { default: autoTable }] = await Promise.all([
+        import('jspdf'),
+        import('jspdf-autotable'),
+    ]);
     const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
     const pageW = doc.internal.pageSize.getWidth();
     const pageH = doc.internal.pageSize.getHeight();
@@ -308,7 +316,8 @@ const severityCellColor = (data: CellHookData, col: number) => {
 // =============================================================================
 
 export async function exportPatchTuesdayPPTX(summary: PatchTuesdaySummary): Promise<void> {
-    const pptx = new PptxGenJS();
+    const { default: PptxGenLib } = await import('pptxgenjs');
+    const pptx = new PptxGenLib();
     pptx.defineLayout({ name: 'WIDE', width: 13.333, height: 7.5 });
     pptx.layout = 'WIDE';
     pptx.author = 'ThreatSumm4ry';
@@ -456,7 +465,8 @@ const slideHeading = (pptx: PptxGenJS, slide: PptxGenJS.Slide, text: string) => 
 // =============================================================================
 
 export async function exportPatchTuesdayExcel(summary: PatchTuesdaySummary): Promise<void> {
-    const wb = new ExcelJS.Workbook();
+    const { default: ExcelLib } = await import('exceljs');
+    const wb = new ExcelLib.Workbook();
     wb.creator = 'ThreatSumm4ry';
     wb.created = new Date();
 
