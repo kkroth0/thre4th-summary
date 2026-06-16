@@ -226,21 +226,46 @@ const formatVendorData = (vendorName: string, data: any, query: string): any => 
             }
             return { "Status": "No WHOIS data available" };
 
-        case "Shodan":
+        case "Shodan": {
+            const banners = Array.isArray(data.data) ? data.data : [];
+            // The actual CVE list, not just a count. Shodan keys data.vulns by CVE id.
+            const hostVulns = data.vulns ? Object.keys(data.vulns) : [];
+            // Per-service banner detail, mirroring the Censys "Services Detail" shape.
+            const servicesDetail = banners.map((b: any) => ({
+                port: b.port,
+                transport: b.transport || "tcp",
+                product: b.product || b._shodan?.module || null,
+                version: b.version || null,
+                cpe: Array.isArray(b.cpe23) ? b.cpe23.slice(0, 3) : (Array.isArray(b.cpe) ? b.cpe.slice(0, 3) : []),
+                module: b._shodan?.module || null,
+                http_server: b.http?.server || null,
+                http_title: b.http?.title || null,
+                ssl_version: Array.isArray(b.ssl?.versions) ? b.ssl.versions.join(", ") : null,
+                ssl_jarm: b.ssl?.jarm || null,
+                cert_subject: b.ssl?.cert?.subject?.CN || null,
+                cert_issuer: b.ssl?.cert?.issuer?.CN || null,
+                vulns: b.vulns ? Object.keys(b.vulns) : [],
+                hostnames: Array.isArray(b.hostnames) ? b.hostnames.slice(0, 3) : [],
+            }));
+            const location = [data.city, data.region_code, data.country_name].filter(Boolean).join(", ");
             return {
-                "Open Ports": data.ports?.slice(0, 5).join(", ") || "None",
+                "Open Ports": data.ports?.slice(0, 12).join(", ") || "None",
                 "Total Ports": data.ports?.length || 0,
-                "Services": Array.isArray(data.data) ? data.data.slice(0, 3).map((d: any) => d.product || d.port).join(", ") : "Unknown",
+                "Services": banners.slice(0, 5).map((d: any) => d.product || `${d.port}/${d.transport || 'tcp'}`).join(", ") || "Unknown",
                 "Organization": data.org || "Unknown",
-                "Hostnames": data.hostnames?.slice(0, 3).join(", ") || "None",
-                "Domains": data.domains?.slice(0, 3).join(", ") || "None",
+                "Hostnames": data.hostnames?.slice(0, 5).join(", ") || "None",
+                "Domains": data.domains?.slice(0, 5).join(", ") || "None",
                 "OS": data.os || "Unknown",
+                "Location": location || "Unknown",
                 "Last Update": data.last_update || "Unknown",
                 "ASN": data.asn || "Unknown",
                 "ISP": data.isp || "Unknown",
-                "Vulnerabilities": data.vulns ? `${Object.keys(data.vulns).length} CVEs` : "0 CVEs",
-                "Tags": data.tags?.slice(0, 5).join(", ") || "None"
+                "Vulnerabilities": `${hostVulns.length} CVEs`,
+                "Vulnerability List": hostVulns,
+                "Tags": data.tags?.slice(0, 8).join(", ") || "None",
+                "Services Detail": servicesDetail,
             };
+        }
         case "Censys": {
             const censysData = data.data || data;
             if (censysData.Status) return censysData;
@@ -254,11 +279,29 @@ const formatVendorData = (vendorName: string, data: any, query: string): any => 
             const certServices = services.filter((s: any) => s.certificate_subject);
             const httpServices = services.filter((s: any) => s.http_status || s.http_title);
 
+            // Aggregate CVEs reported across all services.
+            const allVulns = Array.from(new Set(
+                services.flatMap((s: any) => Array.isArray(s.vulnerabilities) ? s.vulnerabilities : [])
+            ));
+
             const result: Record<string, any> = {
                 "Open Ports": openPorts,
                 "Service Count": censysData.service_count || services.length,
                 "Software": softwareList,
             };
+
+            if (Array.isArray(censysData.labels) && censysData.labels.length > 0) {
+                result["Labels"] = censysData.labels.join(", ");
+            }
+            if (censysData.operating_system) result["Operating System"] = censysData.operating_system;
+            if (allVulns.length > 0) {
+                result["Vulnerabilities"] = `${allVulns.length} CVEs`;
+                result["Vulnerability List"] = allVulns;
+            }
+            if (Array.isArray(censysData.dns_names) && censysData.dns_names.length > 0) {
+                result["Reverse DNS"] = censysData.dns_names.slice(0, 5).join(", ");
+            }
+            if (censysData.last_updated) result["Last Scanned"] = censysData.last_updated;
 
             // HTTP fingerprint
             if (httpServices.length > 0) {
@@ -304,9 +347,14 @@ const formatVendorData = (vendorName: string, data: any, query: string): any => 
                 protocol: s.protocol,
                 transport: s.transport,
                 software: s.software,
+                version: s.software_version,
                 tls: s.tls_version,
+                jarm: s.jarm,
                 http_title: s.http_title,
+                http_server: s.http_server,
                 cert_subject: s.certificate_subject,
+                vulns: Array.isArray(s.vulnerabilities) ? s.vulnerabilities : [],
+                banner: s.banner,
             }));
 
             return result;

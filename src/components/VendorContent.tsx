@@ -302,22 +302,58 @@ export const VendorContent = ({ vendor, onPivot }: VendorContentProps) => {
     if (name === "Shodan") {
         const portsStr = data["Open Ports"] || "None";
         const ports = portsStr === "None" ? [] : portsStr.split(", ");
-        const vulnsCount = parseInt((data["Vulnerabilities"] as string || "0").replace(/[^\d]/g, ""));
+        const vulnList = Array.isArray(data["Vulnerability List"]) ? (data["Vulnerability List"] as string[]) : [];
+        const servicesDetail = Array.isArray(data["Services Detail"]) ? (data["Services Detail"] as any[]) : [];
 
         return (
             <div className="space-y-3">
                 <div className="grid grid-cols-2 gap-3">
                     <div><p className="text-xs text-muted-foreground">Total Ports</p><p className="text-2xl font-bold">{data["Total Ports"] || 0}</p></div>
-                    <div><p className="text-xs text-muted-foreground">Vulnerabilities</p><p className="text-2xl font-bold text-destructive">{vulnsCount}</p></div>
+                    <div><p className="text-xs text-muted-foreground">Vulnerabilities</p><p className="text-2xl font-bold text-destructive">{vulnList.length}</p></div>
                 </div>
                 {ports.length > 0 && (<div><p className="text-sm text-muted-foreground mb-2">Open Ports</p><div className="flex flex-wrap gap-1">{ports.map((p: string, idx: number) => (<Badge key={idx} variant="secondary" className="text-xs">{p}</Badge>))}</div></div>)}
+                {vulnList.length > 0 && (
+                    <div>
+                        <p className="text-sm text-muted-foreground mb-2">CVEs</p>
+                        <div className="flex flex-wrap gap-1">
+                            {vulnList.slice(0, 24).map((cve, idx) => (
+                                <a key={idx} href={`https://nvd.nist.gov/vuln/detail/${cve}`} target="_blank" rel="noopener noreferrer">
+                                    <Badge variant="destructive" className="text-[10px] font-mono hover:opacity-80">{cve}</Badge>
+                                </a>
+                            ))}
+                            {vulnList.length > 24 && <Badge variant="outline" className="text-[10px]">+{vulnList.length - 24} more</Badge>}
+                        </div>
+                    </div>
+                )}
                 <div className="grid grid-cols-2 gap-2 text-xs">
                     <div><p className="text-muted-foreground">Organization</p><p className="font-medium">{data["Organization"]}</p></div>
                     <div><p className="text-muted-foreground">OS</p><p className="font-medium">{data["OS"]}</p></div>
                     <div><p className="text-muted-foreground">ISP</p><p className="font-medium truncate" title={data["ISP"]}>{data["ISP"]}</p></div>
                     <div><p className="text-muted-foreground">ASN</p><p className="font-mono">{data["ASN"]}</p></div>
+                    {data["Location"] && data["Location"] !== "Unknown" && (<div className="col-span-2"><p className="text-muted-foreground">Location</p><p className="font-medium">{data["Location"]}</p></div>)}
                 </div>
-                {data["Services"] && data["Services"] !== "Unknown" && (<div><p className="text-sm text-muted-foreground mb-1">Services</p><p className="text-xs text-muted-foreground">{data["Services"]}</p></div>)}
+                {servicesDetail.length > 0 && (
+                    <div>
+                        <p className="text-sm text-muted-foreground mb-2">Service Detail</p>
+                        <div className="space-y-2">
+                            {servicesDetail.slice(0, 10).map((s, idx) => (
+                                <div key={idx} className="rounded-md border p-2 text-xs space-y-1">
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                        <Badge variant="outline" className="font-mono">{s.port}{s.transport ? `/${s.transport}` : ""}</Badge>
+                                        {s.module && <span className="text-muted-foreground">{s.module}</span>}
+                                        {s.ssl_jarm && <Badge variant="secondary" className="text-[10px]" title={`JARM ${s.ssl_jarm}`}>JARM</Badge>}
+                                        {Array.isArray(s.vulns) && s.vulns.length > 0 && <Badge variant="destructive" className="text-[10px]">{s.vulns.length} CVE</Badge>}
+                                    </div>
+                                    {(s.product || s.version) && <p className="text-muted-foreground">Product: <span className="font-medium text-foreground">{[s.product, s.version].filter(Boolean).join(" ")}</span></p>}
+                                    {s.http_server && <p className="text-muted-foreground">Server: <span className="font-medium text-foreground">{s.http_server}</span></p>}
+                                    {s.http_title && <p className="text-muted-foreground truncate" title={s.http_title}>Title: <span className="font-medium text-foreground">{s.http_title}</span></p>}
+                                    {s.cert_subject && <p className="text-muted-foreground break-all">Cert: <span className="font-medium text-foreground">{s.cert_subject}</span></p>}
+                                    {Array.isArray(s.cpe) && s.cpe.length > 0 && <p className="text-muted-foreground break-all">CPE: <span className="font-mono text-foreground">{s.cpe.join(", ")}</span></p>}
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
                 {data["Hostnames"] && data["Hostnames"] !== "None" && (<div><p className="text-sm text-muted-foreground mb-1">Hostnames</p><p className="text-xs text-muted-foreground">{data["Hostnames"]}</p></div>)}
                 {data["Tags"] && data["Tags"] !== "None" && (<div><p className="text-sm text-muted-foreground mb-1">Tags</p><p className="text-xs text-muted-foreground">{data["Tags"]}</p></div>)}
                 <div className="pt-3 border-t"><Button variant="outline" size="sm" onClick={() => setShowRaw(true)} className="w-full"><Code className="h-4 w-4 mr-2" />Show Raw Data</Button></div>
@@ -378,6 +414,8 @@ export const VendorContent = ({ vendor, onPivot }: VendorContentProps) => {
         const portsStr = (data["Open Ports"] as string) || "None";
         const ports = portsStr === "None" ? [] : portsStr.split(", ");
         const servicesDetail = Array.isArray(data["Services Detail"]) ? (data["Services Detail"] as any[]) : [];
+        const labels = data["Labels"] ? String(data["Labels"]).split(", ").filter(Boolean) : [];
+        const vulnList = Array.isArray(data["Vulnerability List"]) ? (data["Vulnerability List"] as string[]) : [];
         const detailRow = (label: string, key: string) =>
             data[key] ? (<div><p className="text-muted-foreground">{label}</p><p className="font-medium break-all">{renderValue(String(data[key]))}</p></div>) : null;
 
@@ -387,19 +425,36 @@ export const VendorContent = ({ vendor, onPivot }: VendorContentProps) => {
                     <div><p className="text-xs text-muted-foreground">Services</p><p className="text-2xl font-bold">{data["Service Count"] || 0}</p></div>
                     <div><p className="text-xs text-muted-foreground">Open Ports</p><p className="text-2xl font-bold">{ports.length}</p></div>
                 </div>
+                {labels.length > 0 && (<div><p className="text-sm text-muted-foreground mb-2">Censys Labels</p><div className="flex flex-wrap gap-1">{labels.map((l, idx) => (<Badge key={idx} variant="outline" className="text-[10px] uppercase tracking-wide border-primary/30 text-primary">{l}</Badge>))}</div></div>)}
                 {ports.length > 0 && (<div><p className="text-sm text-muted-foreground mb-2">Ports</p><div className="flex flex-wrap gap-1">{ports.map((p, idx) => (<Badge key={idx} variant="secondary" className="text-xs">{p}</Badge>))}</div></div>)}
+                {vulnList.length > 0 && (
+                    <div>
+                        <p className="text-sm text-muted-foreground mb-2">CVEs</p>
+                        <div className="flex flex-wrap gap-1">
+                            {vulnList.slice(0, 24).map((cve, idx) => (
+                                <a key={idx} href={`https://nvd.nist.gov/vuln/detail/${cve}`} target="_blank" rel="noopener noreferrer">
+                                    <Badge variant="destructive" className="text-[10px] font-mono hover:opacity-80">{cve}</Badge>
+                                </a>
+                            ))}
+                            {vulnList.length > 24 && <Badge variant="outline" className="text-[10px]">+{vulnList.length - 24} more</Badge>}
+                        </div>
+                    </div>
+                )}
                 {servicesDetail.length > 0 && (
                     <div>
                         <p className="text-sm text-muted-foreground mb-2">Service Detail</p>
                         <div className="space-y-2">
-                            {servicesDetail.slice(0, 8).map((s, idx) => (
+                            {servicesDetail.slice(0, 10).map((s, idx) => (
                                 <div key={idx} className="rounded-md border p-2 text-xs space-y-1">
-                                    <div className="flex items-center gap-2">
+                                    <div className="flex items-center gap-2 flex-wrap">
                                         <Badge variant="outline" className="font-mono">{s.port}{s.transport ? `/${s.transport}` : ""}</Badge>
                                         {s.protocol && <span className="text-muted-foreground">{s.protocol}</span>}
                                         {s.tls && <Badge variant="secondary" className="text-[10px]">TLS {s.tls}</Badge>}
+                                        {s.jarm && <Badge variant="secondary" className="text-[10px]" title={`JARM ${s.jarm}`}>JARM</Badge>}
+                                        {Array.isArray(s.vulns) && s.vulns.length > 0 && <Badge variant="destructive" className="text-[10px]">{s.vulns.length} CVE</Badge>}
                                     </div>
-                                    {s.software && <p className="text-muted-foreground">Software: <span className="font-medium text-foreground">{s.software}</span></p>}
+                                    {s.software && <p className="text-muted-foreground">Software: <span className="font-medium text-foreground">{[s.software, s.version].filter(Boolean).join(" ")}</span></p>}
+                                    {s.http_server && <p className="text-muted-foreground">Server: <span className="font-medium text-foreground">{s.http_server}</span></p>}
                                     {s.http_title && <p className="text-muted-foreground truncate" title={s.http_title}>Title: <span className="font-medium text-foreground">{s.http_title}</span></p>}
                                     {s.cert_subject && <p className="text-muted-foreground break-all">Cert: <span className="font-medium text-foreground">{s.cert_subject}</span></p>}
                                 </div>
@@ -408,6 +463,8 @@ export const VendorContent = ({ vendor, onPivot }: VendorContentProps) => {
                     </div>
                 )}
                 <div className="grid grid-cols-2 gap-2 text-xs">
+                    {detailRow("Operating System", "Operating System")}
+                    {detailRow("Reverse DNS", "Reverse DNS")}
                     {detailRow("Software", "Software")}
                     {detailRow("HTTP Status", "HTTP Status")}
                     {detailRow("HTML Title", "HTML Title")}

@@ -1039,39 +1039,70 @@ app.post('/api/censys', scanLimiter, async (req, res) => {
         const resource = response.data?.result?.resource;
         if (!resource) return res.json({ data: { "Status": "No data available" } });
 
+        // Censys software can be an array (Platform v3) or a single object; normalize.
+        const firstSoftware = (svc) => {
+            const sw = Array.isArray(svc.software) ? svc.software[0] : svc.software;
+            return sw || null;
+        };
+        // CVE list for a service across the field names Censys has used.
+        const serviceVulns = (svc) => {
+            const v = svc.vulnerabilities || svc.vulns || [];
+            return (Array.isArray(v) ? v : [])
+                .map(x => (typeof x === 'string' ? x : (x.cve_id || x.id || x.cve)))
+                .filter(Boolean)
+                .slice(0, 25);
+        };
+
         const result = {
             ip: resource.ip,
             service_count: resource.service_count || 0,
-            services: (resource.services || []).map(svc => ({
-                port: svc.port,
-                protocol: svc.protocol || "UNKNOWN",
-                transport: svc.transport_protocol || "tcp",
-                software: svc.software?.product || svc.software?.vendor || null,
-                software_version: svc.software?.version || null,
-                scan_time: svc.scan_time,
-                http_status: svc.http?.response?.status_code || null,
-                http_title: svc.http?.response?.html_title || null,
-                http_headers: svc.http?.response?.headers ? Object.keys(svc.http.response.headers).slice(0, 10) : null,
-                http_body_hash: svc.http?.response?.body_hash || null,
-                tls_version: svc.tls?.version_selected || null,
-                certificate_fingerprint: svc.tls?.certificates?.leaf_data?.fingerprint || null,
-                certificate_subject: svc.tls?.certificates?.leaf_data?.subject_dn || null,
-                certificate_issuer: svc.tls?.certificates?.leaf_data?.issuer_dn || null,
-                certificate_names: svc.tls?.certificates?.leaf_data?.names || [],
-                certificate_trusted: svc.tls?.certificates?.leaf_data?.browser_trust?.is_trusted || null,
-            })),
+            // Host-level Censys labels/tags (e.g. REMOTE_ACCESS, DATABASE, C2) — strong context.
+            labels: (resource.labels || []).map(l => (typeof l === 'string' ? l : (l.value || l.label))).filter(Boolean),
+            operating_system: resource.operating_system
+                ? [resource.operating_system.vendor, resource.operating_system.product, resource.operating_system.version].filter(Boolean).join(' ') || null
+                : null,
+            last_updated: resource.last_updated_at || resource.last_updated || null,
+            services: (resource.services || []).map(svc => {
+                const sw = firstSoftware(svc);
+                return {
+                    port: svc.port,
+                    protocol: svc.protocol || svc.extended_service_name || "UNKNOWN",
+                    transport: svc.transport_protocol || "tcp",
+                    software: sw?.product || sw?.vendor || null,
+                    software_version: sw?.version || null,
+                    scan_time: svc.scan_time,
+                    vulnerabilities: serviceVulns(svc),
+                    banner: typeof svc.banner === 'string' ? svc.banner.slice(0, 300) : null,
+                    jarm: svc.jarm?.fingerprint || svc.tls?.jarm?.fingerprint || null,
+                    http_status: svc.http?.response?.status_code || null,
+                    http_title: svc.http?.response?.html_title || null,
+                    http_server: svc.http?.response?.headers?.Server || svc.http?.response?.headers?.server || null,
+                    http_headers: svc.http?.response?.headers ? Object.keys(svc.http.response.headers).slice(0, 10) : null,
+                    http_body_hash: svc.http?.response?.body_hash || null,
+                    tls_version: svc.tls?.version_selected || null,
+                    certificate_fingerprint: svc.tls?.certificates?.leaf_data?.fingerprint || null,
+                    certificate_subject: svc.tls?.certificates?.leaf_data?.subject_dn || null,
+                    certificate_issuer: svc.tls?.certificates?.leaf_data?.issuer_dn || null,
+                    certificate_names: svc.tls?.certificates?.leaf_data?.names || [],
+                    certificate_trusted: svc.tls?.certificates?.leaf_data?.browser_trust?.is_trusted || null,
+                };
+            }),
             location: resource.location ? {
                 country: resource.location.country,
                 country_code: resource.location.country_code,
                 city: resource.location.city,
                 province: resource.location.province,
                 continent: resource.location.continent,
+                coordinates: resource.location.coordinates || null,
             } : null,
             autonomous_system: resource.autonomous_system ? {
                 asn: resource.autonomous_system.asn,
                 name: resource.autonomous_system.name || resource.autonomous_system.description,
                 bgp_prefix: resource.autonomous_system.bgp_prefix,
+                country_code: resource.autonomous_system.country_code || null,
             } : null,
+            // Reverse DNS names for the host, if Censys resolved any.
+            dns_names: resource.dns?.reverse_dns?.names || resource.dns?.names || [],
             dns: resource.dns || null,
         };
 
