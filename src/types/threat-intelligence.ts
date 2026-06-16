@@ -19,6 +19,13 @@ export interface ThreatIntelligenceResult {
     totalVendors: number;
     detections: number;
     vendorData: VendorData[];
+    // Additive verdict metadata (does not affect threatLevel/overallScore):
+    // confidence = agreement among vendors that returned a definitive signal;
+    // disagreement = a meaningful malicious/clean split worth analyst attention;
+    // reportingVendors = how many vendors actually weighed in.
+    confidence?: number;
+    disagreement?: boolean;
+    reportingVendors?: number;
 }
 
 export interface ApiConfig {

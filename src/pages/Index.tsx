@@ -1751,6 +1751,9 @@ const Index = () => {
                       totalVendors={data.totalVendors}
                       detections={data.detections}
                       vendorData={data.vendorData}
+                      confidence={data.confidence}
+                      disagreement={data.disagreement}
+                      reportingVendors={data.reportingVendors}
                     />
 
                     <ThreatCharts

@@ -21,11 +21,14 @@ interface ThreatSummaryProps {
   totalVendors: number;
   detections: number;
   vendorData?: VendorData[];
+  confidence?: number;
+  disagreement?: boolean;
+  reportingVendors?: number;
 }
 
-export const ThreatSummary = ({ query, overallScore, threatLevel, totalVendors, detections, vendorData = [] }: ThreatSummaryProps) => {
+export const ThreatSummary = ({ query, overallScore, threatLevel, totalVendors, detections, vendorData = [], confidence, disagreement, reportingVendors }: ThreatSummaryProps) => {
   const { toast } = useToast();
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
 
   const formatVendorData = (vendor: VendorData): string => {
     let text = `\n${vendor.name}\n${'='.repeat(vendor.name.length)}\n`;
@@ -245,6 +248,24 @@ export const ThreatSummary = ({ query, overallScore, threatLevel, totalVendors, 
               </Dialog>
             </div>
             <ThreatBadge level={threatLevel} className="text-xs px-3 py-1 font-bold rounded-full w-fit shadow-sm" />
+            {typeof confidence === "number" && (reportingVendors ?? 0) > 0 && (
+              <div className="flex items-center gap-1.5 mt-0.5">
+                <span className="text-[10px] font-mono text-muted-foreground">
+                  {language === "pt" ? "Confiança" : "Confidence"}: <strong className="text-foreground">{confidence}%</strong>
+                  <span className="opacity-60"> · {reportingVendors} {language === "pt" ? "fontes" : "vendors"}</span>
+                </span>
+                {disagreement && (
+                  <span
+                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-orange-500/10 border border-orange-500/20 text-[9px] font-bold text-orange-500 uppercase tracking-wide"
+                    title={language === "pt"
+                      ? "Fontes divergem — revise o relatório minoritário antes de agir"
+                      : "Vendors disagree — review the minority report before acting"}
+                  >
+                    <Info className="h-2.5 w-2.5" /> {language === "pt" ? "fontes divergem" : "vendors disagree"}
+                  </span>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Detections Info Block */}

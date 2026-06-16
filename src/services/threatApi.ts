@@ -571,6 +571,18 @@ const scoreThreatResults = (query: string, results: VendorData[]): ThreatIntelli
         else if (totalChecked > 0) threatLevel = "safe";
     }
 
+    // Additive verdict metadata — purely informational, does not alter the
+    // verdict above. Confidence = how strongly the reporting vendors agree with
+    // each other; disagreement = a non-trivial malicious/clean split (a minority
+    // report worth a second look). A strong trusted signal (isMalicious) floors
+    // confidence at 80 since a high-weight engine flagged it.
+    const cleanVotes = Math.max(0, totalChecked - maliciousCount);
+    const majority = Math.max(maliciousCount, cleanVotes);
+    let confidence = totalChecked > 0 ? Math.round((majority / totalChecked) * 100) : 0;
+    if (isMalicious) confidence = Math.max(confidence, 80);
+    const minority = Math.min(maliciousCount, cleanVotes);
+    const disagreement = maliciousCount > 0 && cleanVotes > 0 && minority / totalChecked >= 0.2;
+
     return {
         query,
         overallScore,
@@ -578,6 +590,9 @@ const scoreThreatResults = (query: string, results: VendorData[]): ThreatIntelli
         totalVendors: results.length,
         detections: maliciousCount,
         vendorData: results,
+        confidence,
+        disagreement,
+        reportingVendors: totalChecked,
     };
 };
 
