@@ -1,7 +1,14 @@
 import { useState, useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
 import { getFieldCategory } from "@/components/VendorDataTable";
-import { Shield, AlertTriangle, Bug, FileSearch, Globe, Link as LinkIcon, Radar, Database, Eye, Search, BookOpen, Layers, LayoutGrid, CheckCircle2, Mail, ArrowRight, Upload, Copy, Check, Clock } from "lucide-react";
+import { Shield, AlertTriangle, Bug, FileSearch, Globe, Link as LinkIcon, Radar, Database, Eye, Search, BookOpen, Layers, LayoutGrid, CheckCircle2, Mail, ArrowRight, Upload, Copy, Check, Clock, Download, FileJson, FileCode, ChevronDown } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from "@/components/ui/dropdown-menu";
+import { exportResultsJSON, exportResultsNDJSON, exportResultsSTIX } from "@/utils/threatExport";
 import { Badge } from "@/components/ui/badge";
 import { ThreatSummary } from "@/components/ThreatSummary";
 import { VendorCard } from "@/components/VendorCard";
@@ -1686,17 +1693,35 @@ const Index = () => {
                     <span>{language === "pt" ? "Copiar IOCs" : "Copy IOCs"}</span>
                   </Button>
 
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-9 px-4 rounded-full border-primary/20 hover:bg-primary/10 shadow-sm flex items-center gap-2"
-                    onClick={exportGlobalPDF}
-                    disabled={isExportingPDF}
-                    title={isExportingPDF ? "Building Report..." : "Global PDF Report"}
-                  >
-                    <FileSearch className={`h-4 w-4 ${isExportingPDF ? "animate-pulse" : ""}`} />
-                    <span>{isExportingPDF ? "Building Report..." : "Global PDF Report"}</span>
-                  </Button>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-9 px-4 rounded-full border-primary/20 hover:bg-primary/10 shadow-sm flex items-center gap-2"
+                        disabled={isExportingPDF}
+                        title={isExportingPDF ? "Building Report..." : (language === "pt" ? "Exportar" : "Export")}
+                      >
+                        <Download className={`h-4 w-4 ${isExportingPDF ? "animate-pulse" : ""}`} />
+                        <span>{isExportingPDF ? (language === "pt" ? "Gerando..." : "Building...") : (language === "pt" ? "Exportar" : "Export")}</span>
+                        <ChevronDown className="h-3.5 w-3.5 opacity-60" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-48">
+                      <DropdownMenuItem onClick={exportGlobalPDF} className="gap-2 cursor-pointer">
+                        <FileSearch className="h-4 w-4" /> {language === "pt" ? "Relatório PDF" : "PDF Report"}
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => exportResultsJSON(results)} className="gap-2 cursor-pointer">
+                        <FileJson className="h-4 w-4" /> JSON
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => exportResultsNDJSON(results)} className="gap-2 cursor-pointer">
+                        <FileCode className="h-4 w-4" /> NDJSON (SIEM)
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => exportResultsSTIX(results)} className="gap-2 cursor-pointer">
+                        <Shield className="h-4 w-4" /> STIX 2.1
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </div>
               </div>
 

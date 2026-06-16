@@ -11,7 +11,7 @@ const handleResponse = async (response: Response, vendorName: string) => {
 };
 
 // Detect IOC type from query
-const detectIOCType = (query: string): 'ip' | 'domain' | 'hash' | 'url' => {
+export const detectIOCType = (query: string): 'ip' | 'domain' | 'hash' | 'url' => {
     if (query.startsWith('http://') || query.startsWith('https://')) return 'url';
     if (/^[a-fA-F0-9]{32}$/.test(query)) return 'hash'; // MD5
     if (/^[a-fA-F0-9]{40}$/.test(query)) return 'hash'; // SHA1
