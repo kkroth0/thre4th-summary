@@ -464,114 +464,88 @@ export const checkDNSBLBatch = async (ip: string, providers: string[]): Promise<
     }
 };
 
-export const fetchThreatData = async (query: string, selectedVendors?: string[]): Promise<ThreatIntelligenceResult> => {
-    // Map vendor names to their fetch functions
-    const vendorMap: Record<string, () => Promise<VendorData>> = {
-        "IP Geolocation": () => fetchIPGeoData(query),
-        "WHOIS": () => fetchWHOISData(query),
-        "VirusTotal": () => fetchVirusTotalData(query),
-        "AbuseIPDB": () => fetchAbuseIPDBData(query),
-        "AlienVault OTX": () => fetchAlienVaultData(query),
-        "Shodan": () => fetchShodanData(query),
-        "URLhaus": () => fetchURLhausData(query),
-        "MalwareBazaar": () => fetchMalwareBazaarData(query),
-        "Google Safe Browsing": () => fetchGoogleSafeBrowsingData(query),
-        "PhishTank": () => fetchPhishTankData(query),
-        "Pulsedive": () => fetchPulsediveData(query),
+// AV engines whose verdict alone is enough to mark an IOC malicious.
+const IMPORTANT_AV_VENDORS = [
+    'Microsoft', 'Kaspersky', 'Bitdefender', 'ESET-NOD32', 'Avira',
+    'Sophos', 'McAfee', 'Symantec', 'TrendMicro', 'F-Secure',
+    'Fortinet', 'Palo Alto Networks', 'CrowdStrike'
+];
 
-        "Hybrid Analysis": () => fetchHybridAnalysisData(query),
-        "CIRCL hashlookup": () => fetchCIRCLData(query),
-        "Criminal IP": () => fetchCriminalIPData(query),
-        "MetaDefender": () => fetchMetaDefenderData(query),
-        "PhishStats": () => fetchPhishStatsData(query),
-        "Ransomware.live": () => fetchRansomwareLiveData(query),
-        "OpenPhish": () => fetchOpenPhishData(query),
-        "DShield": () => fetchDShieldData(query),
-        "Team Cymru": () => fetchTeamCymruData(query),
-        "Censys": () => fetchCensysData(query),
-    };
+// Single source of truth mapping each vendor to its fetch call for a given query.
+const buildVendorMap = (query: string): Record<string, () => Promise<VendorData>> => ({
+    "IP Geolocation": () => fetchIPGeoData(query),
+    "WHOIS": () => fetchWHOISData(query),
+    "VirusTotal": () => fetchVirusTotalData(query),
+    "AbuseIPDB": () => fetchAbuseIPDBData(query),
+    "AlienVault OTX": () => fetchAlienVaultData(query),
+    "Shodan": () => fetchShodanData(query),
+    "URLhaus": () => fetchURLhausData(query),
+    "MalwareBazaar": () => fetchMalwareBazaarData(query),
+    "Google Safe Browsing": () => fetchGoogleSafeBrowsingData(query),
+    "PhishTank": () => fetchPhishTankData(query),
+    "Pulsedive": () => fetchPulsediveData(query),
+    "Hybrid Analysis": () => fetchHybridAnalysisData(query),
+    "CIRCL hashlookup": () => fetchCIRCLData(query),
+    "Criminal IP": () => fetchCriminalIPData(query),
+    "MetaDefender": () => fetchMetaDefenderData(query),
+    "PhishStats": () => fetchPhishStatsData(query),
+    "Ransomware.live": () => fetchRansomwareLiveData(query),
+    "OpenPhish": () => fetchOpenPhishData(query),
+    "DShield": () => fetchDShieldData(query),
+    "Team Cymru": () => fetchTeamCymruData(query),
+    "Censys": () => fetchCensysData(query),
+});
 
-    // Detect IOC type
-    const iocType = detectIOCType(query);
+// Resolve which vendors to actually query: the explicit selection (or all known
+// vendors), narrowed to those that both exist in the map and support this IOC type.
+const resolveVendorsToQuery = (
+    vendorMap: Record<string, () => Promise<VendorData>>,
+    selectedVendors: string[] | undefined,
+    iocType: string,
+): string[] =>
+    (selectedVendors || Object.keys(vendorMap))
+        .filter(vendor => {
+            const supportedTypes = VENDOR_IOC_SUPPORT[vendor];
+            return supportedTypes && supportedTypes.includes(iocType);
+        })
+        .filter(vendor => vendorMap[vendor]);
 
-    // If selectedVendors is provided, only query those vendors
-    // Otherwise query all vendors that support this IOC type
-    let vendorsToQuery = selectedVendors || Object.keys(vendorMap);
-
-    // Filter by IOC support
-    vendorsToQuery = vendorsToQuery.filter(vendor => {
-        const supportedTypes = VENDOR_IOC_SUPPORT[vendor];
-        return supportedTypes && supportedTypes.includes(iocType);
-    });
-
-    const fetchPromises = vendorsToQuery
-        .filter(vendor => vendorMap[vendor]) // Ensure vendor exists in map
-        .map(vendor => vendorMap[vendor]());
-
-
-    const results = await Promise.all(fetchPromises);
-
-    // Important vendor detection indicators
-    const IMPORTANT_AV_VENDORS = [
-        'Microsoft', 'Kaspersky', 'Bitdefender', 'ESET-NOD32', 'Avira',
-        'Sophos', 'McAfee', 'Symantec', 'TrendMicro', 'F-Secure',
-        'Fortinet', 'Palo Alto Networks', 'CrowdStrike'
-    ];
-
+// Aggregate per-vendor results into an overall verdict. VirusTotal and AbuseIPDB
+// carry extra weight (a strong signal from either forces "malicious"); every other
+// vendor contributes a simple malicious/clean vote based on its Status string.
+const scoreThreatResults = (query: string, results: VendorData[]): ThreatIntelligenceResult => {
     let isMalicious = false;
     let maliciousCount = 0;
     let totalChecked = 0;
-    let maliciousReasons: string[] = [];
 
-    // Check VirusTotal first (high priority)
     const virusTotal = results.find(v => v.name === "VirusTotal");
     if (virusTotal && !virusTotal.error && virusTotal.data) {
         const vtMalicious = virusTotal.data["Malicious"] || 0;
         const vtAllVendors = virusTotal.data["All Vendors"];
 
-        // Auto-malicious if >3 detections
-        if (vtMalicious > 3) {
-            isMalicious = true;
-            maliciousReasons.push(`VirusTotal: ${vtMalicious} detections`);
-        }
+        if (vtMalicious > 3) isMalicious = true;
 
-        // Auto-malicious if important AV vendors detected it
         if (Array.isArray(vtAllVendors)) {
             const importantDetections = vtAllVendors.filter((v: any) =>
                 v.category === 'malicious' && IMPORTANT_AV_VENDORS.some(av => v.engine.includes(av))
             );
-            if (importantDetections.length > 0) {
-                isMalicious = true;
-                maliciousReasons.push(`VirusTotal: Detected by ${importantDetections.map((v: any) => v.engine).join(', ')}`);
-            }
+            if (importantDetections.length > 0) isMalicious = true;
         }
 
-        // Count VT as checked
         if (vtMalicious > 0) maliciousCount++;
         totalChecked++;
     }
 
-    // Check AbuseIPDB (high priority)
     const abuse = results.find(v => v.name === "AbuseIPDB");
     if (abuse && !abuse.error && abuse.data["Abuse Confidence Score"]) {
         const abuseScore = parseInt(abuse.data["Abuse Confidence Score"] || "0");
-
-        // Auto-malicious if 100% confidence
-        if (abuseScore === 100) {
-            isMalicious = true;
-            maliciousReasons.push(`AbuseIPDB: 100% confidence (${abuse.data["Total Reports"]} reports)`);
-        }
-
-        // Count as malicious if >50%
+        if (abuseScore === 100) isMalicious = true;
         if (abuseScore > 50) maliciousCount++;
         totalChecked++;
     }
 
-    // Check other vendors
     results.forEach(vendor => {
-        // Skip VT and AbuseIPDB (already processed)
         if (vendor.name === "VirusTotal" || vendor.name === "AbuseIPDB") return;
-
         if (vendor.error || Object.keys(vendor.data).length === 0) return;
 
         const status = vendor.data["Status"];
@@ -585,14 +559,12 @@ export const fetchThreatData = async (query: string, selectedVendors?: string[])
         }
     });
 
-    // Calculate score and threat level
     let overallScore = totalChecked > 0 ? Math.round((maliciousCount / totalChecked) * 100) : 0;
     let threatLevel: "safe" | "suspicious" | "malicious" | "unknown" = "unknown";
 
-    // Override based on important detections
     if (isMalicious) {
         threatLevel = "malicious";
-        overallScore = Math.max(overallScore, 75); // Ensure score reflects severity
+        overallScore = Math.max(overallScore, 75);
     } else {
         if (overallScore > 70) threatLevel = "malicious";
         else if (overallScore > 30) threatLevel = "suspicious";
@@ -609,168 +581,51 @@ export const fetchThreatData = async (query: string, selectedVendors?: string[])
     };
 };
 
+export const fetchThreatData = async (query: string, selectedVendors?: string[]): Promise<ThreatIntelligenceResult> => {
+    const vendorMap = buildVendorMap(query);
+    const iocType = detectIOCType(query);
+    const vendorsToQuery = resolveVendorsToQuery(vendorMap, selectedVendors, iocType);
+
+    const results = await Promise.all(vendorsToQuery.map(vendor => vendorMap[vendor]()));
+    return scoreThreatResults(query, results);
+};
+
 export const fetchThreatDataProgressive = async (
     query: string,
     selectedVendors: string[] | undefined,
     onProgress: (data: VendorData) => void
 ): Promise<ThreatIntelligenceResult> => {
-    // Map vendor names to their fetch functions
-    const vendorMap: Record<string, () => Promise<VendorData>> = {
-        "IP Geolocation": () => fetchIPGeoData(query),
-        "WHOIS": () => fetchWHOISData(query),
-        "VirusTotal": () => fetchVirusTotalData(query),
-        "AbuseIPDB": () => fetchAbuseIPDBData(query),
-        "AlienVault OTX": () => fetchAlienVaultData(query),
-        "Shodan": () => fetchShodanData(query),
-        "URLhaus": () => fetchURLhausData(query),
-        "MalwareBazaar": () => fetchMalwareBazaarData(query),
-        "Google Safe Browsing": () => fetchGoogleSafeBrowsingData(query),
-        "PhishTank": () => fetchPhishTankData(query),
-        "Pulsedive": () => fetchPulsediveData(query),
-
-        "Hybrid Analysis": () => fetchHybridAnalysisData(query),
-        "CIRCL hashlookup": () => fetchCIRCLData(query),
-        "Criminal IP": () => fetchCriminalIPData(query),
-        "MetaDefender": () => fetchMetaDefenderData(query),
-        "PhishStats": () => fetchPhishStatsData(query),
-        "Ransomware.live": () => fetchRansomwareLiveData(query),
-        "OpenPhish": () => fetchOpenPhishData(query),
-        "DShield": () => fetchDShieldData(query),
-        "Team Cymru": () => fetchTeamCymruData(query),
-        "Censys": () => fetchCensysData(query),
-    };
-
-    // Detect IOC type
+    const vendorMap = buildVendorMap(query);
     const iocType = detectIOCType(query);
+    const vendorsToQuery = resolveVendorsToQuery(vendorMap, selectedVendors, iocType);
 
-    // Smart filtering
-    let vendorsToQuery = selectedVendors || Object.keys(vendorMap);
-    vendorsToQuery = vendorsToQuery.filter(vendor => {
-        const supportedTypes = VENDOR_IOC_SUPPORT[vendor];
-        return supportedTypes && supportedTypes.includes(iocType);
-    });
-
-    // Create promises that call onProgress when they complete
-    // Each vendor is wrapped in try/catch + timeout so one failure doesn't lose the whole IP
+    // Each vendor is wrapped in a timeout + catch so one slow/failed provider
+    // doesn't lose the whole scan, and onProgress streams each result to the UI.
     const VENDOR_TIMEOUT_MS = 30_000;
 
-    const fetchPromises = vendorsToQuery
-        .filter(vendor => vendorMap[vendor])
-        .map(vendor => {
-            const timeoutPromise = new Promise<never>((_, reject) =>
-                setTimeout(() => reject(new Error(`${vendor} timed out after ${VENDOR_TIMEOUT_MS / 1000}s`)), VENDOR_TIMEOUT_MS)
-            );
+    const fetchPromises = vendorsToQuery.map(vendor => {
+        const timeoutPromise = new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error(`${vendor} timed out after ${VENDOR_TIMEOUT_MS / 1000}s`)), VENDOR_TIMEOUT_MS)
+        );
 
-            return Promise.race([vendorMap[vendor](), timeoutPromise])
-                .then(data => {
-                    onProgress(data);
-                    return data;
-                })
-                .catch(err => {
-                    const errorData: VendorData = {
-                        name: vendor,
-                        data: { "Status": "Error" },
-                        error: err?.message || "Request failed",
-                    };
-                    onProgress(errorData);
-                    return errorData;
-                });
-        });
-
-    const results = await Promise.all(fetchPromises);
-
-    // Important vendor detection indicators (same as fetchThreatData)
-    const IMPORTANT_AV_VENDORS = [
-        'Microsoft', 'Kaspersky', 'Bitdefender', 'ESET-NOD32', 'Avira',
-        'Sophos', 'McAfee', 'Symantec', 'TrendMicro', 'F-Secure',
-        'Fortinet', 'Palo Alto Networks', 'CrowdStrike'
-    ];
-
-    let isMalicious = false;
-    let maliciousCount = 0;
-    let totalChecked = 0;
-
-    // Check VirusTotal first (high priority)
-    const virusTotal = results.find(v => v.name === "VirusTotal");
-    if (virusTotal && !virusTotal.error && virusTotal.data) {
-        const vtMalicious = virusTotal.data["Malicious"] || 0;
-        const vtAllVendors = virusTotal.data["All Vendors"];
-
-        // Auto-malicious if >3 detections
-        if (vtMalicious > 3) {
-            isMalicious = true;
-        }
-
-        // Auto-malicious if important AV vendors detected it
-        if (Array.isArray(vtAllVendors)) {
-            const importantDetections = vtAllVendors.filter((v: any) =>
-                v.category === 'malicious' && IMPORTANT_AV_VENDORS.some(av => v.engine.includes(av))
-            );
-            if (importantDetections.length > 0) {
-                isMalicious = true;
-            }
-        }
-
-        // Count VT as checked
-        if (vtMalicious > 0) maliciousCount++;
-        totalChecked++;
-    }
-
-    // Check AbuseIPDB (high priority)
-    const abuse = results.find(v => v.name === "AbuseIPDB");
-    if (abuse && !abuse.error && abuse.data["Abuse Confidence Score"]) {
-        const abuseScore = parseInt(abuse.data["Abuse Confidence Score"] || "0");
-
-        // Auto-malicious if 100% confidence
-        if (abuseScore === 100) {
-            isMalicious = true;
-        }
-
-        // Count as malicious if >50%
-        if (abuseScore > 50) maliciousCount++;
-        totalChecked++;
-    }
-
-    // Check other vendors
-    results.forEach(vendor => {
-        // Skip VT and AbuseIPDB (already processed)
-        if (vendor.name === "VirusTotal" || vendor.name === "AbuseIPDB") return;
-
-        if (vendor.error || Object.keys(vendor.data).length === 0) return;
-
-        const status = vendor.data["Status"];
-        if (status && typeof status === "string") {
-            totalChecked++;
-            if (status.toLowerCase().includes("malicious") ||
-                status.toLowerCase().includes("unsafe") ||
-                status.toLowerCase().includes("phishing")) {
-                maliciousCount++;
-            }
-        }
+        return Promise.race([vendorMap[vendor](), timeoutPromise])
+            .then(data => {
+                onProgress(data);
+                return data;
+            })
+            .catch(err => {
+                const errorData: VendorData = {
+                    name: vendor,
+                    data: { "Status": "Error" },
+                    error: err?.message || "Request failed",
+                };
+                onProgress(errorData);
+                return errorData;
+            });
     });
 
-    // Calculate score and threat level
-    let overallScore = totalChecked > 0 ? Math.round((maliciousCount / totalChecked) * 100) : 0;
-    let threatLevel: "safe" | "suspicious" | "malicious" | "unknown" = "unknown";
-
-    // Override based on important detections
-    if (isMalicious) {
-        threatLevel = "malicious";
-        overallScore = Math.max(overallScore, 75); // Ensure score reflects severity
-    } else {
-        if (overallScore > 70) threatLevel = "malicious";
-        else if (overallScore > 30) threatLevel = "suspicious";
-        else if (totalChecked > 0) threatLevel = "safe";
-    }
-
-    return {
-        query,
-        overallScore,
-        threatLevel,
-        totalVendors: results.length,
-        detections: maliciousCount,
-        vendorData: results,
-    };
+    const results = await Promise.all(fetchPromises);
+    return scoreThreatResults(query, results);
 };
 
 export interface DnsLookupResult {
