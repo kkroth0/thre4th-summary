@@ -1039,11 +1039,24 @@ app.post('/api/censys', scanLimiter, async (req, res) => {
         const resource = response.data?.result?.resource;
         if (!resource) return res.json({ data: { "Status": "No data available" } });
 
-        // Censys software can be an array (Platform v3) or a single object; normalize.
-        const firstSoftware = (svc) => {
-            const sw = Array.isArray(svc.software) ? svc.software[0] : svc.software;
-            return sw || null;
+        // Platform v3 service.software is an array; pick the entry that actually
+        // names a product/vendor (the first item is often just a {type:[...]}).
+        const namedSoftware = (svc) => {
+            const arr = Array.isArray(svc.software) ? svc.software : (svc.software ? [svc.software] : []);
+            return arr.find(s => s && (s.product || s.vendor)) || null;
         };
+        // Platform v3 header values look like { headers: ["Apache/2.4.7 (Ubuntu)"] }.
+        const headerValue = (headers, name) => {
+            if (!headers) return null;
+            const v = headers[name] ?? headers[name?.toLowerCase()] ?? headers[name?.toUpperCase()];
+            const raw = v && typeof v === 'object' && Array.isArray(v.headers) ? v.headers : v;
+            return Array.isArray(raw) ? raw[0] : (typeof raw === 'string' ? raw : null);
+        };
+        // Service labels look like [{ value: "WEB_UI" }] or plain strings.
+        const labelStrings = (labels) =>
+            (Array.isArray(labels) ? labels : [])
+                .map(l => (typeof l === 'string' ? l : (l?.value || l?.label)))
+                .filter(Boolean);
         // CVE list for a service across the field names Censys has used.
         const serviceVulns = (svc) => {
             const v = svc.vulnerabilities || svc.vulns || [];
@@ -1052,39 +1065,45 @@ app.post('/api/censys', scanLimiter, async (req, res) => {
                 .filter(Boolean)
                 .slice(0, 25);
         };
+        const osString = (os) => os
+            ? ([os.vendor, os.product, os.version].filter(Boolean).join(' ') || null)
+            : null;
+
+        const services = (resource.services || []);
+        // Censys labels/tags (e.g. REMOTE_ACCESS, DATABASE, WEB_UI, LOGIN_PAGE) — strong
+        // context. Merge host-level labels with the per-service ones into one set.
+        const allLabels = [...new Set([
+            ...labelStrings(resource.labels),
+            ...services.flatMap(svc => labelStrings(svc.labels)),
+        ])];
 
         const result = {
             ip: resource.ip,
             service_count: resource.service_count || 0,
-            // Host-level Censys labels/tags (e.g. REMOTE_ACCESS, DATABASE, C2) — strong context.
-            labels: (resource.labels || []).map(l => (typeof l === 'string' ? l : (l.value || l.label))).filter(Boolean),
-            operating_system: resource.operating_system
-                ? [resource.operating_system.vendor, resource.operating_system.product, resource.operating_system.version].filter(Boolean).join(' ') || null
-                : null,
+            labels: allLabels,
+            operating_system: osString(resource.operating_system),
             last_updated: resource.last_updated_at || resource.last_updated || null,
-            services: (resource.services || []).map(svc => {
-                const sw = firstSoftware(svc);
+            services: services.map(svc => {
+                const sw = namedSoftware(svc);
+                // Protocol detail lives under endpoints[]; grab the first HTTP one.
+                const httpEp = (svc.endpoints || []).find(e => e.http);
+                const http = httpEp?.http || null;
                 return {
                     port: svc.port,
                     protocol: svc.protocol || svc.extended_service_name || "UNKNOWN",
                     transport: svc.transport_protocol || "tcp",
                     software: sw?.product || sw?.vendor || null,
                     software_version: sw?.version || null,
+                    os: osString(Array.isArray(svc.operating_systems) ? svc.operating_systems[0] : svc.operating_systems),
+                    labels: labelStrings(svc.labels).slice(0, 6),
                     scan_time: svc.scan_time,
                     vulnerabilities: serviceVulns(svc),
-                    banner: typeof svc.banner === 'string' ? svc.banner.slice(0, 300) : null,
-                    jarm: svc.jarm?.fingerprint || svc.tls?.jarm?.fingerprint || null,
-                    http_status: svc.http?.response?.status_code || null,
-                    http_title: svc.http?.response?.html_title || null,
-                    http_server: svc.http?.response?.headers?.Server || svc.http?.response?.headers?.server || null,
-                    http_headers: svc.http?.response?.headers ? Object.keys(svc.http.response.headers).slice(0, 10) : null,
-                    http_body_hash: svc.http?.response?.body_hash || null,
-                    tls_version: svc.tls?.version_selected || null,
-                    certificate_fingerprint: svc.tls?.certificates?.leaf_data?.fingerprint || null,
-                    certificate_subject: svc.tls?.certificates?.leaf_data?.subject_dn || null,
-                    certificate_issuer: svc.tls?.certificates?.leaf_data?.issuer_dn || null,
-                    certificate_names: svc.tls?.certificates?.leaf_data?.names || [],
-                    certificate_trusted: svc.tls?.certificates?.leaf_data?.browser_trust?.is_trusted || null,
+                    http_status: http?.status_code || null,
+                    http_protocol: http?.protocol || null,
+                    http_title: http?.html_title || null,
+                    http_server: headerValue(http?.headers, 'Server'),
+                    http_body_hash: http?.body_hash_sha256 || http?.body_hash || null,
+                    favicon_hash: Array.isArray(http?.favicons) && http.favicons[0] ? (http.favicons[0].md5_hash || http.favicons[0].hash) : null,
                 };
             }),
             location: resource.location ? {

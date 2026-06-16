@@ -348,13 +348,12 @@ const formatVendorData = (vendorName: string, data: any, query: string): any => 
                 transport: s.transport,
                 software: s.software,
                 version: s.software_version,
-                tls: s.tls_version,
-                jarm: s.jarm,
+                os: s.os,
+                labels: Array.isArray(s.labels) ? s.labels : [],
+                http_status: s.http_status,
                 http_title: s.http_title,
                 http_server: s.http_server,
-                cert_subject: s.certificate_subject,
                 vulns: Array.isArray(s.vulnerabilities) ? s.vulnerabilities : [],
-                banner: s.banner,
             }));
 
             return result;

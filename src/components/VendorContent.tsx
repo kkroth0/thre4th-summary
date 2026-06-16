@@ -449,14 +449,14 @@ export const VendorContent = ({ vendor, onPivot }: VendorContentProps) => {
                                     <div className="flex items-center gap-2 flex-wrap">
                                         <Badge variant="outline" className="font-mono">{s.port}{s.transport ? `/${s.transport}` : ""}</Badge>
                                         {s.protocol && <span className="text-muted-foreground">{s.protocol}</span>}
-                                        {s.tls && <Badge variant="secondary" className="text-[10px]">TLS {s.tls}</Badge>}
-                                        {s.jarm && <Badge variant="secondary" className="text-[10px]" title={`JARM ${s.jarm}`}>JARM</Badge>}
+                                        {s.http_status && <Badge variant="secondary" className="text-[10px]">HTTP {s.http_status}</Badge>}
+                                        {Array.isArray(s.labels) && s.labels.map((l: string, i: number) => (<Badge key={i} variant="outline" className="text-[9px] uppercase border-primary/30 text-primary">{l}</Badge>))}
                                         {Array.isArray(s.vulns) && s.vulns.length > 0 && <Badge variant="destructive" className="text-[10px]">{s.vulns.length} CVE</Badge>}
                                     </div>
                                     {s.software && <p className="text-muted-foreground">Software: <span className="font-medium text-foreground">{[s.software, s.version].filter(Boolean).join(" ")}</span></p>}
+                                    {s.os && <p className="text-muted-foreground">OS: <span className="font-medium text-foreground">{s.os}</span></p>}
                                     {s.http_server && <p className="text-muted-foreground">Server: <span className="font-medium text-foreground">{s.http_server}</span></p>}
                                     {s.http_title && <p className="text-muted-foreground truncate" title={s.http_title}>Title: <span className="font-medium text-foreground">{s.http_title}</span></p>}
-                                    {s.cert_subject && <p className="text-muted-foreground break-all">Cert: <span className="font-medium text-foreground">{s.cert_subject}</span></p>}
                                 </div>
                             ))}
                         </div>
