@@ -268,12 +268,72 @@ const sendResponseWithQuota = (res, axiosResponse) => {
     });
 };
 
+// --- API Key rotation ---
+// Each provider can supply several keys, discovered from the base env var plus
+// numbered fallbacks: VIRUSTOTAL_API_KEY, VIRUSTOTAL2_API_KEY, VIRUSTOTAL3_API_KEY...
+// (any single var may itself hold a comma-separated list). When a key gets
+// rate-limited or rejected, we transparently rotate to the next one. A
+// per-provider cursor remembers where to resume so load spreads across keys.
+const keyCursors = {};
+
+const splitKeys = (raw) => (raw || '').split(',').map(k => k.trim()).filter(Boolean);
+
+const getKeys = (envName) => {
+    const keys = [...splitKeys(process.env[envName])];
+
+    // Pull in numbered fallbacks, e.g. ABUSEIPDB_API_KEY -> ABUSEIPDB2_API_KEY, ABUSEIPDB3_API_KEY
+    const match = envName.match(/^(.*?)(_API_KEY)$/);
+    if (match) {
+        const [, prefix, suffix] = match;
+        for (let n = 2; process.env[`${prefix}${n}${suffix}`] !== undefined; n++) {
+            keys.push(...splitKeys(process.env[`${prefix}${n}${suffix}`]));
+        }
+    }
+    return [...new Set(keys)]; // de-dupe in case a key is repeated across vars
+};
+
+// Runs makeRequest(key) against each available key, rotating on rate-limit (429)
+// or auth (401/403) failures until one succeeds or all keys are exhausted.
+// Other errors (404, etc.) are genuine answers and surface immediately.
+// Throws an error tagged `noKey` when no keys are configured.
+const withKeyRotation = async (envName, makeRequest) => {
+    const keys = getKeys(envName);
+    if (keys.length === 0) {
+        const err = new Error('API Key missing');
+        err.noKey = true;
+        throw err;
+    }
+
+    const start = keyCursors[envName] || 0;
+    let lastError;
+
+    for (let i = 0; i < keys.length; i++) {
+        const idx = (start + i) % keys.length;
+        try {
+            const response = await makeRequest(keys[idx]);
+            keyCursors[envName] = idx; // next request starts from the key that worked
+            return response;
+        } catch (error) {
+            lastError = error;
+            const status = error.response?.status;
+            if (status === 429 || status === 401 || status === 403) {
+                if (keys.length > 1) {
+                    console.warn(`[KeyRotation] ${envName} key #${idx + 1}/${keys.length} failed (${status}), rotating...`);
+                }
+                keyCursors[envName] = (idx + 1) % keys.length; // skip the exhausted key next time
+                continue;
+            }
+            throw error; // not a rotation-worthy error
+        }
+    }
+    throw lastError; // all keys exhausted
+};
+
 // --- API Endpoints ---
 
 // VirusTotal
 app.post('/api/virustotal', scanLimiter, async (req, res) => {
     const { query } = req.body;
-    if (!process.env.VIRUSTOTAL_API_KEY) return res.status(500).json({ error: "API Key missing" });
 
     try {
         const queryType = detectQueryType(query);
@@ -285,11 +345,12 @@ app.post('/api/virustotal', scanLimiter, async (req, res) => {
         else if (queryType === "hash") endpoint = `https://www.virustotal.com/api/v3/files/${sanitized}`;
         else endpoint = `https://www.virustotal.com/api/v3/urls/${Buffer.from(sanitized).toString('base64').replace(/=/g, "")}`;
 
-        const response = await axios.get(endpoint, {
-            headers: { "x-apikey": process.env.VIRUSTOTAL_API_KEY }
-        });
+        const response = await withKeyRotation('VIRUSTOTAL_API_KEY', (key) =>
+            axios.get(endpoint, { headers: { "x-apikey": key } })
+        );
         sendResponseWithQuota(res, response);
     } catch (error) {
+        if (error.noKey) return res.status(500).json({ error: "API Key missing" });
         const { status, message } = sanitizeError(error);
         res.status(status).json({ error: message });
     }
@@ -298,23 +359,25 @@ app.post('/api/virustotal', scanLimiter, async (req, res) => {
 // AbuseIPDB
 app.post('/api/abuseipdb', scanLimiter, async (req, res) => {
     const { query } = req.body;
-    if (!process.env.ABUSEIPDB_API_KEY) return res.status(500).json({ error: "API Key missing" });
 
     try {
         const queryType = detectQueryType(query);
-        if (queryType !== "ip") return res.json({ data: { "Status": "IP only" } }); 
+        if (queryType !== "ip") return res.json({ data: { "Status": "IP only" } });
 
         const sanitized = sanitizeQuery(query, 'ip');
-        const response = await axios.get(`https://api.abuseipdb.com/api/v2/check`, {
-            params: {
-                ipAddress: sanitized,
-                maxAgeInDays: 90,
-                verbose: true
-            },
-            headers: { "Key": process.env.ABUSEIPDB_API_KEY, "Accept": "application/json" }
-        });
+        const response = await withKeyRotation('ABUSEIPDB_API_KEY', (key) =>
+            axios.get(`https://api.abuseipdb.com/api/v2/check`, {
+                params: {
+                    ipAddress: sanitized,
+                    maxAgeInDays: 90,
+                    verbose: true
+                },
+                headers: { "Key": key, "Accept": "application/json" }
+            })
+        );
         sendResponseWithQuota(res, response);
     } catch (error) {
+        if (error.noKey) return res.status(500).json({ error: "API Key missing" });
         const { status, message } = sanitizeError(error);
         res.status(status).json({ error: message });
     }
@@ -323,20 +386,22 @@ app.post('/api/abuseipdb', scanLimiter, async (req, res) => {
 // AbuseIPDB Check-Block
 app.post('/api/abuseipdb/check-block', scanLimiter, async (req, res) => {
     const { query } = req.body;
-    if (!process.env.ABUSEIPDB_API_KEY) return res.status(500).json({ error: "API Key missing" });
     if (!query) return res.status(400).json({ error: "Network parameter 'query' is required" });
 
     try {
         const sanitized = sanitizeQuery(query, 'cidr');
-        const response = await axios.get(`https://api.abuseipdb.com/api/v2/check-block`, {
-            params: {
-                network: sanitized,
-                maxAgeInDays: 90
-            },
-            headers: { "Key": process.env.ABUSEIPDB_API_KEY, "Accept": "application/json" }
-        });
+        const response = await withKeyRotation('ABUSEIPDB_API_KEY', (key) =>
+            axios.get(`https://api.abuseipdb.com/api/v2/check-block`, {
+                params: {
+                    network: sanitized,
+                    maxAgeInDays: 90
+                },
+                headers: { "Key": key, "Accept": "application/json" }
+            })
+        );
         sendResponseWithQuota(res, response);
     } catch (error) {
+        if (error.noKey) return res.status(500).json({ error: "API Key missing" });
         const { status, message } = sanitizeError(error);
         res.status(status).json({ error: message });
     }
