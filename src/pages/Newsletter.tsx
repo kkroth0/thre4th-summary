@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { Link } from "react-router-dom";
-import { ArrowLeft, Globe, BookOpen, AlertTriangle, Search, Mail, Eye, Sparkles, Filter, CheckCircle2, ChevronLeft, ChevronRight, ChevronDown, Download, Layers, RefreshCw, Calendar, Share2, Loader2 } from "lucide-react";
+import { ArrowLeft, Globe, BookOpen, AlertTriangle, Search, Mail, Eye, Sparkles, Filter, CheckCircle2, ChevronLeft, ChevronRight, ChevronDown, Download, Layers, RefreshCw, Calendar, Share2, Loader2, Crosshair, Copy } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -83,6 +83,30 @@ interface EnrichData {
   ttps?: string[];
   assets?: string[];
   cves?: string[];
+}
+
+// Guided Threat Hunting pack, produced by the Python hunt-service (Groq +
+// Pydantic) and proxied through /api/newsletter/hunt-pack. Every IOC arrives
+// already defanged from the service.
+interface HuntIoc {
+  type: "ip" | "domain" | "url" | "hash";
+  value: string;
+}
+interface HuntDetectionQuery {
+  kql: string;
+  sigma?: string;
+}
+interface HuntPackData {
+  available: boolean;
+  scraped_chars?: number;
+  lang?: string;
+  threat_actor: string;
+  ttp_mitre: string[];
+  ioc_list: HuntIoc[];
+  hunting_hypothesis: string;
+  detection_query: HuntDetectionQuery;
+  executive_brief: string;
+  soc_summary: string;
 }
 
 // True when an IOC set carries at least one indicator.
@@ -474,6 +498,33 @@ const Newsletter = () => {
       const fallback: EnrichData = { available: false, executiveSummary: item.description, impactMitigation: "" };
       setEnrichment(p => ({ ...p, [item.link]: { loading: false, data: fallback } }));
       return fallback;
+    }
+  };
+
+  // ── Guided Threat Hunting: on-demand, never auto-fetched (it's expensive:
+  // browser scrape + LLM + validation retries, and the free host may cold-start).
+  const [huntPacks, setHuntPacks] = useState<Record<string, { loading: boolean; error?: string; data?: HuntPackData }>>({});
+
+  const getHuntPack = async (item: Advisory) => {
+    if (huntPacks[item.link]?.loading) return;
+    setHuntPacks(p => ({ ...p, [item.link]: { loading: true } }));
+    try {
+      const res = await fetch("/api/newsletter/hunt-pack", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: item.link, lang: language }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const msg = res.status === 503
+          ? (language === "pt" ? "Serviço de threat hunting não configurado" : "Threat hunting service not configured")
+          : (body?.error || (language === "pt" ? "Falha ao gerar o Hunt Pack" : "Failed to generate Hunt Pack"));
+        throw new Error(msg);
+      }
+      setHuntPacks(p => ({ ...p, [item.link]: { loading: false, data: body as HuntPackData } }));
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : (language === "pt" ? "Falha ao gerar o Hunt Pack" : "Failed to generate Hunt Pack");
+      setHuntPacks(p => ({ ...p, [item.link]: { loading: false, error: msg } }));
     }
   };
 
@@ -1244,6 +1295,169 @@ const Newsletter = () => {
                                   </p>
                                 </div>
                               ) : null}
+
+                              {/* Guided Threat Hunting Pack (on-demand) */}
+                              {(() => {
+                                const hp = huntPacks[item.link];
+                                return (
+                                  <div className="pt-2 border-t border-border/40">
+                                    {!hp || (!hp.loading && !hp.data && !hp.error) ? (
+                                      <button
+                                        onClick={() => void getHuntPack(item)}
+                                        className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-primary/30 text-primary hover:bg-primary/10 transition-colors"
+                                      >
+                                        <Crosshair className="h-3.5 w-3.5" />
+                                        {language === "pt" ? "Gerar Hunt Pack" : "Generate Hunt Pack"}
+                                      </button>
+                                    ) : null}
+
+                                    {hp?.loading ? (
+                                      <div className="flex items-center gap-2 text-xs text-muted-foreground py-1">
+                                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                        {language === "pt"
+                                          ? "Coletando o artigo e montando o Hunt Pack (pode aquecer o serviço, ~1 min)..."
+                                          : "Scraping the article and building the Hunt Pack (service may be warming up, ~1 min)..."}
+                                      </div>
+                                    ) : null}
+
+                                    {hp?.error ? (
+                                      <div className="flex items-center justify-between gap-2 text-xs py-1">
+                                        <span className="text-red-500">{hp.error}</span>
+                                        <button
+                                          onClick={() => void getHuntPack(item)}
+                                          className="text-[10px] px-1.5 py-0.5 rounded border border-border/60 text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                                        >
+                                          {language === "pt" ? "Tentar de novo" : "Retry"}
+                                        </button>
+                                      </div>
+                                    ) : null}
+
+                                    {hp?.data ? (() => {
+                                      const pack = hp.data;
+                                      const copy = (text: string, label: string) => {
+                                        navigator.clipboard.writeText(text);
+                                        toast.success(label);
+                                      };
+                                      return (
+                                        <div className="mt-1 space-y-3 rounded-lg border border-primary/20 bg-primary/[0.03] p-3">
+                                          <div className="flex items-center gap-1.5 text-[11px] font-bold text-primary tracking-wide">
+                                            <Crosshair className="h-3.5 w-3.5" />
+                                            {language === "pt" ? "PACOTE DE THREAT HUNTING" : "THREAT HUNTING PACK"}
+                                          </div>
+
+                                          <div className="text-[13px]">
+                                            <span className="font-bold">{language === "pt" ? "Ator de ameaça:" : "Threat actor:"}</span> {pack.threat_actor}
+                                          </div>
+
+                                          {pack.ttp_mitre?.length ? (
+                                            <div>
+                                              <div className="text-[11px] font-bold text-muted-foreground/80 tracking-wide mb-1">[ MITRE ATT&CK ]</div>
+                                              <div className="flex flex-wrap gap-1.5">
+                                                {pack.ttp_mitre.map((t) => (
+                                                  <a
+                                                    key={t}
+                                                    href={`https://attack.mitre.org/techniques/${t.replace(".", "/")}/`}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="font-mono text-[11px] px-1.5 py-0.5 rounded border border-primary/20 text-primary hover:bg-primary/10"
+                                                  >
+                                                    {t}
+                                                  </a>
+                                                ))}
+                                              </div>
+                                            </div>
+                                          ) : null}
+
+                                          {pack.ioc_list?.length ? (
+                                            <div>
+                                              <div className="flex items-center justify-between mb-1">
+                                                <div className="text-[11px] font-bold text-muted-foreground/80 tracking-wide">[ {language === "pt" ? "INDICADORES (IOCs)" : "INDICATORS (IOCs)"} ]</div>
+                                                <button
+                                                  onClick={() => copy(
+                                                    pack.ioc_list.map((i) => `${i.type}\t${i.value}`).join("\n"),
+                                                    language === "pt" ? "IOCs copiados (defanged)" : "IOCs copied (defanged)"
+                                                  )}
+                                                  className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded border border-border/60 text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                                                >
+                                                  <Copy className="h-3 w-3" />{language === "pt" ? "Copiar" : "Copy"}
+                                                </button>
+                                              </div>
+                                              <div className="flex flex-wrap gap-1.5">
+                                                {pack.ioc_list.map((i) => (
+                                                  <span
+                                                    key={`${i.type}:${i.value}`}
+                                                    title={i.type}
+                                                    className="font-mono text-[11px] px-1.5 py-0.5 rounded border border-amber-500/25 bg-amber-500/5 text-amber-600 dark:text-amber-400 break-all"
+                                                  >
+                                                    {i.value}
+                                                  </span>
+                                                ))}
+                                              </div>
+                                            </div>
+                                          ) : null}
+
+                                          {pack.hunting_hypothesis ? (
+                                            <div>
+                                              <div className="text-[11px] font-bold text-muted-foreground/80 tracking-wide mb-1">[ {language === "pt" ? "HIPÓTESE DE CAÇA" : "HUNTING HYPOTHESIS"} ]</div>
+                                              <p className="text-sm leading-relaxed text-foreground/90 whitespace-pre-line">{pack.hunting_hypothesis}</p>
+                                            </div>
+                                          ) : null}
+
+                                          {pack.detection_query?.kql ? (
+                                            <div>
+                                              <div className="flex items-center justify-between mb-1">
+                                                <div className="text-[11px] font-bold text-muted-foreground/80 tracking-wide">[ {language === "pt" ? "CONSULTA KQL (Sentinel)" : "KQL QUERY (Sentinel)"} ]</div>
+                                                <button
+                                                  onClick={() => copy(pack.detection_query.kql, language === "pt" ? "KQL copiada" : "KQL copied")}
+                                                  className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded border border-border/60 text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                                                >
+                                                  <Copy className="h-3 w-3" />{language === "pt" ? "Copiar" : "Copy"}
+                                                </button>
+                                              </div>
+                                              <pre className="text-[11px] font-mono bg-muted/40 border border-border/40 rounded p-2 overflow-x-auto whitespace-pre-wrap break-all">{pack.detection_query.kql}</pre>
+                                            </div>
+                                          ) : null}
+
+                                          {pack.detection_query?.sigma ? (
+                                            <div>
+                                              <div className="flex items-center justify-between mb-1">
+                                                <div className="text-[11px] font-bold text-muted-foreground/80 tracking-wide">[ {language === "pt" ? "REGRA SIGMA" : "SIGMA RULE"} ]</div>
+                                                <button
+                                                  onClick={() => copy(pack.detection_query.sigma || "", language === "pt" ? "Sigma copiada" : "Sigma copied")}
+                                                  className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded border border-border/60 text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                                                >
+                                                  <Copy className="h-3 w-3" />{language === "pt" ? "Copiar" : "Copy"}
+                                                </button>
+                                              </div>
+                                              <pre className="text-[11px] font-mono bg-muted/40 border border-border/40 rounded p-2 overflow-x-auto whitespace-pre-wrap break-all">{pack.detection_query.sigma}</pre>
+                                            </div>
+                                          ) : null}
+
+                                          {pack.executive_brief ? (
+                                            <div>
+                                              <div className="text-[11px] font-bold text-muted-foreground/80 tracking-wide mb-1">[ {language === "pt" ? "BRIEF EXECUTIVO" : "EXECUTIVE BRIEF"} ]</div>
+                                              <p className="text-sm leading-relaxed text-foreground/90 whitespace-pre-line">{pack.executive_brief}</p>
+                                            </div>
+                                          ) : null}
+
+                                          {pack.soc_summary ? (
+                                            <div>
+                                              <div className="text-[11px] font-bold text-muted-foreground/80 tracking-wide mb-1">[ {language === "pt" ? "RESUMO SOC" : "SOC SUMMARY"} ]</div>
+                                              <p className="text-sm leading-relaxed text-foreground/90 whitespace-pre-line">{pack.soc_summary}</p>
+                                            </div>
+                                          ) : null}
+
+                                          <p className="text-[10px] text-muted-foreground/60 italic">
+                                            {language === "pt"
+                                              ? "Gerado por IA a partir do artigo — indicadores defanged; valide antes de agir."
+                                              : "AI-generated from the article — defanged indicators; validate before acting."}
+                                          </p>
+                                        </div>
+                                      );
+                                    })() : null}
+                                  </div>
+                                );
+                              })()}
 
                               {/* Source + References footer */}
                               <div className="pt-2 border-t border-border/40 space-y-1 text-[12px]">

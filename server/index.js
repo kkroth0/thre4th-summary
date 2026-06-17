@@ -1252,6 +1252,11 @@ const memoryCache = {
         store: new Map(),
         ttl: 7 * 24 * 60 * 60 * 1000 // 7 days
     },
+    // Guided Threat Hunting packs (from the Python hunt-service), keyed by `${lang}|${url}`.
+    huntPack: {
+        store: new Map(),
+        ttl: 7 * 24 * 60 * 60 * 1000 // 7 days
+    },
     recentCves: {
         data: null,
         expiresAt: 0,
@@ -1668,6 +1673,51 @@ app.post('/api/newsletter/enrich', scanLimiter, async (req, res) => {
 
         cacheSet(memoryCache.newsletterEnrich.store, cacheKey, { data: payload, expiresAt: now + memoryCache.newsletterEnrich.ttl }, 500);
         res.json(payload);
+    } catch (error) {
+        const { status, message } = sanitizeError(error);
+        res.status(status).json({ error: message });
+    }
+});
+
+// Guided Threat Hunting: proxy to the Python hunt-service which scrapes the
+// advisory (Scrapling), runs Groq + Pydantic validation/retry, and returns a
+// defanged structured Hunt Pack. The advisory is looked up in the live feed by
+// URL (same allowlist as /enrich) so this can't be used as an arbitrary scraper.
+app.post('/api/newsletter/hunt-pack', scanLimiter, async (req, res) => {
+    try {
+        const url = (req.body?.url || '').toString();
+        const lang = req.body?.lang === 'en' ? 'en' : 'pt';
+        if (!url) return res.status(400).json({ error: 'Missing advisory url' });
+
+        if (!process.env.HUNT_SERVICE_URL) {
+            return res.status(503).json({ error: 'Threat hunting service not configured' });
+        }
+
+        const feed = memoryCache.newsletter.data || [];
+        const item = feed.find((i) => i.link === url);
+        if (!item) return res.status(404).json({ error: 'Advisory not found in current feed' });
+
+        const cacheKey = `${lang}|${url}`;
+        const now = Date.now();
+        const cached = memoryCache.huntPack.store.get(cacheKey);
+        if (cached && cached.expiresAt > now) return res.json(cached.data);
+
+        const response = await axios.post(
+            `${process.env.HUNT_SERVICE_URL.replace(/\/$/, '')}/hunt-pack`,
+            { url: item.link, lang, title: item.title },
+            {
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...(process.env.HUNT_SERVICE_SECRET ? { 'X-Hunt-Secret': process.env.HUNT_SERVICE_SECRET } : {}),
+                },
+                // Browser scraping + LLM + validation retries can be slow, and a
+                // free host may be cold-starting; allow a generous budget.
+                timeout: 120000,
+            }
+        );
+
+        cacheSet(memoryCache.huntPack.store, cacheKey, { data: response.data, expiresAt: now + memoryCache.huntPack.ttl }, 200);
+        res.json(response.data);
     } catch (error) {
         const { status, message } = sanitizeError(error);
         res.status(status).json({ error: message });
