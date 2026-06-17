@@ -114,3 +114,51 @@ export const exportResultsSTIX = (results: ThreatIntelligenceResult[]) => {
 
     triggerDownload(JSON.stringify(bundle, null, 2), `threatsumm4ry-stix-${stamp()}.json`, "application/json");
 };
+
+// ---- Generic IOC-list exports (used by the Phishing Analyzer) ----------------
+// These take a flat list of indicator strings (URLs/domains/IPs/hashes) rather
+// than full scan results, and reuse the same STIX pattern/uuid helpers.
+
+export const exportIOCsJSON = (iocs: string[], source = "phishing-analysis") => {
+    const payload = {
+        generated_at: new Date().toISOString(),
+        tool: "ThreatSumm4ry",
+        source,
+        count: iocs.length,
+        iocs: iocs.map((i) => ({ indicator: i, type: detectIOCType(i) })),
+    };
+    triggerDownload(JSON.stringify(payload, null, 2), `threatsumm4ry-iocs-${stamp()}.json`, "application/json");
+};
+
+export const exportIOCsSTIX = (iocs: string[], source = "phishing-analysis") => {
+    const now = new Date().toISOString();
+    const identityId = `identity--${uuid()}`;
+    const identity = {
+        type: "identity",
+        spec_version: "2.1",
+        id: identityId,
+        created: now,
+        modified: now,
+        name: "ThreatSumm4ry",
+        identity_class: "system",
+    };
+    const indicators = iocs.map((i) => ({
+        type: "indicator",
+        spec_version: "2.1",
+        id: `indicator--${uuid()}`,
+        created: now,
+        modified: now,
+        created_by_ref: identityId,
+        name: i,
+        pattern: stixPattern(i),
+        pattern_type: "stix",
+        valid_from: now,
+        labels: [source],
+    }));
+    const bundle = {
+        type: "bundle",
+        id: `bundle--${uuid()}`,
+        objects: [identity, ...indicators],
+    };
+    triggerDownload(JSON.stringify(bundle, null, 2), `threatsumm4ry-iocs-stix-${stamp()}.json`, "application/json");
+};

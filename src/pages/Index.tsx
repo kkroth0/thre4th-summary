@@ -9,6 +9,7 @@ import {
   DropdownMenuItem,
 } from "@/components/ui/dropdown-menu";
 import { exportResultsJSON, exportResultsNDJSON, exportResultsSTIX } from "@/utils/threatExport";
+import { defangList } from "@/utils/defang";
 import { Badge } from "@/components/ui/badge";
 import { ThreatSummary } from "@/components/ThreatSummary";
 import { VendorCard } from "@/components/VendorCard";
@@ -397,9 +398,7 @@ const Index = () => {
   // Defang + copy every scanned IOC to the clipboard for safe pasting into
   // tickets, SIEM queries or firewall rules.
   const copyAllIocs = async () => {
-    const defang = (ioc: string) =>
-      ioc.replace(/^https?:\/\//i, (m) => m.replace(/t/gi, "x")).replace(/\./g, "[.]");
-    const text = results.map((r) => defang(r.query)).join("\n");
+    const text = defangList(results.map((r) => r.query));
     if (!text) return;
     try {
       await navigator.clipboard.writeText(text);

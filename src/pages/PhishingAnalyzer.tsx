@@ -1,19 +1,38 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { ArrowLeft, Globe, Shield, ShieldAlert, Mail, Eye, Sparkles, Filter, CheckCircle2, ChevronRight, Upload, AlertTriangle, FileText, Check, AlertCircle, RefreshCw, Terminal, ExternalLink } from "lucide-react";
+import { ArrowLeft, Globe, Shield, ShieldAlert, Mail, Eye, Sparkles, Filter, CheckCircle2, ChevronRight, Upload, AlertTriangle, FileText, Check, AlertCircle, RefreshCw, Terminal, ExternalLink, Copy, Loader2, ShieldCheck, Network, Hash, Image as ImageIcon, Download, FileJson, Search, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from "@/components/ui/dropdown-menu";
 import { Footer } from "@/components/Footer";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useSidebar } from "@/contexts/SidebarContext";
 import { Header } from "@/components/Header";
+import { ThreatBadge } from "@/components/ThreatBadge";
 import { toast } from "sonner";
+import { fetchThreatDataProgressive } from "@/services/threatApi";
+import type { ThreatIntelligenceResult } from "@/types/threat-intelligence";
+import { defang, defangList } from "@/utils/defang";
+import { detectTyposquat } from "@/utils/typosquat";
+import { exportIOCsJSON, exportIOCsSTIX } from "@/utils/threatExport";
+
+interface ScoreSignal {
+  label: string;
+  points: number;
+  severity: "low" | "medium" | "high";
+}
 
 interface AttachmentItem {
   name: string;
   sizeKB: number;
+  sha256?: string;
   risk: "low" | "medium" | "high";
 }
 
@@ -36,7 +55,9 @@ interface ParsedEml {
   attachments: AttachmentItem[];
   score: number;
   verdict: "safe" | "suspicious" | "malicious";
+  signals: ScoreSignal[];
   alerts: string[];
+  typosquat: { host: string; brand: string } | null;
   rawText: string;
 }
 
@@ -95,6 +116,50 @@ Return-Path: <noreply@github.com>
 </html>
 `;
 
+// URL- and domain-capable providers used for live reputation enrichment.
+const URL_VENDORS = ["VirusTotal", "URLhaus", "PhishTank", "OpenPhish", "PhishStats", "Pulsedive"];
+
+// Extract attachment parts (name + decoded bytes) from a raw EML by walking the
+// MIME boundary, so we can compute a real size + hash instead of guessing.
+const extractAttachmentBytes = (rawText: string): { name: string; bytes: Uint8Array }[] => {
+  const out: { name: string; bytes: Uint8Array }[] = [];
+  const boundaryMatch = rawText.match(/boundary="?([^"\r\n;]+)"?/i);
+  if (!boundaryMatch) return out;
+  for (const part of rawText.split(`--${boundaryMatch[1]}`)) {
+    if (!/content-disposition:\s*attachment/i.test(part)) continue;
+    const nameMatch = part.match(/filename\*?="?([^"\r\n;]+)"?/i);
+    if (!nameMatch) continue;
+    const name = nameMatch[1].trim();
+    const sepIdx = part.search(/\r?\n\r?\n/);
+    if (sepIdx === -1) continue;
+    let body = part.slice(sepIdx).trim();
+    if (!/content-transfer-encoding:\s*base64/i.test(part)) {
+      out.push({ name, bytes: new TextEncoder().encode(body) });
+      continue;
+    }
+    body = body.replace(/\s+/g, "");
+    try {
+      const bin = atob(body);
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      out.push({ name, bytes });
+    } catch { /* undecodable part — skip */ }
+  }
+  return out;
+};
+
+const sha256Hex = async (bytes: Uint8Array): Promise<string> => {
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, "0")).join("");
+};
+
+const attachmentRisk = (fileName: string): "low" | "medium" | "high" => {
+  const ext = fileName.split(".").pop()?.toLowerCase() || "";
+  if (["exe", "scr", "vbs", "js", "bat", "cmd", "msi", "jar", "ps1", "lnk"].includes(ext)) return "high";
+  if (["zip", "rar", "7z", "pdf", "doc", "docx", "xls", "xlsx", "docm", "xlsm", "iso", "html"].includes(ext)) return "medium";
+  return "low";
+};
+
 const PhishingAnalyzer = () => {
   const { isCollapsed } = useSidebar();
   const { t, language } = useLanguage();
@@ -102,6 +167,12 @@ const PhishingAnalyzer = () => {
   const [parsedData, setParsedData] = useState<ParsedEml | null>(null);
   const [fileName, setFileName] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // Live threat-intel enrichment (reuses the main scan engine).
+  const [senderRep, setSenderRep] = useState<ThreatIntelligenceResult | null>(null);
+  const [senderRepLoading, setSenderRepLoading] = useState(false);
+  const [linkResults, setLinkResults] = useState<Record<string, ThreatIntelligenceResult | "loading">>({});
+  const [copiedIocs, setCopiedIocs] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
   // Core EML Parser Logic
   const parseEmlContent = (rawText: string, name: string) => {
@@ -194,122 +265,96 @@ const PhishingAnalyzer = () => {
       }
     }
 
-    // Extract Attachments
-    const attachmentRegex = /content-disposition:\s*attachment;\s*filename=["']?([^"'\r\n;]+)["']?/gi;
-    const attachmentsFound: AttachmentItem[] = [];
-    
-    let attachMatch;
-    while ((attachMatch = attachmentRegex.exec(rawText)) !== null) {
-      const fName = attachMatch[1];
-      const extension = fName.split(".").pop()?.toLowerCase() || "";
-      let risk: "low" | "medium" | "high" = "low";
-      if (["exe", "scr", "vbs", "js", "bat", "cmd", "msi"].includes(extension)) {
-        risk = "high";
-      } else if (["zip", "rar", "7z", "pdf", "doc", "docx", "xls", "xlsx"].includes(extension)) {
-        risk = "medium";
-      }
-      
-      attachmentsFound.push({
-        name: fName,
-        sizeKB: Math.floor(Math.random() * 450) + 12,
-        risk
-      });
-    }
+    // Extract attachments with their real bytes so size + SHA-256 are genuine.
+    const attachmentBytes = extractAttachmentBytes(rawText);
+    const attachmentsFound: AttachmentItem[] = attachmentBytes.map((a) => ({
+      name: a.name,
+      sizeKB: Math.max(1, Math.round(a.bytes.length / 1024)),
+      risk: attachmentRisk(a.name),
+    }));
 
-    // scoring logic
-    const alerts: string[] = [];
-    let score = 0;
-    
-    if (spf === "fail") {
-      score += 25;
-      alerts.push(language === "pt" ? "Falha na autenticação SPF (IP do remetente não está autorizado)." : "SPF authentication failed (Sender IP is spoofed or not authorized).");
-    }
-    if (dkim === "fail") {
-      score += 20;
-      alerts.push(language === "pt" ? "Falha na verificação de assinatura criptográfica DKIM." : "DKIM cryptographic signature check failed.");
-    }
-    if (spf === "unknown" && dkim === "unknown") {
-      score += 10;
-      alerts.push(language === "pt" ? "O e-mail carece de cabeçalhos de autenticação modernos (SPF/DKIM)." : "Email lacks modern authentication checks (SPF/DKIM).");
-    }
-    
+    // ---- Signal-based scoring: each signal carries its own point weight ----
+    const signals: ScoreSignal[] = [];
+    const add = (points: number, severity: "low" | "medium" | "high", label: string) =>
+      signals.push({ points, severity, label });
+
+    if (spf === "fail") add(25, "high", language === "pt" ? "Falha na autenticação SPF (IP do remetente não autorizado)." : "SPF authentication failed (sender IP not authorized).");
+    if (dkim === "fail") add(20, "high", language === "pt" ? "Falha na verificação de assinatura DKIM." : "DKIM signature check failed.");
+    if (spf === "unknown" && dkim === "unknown") add(10, "medium", language === "pt" ? "Sem cabeçalhos de autenticação modernos (SPF/DKIM)." : "No modern authentication headers (SPF/DKIM).");
+
     const brands = ["paypal", "microsoft", "netflix", "google", "amazon", "bank", "apple", "invoice", "finance", "billing"];
     const isBrandInName = brands.some(brand => senderName.toLowerCase().includes(brand));
     const isBrandInEmail = brands.some(brand => senderEmail.toLowerCase().includes(brand));
-    
     const freeDomains = ["gmail.com", "yahoo.com", "outlook.com", "hotmail.com", "aol.com", "icloud.com"];
     const senderDomain = senderEmail.split("@")[1] || "";
     const isFreeDomain = freeDomains.includes(senderDomain.toLowerCase());
-    
+
     if (isBrandInName && !isBrandInEmail) {
-      score += 30;
-      alerts.push(language === "pt" 
-        ? `Possível falsificação de display name: Alega ser "${senderName}" mas o domínio real é "${senderDomain}".`
-        : `Display name spoofing suspected: Claims to be "${senderName}" but email domain is "${senderDomain}".`);
+      add(30, "high", language === "pt"
+        ? `Possível falsificação de display name: alega ser "${senderName}" mas o domínio real é "${senderDomain}".`
+        : `Display name spoofing: claims to be "${senderName}" but the domain is "${senderDomain}".`);
     } else if (isBrandInName && isFreeDomain) {
-      score += 25;
-      alerts.push(language === "pt"
-        ? `Remetente suspeito: Nome comercial "${senderName}" associado a um domínio de e-mail gratuito (${senderDomain}).`
-        : `Suspicious sender address: Brand display name "${senderName}" paired with a free email domain (${senderDomain}).`);
+      add(25, "high", language === "pt"
+        ? `Nome comercial "${senderName}" em domínio de e-mail gratuito (${senderDomain}).`
+        : `Brand display name "${senderName}" on a free email domain (${senderDomain}).`);
     }
-    
+
+    // Lookalike / typosquat sender domain (homoglyph + edit distance).
+    const typo = detectTyposquat(senderDomain);
+    if (typo) {
+      add(30, "high", language === "pt"
+        ? `Domínio sósia de "${typo.brand}": ${senderDomain}.`
+        : `Lookalike of "${typo.brand}": ${senderDomain}.`);
+    }
+
     const urgencyKeywords = [
       "urgent", "urgente", "action required", "ação necessária", "immediate", "imediato", "suspended", "suspenso", "security alert", "alerta de segurança",
       "password reset", "redefinir senha", "verify", "verifique", "verification", "verificação", "invoice", "fatura", "overdue", "atrasado",
       "unauthorized access", "acesso não autorizado", "compromise", "confirm your account", "confirme sua conta"
     ];
-    
     const textToAnalyze = (subject + " " + bodyText).toLowerCase();
     const matchedKeywords = urgencyKeywords.filter(kw => textToAnalyze.includes(kw));
     if (matchedKeywords.length >= 2) {
-      score += 15;
-      alerts.push(language === "pt"
-        ? `Urgência e coação detectadas no conteúdo: ${matchedKeywords.slice(0, 3).join(", ")}.`
-        : `Urgency and coercion vocabulary detected: ${matchedKeywords.slice(0, 3).join(", ")}.`);
+      add(15, "medium", language === "pt"
+        ? `Vocabulário de urgência/coação: ${matchedKeywords.slice(0, 3).join(", ")}.`
+        : `Urgency/coercion vocabulary: ${matchedKeywords.slice(0, 3).join(", ")}.`);
     }
 
     const highRiskAttachments = attachmentsFound.filter(a => a.risk === "high");
     const medRiskAttachments = attachmentsFound.filter(a => a.risk === "medium");
-    
     if (highRiskAttachments.length > 0) {
-      score += 40;
-      alerts.push(language === "pt"
-        ? `Contém anexos executáveis de alto risco: ${highRiskAttachments.map(a => a.name).join(", ")}.`
-        : `Contains high-risk executable attachments: ${highRiskAttachments.map(a => a.name).join(", ")}.`);
+      add(40, "high", language === "pt"
+        ? `Anexos executáveis de alto risco: ${highRiskAttachments.map(a => a.name).join(", ")}.`
+        : `High-risk executable attachments: ${highRiskAttachments.map(a => a.name).join(", ")}.`);
     } else if (medRiskAttachments.length > 0) {
-      score += 15;
-      alerts.push(language === "pt"
-        ? `Contém anexos de documentos ou arquivos compactados: ${medRiskAttachments.map(a => a.name).join(", ")}.`
-        : `Contains document/archive attachments: ${medRiskAttachments.map(a => a.name).join(", ")}.`);
+      add(15, "medium", language === "pt"
+        ? `Anexos de documentos/arquivos compactados: ${medRiskAttachments.map(a => a.name).join(", ")}.`
+        : `Document/archive attachments: ${medRiskAttachments.map(a => a.name).join(", ")}.`);
     }
 
     const suspiciousLinkDomains = ["bit.ly", "t.co", "tinyurl.com", "cutt.ly", "ow.ly", "googl", "formspree", "forms.gle"];
-    const hasSuspiciousLink = linksFound.some(link => 
-      suspiciousLinkDomains.some(domain => link.toLowerCase().includes(domain))
-    );
-    
-    if (hasSuspiciousLink) {
-      score += 25;
-      alerts.push(language === "pt"
-        ? "Contém encurtadores de links ou formulários frequentemente usados em campanhas de phishing."
-        : "Contains URL shorteners or form domains typically used in phishing campaigns.");
+    if (linksFound.some(link => suspiciousLinkDomains.some(d => link.toLowerCase().includes(d)))) {
+      add(25, "medium", language === "pt"
+        ? "Contém encurtadores de links ou formulários usados em campanhas de phishing."
+        : "Contains URL shorteners or form domains typical of phishing campaigns.");
     }
-    
     if (linksFound.length > 5) {
-      score += 10;
-      alerts.push(language === "pt"
-        ? `Alto número de hiperlinks (${linksFound.length} links encontrados).`
-        : `High link count (${linksFound.length} links found).`);
+      add(10, "low", language === "pt" ? `Alto número de hiperlinks (${linksFound.length}).` : `High link count (${linksFound.length}).`);
     }
 
-    score = Math.min(100, Math.max(0, score));
-    
-    let verdict: "safe" | "suspicious" | "malicious" = "safe";
-    if (score >= 60) {
-      verdict = "malicious";
-    } else if (score >= 25) {
-      verdict = "suspicious";
-    }
+    const score = Math.min(100, Math.max(0, signals.reduce((s, x) => s + x.points, 0)));
+    const verdict: "safe" | "suspicious" | "malicious" = score >= 60 ? "malicious" : score >= 25 ? "suspicious" : "safe";
+    const alerts = signals.map(s => s.label);
+
+    // Compute real SHA-256 for each attachment in the background, then patch it in.
+    attachmentBytes.forEach(async (a, idx) => {
+      try {
+        const sha = await sha256Hex(a.bytes);
+        setParsedData(prev => prev
+          ? { ...prev, attachments: prev.attachments.map((at, i) => i === idx ? { ...at, sha256: sha } : at) }
+          : prev);
+      } catch { /* hashing unavailable — leave undefined */ }
+    });
 
     setParsedData({
       headers,
@@ -330,7 +375,9 @@ const PhishingAnalyzer = () => {
       attachments: attachmentsFound,
       score,
       verdict,
+      signals,
       alerts,
+      typosquat: typo ? { host: senderDomain, brand: typo.brand } : null,
       rawText
     });
 
@@ -393,7 +440,86 @@ const PhishingAnalyzer = () => {
   const resetAnalyzer = () => {
     setParsedData(null);
     setFileName(null);
+    setSenderRep(null);
+    setLinkResults({});
+    setPreviewUrl(null);
   };
+
+  // ---- Live reputation enrichment (reuses fetchThreatDataProgressive) ----
+  const enrichSender = async (domain: string) => {
+    setSenderRepLoading(true);
+    try {
+      const res = await fetchThreatDataProgressive(domain, ["VirusTotal", "URLhaus", "WHOIS", "AlienVault OTX", "Pulsedive"], () => {});
+      setSenderRep(res);
+    } catch {
+      /* enrichment best-effort */
+    } finally {
+      setSenderRepLoading(false);
+    }
+  };
+
+  const checkLink = async (url: string) => {
+    setLinkResults((prev) => ({ ...prev, [url]: "loading" }));
+    try {
+      const res = await fetchThreatDataProgressive(url, URL_VENDORS, () => {});
+      setLinkResults((prev) => ({ ...prev, [url]: res }));
+    } catch {
+      setLinkResults((prev) => {
+        const next = { ...prev };
+        delete next[url];
+        return next;
+      });
+      toast.error(language === "pt" ? "Falha ao consultar o link." : "Link lookup failed.");
+    }
+  };
+
+  // Check up to 10 links sequentially to respect the per-scan rate limit.
+  const checkAllLinks = async () => {
+    const targets = (parsedData?.links || []).slice(0, 10).filter((l) => !linkResults[l]);
+    for (const url of targets) {
+      // eslint-disable-next-line no-await-in-loop
+      await checkLink(url);
+    }
+  };
+
+  // All unique indicators worth exporting: links, sender domain, attachment hashes.
+  const collectIocs = (): string[] => {
+    if (!parsedData) return [];
+    const set = new Set<string>();
+    parsedData.links.forEach((l) => set.add(l));
+    if (parsedData.senderDomain) set.add(parsedData.senderDomain);
+    parsedData.attachments.forEach((a) => a.sha256 && set.add(a.sha256));
+    return [...set];
+  };
+
+  const copyIocs = async () => {
+    const text = defangList(collectIocs());
+    if (!text) return;
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedIocs(true);
+      setTimeout(() => setCopiedIocs(false), 1500);
+      toast.success(language === "pt" ? "IOCs copiados (defanged)." : "IOCs copied (defanged).");
+    } catch {
+      toast.error(language === "pt" ? "Falha ao copiar." : "Copy failed.");
+    }
+  };
+
+  // Auto-enrich the sender domain whenever a new email is parsed.
+  useEffect(() => {
+    setLinkResults({});
+    setSenderRep(null);
+    setPreviewUrl(null);
+    if (parsedData?.senderDomain) enrichSender(parsedData.senderDomain);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [parsedData?.senderDomain, parsedData?.messageId]);
+
+  // The verdict, escalated if live intel flags the sender or any link as malicious.
+  const liveMalicious =
+    senderRep?.threatLevel === "malicious" ||
+    Object.values(linkResults).some((r) => r !== "loading" && r?.threatLevel === "malicious");
+  const effectiveVerdict: "safe" | "suspicious" | "malicious" =
+    liveMalicious ? "malicious" : (parsedData?.verdict || "safe");
 
   // Helper values for display
   const getVerdictStyle = (verdict: "safe" | "suspicious" | "malicious") => {
@@ -557,7 +683,7 @@ const PhishingAnalyzer = () => {
             <div className="space-y-6">
               {/* Top Banner: Security Assessment Header */}
               {(() => {
-                const style = getVerdictStyle(parsedData.verdict);
+                const style = getVerdictStyle(effectiveVerdict);
                 return (
                   <Card className={`border shadow bg-gradient-to-r ${style.cardBg} transition-all`}>
                     <CardContent className="p-5 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
@@ -585,12 +711,56 @@ const PhishingAnalyzer = () => {
                         </div>
 
                         {/* Verdict Badge */}
-                        <Badge variant="outline" className={`text-xs py-1.5 px-4 rounded-full font-bold uppercase tracking-wider ${style.color} bg-background/45 backdrop-blur-md shrink-0`}>
-                          {style.title}
-                        </Badge>
+                        <div className="flex flex-col items-end gap-1 shrink-0">
+                          <Badge variant="outline" className={`text-xs py-1.5 px-4 rounded-full font-bold uppercase tracking-wider ${style.color} bg-background/45 backdrop-blur-md`}>
+                            {style.title}
+                          </Badge>
+                          {liveMalicious && parsedData.verdict !== "malicious" && (
+                            <span className="text-[9px] font-bold text-red-500 uppercase tracking-wide flex items-center gap-1">
+                              <AlertTriangle className="h-2.5 w-2.5" />
+                              {language === "pt" ? "Escalado por intel ao vivo" : "Escalated by live intel"}
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </CardContent>
                   </Card>
+                );
+              })()}
+
+              {/* IOC toolbar — copy / export every indicator from this email */}
+              {(() => {
+                const iocs = collectIocs();
+                if (iocs.length === 0) return null;
+                return (
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <span className="text-[11px] text-muted-foreground font-medium flex items-center gap-1.5">
+                      <Network className="h-3.5 w-3.5 text-primary" />
+                      {iocs.length} {language === "pt" ? "indicadores extraídos" : "extracted indicators"}
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5" onClick={copyIocs}>
+                        {copiedIocs ? <Check className="h-3.5 w-3.5 text-green-500" /> : <Copy className="h-3.5 w-3.5" />}
+                        {language === "pt" ? "Copiar IOCs" : "Copy IOCs"}
+                      </Button>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5">
+                            <Download className="h-3.5 w-3.5" />
+                            {language === "pt" ? "Exportar" : "Export"}
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-44">
+                          <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => exportIOCsJSON(collectIocs())}>
+                            <FileJson className="h-4 w-4" /> JSON
+                          </DropdownMenuItem>
+                          <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => exportIOCsSTIX(collectIocs())}>
+                            <Shield className="h-4 w-4" /> STIX 2.1
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
+                  </div>
                 );
               })()}
 
@@ -646,6 +816,64 @@ const PhishingAnalyzer = () => {
                           </div>
                         </CardContent>
                       </Card>
+
+                      {/* Live Sender Reputation */}
+                      <Card className="border shadow bg-card">
+                        <CardHeader className="pb-2 flex flex-row items-center justify-between space-y-0">
+                          <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                            <ShieldCheck className="h-3.5 w-3.5 text-primary" />
+                            {language === "pt" ? "Reputação do Remetente" : "Sender Reputation"}
+                          </span>
+                          {senderRepLoading && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />}
+                        </CardHeader>
+                        <CardContent className="text-xs space-y-3">
+                          {parsedData.typosquat && (
+                            <div className="flex items-start gap-2 p-2 rounded-md bg-red-500/10 border border-red-500/20 text-red-500">
+                              <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                              <span className="font-semibold leading-snug">
+                                {language === "pt" ? `Domínio sósia de ${parsedData.typosquat.brand}` : `Lookalike of ${parsedData.typosquat.brand}`}
+                              </span>
+                            </div>
+                          )}
+                          {senderRep ? (() => {
+                            const whois = senderRep.vendorData.find(v => v.name === "WHOIS");
+                            const created = whois?.data?.["Created"] || whois?.data?.["Creation Date"];
+                            let age: { days: number; created: string } | null = null;
+                            if (created) {
+                              const d = new Date(created as string);
+                              if (!isNaN(d.getTime())) age = { days: Math.floor((Date.now() - d.getTime()) / 86400000), created: d.toISOString().slice(0, 10) };
+                            }
+                            const sources = senderRep.vendorData.filter(v => !v.error && v.data && Object.keys(v.data).length > 0);
+                            return (
+                              <>
+                                <div className="flex items-center justify-between">
+                                  <span className="text-muted-foreground">{language === "pt" ? "Veredito" : "Verdict"}</span>
+                                  <ThreatBadge level={senderRep.threatLevel} />
+                                </div>
+                                <div className="flex items-center justify-between">
+                                  <span className="text-muted-foreground">{language === "pt" ? "Pontuação" : "Score"}</span>
+                                  <span className="font-bold text-foreground">
+                                    {senderRep.overallScore}/100{typeof senderRep.confidence === "number" ? ` · ${senderRep.confidence}%` : ""}
+                                  </span>
+                                </div>
+                                {age && age.days >= 0 && (
+                                  <div className={`flex items-center justify-between ${age.days < 30 ? "text-red-500 font-semibold" : ""}`}>
+                                    <span className="text-muted-foreground flex items-center gap-1"><Clock className="h-3 w-3" />{language === "pt" ? "Idade do domínio" : "Domain age"}</span>
+                                    <span title={age.created}>{age.days}d {age.days < 30 ? (language === "pt" ? "(novo!)" : "(new!)") : ""}</span>
+                                  </div>
+                                )}
+                                {sources.length > 0 && (
+                                  <div className="flex flex-wrap gap-1 pt-1">
+                                    {sources.map((v, i) => (<Badge key={i} variant="outline" className="text-[9px]">{v.name}</Badge>))}
+                                  </div>
+                                )}
+                              </>
+                            );
+                          })() : (
+                            <p className="text-muted-foreground">{senderRepLoading ? (language === "pt" ? "Consultando fontes..." : "Querying sources...") : (language === "pt" ? "Sem dados de reputação." : "No reputation data.")}</p>
+                          )}
+                        </CardContent>
+                      </Card>
                     </div>
 
                     {/* Right: Message Summary & Threats (2/3 columns) */}
@@ -686,26 +914,37 @@ const PhishingAnalyzer = () => {
                         </CardContent>
                       </Card>
 
-                      {/* Alerts checklist card */}
+                      {/* Score breakdown card — each signal with the points it contributed */}
                       <Card className="border shadow-sm bg-card">
-                        <CardHeader className="pb-2">
+                        <CardHeader className="pb-2 flex flex-row items-center justify-between space-y-0">
                           <CardTitle className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
-                            {language === "pt" ? "Indicadores de Ameaça Identificados" : "Analyzed Risk Indicators"}
+                            {language === "pt" ? "Como a Pontuação foi Calculada" : "How the Score Was Built"}
                           </CardTitle>
+                          {parsedData.signals.length > 0 && (
+                            <span className="text-[10px] font-mono text-muted-foreground">
+                              {parsedData.signals.length} {language === "pt" ? "sinais" : "signals"} · {parsedData.score}/100
+                            </span>
+                          )}
                         </CardHeader>
-                        <CardContent className="space-y-3.5">
-                          {parsedData.alerts.length === 0 ? (
+                        <CardContent className="space-y-2.5">
+                          {parsedData.signals.length === 0 ? (
                             <div className="p-6 text-center text-sm text-green-500 font-semibold flex flex-col items-center gap-2">
                               <CheckCircle2 className="h-8 w-8 text-green-500" />
                               {language === "pt" ? "Nenhum indicador de phishing detectado." : "No phishing indicators detected."}
                             </div>
                           ) : (
-                            parsedData.alerts.map((alert, idx) => (
-                              <div key={idx} className="flex items-start gap-3 p-3 rounded-lg border bg-muted/30 border-primary/5 text-xs">
-                                <AlertCircle className="h-4.5 w-4.5 text-primary shrink-0 mt-0.5" />
-                                <div className="leading-relaxed font-medium text-foreground">{alert}</div>
-                              </div>
-                            ))
+                            parsedData.signals.map((sig, idx) => {
+                              const tone = sig.severity === "high" ? "text-red-500 border-red-500/30 bg-red-500/5"
+                                : sig.severity === "medium" ? "text-amber-500 border-amber-500/30 bg-amber-500/5"
+                                : "text-muted-foreground border-primary/10 bg-muted/30";
+                              return (
+                                <div key={idx} className={`flex items-start gap-3 p-3 rounded-lg border text-xs ${tone}`}>
+                                  <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                                  <div className="leading-relaxed font-medium text-foreground flex-1">{sig.label}</div>
+                                  <Badge variant="outline" className="font-mono shrink-0">+{sig.points}</Badge>
+                                </div>
+                              );
+                            })
                           )}
                         </CardContent>
                       </Card>
@@ -780,10 +1019,16 @@ const PhishingAnalyzer = () => {
                 {/* Links Tab Content */}
                 <TabsContent value="links" className="pt-4">
                   <Card className="border shadow-sm bg-card">
-                    <CardHeader className="pb-2">
+                    <CardHeader className="pb-2 flex flex-row items-center justify-between gap-2 space-y-0">
                       <CardTitle className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
-                        {language === "pt" ? "Hiperlinks Extraídos do E-mail" : "Extracted URLs Details"}
+                        {language === "pt" ? "Links — Reputação ao Vivo" : "Links — Live Reputation"}
                       </CardTitle>
+                      {parsedData.links.length > 0 && (
+                        <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5" onClick={checkAllLinks}>
+                          <Search className="h-3.5 w-3.5" />
+                          {language === "pt" ? "Verificar todos" : "Check all"}
+                        </Button>
+                      )}
                     </CardHeader>
                     <CardContent className="p-0">
                       {parsedData.links.length === 0 ? (
@@ -791,33 +1036,50 @@ const PhishingAnalyzer = () => {
                           {language === "pt" ? "Nenhum link encontrado no corpo do e-mail." : "No hyperlinks found in the email body."}
                         </div>
                       ) : (
-                        <div className="divide-y max-h-[350px] overflow-y-auto">
+                        <div className="divide-y max-h-[460px] overflow-y-auto">
                           {parsedData.links.map((link, idx) => {
-                            const isSuspicious = ["bit.ly", "t.co", "tinyurl.com", "cutt.ly"].some(domain => 
-                              link.toLowerCase().includes(domain)
-                            );
+                            const isSuspicious = ["bit.ly", "t.co", "tinyurl.com", "cutt.ly", "ow.ly", "forms.gle"].some(d => link.toLowerCase().includes(d));
+                            let host = "";
+                            try { host = new URL(link).hostname; } catch { host = ""; }
+                            const rep = linkResults[link];
                             return (
-                              <div key={idx} className="p-4 flex items-center justify-between gap-4 text-xs">
-                                <div className="space-y-1 truncate">
-                                  <div className="font-mono font-bold text-foreground truncate break-all select-all">
-                                    {link}
+                              <div key={idx} className="p-4 space-y-2 text-xs">
+                                <div className="flex items-start justify-between gap-3">
+                                  <div className="space-y-1 min-w-0 flex-1">
+                                    <div className="flex items-center gap-2 min-w-0">
+                                      {host && <img src={`https://www.google.com/s2/favicons?domain=${host}&sz=32`} alt="" className="h-4 w-4 rounded-sm shrink-0" loading="lazy" />}
+                                      <span className="font-mono font-bold text-foreground truncate break-all select-all">{defang(link)}</span>
+                                    </div>
+                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                      {isSuspicious && <Badge variant="outline" className="text-amber-500 border-amber-500/30 text-[10px]">{language === "pt" ? "Encurtador" : "Redirector"}</Badge>}
+                                      {rep === "loading" && <Badge variant="outline" className="text-[10px] gap-1"><Loader2 className="h-2.5 w-2.5 animate-spin" />{language === "pt" ? "Consultando" : "Checking"}</Badge>}
+                                      {rep && rep !== "loading" && <ThreatBadge level={rep.threatLevel} />}
+                                      {rep && rep !== "loading" && <span className="text-muted-foreground">{rep.detections}/{rep.reportingVendors ?? rep.totalVendors} {language === "pt" ? "fontes" : "sources"}</span>}
+                                    </div>
                                   </div>
-                                  <div className="flex items-center gap-2">
-                                    <Badge variant="outline" className={isSuspicious ? "text-amber-500 border-amber-500/30" : "text-green-500 border-green-500/30"}>
-                                      {isSuspicious ? "Suspicious / Redirector" : "Legitimate format"}
-                                    </Badge>
+                                  <div className="flex items-center gap-1 shrink-0">
+                                    <Button variant="ghost" size="icon" className="h-8 w-8 border border-border" title={language === "pt" ? "Copiar (defanged)" : "Copy (defanged)"} onClick={() => { navigator.clipboard.writeText(defang(link)); toast.success(language === "pt" ? "Copiado (defanged)" : "Copied (defanged)"); }}>
+                                      <Copy className="h-3.5 w-3.5" />
+                                    </Button>
+                                    <Button variant="ghost" size="icon" className="h-8 w-8 border border-border" title={language === "pt" ? "Pré-visualizar" : "Preview"} onClick={() => setPreviewUrl(previewUrl === link ? null : link)}>
+                                      <ImageIcon className="h-3.5 w-3.5" />
+                                    </Button>
+                                    {(!rep || rep === "loading") && (
+                                      <Button variant="outline" size="sm" className="h-8 text-[11px] gap-1" disabled={rep === "loading"} onClick={() => checkLink(link)}>
+                                        <Search className="h-3 w-3" />{language === "pt" ? "Verificar" : "Check"}
+                                      </Button>
+                                    )}
                                   </div>
                                 </div>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-8 w-8 border border-border shrink-0"
-                                  asChild
-                                >
-                                  <a href={link} target="_blank" rel="noopener noreferrer">
-                                    <ExternalLink className="h-3.5 w-3.5" />
-                                  </a>
-                                </Button>
+                                {previewUrl === link && (
+                                  <div className="rounded-lg border overflow-hidden bg-muted/30">
+                                    <div className="px-2 py-1 text-[10px] text-muted-foreground flex items-center gap-1.5 border-b">
+                                      <ImageIcon className="h-3 w-3 shrink-0" />
+                                      {language === "pt" ? "Prévia renderizada por terceiros (WordPress mShots) — seu navegador não acessa o site diretamente." : "Preview rendered by a third party (WordPress mShots) — your browser does not load the site directly."}
+                                    </div>
+                                    <img src={`https://s.wordpress.com/mshots/v1/${encodeURIComponent(link)}?w=600`} alt="preview" className="w-full max-h-72 object-contain bg-white" loading="lazy" />
+                                  </div>
+                                )}
                               </div>
                             );
                           })}
@@ -851,19 +1113,41 @@ const PhishingAnalyzer = () => {
                                 : "bg-green-500/10 text-green-500 border-green-500/30";
 
                             return (
-                              <div key={idx} className="p-4 flex items-center justify-between gap-4 text-xs">
-                                <div className="flex items-center gap-3">
+                              <div key={idx} className="p-4 flex items-start justify-between gap-4 text-xs">
+                                <div className="flex items-start gap-3 min-w-0">
                                   <div className="h-9 w-9 rounded bg-muted/60 flex items-center justify-center shrink-0 border">
                                     <FileText className="h-4.5 w-4.5 text-muted-foreground" />
                                   </div>
-                                  <div>
-                                    <div className="font-bold text-foreground">{attach.name}</div>
-                                    <div className="text-[10px] text-muted-foreground mt-0.5">{attach.sizeKB} KB</div>
+                                  <div className="min-w-0 space-y-1">
+                                    <div className="font-bold text-foreground break-all">{attach.name}</div>
+                                    <div className="text-[10px] text-muted-foreground">{attach.sizeKB} KB</div>
+                                    {attach.sha256 && (
+                                      <div className="flex items-center gap-1.5 flex-wrap">
+                                        <Hash className="h-3 w-3 text-muted-foreground shrink-0" />
+                                        <span className="font-mono text-[10px] text-muted-foreground break-all select-all" title="SHA-256">{attach.sha256}</span>
+                                        <button
+                                          className="text-muted-foreground hover:text-foreground"
+                                          title={language === "pt" ? "Copiar hash" : "Copy hash"}
+                                          onClick={() => { navigator.clipboard.writeText(attach.sha256!); toast.success(language === "pt" ? "Hash copiado" : "Hash copied"); }}
+                                        >
+                                          <Copy className="h-3 w-3" />
+                                        </button>
+                                      </div>
+                                    )}
                                   </div>
                                 </div>
-                                <Badge variant="outline" className={badgeStyle}>
-                                  {attach.risk.toUpperCase()} RISK
-                                </Badge>
+                                <div className="flex flex-col items-end gap-1.5 shrink-0">
+                                  <Badge variant="outline" className={badgeStyle}>
+                                    {attach.risk.toUpperCase()} RISK
+                                  </Badge>
+                                  {attach.sha256 && (
+                                    <Button variant="outline" size="sm" className="h-7 text-[10px] gap-1" asChild>
+                                      <a href={`https://www.virustotal.com/gui/file/${attach.sha256}`} target="_blank" rel="noopener noreferrer">
+                                        <ExternalLink className="h-3 w-3" />{language === "pt" ? "Consultar no VT" : "Look up on VT"}
+                                      </a>
+                                    </Button>
+                                  )}
+                                </div>
                               </div>
                             );
                           })}
