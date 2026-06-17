@@ -1,5 +1,5 @@
 import { Link, useLocation } from "react-router-dom";
-import { BookOpen, Shield, Mail, Activity, Terminal, ArrowLeft, ShieldAlert, MailWarning, ChevronLeft, ChevronRight, Globe, CalendarCheck } from "lucide-react";
+import { BookOpen, Shield, Mail, Activity, Terminal, ArrowLeft, ShieldAlert, MailWarning, ChevronLeft, ChevronRight, Globe, CalendarCheck, Crosshair } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { LanguageToggle } from "@/components/LanguageToggle";
@@ -34,6 +34,7 @@ export function Header({ actions, logoAddon, onLogoClick, showBackButton = false
     { path: "/dnsbl", label: t("dnsblCheck") || "DNSBL Check", icon: ShieldAlert },
     { path: "/dns-visualizer", label: t("dnsVisualizer") || "DNS Visualizer", icon: Globe },
     { path: "/phishing-analyzer", label: language === "pt" ? "Análise de Phishing" : "Phishing Analyzer", icon: MailWarning },
+    { path: "/threat-hunting", label: language === "pt" ? "Threat Hunting" : "Threat Hunting", icon: Crosshair },
     { path: "/newsletter", label: language === "pt" ? "Feed de Advisories" : "Advisory Feed", icon: Mail },
     { path: "/cves", label: language === "pt" ? "Painel de CVEs" : "CVE Dashboard", icon: Shield },
     { path: "/patch-tuesday", label: language === "pt" ? "Patch Tuesday" : "Patch Tuesday", icon: CalendarCheck },

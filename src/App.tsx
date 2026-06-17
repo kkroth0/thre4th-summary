@@ -13,6 +13,7 @@ const DnsblCheck = lazy(() => import("./pages/DnsblCheck"));
 const Newsletter = lazy(() => import("./pages/Newsletter"));
 const CveDashboard = lazy(() => import("./pages/CveDashboard"));
 const PhishingAnalyzer = lazy(() => import("./pages/PhishingAnalyzer"));
+const ThreatHunting = lazy(() => import("./pages/ThreatHunting"));
 const DnsVisualizer = lazy(() => import("./pages/DnsVisualizer"));
 const PatchTuesday = lazy(() => import("./pages/PatchTuesday"));
 const Features = lazy(() => import("./pages/Features"));
@@ -47,7 +48,8 @@ const App = () => (
                 <Route path="/dnsbl" element={<DnsblCheck />} />
                 <Route path="/newsletter" element={<Newsletter />} />
                 <Route path="/phishing-analyzer" element={<PhishingAnalyzer />} />
-                
+                <Route path="/threat-hunting" element={<ThreatHunting />} />
+
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </Suspense>
