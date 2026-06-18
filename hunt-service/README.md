@@ -1,3 +1,13 @@
+---
+title: Thre4th Hunt Service
+emoji: 🎯
+colorFrom: blue
+colorTo: indigo
+sdk: docker
+app_port: 7860
+pinned: false
+---
+
 # ThreatSumm4ry — Hunt Service
 
 Python microservice that turns a security-report URL into a validated **Threat

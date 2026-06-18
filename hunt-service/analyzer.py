@@ -75,14 +75,37 @@ class DetectionQuery(BaseModel):
         return v.strip()
 
 
+class HuntStep(BaseModel):
+    """One stage of the Microsoft Sentinel threat-hunting process: what the
+    analyst is trying to prove and the KQL that does it."""
+    step: str          # short imperative goal, e.g. "Surface initial access"
+    data_source: str   # Sentinel table(s) the query runs over, e.g. "DeviceProcessEvents"
+    kql: str           # ready-to-run Sentinel KQL for this stage
+
+    @field_validator("step", "kql")
+    @classmethod
+    def _not_empty(cls, v: str) -> str:
+        if not v or not v.strip():
+            raise ValueError("hunting step 'step' and 'kql' must not be empty")
+        return v.strip()
+
+
 class HuntPack(BaseModel):
     threat_actor: str
     ttp_mitre: List[str]
     ioc_list: List[IOC]
     hunting_hypothesis: str
     detection_query: DetectionQuery
+    hunting_process: List[HuntStep]  # ordered KQL-driven Sentinel hunt playbook
     executive_brief: str  # CISO / coordinator business-risk language
     soc_summary: str       # technical SOC language
+
+    @field_validator("hunting_process")
+    @classmethod
+    def _has_steps(cls, v: List[HuntStep]) -> List[HuntStep]:
+        if len(v) < 2:
+            raise ValueError("hunting_process must contain at least 2 ordered KQL steps")
+        return v
 
     @field_validator("ttp_mitre")
     @classmethod
@@ -114,11 +137,17 @@ def _system_prompt(lang: str) -> str:
         '- "hunting_hypothesis": one concrete, testable threat-hunting hypothesis a SOC can pursue.\n'
         '- "detection_query": object {"kql": a ready-to-run Microsoft Sentinel KQL query derived from '
         'the TTP/IOCs, "sigma": an equivalent Sigma rule in YAML}. The KQL MUST NOT be empty.\n'
+        '- "hunting_process": ordered array of 3-5 Microsoft Sentinel hunting stages that build on '
+        'each other (initial access -> execution/persistence -> lateral movement / C2 / exfiltration). '
+        'Each item is {"step": short imperative goal, "data_source": the Sentinel/Defender table(s) the '
+        'query reads (e.g. DeviceProcessEvents, SigninLogs, DeviceNetworkEvents, EmailEvents), "kql": a '
+        'ready-to-run KQL query for that stage}. Every kql MUST be valid Sentinel KQL and non-empty.\n'
         '- "executive_brief": 2-3 sentences for a CISO / SOC coordinator — business risk, impact and '
         "why it matters, NO jargon.\n"
         '- "soc_summary": 2-3 technical sentences for SOC analysts — attack chain and what to look for.\n'
-        f"Write executive_brief, soc_summary and hunting_hypothesis in {out_lang}. "
-        "Keep ttp_mitre, IOCs and the queries technical/untranslated. Respond ONLY the JSON."
+        f"Write executive_brief, soc_summary, hunting_hypothesis and each hunting_process 'step' "
+        f"goal in {out_lang}. Keep ttp_mitre, IOCs, data_source table names and all KQL/Sigma "
+        "queries technical/untranslated. Respond ONLY the JSON."
     )
 
 
