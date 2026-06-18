@@ -20,17 +20,34 @@ export const detectIOCType = (query: string): 'ip' | 'domain' | 'hash' | 'url' =
     return 'domain';
 };
 
-// Map vendors to IOC types they support
+// Map each vendor to the IOC types it can actually be queried for. This MUST stay
+// in sync with what every backend endpoint in server/index.js accepts — a vendor
+// missing here (or missing a type) is silently dropped by resolveVendorsToQuery,
+// so an incomplete map means whole IOC types (hash/domain/url) get almost no
+// coverage. Verified against the per-vendor `detectQueryType` guards in the API.
 export const VENDOR_IOC_SUPPORT: Record<string, ('ip' | 'domain' | 'hash' | 'url')[]> = {
     "IP Geolocation": ['ip'],
     "WHOIS": ['domain'],
     "VirusTotal": ['ip', 'domain', 'hash', 'url'],
     "AbuseIPDB": ['ip'],
-    "AlienVault OTX": ['ip', 'domain', 'hash'],
+    "AlienVault OTX": ['ip', 'domain', 'hash', 'url'],
     "Shodan": ['ip'],
     "URLhaus": ['url', 'domain'],
+    "MalwareBazaar": ['hash'],
+    "PhishTank": ['url'],
+    "Pulsedive": ['ip', 'domain', 'hash', 'url'],
+    "Hybrid Analysis": ['hash'],
+    "CIRCL hashlookup": ['hash'],
+    "Criminal IP": ['ip', 'domain'],
+    "MetaDefender": ['ip', 'hash'],
+    "PhishStats": ['url', 'domain'],
+    "OpenPhish": ['url', 'domain'],
+    "DShield": ['ip'],
+    "Team Cymru": ['ip', 'hash'],
     "Censys": ['ip'],
-
+    // Intentionally excluded from per-IOC routing:
+    //  - "Ransomware.live": recent-victims feed, ignores the query entirely.
+    //  - "Google Safe Browsing": no backend endpoint implemented yet (would 404).
 };
 
 // Formatting logic moved from individual fetch functions
