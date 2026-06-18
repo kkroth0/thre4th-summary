@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useMemo } from "react";
 import {
   Crosshair, Search, Loader2, Copy, ExternalLink, Download, RefreshCw,
-  AlertTriangle, ChevronRight, Target, ShieldAlert,
+  AlertTriangle, Target, ShieldAlert, Fingerprint, Building2, Activity,
+  FlaskConical, ListChecks, Code2, FileCode2, Link2, Newspaper, Check,
+  ArrowRight, Sparkles,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Footer } from "@/components/Footer";
@@ -63,7 +65,7 @@ const T = {
   en: {
     title: "Threat Hunting",
     subtitle:
-      "Turn a live advisory — or any report URL you paste — into a validated Threat Hunting Pack: threat actor, MITRE ATT&CK TTPs, defanged IOCs, a hunting hypothesis, a step-by-step Microsoft Sentinel KQL hunting process, and ready-to-run KQL + Sigma. Export it as a branded PPTX. Powered by the scrape → Groq → Pydantic hunt microservice.",
+      "Turn any security advisory into an actionable threat hunting package — adversary attribution, MITRE ATT&CK mapping, indicators of compromise, and ready-to-run Microsoft Sentinel detections, delivered as a presentation-ready report.",
     pickTitle: "1. Pick an advisory",
     pickHint: "Hunting runs over the live advisory feed, or any report URL you paste.",
     searchPlaceholder: "Search advisories…",
@@ -73,6 +75,15 @@ const T = {
     urlInvalid: "Enter a valid http(s) URL.",
     hunt: "Hunt",
     pastedSource: "Pasted URL",
+    analyze: "Analyze a report",
+    analyzeHint: "Paste any threat report URL — or pick one from the live feed below.",
+    feedDivider: "live advisory feed",
+    glance: "At a glance",
+    ttpsShort: "MITRE TTPs",
+    iocsShort: "Indicators",
+    stepsShort: "Hunt steps",
+    detections: "Detections (Sentinel)",
+    produces: "Each pack includes",
     loadingFeed: "Loading advisory feed…",
     feedError: "Could not load the advisory feed.",
     noResults: "No advisories match your search.",
@@ -121,6 +132,15 @@ const T = {
     urlInvalid: "Informe uma URL http(s) válida.",
     hunt: "Caçar",
     pastedSource: "URL colada",
+    analyze: "Analisar um relatório",
+    analyzeHint: "Cole qualquer URL de relatório de ameaça — ou escolha uma do feed ao vivo abaixo.",
+    feedDivider: "feed de advisories ao vivo",
+    glance: "Visão geral",
+    ttpsShort: "TTPs MITRE",
+    iocsShort: "Indicadores",
+    stepsShort: "Etapas de caça",
+    detections: "Detecções (Sentinel)",
+    produces: "Cada pacote inclui",
     loadingFeed: "Carregando o feed de advisories…",
     feedError: "Não foi possível carregar o feed de advisories.",
     noResults: "Nenhum advisory corresponde à sua busca.",
@@ -363,20 +383,93 @@ const exportPptx = async (
   await pptx.writeFile({ fileName: `hunt-report-${safeName}-${dateStr}.pptx` });
 };
 
-const SectionLabel = ({ children }: { children: React.ReactNode }) => (
-  <div className="text-[11px] font-bold text-muted-foreground/80 tracking-wide mb-1.5">
-    [ {children} ]
+// Small copy button that flips to a check for a moment on success.
+const CopyButton = ({ onClick, label }: { onClick: () => void; label?: string }) => {
+  const [done, setDone] = useState(false);
+  return (
+    <button
+      onClick={() => {
+        onClick();
+        setDone(true);
+        setTimeout(() => setDone(false), 1200);
+      }}
+      className="inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded-md border border-border/60 text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
+    >
+      {done ? <Check className="h-3 w-3 text-emerald-500" /> : <Copy className="h-3 w-3" />}
+      {label}
+    </button>
+  );
+};
+
+// A titled card section with an icon header.
+const Section = ({
+  icon: Icon, title, action, children,
+}: {
+  icon: React.ElementType; title: string; action?: React.ReactNode; children: React.ReactNode;
+}) => (
+  <section className="rounded-xl border border-border/50 bg-card/40 overflow-hidden">
+    <div className="flex items-center justify-between gap-2 px-3.5 py-2.5 border-b border-border/40 bg-muted/20">
+      <div className="flex items-center gap-2 text-[12px] font-bold tracking-wide text-foreground/90">
+        <Icon className="h-3.5 w-3.5 text-primary" />
+        {title}
+      </div>
+      {action}
+    </div>
+    <div className="p-3.5">{children}</div>
+  </section>
+);
+
+// A highlighted prose callout (executive brief / SOC / hypothesis).
+const Callout = ({
+  icon: Icon, title, tone, children,
+}: {
+  icon: React.ElementType; title: string; tone: "primary" | "amber" | "slate"; children: React.ReactNode;
+}) => {
+  const tones = {
+    primary: "border-primary/25 bg-primary/[0.05] text-primary",
+    amber: "border-amber-500/25 bg-amber-500/[0.05] text-amber-600 dark:text-amber-400",
+    slate: "border-border/60 bg-muted/30 text-foreground/70",
+  };
+  return (
+    <div className={`rounded-xl border p-3.5 ${tones[tone]}`}>
+      <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide mb-1.5">
+        <Icon className="h-3.5 w-3.5" />
+        {title}
+      </div>
+      <p className="text-sm leading-relaxed text-foreground/90 whitespace-pre-line">{children}</p>
+    </div>
+  );
+};
+
+// A monospace code block with a filename-style header bar and copy action.
+const CodeBlock = ({
+  title, code, onCopy, lang,
+}: {
+  title: string; code: string; onCopy: () => void; lang?: string;
+}) => (
+  <div className="rounded-lg border border-border/50 overflow-hidden bg-[#0d1117]">
+    <div className="flex items-center justify-between px-3 py-1.5 border-b border-white/10 bg-white/[0.03]">
+      <div className="flex items-center gap-1.5 text-[11px] font-mono text-slate-400">
+        <Code2 className="h-3 w-3" />
+        {title}{lang ? <span className="text-slate-600">· {lang}</span> : null}
+      </div>
+      <CopyButton onClick={onCopy} />
+    </div>
+    <pre className="text-[11.5px] leading-relaxed font-mono text-slate-200 p-3 overflow-x-auto whitespace-pre-wrap break-words">{code}</pre>
   </div>
 );
 
-const CopyButton = ({ onClick, label }: { onClick: () => void; label: string }) => (
-  <button
-    onClick={onClick}
-    className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded border border-border/60 text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
-  >
-    <Copy className="h-3 w-3" />
-    {label}
-  </button>
+// A compact metric tile for the "at a glance" row.
+const StatTile = ({ icon: Icon, value, label }: { icon: React.ElementType; value: React.ReactNode; label: string }) => (
+  <div className="flex items-center gap-2.5 rounded-xl border border-border/50 bg-card/40 px-3 py-2.5">
+    <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center text-primary shrink-0">
+      <Icon className="h-4 w-4" />
+    </div>
+    <div className="min-w-0">
+      <div className="text-sm font-bold text-foreground leading-none truncate">{value}</div>
+      <div className="text-[10px] uppercase tracking-wide text-muted-foreground/70 mt-1">{label}</div>
+    </div>
+  </div>
 );
 
 export default function ThreatHunting() {
@@ -499,104 +592,128 @@ export default function ThreatHunting() {
 
       <div className="flex-1 max-w-7xl w-full mx-auto px-4 md:px-8 py-8 md:py-12 space-y-8">
         {/* Hero */}
-        <div className="space-y-3">
-          <div className="flex items-center gap-2.5">
-            <div className="h-10 w-10 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary shrink-0">
-              <Crosshair className="h-5 w-5" />
+        <div className="relative overflow-hidden rounded-2xl border border-primary/15 bg-gradient-to-br from-primary/[0.07] via-primary/[0.02] to-transparent p-6 md:p-7">
+          <div className="absolute -right-8 -top-8 h-32 w-32 rounded-full bg-primary/10 blur-3xl" aria-hidden />
+          <div className="relative space-y-3">
+            <div className="flex items-center gap-3">
+              <div className="h-11 w-11 rounded-xl bg-primary/15 border border-primary/25 flex items-center justify-center text-primary shrink-0">
+                <Crosshair className="h-5 w-5" />
+              </div>
+              <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-foreground">{t.title}</h1>
             </div>
-            <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-foreground">{t.title}</h1>
+            <p className="text-sm text-muted-foreground leading-relaxed max-w-3xl">{t.subtitle}</p>
+            <div className="flex flex-wrap items-center gap-1.5 pt-1">
+              <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground/60 mr-1">{t.produces}</span>
+              {[
+                { icon: Fingerprint, label: t.threatActor },
+                { icon: Target, label: t.mitre },
+                { icon: ShieldAlert, label: t.iocsShort },
+                { icon: ListChecks, label: t.stepsShort },
+                { icon: FileCode2, label: t.detections },
+                { icon: Download, label: "PPTX" },
+              ].map(({ icon: Icon, label }) => (
+                <span key={label} className="inline-flex items-center gap-1 text-[10.5px] px-2 py-1 rounded-full border border-border/50 bg-card/50 text-foreground/70">
+                  <Icon className="h-3 w-3 text-primary" />
+                  {label}
+                </span>
+              ))}
+            </div>
           </div>
-          <p className="text-sm text-muted-foreground leading-relaxed max-w-3xl">{t.subtitle}</p>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-          {/* Left: advisory picker */}
-          <div className="lg:col-span-5 space-y-3">
-            <div>
-              <h2 className="text-sm font-bold text-foreground tracking-wide">{t.pickTitle}</h2>
-              <p className="text-[11px] text-muted-foreground/70 mt-0.5">{t.pickHint}</p>
-            </div>
-
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-              <input
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder={t.searchPlaceholder}
-                className="w-full h-9 pl-9 pr-3 rounded-xl bg-muted/30 border border-border/50 text-[13px] text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/40"
-              />
-            </div>
-
-            <div className="space-y-1.5 max-h-[60vh] overflow-y-auto pr-1">
-              {loadingFeed ? (
-                <div className="flex items-center gap-2 text-xs text-muted-foreground py-3">
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  {t.loadingFeed}
-                </div>
-              ) : feedError ? (
-                <div className="flex items-center gap-2 text-xs text-red-500 py-3">
-                  <AlertTriangle className="h-3.5 w-3.5" />
-                  {feedError}
-                </div>
-              ) : filtered.length === 0 ? (
-                <div className="text-xs text-muted-foreground/70 py-3">{t.noResults}</div>
-              ) : (
-                filtered.map((a) => {
-                  const isActive = selected?.link === a.link;
-                  return (
-                    <button
-                      key={a.link}
-                      onClick={() => select(a)}
-                      className={`w-full text-left rounded-xl border p-3 transition-all ${
-                        isActive
-                          ? "border-primary/40 bg-primary/[0.06]"
-                          : "border-border/40 bg-white/[0.01] hover:bg-muted/20 hover:border-border/70"
-                      }`}
-                    >
-                      <div className="flex items-start gap-2">
-                        <ChevronRight className={`h-3.5 w-3.5 mt-0.5 shrink-0 ${isActive ? "text-primary" : "text-muted-foreground/50"}`} />
-                        <div className="min-w-0 space-y-1">
-                          <div className="text-[13px] font-semibold text-foreground leading-snug line-clamp-2">{titleOf(a)}</div>
-                          <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-muted-foreground/70">
-                            <span>{a.source}</span>
-                            {a.severity && (
-                              <span className={`px-1.5 py-0.5 rounded border font-bold ${SEVERITY_STYLES[a.severity] || SEVERITY_STYLES.Low}`}>
-                                {a.severity}
-                              </span>
-                            )}
-                            {(a.cves ?? []).slice(0, 2).map((c) => (
-                              <span key={c} className="font-mono text-primary/80">{c}</span>
-                            ))}
-                          </div>
-                        </div>
-                      </div>
-                    </button>
-                  );
-                })
-              )}
-            </div>
-
-            {/* Paste any report URL */}
-            <div className="pt-3 mt-1 border-t border-border/40 space-y-2">
-              <div>
-                <h2 className="text-sm font-bold text-foreground tracking-wide">{t.orPasteTitle}</h2>
-                <p className="text-[11px] text-muted-foreground/70 mt-0.5">{t.orPasteHint}</p>
-              </div>
+          {/* Left: source picker — paste a URL first, then the live feed */}
+          <div className="lg:col-span-5 space-y-4">
+            {/* Primary action: analyze any URL */}
+            <div className="rounded-2xl border border-border/50 bg-card/40 p-4 space-y-2.5">
               <div className="flex items-center gap-2">
-                <div className="relative flex-1">
-                  <ExternalLink className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-                  <input
-                    value={urlInput}
-                    onChange={(e) => setUrlInput(e.target.value)}
-                    onKeyDown={(e) => e.key === "Enter" && huntUrl()}
-                    placeholder={t.urlPlaceholder}
-                    className="w-full h-9 pl-9 pr-3 rounded-xl bg-muted/30 border border-border/50 text-[13px] text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/40"
-                  />
+                <Sparkles className="h-4 w-4 text-primary" />
+                <h2 className="text-sm font-bold text-foreground tracking-wide">{t.analyze}</h2>
+              </div>
+              <p className="text-[11px] text-muted-foreground/70">{t.analyzeHint}</p>
+              <div className="relative">
+                <Link2 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <input
+                  value={urlInput}
+                  onChange={(e) => setUrlInput(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && huntUrl()}
+                  placeholder={t.urlPlaceholder}
+                  className="w-full h-11 pl-9 pr-3 rounded-xl bg-background border border-border/60 text-[13px] text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/30"
+                />
+              </div>
+              <Button onClick={huntUrl} disabled={!urlInput.trim()} className="w-full h-10 gap-2">
+                <Crosshair className="h-4 w-4" />
+                {t.hunt}
+              </Button>
+            </div>
+
+            {/* Live advisory feed */}
+            <div className="rounded-2xl border border-border/50 bg-card/40 p-4 space-y-3">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <Newspaper className="h-4 w-4 text-primary" />
+                  <h2 className="text-sm font-bold text-foreground tracking-wide capitalize">{t.feedDivider}</h2>
                 </div>
-                <Button onClick={huntUrl} disabled={!urlInput.trim()} className="h-9 px-4 gap-1.5 shrink-0">
-                  <Crosshair className="h-3.5 w-3.5" />
-                  {t.hunt}
-                </Button>
+                {!loadingFeed && !feedError && (
+                  <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-muted/50 text-muted-foreground">{filtered.length}</span>
+                )}
+              </div>
+
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                <input
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder={t.searchPlaceholder}
+                  className="w-full h-9 pl-9 pr-3 rounded-xl bg-background border border-border/50 text-[13px] text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/40"
+                />
+              </div>
+
+              <div className="space-y-1.5 max-h-[52vh] overflow-y-auto pr-1 -mr-1">
+                {loadingFeed ? (
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground py-3">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    {t.loadingFeed}
+                  </div>
+                ) : feedError ? (
+                  <div className="flex items-center gap-2 text-xs text-red-500 py-3">
+                    <AlertTriangle className="h-3.5 w-3.5" />
+                    {feedError}
+                  </div>
+                ) : filtered.length === 0 ? (
+                  <div className="text-xs text-muted-foreground/70 py-3">{t.noResults}</div>
+                ) : (
+                  filtered.map((a) => {
+                    const isActive = selected?.link === a.link;
+                    return (
+                      <button
+                        key={a.link}
+                        onClick={() => select(a)}
+                        className={`group w-full text-left rounded-xl border p-3 transition-all ${
+                          isActive
+                            ? "border-primary/50 bg-primary/[0.07] shadow-sm"
+                            : "border-border/40 bg-background/40 hover:bg-muted/30 hover:border-border/70"
+                        }`}
+                      >
+                        <div className="text-[13px] font-semibold text-foreground leading-snug line-clamp-2 mb-1.5">{titleOf(a)}</div>
+                        <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-muted-foreground/70">
+                          <span className="inline-flex items-center gap-1">
+                            <span className={`h-1.5 w-1.5 rounded-full ${isActive ? "bg-primary" : "bg-muted-foreground/40"}`} />
+                            {a.source}
+                          </span>
+                          {a.severity && (
+                            <span className={`px-1.5 py-0.5 rounded border font-bold ${SEVERITY_STYLES[a.severity] || SEVERITY_STYLES.Low}`}>
+                              {a.severity}
+                            </span>
+                          )}
+                          {(a.cves ?? []).slice(0, 2).map((c) => (
+                            <span key={c} className="font-mono text-primary/80">{c}</span>
+                          ))}
+                        </div>
+                      </button>
+                    );
+                  })
+                )}
               </div>
             </div>
           </div>
@@ -604,15 +721,17 @@ export default function ThreatHunting() {
           {/* Right: hunt pack panel */}
           <div className="lg:col-span-7">
             {!selected ? (
-              <div className="h-full min-h-[300px] rounded-2xl border border-dashed border-border/50 flex flex-col items-center justify-center text-center gap-3 p-8">
-                <Target className="h-8 w-8 text-muted-foreground/40" />
-                <p className="text-sm text-muted-foreground/70 max-w-xs">{t.pickPrompt}</p>
+              <div className="h-full min-h-[340px] rounded-2xl border border-dashed border-border/50 bg-card/20 flex flex-col items-center justify-center text-center gap-4 p-8">
+                <div className="h-14 w-14 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary/70">
+                  <Target className="h-7 w-7" />
+                </div>
+                <p className="text-sm text-muted-foreground/80 max-w-xs leading-relaxed">{t.pickPrompt}</p>
               </div>
             ) : (
-              <div className="rounded-2xl border border-primary/20 bg-primary/[0.03] p-4 md:p-5 space-y-4">
+              <div className="rounded-2xl border border-border/60 bg-card/40 overflow-hidden">
                 {/* Pack header */}
-                <div className="flex items-start justify-between gap-3 border-b border-border/40 pb-3">
-                  <div className="flex items-center gap-1.5 text-[12px] font-bold text-primary tracking-wide">
+                <div className="flex flex-wrap items-center justify-between gap-3 px-4 md:px-5 py-3.5 border-b border-border/50 bg-gradient-to-r from-primary/[0.06] to-transparent">
+                  <div className="flex items-center gap-2 text-[12px] font-bold text-primary tracking-wide">
                     <Crosshair className="h-4 w-4" />
                     {t.packTitle.toUpperCase()}
                   </div>
@@ -621,7 +740,7 @@ export default function ThreatHunting() {
                       href={selected.link}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded border border-border/60 text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                      className="inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded-md border border-border/60 text-muted-foreground hover:text-foreground hover:bg-muted/60"
                     >
                       <ExternalLink className="h-3 w-3" />
                       {t.source}
@@ -631,172 +750,158 @@ export default function ThreatHunting() {
                         <CopyButton onClick={() => copy(buildPackText(pack.data!, titleOf(selected), t), t.copiedPack)} label={t.copyAll} />
                         <button
                           onClick={() => downloadJson(pack.data!, selected)}
-                          className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded border border-border/60 text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                          className="inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded-md border border-border/60 text-muted-foreground hover:text-foreground hover:bg-muted/60"
                         >
                           <Download className="h-3 w-3" />
                           {t.exportJson}
                         </button>
                         <button
+                          onClick={() => void generate(selected)}
+                          className="inline-flex items-center justify-center h-[26px] w-[26px] rounded-md border border-border/60 text-muted-foreground hover:text-foreground hover:bg-muted/60"
+                          title={t.regenerate}
+                        >
+                          <RefreshCw className="h-3 w-3" />
+                        </button>
+                        <button
                           onClick={() => void exportReport(pack.data!, selected)}
                           disabled={pptxBuilding}
-                          className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded border border-primary/40 bg-primary/10 text-primary hover:bg-primary/20 disabled:opacity-50"
+                          className="inline-flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1 rounded-md bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
                           title={t.exportPptx}
                         >
                           {pptxBuilding ? <Loader2 className="h-3 w-3 animate-spin" /> : <Download className="h-3 w-3" />}
                           {pptxBuilding ? t.building : t.exportPptx}
-                        </button>
-                        <button
-                          onClick={() => void generate(selected)}
-                          className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded border border-border/60 text-muted-foreground hover:text-foreground hover:bg-muted/50"
-                          title={t.regenerate}
-                        >
-                          <RefreshCw className="h-3 w-3" />
                         </button>
                       </>
                     )}
                   </div>
                 </div>
 
-                {/* Selected advisory title */}
-                <div className="text-[13px] font-semibold text-foreground/90 leading-snug">{titleOf(selected)}</div>
+                <div className="p-4 md:p-5 space-y-4">
+                  {/* Selected advisory title */}
+                  <div className="text-[15px] font-bold text-foreground leading-snug">{titleOf(selected)}</div>
 
-                {pack?.loading ? (
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground py-4">
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    {t.generating}
-                  </div>
-                ) : pack?.error ? (
-                  <div className="flex items-center justify-between gap-2 text-xs py-2">
-                    <span className="flex items-center gap-1.5 text-red-500">
-                      <ShieldAlert className="h-3.5 w-3.5" />
-                      {pack.error}
-                    </span>
-                    <button
-                      onClick={() => void generate(selected)}
-                      className="text-[10px] px-1.5 py-0.5 rounded border border-border/60 text-muted-foreground hover:text-foreground hover:bg-muted/50"
-                    >
-                      {t.retry}
-                    </button>
-                  </div>
-                ) : pack?.data ? (
-                  <div className="space-y-4">
-                    <div className="text-[13px]">
-                      <span className="font-bold">{t.threatActor}:</span> {pack.data.threat_actor}
+                  {pack?.loading ? (
+                    <div className="flex flex-col items-center justify-center gap-3 py-12 text-center">
+                      <Loader2 className="h-7 w-7 animate-spin text-primary" />
+                      <p className="text-xs text-muted-foreground max-w-sm leading-relaxed">{t.generating}</p>
                     </div>
-
-                    {pack.data.ttp_mitre?.length ? (
-                      <div>
-                        <SectionLabel>{t.mitre}</SectionLabel>
-                        <div className="flex flex-wrap gap-1.5">
-                          {pack.data.ttp_mitre.map((tech) => (
-                            <a
-                              key={tech}
-                              href={`https://attack.mitre.org/techniques/${tech.replace(".", "/")}/`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="font-mono text-[11px] px-1.5 py-0.5 rounded border border-primary/20 text-primary hover:bg-primary/10"
-                            >
-                              {tech}
-                            </a>
-                          ))}
-                        </div>
+                  ) : pack?.error ? (
+                    <div className="rounded-xl border border-red-500/30 bg-red-500/[0.05] p-4 flex items-start justify-between gap-3">
+                      <span className="flex items-start gap-2 text-xs text-red-500">
+                        <ShieldAlert className="h-4 w-4 shrink-0 mt-px" />
+                        {pack.error}
+                      </span>
+                      <button
+                        onClick={() => void generate(selected)}
+                        className="shrink-0 text-[11px] px-2 py-1 rounded-md border border-red-500/30 text-red-500 hover:bg-red-500/10"
+                      >
+                        {t.retry}
+                      </button>
+                    </div>
+                  ) : pack?.data ? (
+                    <div className="space-y-4">
+                      {/* At a glance */}
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                        <StatTile icon={Fingerprint} value={pack.data.threat_actor} label={t.threatActor} />
+                        <StatTile icon={Target} value={pack.data.ttp_mitre?.length ?? 0} label={t.ttpsShort} />
+                        <StatTile icon={ShieldAlert} value={pack.data.ioc_list?.length ?? 0} label={t.iocsShort} />
+                        <StatTile icon={ListChecks} value={pack.data.hunting_process?.length ?? 0} label={t.stepsShort} />
                       </div>
-                    ) : null}
 
-                    {pack.data.ioc_list?.length ? (
-                      <div>
-                        <div className="flex items-center justify-between mb-1.5">
-                          <SectionLabel>{t.iocs}</SectionLabel>
-                          <CopyButton
-                            onClick={() => copy(pack.data!.ioc_list.map((i) => `${i.type}\t${i.value}`).join("\n"), t.copiedIocs)}
-                            label={t.copy}
-                          />
-                        </div>
-                        <div className="flex flex-wrap gap-1.5">
-                          {pack.data.ioc_list.map((i) => (
-                            <span
-                              key={`${i.type}:${i.value}`}
-                              title={i.type}
-                              className="font-mono text-[11px] px-1.5 py-0.5 rounded border border-amber-500/25 bg-amber-500/5 text-amber-600 dark:text-amber-400 break-all"
-                            >
-                              {i.value}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    ) : null}
+                      {pack.data.executive_brief ? (
+                        <Callout icon={Building2} title={t.execBrief} tone="primary">{pack.data.executive_brief}</Callout>
+                      ) : null}
 
-                    {pack.data.hunting_hypothesis ? (
-                      <div>
-                        <SectionLabel>{t.hypothesis}</SectionLabel>
-                        <p className="text-sm leading-relaxed text-foreground/90 whitespace-pre-line">{pack.data.hunting_hypothesis}</p>
-                      </div>
-                    ) : null}
+                      {pack.data.hunting_hypothesis ? (
+                        <Callout icon={FlaskConical} title={t.hypothesis} tone="amber">{pack.data.hunting_hypothesis}</Callout>
+                      ) : null}
 
-                    {pack.data.hunting_process?.length ? (
-                      <div>
-                        <SectionLabel>{t.process}</SectionLabel>
-                        <ol className="space-y-2.5">
-                          {pack.data.hunting_process.map((s, i) => (
-                            <li key={i} className="rounded-lg border border-border/40 bg-muted/20 p-2.5">
-                              <div className="flex items-start gap-2 mb-1.5">
-                                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/15 text-[10px] font-bold text-primary">
+                      {pack.data.ttp_mitre?.length ? (
+                        <Section icon={Target} title={t.mitre}>
+                          <div className="flex flex-wrap gap-1.5">
+                            {pack.data.ttp_mitre.map((tech) => (
+                              <a
+                                key={tech}
+                                href={`https://attack.mitre.org/techniques/${tech.replace(".", "/")}/`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 font-mono text-[11px] px-2 py-1 rounded-md border border-primary/20 bg-primary/[0.06] text-primary hover:bg-primary/15 transition-colors"
+                              >
+                                {tech}
+                                <ArrowRight className="h-2.5 w-2.5 opacity-50" />
+                              </a>
+                            ))}
+                          </div>
+                        </Section>
+                      ) : null}
+
+                      {pack.data.ioc_list?.length ? (
+                        <Section
+                          icon={ShieldAlert}
+                          title={t.iocs}
+                          action={<CopyButton onClick={() => copy(pack.data!.ioc_list.map((i) => `${i.type}\t${i.value}`).join("\n"), t.copiedIocs)} label={t.copy} />}
+                        >
+                          <div className="flex flex-wrap gap-1.5">
+                            {pack.data.ioc_list.map((i) => (
+                              <span
+                                key={`${i.type}:${i.value}`}
+                                className="inline-flex items-center gap-1.5 font-mono text-[11px] pl-1 pr-2 py-1 rounded-md border border-amber-500/25 bg-amber-500/5 text-amber-600 dark:text-amber-400 break-all"
+                              >
+                                <span className="text-[9px] uppercase font-bold px-1 py-0.5 rounded bg-amber-500/15 text-amber-700 dark:text-amber-300">{i.type}</span>
+                                {i.value}
+                              </span>
+                            ))}
+                          </div>
+                        </Section>
+                      ) : null}
+
+                      {pack.data.hunting_process?.length ? (
+                        <Section icon={ListChecks} title={t.process}>
+                          <ol className="space-y-3">
+                            {pack.data.hunting_process.map((s, i) => (
+                              <li key={i} className="relative pl-7">
+                                <span className="absolute left-0 top-0 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground">
                                   {i + 1}
                                 </span>
-                                <div className="min-w-0">
-                                  <div className="text-[13px] font-semibold text-foreground leading-snug">{s.step}</div>
+                                {i < pack.data!.hunting_process!.length - 1 && (
+                                  <span className="absolute left-[9px] top-6 bottom-[-12px] w-px bg-border/60" aria-hidden />
+                                )}
+                                <div className="flex flex-wrap items-center gap-2 mb-1.5">
+                                  <span className="text-[13px] font-semibold text-foreground leading-snug">{s.step}</span>
                                   {s.data_source ? (
-                                    <div className="text-[10px] text-muted-foreground/80 mt-0.5">
-                                      {t.dataSource}: <span className="font-mono text-primary/80">{s.data_source}</span>
-                                    </div>
+                                    <span className="inline-flex items-center gap-1 text-[10px] font-mono px-1.5 py-0.5 rounded border border-border/50 bg-muted/40 text-muted-foreground">
+                                      {s.data_source}
+                                    </span>
                                   ) : null}
                                 </div>
-                                <CopyButton onClick={() => copy(s.kql, t.copiedKql)} label={t.copy} />
-                              </div>
-                              <pre className="text-[11px] font-mono bg-muted/40 border border-border/40 rounded p-2 overflow-x-auto whitespace-pre-wrap break-all">{s.kql}</pre>
-                            </li>
-                          ))}
-                        </ol>
-                      </div>
-                    ) : null}
+                                <CodeBlock title={`${t.stepLabel} ${i + 1}`} lang="KQL" code={s.kql} onCopy={() => copy(s.kql, t.copiedKql)} />
+                              </li>
+                            ))}
+                          </ol>
+                        </Section>
+                      ) : null}
 
-                    {pack.data.detection_query?.kql ? (
-                      <div>
-                        <div className="flex items-center justify-between mb-1.5">
-                          <SectionLabel>{t.kql}</SectionLabel>
-                          <CopyButton onClick={() => copy(pack.data!.detection_query.kql, t.copiedKql)} label={t.copy} />
-                        </div>
-                        <pre className="text-[11px] font-mono bg-muted/40 border border-border/40 rounded p-2 overflow-x-auto whitespace-pre-wrap break-all">{pack.data.detection_query.kql}</pre>
-                      </div>
-                    ) : null}
+                      {pack.data.detection_query?.kql || pack.data.detection_query?.sigma ? (
+                        <Section icon={FileCode2} title={t.detections}>
+                          <div className="space-y-3">
+                            {pack.data.detection_query?.kql ? (
+                              <CodeBlock title={t.kql} lang="KQL" code={pack.data.detection_query.kql} onCopy={() => copy(pack.data!.detection_query.kql, t.copiedKql)} />
+                            ) : null}
+                            {pack.data.detection_query?.sigma ? (
+                              <CodeBlock title={t.sigma} lang="YAML" code={pack.data.detection_query.sigma} onCopy={() => copy(pack.data!.detection_query.sigma || "", t.copiedSigma)} />
+                            ) : null}
+                          </div>
+                        </Section>
+                      ) : null}
 
-                    {pack.data.detection_query?.sigma ? (
-                      <div>
-                        <div className="flex items-center justify-between mb-1.5">
-                          <SectionLabel>{t.sigma}</SectionLabel>
-                          <CopyButton onClick={() => copy(pack.data!.detection_query.sigma || "", t.copiedSigma)} label={t.copy} />
-                        </div>
-                        <pre className="text-[11px] font-mono bg-muted/40 border border-border/40 rounded p-2 overflow-x-auto whitespace-pre-wrap break-all">{pack.data.detection_query.sigma}</pre>
-                      </div>
-                    ) : null}
+                      {pack.data.soc_summary ? (
+                        <Callout icon={Activity} title={t.socSummary} tone="slate">{pack.data.soc_summary}</Callout>
+                      ) : null}
 
-                    {pack.data.executive_brief ? (
-                      <div>
-                        <SectionLabel>{t.execBrief}</SectionLabel>
-                        <p className="text-sm leading-relaxed text-foreground/90 whitespace-pre-line">{pack.data.executive_brief}</p>
-                      </div>
-                    ) : null}
-
-                    {pack.data.soc_summary ? (
-                      <div>
-                        <SectionLabel>{t.socSummary}</SectionLabel>
-                        <p className="text-sm leading-relaxed text-foreground/90 whitespace-pre-line">{pack.data.soc_summary}</p>
-                      </div>
-                    ) : null}
-
-                    <p className="text-[10px] text-muted-foreground/60 italic pt-1 border-t border-border/30">{t.disclaimer}</p>
-                  </div>
-                ) : null}
+                      <p className="text-[10px] text-muted-foreground/60 italic pt-1 border-t border-border/30">{t.disclaimer}</p>
+                    </div>
+                  ) : null}
+                </div>
               </div>
             )}
           </div>
