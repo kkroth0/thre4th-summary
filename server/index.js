@@ -7,6 +7,7 @@ import axios from 'axios';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import dns from 'dns';
+import net from 'net';
 import fs from 'fs';
 import crypto from 'crypto';
 import compression from 'compression';
@@ -444,10 +445,14 @@ app.post('/api/shodan', scanLimiter, async (req, res) => {
 
     try {
         const queryType = detectQueryType(query);
-        if (queryType !== "ip") return res.json({ data: { "Status": "IP only" } });
+        if (queryType !== "ip" && queryType !== "domain") return res.json({ data: { "Status": "IP/Domain only" } });
 
-        const sanitized = sanitizeQuery(query, 'ip');
-        const response = await axios.get(`https://api.shodan.io/shodan/host/${sanitized}`, {
+        const sanitized = sanitizeQuery(query, queryType);
+        // Host lookup for IPs; DNS/subdomain enumeration for domains.
+        const endpoint = queryType === "ip"
+            ? `https://api.shodan.io/shodan/host/${sanitized}`
+            : `https://api.shodan.io/dns/domain/${sanitized}`;
+        const response = await axios.get(endpoint, {
             params: { key: process.env.SHODAN_API_KEY }
         });
         sendResponseWithQuota(res, response);
@@ -503,6 +508,32 @@ app.post('/api/malwarebazaar', scanLimiter, async (req, res) => {
         const response = await axios.post(`https://mb-api.abuse.ch/api/v1/`,
             params.toString(),
             { headers: { "Content-Type": "application/x-www-form-urlencoded" } }
+        );
+        res.json(response.data);
+    } catch (error) {
+        const { status, message } = sanitizeError(error);
+        res.status(status).json({ error: message });
+    }
+});
+
+// ThreatFox (abuse.ch) — IOC -> malware/threat attribution. Accepts ip, domain,
+// url and hash. abuse.ch now requires an Auth-Key header on all queries.
+app.post('/api/threatfox', scanLimiter, async (req, res) => {
+    const { query } = req.body;
+    try {
+        const queryType = detectQueryType(query);
+        if (!["ip", "domain", "url", "hash"].includes(queryType)) {
+            return res.json({ data: { "Status": "IP/Domain/URL/Hash only" } });
+        }
+        const sanitized = sanitizeQuery(query, queryType);
+
+        const headers = { "Content-Type": "application/json" };
+        if (process.env.THREATFOX_API_KEY) headers["Auth-Key"] = process.env.THREATFOX_API_KEY;
+
+        const response = await axios.post(
+            `https://threatfox-api.abuse.ch/api/v1/`,
+            { query: "search_ioc", search_term: sanitized },
+            { headers }
         );
         res.json(response.data);
     } catch (error) {
@@ -1679,10 +1710,75 @@ app.post('/api/newsletter/enrich', scanLimiter, async (req, res) => {
     }
 });
 
+// True when an IPv4/IPv6 address is private, loopback, link-local or otherwise
+// not a routable public host — the set of targets an SSRF attempt would aim at.
+const isPrivateAddress = (ip) => {
+    const kind = net.isIP(ip);
+    if (kind === 4) {
+        const p = ip.split('.').map(Number);
+        if (p.some((n) => Number.isNaN(n) || n < 0 || n > 255)) return true;
+        const [a, b] = p;
+        return (
+            a === 0 || a === 10 || a === 127 ||                 // this-net, private, loopback
+            (a === 100 && b >= 64 && b <= 127) ||               // CGNAT 100.64/10
+            (a === 169 && b === 254) ||                          // link-local
+            (a === 172 && b >= 16 && b <= 31) ||                 // private
+            (a === 192 && b === 168) ||                          // private
+            (a === 192 && b === 0) ||                            // 192.0.0/24 + TEST-NET-1
+            (a === 198 && (b === 18 || b === 19)) ||             // benchmarking
+            a >= 224                                             // multicast + reserved
+        );
+    }
+    if (kind === 6) {
+        const v = ip.toLowerCase();
+        return (
+            v === '::' || v === '::1' ||                         // unspecified, loopback
+            v.startsWith('fe80') || v.startsWith('fc') || v.startsWith('fd') || // link-local, ULA
+            v.startsWith('::ffff:') || v.startsWith('::')        // IPv4-mapped / embedded
+        );
+    }
+    return true; // not a recognised IP literal
+};
+
+// SSRF guard for user-pasted URLs: enforce http(s), reject embedded credentials
+// and non-standard ports, then resolve every A/AAAA record and ensure none point
+// at a private/loopback/reserved address. Throws an Error with a safe message.
+const assertSafePublicUrl = async (raw) => {
+    let parsed;
+    try {
+        parsed = new URL(raw);
+    } catch {
+        throw new Error('Invalid URL');
+    }
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+        throw new Error('URL must be http(s)');
+    }
+    if (parsed.username || parsed.password) {
+        throw new Error('URL must not contain credentials');
+    }
+    if (parsed.port && !['', '80', '443'].includes(parsed.port)) {
+        throw new Error('Only standard web ports are allowed');
+    }
+    const host = parsed.hostname.replace(/^\[|\]$/g, '');
+    if (host === 'localhost' || isPrivateAddress(host)) {
+        throw new Error('URL resolves to a non-public host');
+    }
+    let records;
+    try {
+        records = await dns.promises.lookup(host, { all: true });
+    } catch {
+        throw new Error('Could not resolve URL host');
+    }
+    if (!records.length || records.some((r) => isPrivateAddress(r.address))) {
+        throw new Error('URL resolves to a non-public host');
+    }
+};
+
 // Guided Threat Hunting: proxy to the Python hunt-service which scrapes the
-// advisory (Scrapling), runs Groq + Pydantic validation/retry, and returns a
-// defanged structured Hunt Pack. The advisory is looked up in the live feed by
-// URL (same allowlist as /enrich) so this can't be used as an arbitrary scraper.
+// report (Scrapling), runs Groq + Pydantic validation/retry, and returns a
+// defanged structured Hunt Pack. Advisories from the live feed are trusted by
+// their allowlisted URL; any other pasted URL must pass the SSRF guard above so
+// this can't be used to scan internal infrastructure.
 app.post('/api/newsletter/hunt-pack', scanLimiter, async (req, res) => {
     try {
         const url = (req.body?.url || '').toString();
@@ -1695,7 +1791,19 @@ app.post('/api/newsletter/hunt-pack', scanLimiter, async (req, res) => {
 
         const feed = memoryCache.newsletter.data || [];
         const item = feed.find((i) => i.link === url);
-        if (!item) return res.status(404).json({ error: 'Advisory not found in current feed' });
+
+        // Feed advisories carry a known-good title; pasted URLs are validated for
+        // SSRF before we let the scraper anywhere near them.
+        let title = '';
+        if (item) {
+            title = item.title;
+        } else {
+            try {
+                await assertSafePublicUrl(url);
+            } catch (e) {
+                return res.status(400).json({ error: e.message || 'URL rejected' });
+            }
+        }
 
         const cacheKey = `${lang}|${url}`;
         const now = Date.now();
@@ -1704,7 +1812,7 @@ app.post('/api/newsletter/hunt-pack', scanLimiter, async (req, res) => {
 
         const response = await axios.post(
             `${process.env.HUNT_SERVICE_URL.replace(/\/$/, '')}/hunt-pack`,
-            { url: item.link, lang, title: item.title },
+            { url, lang, title },
             {
                 headers: {
                     'Content-Type': 'application/json',
