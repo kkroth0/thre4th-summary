@@ -1,5 +1,5 @@
 /// <reference types="vite/client" />
-import { ThreatIntelligenceResult, VendorData } from "@/types/threat-intelligence";
+import { ThreatIntelligenceResult, VendorData, TimelineEvent } from "@/types/threat-intelligence";
 
 // Helper to handle response
 const handleResponse = async (response: Response, vendorName: string) => {
@@ -31,9 +31,10 @@ export const VENDOR_IOC_SUPPORT: Record<string, ('ip' | 'domain' | 'hash' | 'url
     "VirusTotal": ['ip', 'domain', 'hash', 'url'],
     "AbuseIPDB": ['ip'],
     "AlienVault OTX": ['ip', 'domain', 'hash', 'url'],
-    "Shodan": ['ip'],
+    "Shodan": ['ip', 'domain'],
     "URLhaus": ['url', 'domain'],
     "MalwareBazaar": ['hash'],
+    "ThreatFox": ['ip', 'domain', 'url', 'hash'],
     "PhishTank": ['url'],
     "Pulsedive": ['ip', 'domain', 'hash', 'url'],
     "Hybrid Analysis": ['hash'],
@@ -147,13 +148,43 @@ const formatVendorData = (vendorName: string, data: any, query: string): any => 
 
         case "MalwareBazaar":
             if (data.query_status === "ok") {
+                const mb = data.data?.[0] || {};
                 return {
                     "Status": "Sample Found",
-                    "File Type": data.data?.[0]?.file_type || "Unknown",
-                    "Signature": data.data?.[0]?.signature || "Unknown",
+                    "File Type": mb.file_type || "Unknown",
+                    "File Name": mb.file_name || "Unknown",
+                    "Signature": mb.signature || "Unknown",
+                    "MD5": mb.md5_hash || "Unknown",
+                    "SHA256": mb.sha256_hash || "Unknown",
+                    "File Size": mb.file_size ? `${mb.file_size} bytes` : "Unknown",
+                    "Delivery Method": mb.delivery_method || "Unknown",
+                    "Reporter": mb.reporter || "Unknown",
+                    "Tags": Array.isArray(mb.tags) ? mb.tags.join(", ") : "None",
+                    "First Seen": mb.first_seen || "Unknown",
+                    "Last Seen": mb.last_seen || "Unknown",
                 };
             }
             return { "Status": "No samples found" };
+
+        case "ThreatFox":
+            if (data.query_status === "ok" && Array.isArray(data.data) && data.data.length > 0) {
+                const tf = data.data[0];
+                const malwares = Array.from(new Set(data.data.map((d: any) => d.malware_printable).filter(Boolean)));
+                const allTags = Array.from(new Set(data.data.flatMap((d: any) => Array.isArray(d.tags) ? d.tags : [])));
+                return {
+                    "Status": "Malicious",
+                    "Malware": malwares.slice(0, 5).join(", ") || tf.malware_printable || "Unknown",
+                    "Threat Type": tf.threat_type_desc || tf.threat_type || "Unknown",
+                    "Confidence": tf.confidence_level != null ? `${tf.confidence_level}%` : "Unknown",
+                    "IOC Matches": data.data.length,
+                    "Malpedia": tf.malware_malpedia || "N/A",
+                    "Tags": allTags.slice(0, 8).join(", ") || "None",
+                    "Reference": tf.reference || "N/A",
+                    "First Seen": tf.first_seen || "Unknown",
+                    "Last Seen": tf.last_seen || "Unknown",
+                };
+            }
+            return { "Status": "No data" };
         case "Google Safe Browsing":
             if (data.matches && data.matches.length > 0) {
                 return {
@@ -167,21 +198,45 @@ const formatVendorData = (vendorName: string, data: any, query: string): any => 
                 "Status": data.results?.in_database ? (data.results.valid ? "Verified Phishing" : "Not Phishing") : "Unknown",
                 "Verified": data.results?.verified ? "Yes" : "No",
             };
-        case "Pulsedive":
+        case "Pulsedive": {
+            if (data.error || (!data.risk && !data.iid)) return { "Status": "No data" };
+            const pdRisk = (data.risk || "unknown").toLowerCase();
+            const pdStatus = ["critical", "high"].includes(pdRisk) ? "Malicious"
+                : pdRisk === "medium" ? "Suspicious"
+                : pdRisk === "none" || pdRisk === "low" ? "Clean" : "Unknown";
             return {
+                "Status": pdStatus,
                 "Risk": data.risk || "Unknown",
-                "Threats": Array.isArray(data.threats) ? data.threats.slice(0, 3).map((t: any) => typeof t === 'string' ? t : t.name || t.type || 'Unknown').join(", ") : "None",
+                "Risk (recommended)": data.risk_recommended || "Unknown",
+                "Type": data.type || "Unknown",
+                "Threats": Array.isArray(data.threats) ? data.threats.slice(0, 5).map((t: any) => typeof t === 'string' ? t : t.name || t.type || 'Unknown').join(", ") : "None",
                 "Feeds": data.feeds?.length || 0,
+                "First Seen": data.stamp_added || "Unknown",
+                "Last Seen": data.stamp_seen || data.stamp_updated || "Unknown",
             };
+        }
 
 
 
         case "Hybrid Analysis":
             if (Array.isArray(data) && data.length > 0) {
+                const ha = data[0];
+                const haTags = Array.from(new Set(data.flatMap((d: any) => Array.isArray(d.classification_tags) ? d.classification_tags : [])));
+                const mitre = Array.isArray(ha.mitre_attcks) ? ha.mitre_attcks.map((m: any) => m.technique || m.attck_id).filter(Boolean) : [];
                 return {
-                    "Verdict": data[0].verdict || "Unknown",
-                    "Threat Score": `${data[0].threat_score}/100`,
-                    "AV Detect": `${data[0].av_detect}%`,
+                    "Status": ha.verdict === "malicious" ? "Malicious" : ha.verdict === "suspicious" ? "Suspicious" : (ha.verdict || "Unknown"),
+                    "Verdict": ha.verdict || "Unknown",
+                    "Malware Family": ha.vx_family || "N/A",
+                    "Threat Score": ha.threat_score != null ? `${ha.threat_score}/100` : "N/A",
+                    "Threat Level": ha.threat_level != null ? String(ha.threat_level) : "N/A",
+                    "AV Detect": ha.av_detect != null ? `${ha.av_detect}%` : "N/A",
+                    "File Type": ha.type_short || ha.type || "Unknown",
+                    "Submission": ha.submit_name || "Unknown",
+                    "Signatures": ha.total_signatures != null ? ha.total_signatures : "N/A",
+                    "MITRE ATT&CK": mitre.slice(0, 6).join(", ") || "None",
+                    "Classification": haTags.slice(0, 6).join(", ") || "None",
+                    "Analyzed": ha.analysis_start_time || "Unknown",
+                    "Reports": data.length,
                 };
             }
             return { "Status": "No analysis found" };
@@ -244,6 +299,22 @@ const formatVendorData = (vendorName: string, data: any, query: string): any => 
             return { "Status": "No WHOIS data available" };
 
         case "Shodan": {
+            // Domain queries hit /dns/domain — a different shape (subdomains + DNS records).
+            if (data.subdomains || (Array.isArray(data.data) && data.data[0]?.subdomain !== undefined)) {
+                const records = Array.isArray(data.data) ? data.data : [];
+                const byType = (t: string) => records.filter((r: any) => r.type === t);
+                return {
+                    "Status": records.length > 0 ? "DNS Records Found" : "No DNS data",
+                    "Subdomains": Array.isArray(data.subdomains) ? data.subdomains.length : 0,
+                    "Subdomain List": Array.isArray(data.subdomains) ? data.subdomains.slice(0, 25) : [],
+                    "A Records": byType("A").map((r: any) => `${r.subdomain || "@"} → ${r.value}`).slice(0, 10).join(", ") || "None",
+                    "MX Records": byType("MX").map((r: any) => r.value).slice(0, 5).join(", ") || "None",
+                    "NS Records": byType("NS").map((r: any) => r.value).slice(0, 5).join(", ") || "None",
+                    "TXT Records": byType("TXT").length,
+                    "Total Records": records.length,
+                    "Tags": Array.isArray(data.tags) ? data.tags.join(", ") : "None",
+                };
+            }
             const banners = Array.isArray(data.data) ? data.data : [];
             // The actual CVE list, not just a count. Shodan keys data.vulns by CVE id.
             const hostVulns = data.vulns ? Object.keys(data.vulns) : [];
@@ -435,6 +506,125 @@ const getVendorLink = (vendorName: string, query: string): string | undefined =>
     }
 };
 
+// ---- IOC detection timeline -------------------------------------------------
+// Normalize the many timestamp formats vendors return (unix seconds, ISO, and
+// abuse.ch's "YYYY-MM-DD HH:MM:SS UTC") to an ISO string, or null if unusable.
+const parseLooseDate = (v: any): string | null => {
+    if (v == null) return null;
+    let t: number;
+    if (typeof v === "number") {
+        if (!v) return null; // 0 / NaN are "no timestamp", not 1970
+        t = v < 1e12 ? v * 1000 : v; // seconds vs ms
+    } else {
+        const s = String(v).trim();
+        if (!s || /^(unknown|never|n\/a|none|0)$/i.test(s)) return null;
+        // abuse.ch style: "2023-08-01 12:34:56 UTC"
+        const normalized = s.replace(/\s+UTC$/i, "Z").replace(" ", "T");
+        t = Date.parse(normalized);
+        if (isNaN(t)) t = Date.parse(s);
+    }
+    if (isNaN(t)) return null;
+    const d = new Date(t);
+    const yr = d.getUTCFullYear();
+    if (yr < 2000 || yr > new Date().getUTCFullYear() + 1) return null; // sanity bound
+    return d.toISOString();
+};
+
+const pushEvent = (
+    events: TimelineEvent[], vendor: string, label: string, raw: any, kind: TimelineEvent["kind"],
+) => {
+    const date = parseLooseDate(raw);
+    if (date) events.push({ vendor, label, date, kind });
+};
+
+// Pull dated observations out of a vendor's RAW response (before display
+// formatting) so every feed can contribute to one merged timeline.
+const extractVendorTimestamps = (vendorName: string, data: any): TimelineEvent[] => {
+    const e: TimelineEvent[] = [];
+    const v = vendorName;
+    try {
+        switch (vendorName) {
+            case "VirusTotal": {
+                const a = (data.data?.data ? data.data.data : data.data)?.attributes;
+                if (a) {
+                    pushEvent(e, v, "First submission", a.first_submission_date, "first_seen");
+                    pushEvent(e, v, "Last analysis", a.last_analysis_date, "analysis");
+                    pushEvent(e, v, "Last modification", a.last_modification_date, "other");
+                }
+                break;
+            }
+            case "AbuseIPDB": {
+                const a = data.data?.data ? data.data.data : data.data;
+                if (a) {
+                    pushEvent(e, v, "Last reported", a.lastReportedAt, "report");
+                    (a.reports || []).slice(0, 5).forEach((r: any) => pushEvent(e, v, "Abuse report", r.reportedAt, "report"));
+                }
+                break;
+            }
+            case "AlienVault OTX": {
+                const a = data.data || data;
+                (a.pulse_info?.pulses || []).slice(0, 5).forEach((p: any) => pushEvent(e, v, `Pulse: ${p.name || "created"}`, p.created, "report"));
+                break;
+            }
+            case "URLhaus": {
+                pushEvent(e, v, "First seen", data.firstseen, "first_seen");
+                pushEvent(e, v, "Last seen", data.lastseen, "last_seen");
+                (data.urls || []).slice(0, 5).forEach((u: any) => pushEvent(e, v, "Malicious URL added", u.date_added, "report"));
+                break;
+            }
+            case "MalwareBazaar": {
+                const m = data.data?.[0];
+                if (m) { pushEvent(e, v, "First seen", m.first_seen, "first_seen"); pushEvent(e, v, "Last seen", m.last_seen, "last_seen"); }
+                break;
+            }
+            case "ThreatFox": {
+                (data.data || []).slice(0, 8).forEach((d: any) => {
+                    pushEvent(e, v, `First seen: ${d.malware_printable || "IOC"}`, d.first_seen, "first_seen");
+                    pushEvent(e, v, "Last seen", d.last_seen, "last_seen");
+                });
+                break;
+            }
+            case "Shodan": {
+                pushEvent(e, v, "Last update", data.last_update, "analysis");
+                (Array.isArray(data.data) ? data.data : []).slice(0, 8).forEach((b: any) =>
+                    pushEvent(e, v, b.subdomain !== undefined ? `DNS ${b.type} record` : `Service :${b.port}`, b.last_seen || b.timestamp, "other"));
+                break;
+            }
+            case "Censys": {
+                const c = data.data || data;
+                pushEvent(e, v, "Last scanned", c.last_updated, "analysis");
+                break;
+            }
+            case "Pulsedive": {
+                pushEvent(e, v, "First seen", data.stamp_added, "first_seen");
+                pushEvent(e, v, "Last seen", data.stamp_seen, "last_seen");
+                pushEvent(e, v, "Updated", data.stamp_updated, "other");
+                break;
+            }
+            case "Hybrid Analysis": {
+                (Array.isArray(data) ? data : []).slice(0, 5).forEach((d: any) => pushEvent(e, v, `Analyzed: ${d.vx_family || d.submit_name || "sample"}`, d.analysis_start_time, "analysis"));
+                break;
+            }
+            case "WHOIS": {
+                const r = data.WhoisRecord;
+                if (r) {
+                    pushEvent(e, v, "Domain registered", r.createdDate, "first_seen");
+                    pushEvent(e, v, "Domain updated", r.updatedDate, "other");
+                    pushEvent(e, v, "Domain expires", r.expiresDate, "other");
+                }
+                break;
+            }
+            case "PhishStats": {
+                (Array.isArray(data) ? data : []).slice(0, 5).forEach((d: any) => pushEvent(e, v, "Phishing reported", d.date, "report"));
+                break;
+            }
+        }
+    } catch {
+        /* best-effort: a malformed vendor payload must never break the search */
+    }
+    return e;
+};
+
 // Generic fetcher for backend API
 const fetchFromBackend = async (endpoint: string, query: string, vendorName: string): Promise<VendorData> => {
     try {
@@ -448,7 +638,8 @@ const fetchFromBackend = async (endpoint: string, query: string, vendorName: str
         return {
             name: vendorName,
             data: formatVendorData(vendorName, data, query),
-            link: getVendorLink(vendorName, query)
+            link: getVendorLink(vendorName, query),
+            timeline: extractVendorTimestamps(vendorName, data),
         };
     } catch (error) {
         return { name: vendorName, data: {}, error: (error as Error).message };
@@ -481,6 +672,7 @@ export const fetchShodanData = (query: string) => fetchFromBackend('shodan', que
 export const fetchURLhausData = (query: string) => fetchFromBackend('urlhaus', query, "URLhaus");
 
 export const fetchMalwareBazaarData = (query: string) => fetchFromBackend('malwarebazaar', query, "MalwareBazaar");
+export const fetchThreatFoxData = (query: string) => fetchFromBackend('threatfox', query, "ThreatFox");
 export const fetchGoogleSafeBrowsingData = (query: string) => fetchFromBackend('googlesafebrowsing', query, "Google Safe Browsing");
 export const fetchPhishTankData = (query: string) => fetchFromBackend('phishtank', query, "PhishTank");
 export const fetchPulsediveData = (query: string) => fetchFromBackend('pulsedive', query, "Pulsedive");
@@ -545,6 +737,7 @@ const buildVendorMap = (query: string): Record<string, () => Promise<VendorData>
     "Shodan": () => fetchShodanData(query),
     "URLhaus": () => fetchURLhausData(query),
     "MalwareBazaar": () => fetchMalwareBazaarData(query),
+    "ThreatFox": () => fetchThreatFoxData(query),
     "Google Safe Browsing": () => fetchGoogleSafeBrowsingData(query),
     "PhishTank": () => fetchPhishTankData(query),
     "Pulsedive": () => fetchPulsediveData(query),

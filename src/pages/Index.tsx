@@ -21,6 +21,7 @@ import { useSidebar } from "@/contexts/SidebarContext";
 import { Header } from "@/components/Header";
 
 import { ThreatCharts } from "@/components/ThreatCharts";
+import { IocTimeline } from "@/components/IocTimeline";
 import { QuickActions } from "@/components/QuickActions";
 import { ViewToggle } from "@/components/ViewToggle";
 import { ThreatCorrelationGraph } from "@/components/ThreatCorrelationGraph";
@@ -324,7 +325,7 @@ const SearchForm = ({
 
 const ALL_VENDORS = [
   "IP Geolocation", "WHOIS", "VirusTotal", "AbuseIPDB", "AlienVault OTX",
-  "Shodan", "URLhaus", "MalwareBazaar", "Google Safe Browsing",
+  "Shodan", "URLhaus", "MalwareBazaar", "ThreatFox", "Google Safe Browsing",
   "PhishTank", "Pulsedive",
   "Hybrid Analysis", "CIRCL hashlookup",
   "Criminal IP", "MetaDefender", "PhishStats", "Ransomware.live",
@@ -1760,6 +1761,8 @@ const Index = () => {
                       detections={data.detections}
                       totalVendors={data.totalVendors}
                     />
+
+                    <IocTimeline vendorData={data.vendorData} />
 
                     <div className="flex items-center justify-between mb-4 animate-fade-in">
                       <h2 className="text-2xl font-bold">{t('vendorResults')}</h2>

@@ -1,3 +1,13 @@
+// A single dated observation a vendor reported about an IOC (first/last seen,
+// last analysis, an abuse report, etc.), normalized to ISO 8601 so events from
+// every feed can be merged into one chronological timeline.
+export interface TimelineEvent {
+    vendor: string;
+    label: string;
+    date: string; // ISO 8601
+    kind: "first_seen" | "last_seen" | "analysis" | "report" | "other";
+}
+
 export interface VendorData {
     name: string;
     data: Record<string, any>;
@@ -10,6 +20,7 @@ export interface VendorData {
         daily_remaining?: string | number;
     };
     link?: string;
+    timeline?: TimelineEvent[];
 }
 
 export interface ThreatIntelligenceResult {
