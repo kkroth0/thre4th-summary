@@ -26,6 +26,10 @@ const SEVERITY_STYLES: Record<string, string> = {
 
 const slug = (s: string) => (s || "boletim").normalize("NFKD").replace(/[^\w\s-]/g, "").trim().toLowerCase().replace(/[\s_-]+/g, "-").slice(0, 50) || "boletim";
 
+// Após esse tempo um job ainda "pending" vira erro no front (worker caiu, ou o
+// backend reiniciou e perdeu o job -> 404). Evita "gerando…" eterno.
+const CLIENT_TIMEOUT_MS = 10 * 60 * 1000;
+
 const DailyBulletin: React.FC = () => {
   const { language } = useLanguage();
   const { isCollapsed } = useSidebar();
@@ -57,7 +61,17 @@ const DailyBulletin: React.FC = () => {
     const tick = async () => {
       const open = jobs.filter((j) => j.status === "pending");
       if (!open.length) return;
-      const updated = await Promise.all(open.map((j) => fetchJob(j.id).catch(() => null)));
+      const updated = await Promise.all(open.map(async (j) => {
+        const tooOld = Date.now() - new Date(j.createdAt).getTime() > CLIENT_TIMEOUT_MS;
+        try {
+          const u = await fetchJob(j.id);
+          if (u.status === "pending" && tooOld) return { ...u, status: "error" as const, error: "tempo esgotado" };
+          return u;
+        } catch {
+          // 404 (servidor reiniciou e perdeu o job) ou rede: só marca erro depois do tempo
+          return tooOld ? { ...j, status: "error" as const, error: "job perdido (servidor reiniciou?)" } : null;
+        }
+      }));
       setJobs((prev) => prev.map((j) => {
         const u = updated.find((x) => x && x.id === j.id);
         return u || j;

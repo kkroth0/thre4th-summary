@@ -1681,6 +1681,23 @@ function pruneJobs(max = 100) {
     while (ids.length > max) delete jobsStore[ids.shift()];
 }
 
+// Expira jobs presos em 'pending' além do TTL (worker caiu / geração longa demais),
+// pra não deixar o front em "gerando…" pra sempre nem o worker pegar job morto.
+const JOB_TTL_MS = parseInt(process.env.FEED_JOB_TTL_MS, 10) || 10 * 60 * 1000;
+function expireStaleJobs() {
+    const now = Date.now();
+    let changed = false;
+    for (const j of Object.values(jobsStore)) {
+        if (j.status === 'pending' && now - new Date(j.createdAt).getTime() > JOB_TTL_MS) {
+            j.status = 'error';
+            j.error = 'expirou (worker indisponível ou geração longa demais)';
+            j.updatedAt = new Date().toISOString();
+            changed = true;
+        }
+    }
+    if (changed) saveJobs();
+}
+
 // Front pede a geração de UMA url. Público + rate-limit + validação SSRF.
 //   POST /api/feed/generate  { url, type, title? }
 app.post('/api/feed/generate', scanLimiter, async (req, res) => {
@@ -1707,6 +1724,7 @@ app.post('/api/feed/generate', scanLimiter, async (req, res) => {
 
 // Front faz poll do job. Público.   GET /api/feed/job?id=...
 app.get('/api/feed/job', (req, res) => {
+    expireStaleJobs();
     const job = jobsStore[(req.query.id || '').toString()];
     if (!job) return res.status(404).json({ error: 'job não encontrado' });
     res.json(job);
@@ -1715,6 +1733,7 @@ app.get('/api/feed/job', (req, res) => {
 // Worker (VPS) lê os jobs pendentes. 🔒   GET /api/feed/jobs/pending
 app.get('/api/feed/jobs/pending', (req, res) => {
     if (!requireFeedSecret(req, res)) return;
+    expireStaleJobs();
     const pending = Object.values(jobsStore)
         .filter((j) => j.status === 'pending')
         .map((j) => ({ id: j.id, url: j.url, type: j.type, title: j.title }));
