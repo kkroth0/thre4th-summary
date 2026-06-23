@@ -246,23 +246,45 @@ const formatVendorData = (vendorName: string, data: any, query: string): any => 
                 "File Name": data.FileName || "Unknown",
                 "File Size": data.FileSize || "Unknown",
             };
-        case "Criminal IP":
+        case "Criminal IP": {
+            // Criminal IP returns `issues` as an OBJECT of booleans (is_vpn, is_tor…),
+            // not an array, and `score` as {inbound, outbound}. The card renderer
+            // expects Score/Issues/Classification/VPN/Proxy/Tor/Cloud, so map to those.
+            const ciIssues = (data.issues && typeof data.issues === "object") ? data.issues : {};
+            const ciScoreRaw = typeof data.score === "object" ? (data.score?.inbound ?? data.score?.outbound ?? 0) : (data.score ?? 0);
+            const ciScore = typeof ciScoreRaw === "number" ? ciScoreRaw : (parseInt(ciScoreRaw) || 0);
+            const ciIssueCount = Object.values(ciIssues).filter(Boolean).length;
+            const ciMalicious = data.is_malicious || ciIssues.is_malicious;
             return {
-                "Score": typeof data.score === 'object' ? (data.score?.inbound || data.score?.value || JSON.stringify(data.score)) : (data.score || "Unknown"),
-                "Issues": data.issues?.length || 0,
-                "Status": data.is_malicious ? "Malicious" : "Clean",
+                "Score": ciScore,
+                "Issues": ciIssueCount,
+                "Classification": ciMalicious ? "Malicious" : ciIssueCount ? "Suspicious" : "Clean",
+                "VPN": ciIssues.is_vpn ? "Yes" : "No",
+                "Proxy": ciIssues.is_proxy ? "Yes" : "No",
+                "Tor": ciIssues.is_tor ? "Yes" : "No",
+                "Cloud": ciIssues.is_cloud ? "Yes" : "No",
+                "Status": ciMalicious ? "Malicious" : "Clean",
             };
-        case "MetaDefender":
+        }
+        case "MetaDefender": {
             if (data.scan_results) {
                 return {
                     "Detection Rate": `${data.scan_results?.total_detected_avs}/${data.scan_results?.total_avs}`,
                     "Status": data.scan_results?.total_detected_avs > 0 ? "Malicious" : "Clean",
+                    "Threat": data.scan_results?.scan_all_result_a || "Unknown",
                 };
             }
+            const mdLr = data.lookup_results || {};
+            const mdFlagged = Array.isArray(mdLr.sources)
+                ? mdLr.sources.filter((s: any) => s.assessment && /mali|susp|phish|black|spam|botnet/i.test(s.assessment))
+                : [];
             return {
-                "Geo Location": data.geo_info?.country?.name || "Unknown",
-                "Detected AVs": data.lookup_results?.detected_by || 0,
+                "Status": (mdLr.detected_by || 0) > 0 ? "Flagged" : "Clean",
+                "Detected By": `${mdLr.detected_by || 0} source${(mdLr.detected_by || 0) === 1 ? "" : "s"}`,
+                "Flagged By": mdFlagged.length ? mdFlagged.map((s: any) => s.provider).slice(0, 5).join(", ") : "None",
+                "Geo Location": [data.geo_info?.city?.name, data.geo_info?.country?.name].filter(Boolean).join(", ") || "Unknown",
             };
+        }
         case "PhishStats":
             if (Array.isArray(data) && data.length > 0) {
                 return {
@@ -924,4 +946,63 @@ export const fetchDnsLookup = async (domain: string): Promise<DnsLookupResult> =
         throw new Error(`DNS Lookup API error: ${response.status} - ${errorText}`);
     }
     return response.json();
+};
+
+// ─── Boletim diário (Feed Generator) ───────────────────────────────────────
+// Sugestões CTI do dia -> curadoria (seleção) -> o emissor na VPS gera o JSON e
+// publica -> o render agent local renderiza o .pptx oficial dos templates.
+export type DeckType = 'vuln' | 'campaign';
+
+export interface DailySuggestion {
+    title: string;
+    url: string;
+    source: string;
+    pubDate: string;
+    score: number;
+    severity: string;
+    cves: string[];
+    kev: boolean;
+    reasons: string[];
+    suggestedType: DeckType;
+}
+
+export interface DailySelectionItem {
+    url: string;
+    type: DeckType;
+    title: string;
+}
+
+export interface DailyBoletim {
+    date: string;
+    selection: DailySelectionItem[];
+    boletins: Record<string, { json: unknown; publishedAt: string }>;
+    updatedAt: string | null;
+}
+
+export const fetchDailySuggestions = async (
+    hours = 36,
+    limit = 10,
+): Promise<{ generatedAt: string; windowHours: number; count: number; suggestions: DailySuggestion[] }> => {
+    const r = await fetch(`/api/feed/daily-suggestions?hours=${hours}&limit=${limit}`);
+    if (!r.ok) throw new Error(`Suggestions API error: ${r.status}`);
+    return r.json();
+};
+
+export const saveDailySelection = async (items: DailySelectionItem[], date?: string) => {
+    const r = await fetch('/api/feed/daily-selection', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items, ...(date ? { date } : {}) }),
+    });
+    if (!r.ok) {
+        const e = await r.json().catch(() => ({}));
+        throw new Error(e.error || `Selection API error: ${r.status}`);
+    }
+    return r.json();
+};
+
+export const fetchDailyBoletim = async (date?: string): Promise<DailyBoletim> => {
+    const r = await fetch(`/api/feed/daily-boletim${date ? `?date=${date}` : ''}`);
+    if (!r.ok) throw new Error(`Boletim API error: ${r.status}`);
+    return r.json();
 };

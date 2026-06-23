@@ -28,3 +28,6 @@ dist-ssr
 
 # Local secrets (do not commit)
 hunt-service-env.txt
+
+# Boletim diário · store persistente do Feed Generator
+server/.feed-store.json

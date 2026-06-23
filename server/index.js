@@ -590,6 +590,11 @@ app.post('/api/pulsedive', scanLimiter, async (req, res) => {
         });
         res.json(response.data);
     } catch (error) {
+        // Pulsedive returns 404 when the indicator simply isn't in its database —
+        // that's a clean "not found", not an error worth surfacing to the user.
+        if (error.response?.status === 404) {
+            return res.json({ data: { "Status": "Not in Pulsedive database" } });
+        }
         const { status, message } = sanitizeError(error);
         res.status(status).json({ error: message });
     }
@@ -1496,6 +1501,171 @@ app.get('/api/newsletter', async (req, res) => {
     }
 });
 
+// ─── Feed Generator · sugestões do boletim diário ─────────────────────────
+// Fase 1: itens CTI do dia, vindos do feed unificado (já pontuado/deduplicado),
+// servidos como *sugestões* para a curadoria do boletim diário — o analista
+// escolhe quais viram boletim. Read-only; reaproveita o cache da newsletter.
+//   GET /api/feed/daily-suggestions?hours=36&limit=10&minScore=0
+app.get('/api/feed/daily-suggestions', async (req, res) => {
+    try {
+        if (!memoryCache.newsletter.data) await refreshNewsletterFeed();
+        const all = memoryCache.newsletter.data || [];
+
+        const hours = Math.min(Math.max(parseInt(req.query.hours, 10) || 36, 1), 168);
+        const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 10, 1), 50);
+        const minScore = parseInt(req.query.minScore, 10);
+        const cutoff = Date.now() - hours * 60 * 60 * 1000;
+
+        let items = all.filter((i) => {
+            const t = new Date(i.pubDate).getTime();
+            return Number.isFinite(t) && t >= cutoff && (i.link || '').startsWith('http');
+        });
+        if (!Number.isNaN(minScore)) items = items.filter((i) => (i.score || 0) >= minScore);
+
+        // Maior relevância primeiro; itens em CISA KEV já sobem via score.
+        items.sort((a, b) => (b.score || 0) - (a.score || 0) || new Date(b.pubDate) - new Date(a.pubDate));
+
+        const suggestions = items.slice(0, limit).map((i) => ({
+            title: i.title,
+            url: i.link,
+            source: i.source,
+            pubDate: i.pubDate,
+            score: i.score || 0,
+            severity: i.severity || 'Low',
+            cves: i.cves || [],
+            kev: !!i.kev,
+            reasons: i.reasons || [],
+            // tipo de deck sugerido: advisory com CVE tende a "vuln", senão "campaign".
+            suggestedType: (i.cves && i.cves.length) ? 'vuln' : 'campaign',
+        }));
+
+        res.set('Cache-Control', 'public, max-age=300');
+        res.json({
+            generatedAt: new Date().toISOString(),
+            windowHours: hours,
+            count: suggestions.length,
+            suggestions,
+        });
+    } catch (error) {
+        const { status, message } = sanitizeError(error);
+        res.status(status).json({ error: message });
+    }
+});
+
+// ─── Boletim diário · store persistente (seleção curada + boletim gerado) ──
+// Loop do Feed Generator: o site grava a SELEÇÃO curada (POST selection); o
+// emissor na VPS lê a seleção (GET selection, com segredo), gera o JSON e o
+// PUBLICA (POST boletim, com segredo); o site e o render agent local leem o
+// boletim (GET boletim). Persistido em disco p/ sobreviver a restart.
+const FEED_STORE_PATH = path.join(__dirname, '.feed-store.json');
+function loadFeedStore() {
+    try { return JSON.parse(fs.readFileSync(FEED_STORE_PATH, 'utf8')); }
+    catch { return {}; }
+}
+function saveFeedStore(store) {
+    try { fs.writeFileSync(FEED_STORE_PATH, JSON.stringify(store, null, 2)); }
+    catch (e) { console.error('feed store write failed:', e.message); }
+}
+let feedStore = loadFeedStore();   // { "YYYY-MM-DD": { selection, boletins, updatedAt } }
+
+const dateKey = (d) => {
+    const s = (d || new Date().toISOString()).toString().slice(0, 10);
+    return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : new Date().toISOString().slice(0, 10);
+};
+const dayEntry = (key) => (feedStore[key] = feedStore[key] || { selection: [], boletins: {}, updatedAt: null });
+
+// Segredo compartilhado p/ as rotas servidor-a-servidor (emissor/render agent).
+// Sem FEED_AGENT_SECRET definido, as rotas protegidas ficam desabilitadas (503),
+// pra não exporem leitura/escrita de boletim sem auth.
+function requireFeedSecret(req, res) {
+    const secret = process.env.FEED_AGENT_SECRET;
+    if (!secret) { res.status(503).json({ error: 'feed agent secret not configured' }); return false; }
+    if (req.get('X-Feed-Secret') !== secret) { res.status(401).json({ error: 'unauthorized' }); return false; }
+    return true;
+}
+
+// UI grava a seleção curada do dia. Público + rate-limit + validação SSRF.
+//   POST /api/feed/daily-selection  { date?, items:[{url,type,title}] }
+app.post('/api/feed/daily-selection', scanLimiter, async (req, res) => {
+    try {
+        const key = dateKey(req.body?.date);
+        const rawItems = Array.isArray(req.body?.items) ? req.body.items : [];
+        if (!rawItems.length) return res.status(400).json({ error: 'items vazio' });
+        if (rawItems.length > 50) return res.status(400).json({ error: 'máx. 50 itens' });
+
+        // URLs vindas do feed (curadoria das sugestões) são confiáveis pela
+        // allowlist — mesmo modelo do /hunt-pack. Só URL externa avulsa passa
+        // pelo guard SSRF.
+        const feedUrls = new Set((memoryCache.newsletter.data || []).map((i) => i.link || ''));
+        const items = [];
+        for (const it of rawItems) {
+            const url = (it?.url || '').toString();
+            if (!/^https?:\/\//i.test(url)) continue;
+            if (!feedUrls.has(url)) {
+                try { await assertSafePublicUrl(url); } catch { continue; }
+            }
+            items.push({
+                url,
+                type: it?.type === 'campaign' ? 'campaign' : 'vuln',
+                title: (it?.title || '').toString().slice(0, 300),
+            });
+        }
+        if (!items.length) return res.status(400).json({ error: 'nenhuma URL válida' });
+
+        const e = dayEntry(key);
+        e.selection = items;
+        e.updatedAt = new Date().toISOString();
+        saveFeedStore(feedStore);
+        res.json({ date: key, count: items.length, selection: items });
+    } catch (error) {
+        const { status, message } = sanitizeError(error);
+        res.status(status).json({ error: message });
+    }
+});
+
+// Emissor (VPS) lê a seleção curada. Protegido por segredo.
+//   GET /api/feed/daily-selection?date=YYYY-MM-DD
+app.get('/api/feed/daily-selection', async (req, res) => {
+    if (!requireFeedSecret(req, res)) return;
+    const key = dateKey(req.query.date);
+    const e = feedStore[key] || { selection: [], updatedAt: null };
+    res.json({ date: key, selection: e.selection || [], updatedAt: e.updatedAt || null });
+});
+
+// Emissor (VPS) publica o JSON do boletim gerado. Protegido por segredo.
+//   POST /api/feed/daily-boletim  { date?, type, json }
+app.post('/api/feed/daily-boletim', async (req, res) => {
+    if (!requireFeedSecret(req, res)) return;
+    try {
+        const key = dateKey(req.body?.date);
+        const type = req.body?.type === 'campaign' ? 'campaign' : 'vuln';
+        const json = req.body?.json;
+        if (!json || typeof json !== 'object') return res.status(400).json({ error: 'json ausente/inválido' });
+
+        const e = dayEntry(key);
+        e.boletins[type] = { json, publishedAt: new Date().toISOString() };
+        e.updatedAt = new Date().toISOString();
+        saveFeedStore(feedStore);
+        res.json({ date: key, type, ok: true });
+    } catch (error) {
+        const { status, message } = sanitizeError(error);
+        res.status(status).json({ error: message });
+    }
+});
+
+// Site (UI) + render agent local leem o boletim do dia. Leitura pública.
+//   GET /api/feed/daily-boletim?date=YYYY-MM-DD
+app.get('/api/feed/daily-boletim', (req, res) => {
+    const key = dateKey(req.query.date);
+    const e = feedStore[key] || { selection: [], boletins: {}, updatedAt: null };
+    res.json({
+        date: key,
+        selection: e.selection || [],
+        boletins: e.boletins || {},
+        updatedAt: e.updatedAt || null,
+    });
+});
+
 // ─── Groq-powered on-demand advisory analysis ─────────────────────────────
 const GROQ_BASE_URL = 'https://api.groq.com/openai/v1';
 const GROQ_MODELS = ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'gemma2-9b-it'];
@@ -1760,7 +1930,11 @@ const assertSafePublicUrl = async (raw) => {
         throw new Error('Only standard web ports are allowed');
     }
     const host = parsed.hostname.replace(/^\[|\]$/g, '');
-    if (host === 'localhost' || isPrivateAddress(host)) {
+    // isPrivateAddress só entende IP literal; para um IP-literal no host (ex.:
+    // http://10.0.0.1) bloqueia se for privado. Hostnames (ex.: example.com)
+    // são validados logo abaixo pela resolução DNS — net.isIP() devolve 0 p/
+    // hostname, então não caímos no `return true` de "não é IP".
+    if (host === 'localhost' || (net.isIP(host) && isPrivateAddress(host))) {
         throw new Error('URL resolves to a non-public host');
     }
     let records;
