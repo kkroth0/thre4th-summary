@@ -30,6 +30,15 @@ const slug = (s: string) => (s || "boletim").normalize("NFKD").replace(/[^\w\s-]
 // backend reiniciou e perdeu o job -> 404). Evita "gerando…" eterno.
 const CLIENT_TIMEOUT_MS = 10 * 60 * 1000;
 
+// Fases estimadas pelo tempo decorrido (mapeiam o pipeline real: coleta ~10-15s,
+// análise LLM ~15-30s). Não é progresso real, mas dá feedback agradável.
+const PHASES = [
+  { pt: "Coletando a página…", en: "Fetching the page…" },
+  { pt: "Analisando com IA…", en: "Analyzing with AI…" },
+  { pt: "Montando o boletim…", en: "Assembling the bulletin…" },
+];
+const phaseIndex = (elapsedMs: number) => (elapsedMs < 15000 ? 0 : elapsedMs < 40000 ? 1 : 2);
+
 const DailyBulletin: React.FC = () => {
   const { language } = useLanguage();
   const { isCollapsed } = useSidebar();
@@ -40,6 +49,7 @@ const DailyBulletin: React.FC = () => {
   const [pasteUrl, setPasteUrl] = useState("");
   const [pasteType, setPasteType] = useState<DeckType>("vuln");
   const [jobs, setJobs] = useState<BoletimJob[]>([]);
+  const [nowMs, setNowMs] = useState(Date.now());
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const loadSuggestions = useCallback(async () => {
@@ -81,6 +91,13 @@ const DailyBulletin: React.FC = () => {
       pollRef.current = setInterval(tick, 3000);
       return () => { if (pollRef.current) clearInterval(pollRef.current); };
     }
+  }, [jobs]);
+
+  // Ticker de 1s só enquanto há job gerando — alimenta a animação de fases.
+  useEffect(() => {
+    if (!jobs.some((j) => j.status === "pending")) return;
+    const t = setInterval(() => setNowMs(Date.now()), 1000);
+    return () => clearInterval(t);
   }, [jobs]);
 
   const generate = async (url: string, type: DeckType, title: string) => {
@@ -156,29 +173,55 @@ const DailyBulletin: React.FC = () => {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-2">
-              {jobs.map((j) => (
-                <div key={j.id} className="flex items-center justify-between rounded-md border p-3 gap-3">
-                  <div className="min-w-0">
-                    <div className="text-sm font-medium truncate">{j.title || j.url}</div>
-                    <div className="text-xs text-muted-foreground truncate">{j.type} · {j.url}</div>
+              {jobs.map((j) => {
+                const elapsed = Math.max(0, nowMs - new Date(j.createdAt).getTime());
+                const pidx = phaseIndex(elapsed);
+                return (
+                  <div key={j.id} className="rounded-md border p-3 animate-fade-in">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="text-sm font-medium truncate">{j.title || j.url}</div>
+                        <div className="text-xs text-muted-foreground truncate">{j.type} · {j.url}</div>
+                      </div>
+                      {j.status === "pending" && (
+                        <span className="text-xs text-primary inline-flex items-center gap-1.5 shrink-0 tabular-nums">
+                          <span className="relative flex h-2 w-2">
+                            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-60" />
+                            <span className="relative inline-flex h-2 w-2 rounded-full bg-primary" />
+                          </span>
+                          {Math.floor(elapsed / 1000)}s
+                        </span>
+                      )}
+                      {j.status === "done" && (
+                        <Button size="sm" variant="outline" onClick={() => download(j)} className="shrink-0">
+                          <Download className="h-4 w-4 mr-2" /> JSON
+                        </Button>
+                      )}
+                      {j.status === "error" && (
+                        <span className="text-xs text-red-500 inline-flex items-center gap-1 shrink-0" title={j.error || ""}>
+                          <AlertTriangle className="h-3 w-3" /> {pt ? "erro" : "error"}
+                        </span>
+                      )}
+                    </div>
+                    {j.status === "pending" && (
+                      <div className="mt-3">
+                        <div className="relative h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                          <span className="absolute top-0 h-full rounded-full bg-primary animate-indeterminate" />
+                        </div>
+                        <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
+                          <Sparkles className="h-3.5 w-3.5 text-primary animate-pulse" />
+                          <span>{pt ? PHASES[pidx].pt : PHASES[pidx].en}</span>
+                          <span className="ml-auto flex gap-1">
+                            {PHASES.map((_, i) => (
+                              <span key={i} className={`h-1.5 w-1.5 rounded-full transition-colors ${i <= pidx ? "bg-primary" : "bg-muted-foreground/30"}`} />
+                            ))}
+                          </span>
+                        </div>
+                      </div>
+                    )}
                   </div>
-                  {j.status === "pending" && (
-                    <span className="text-xs text-muted-foreground inline-flex items-center gap-1 shrink-0">
-                      <Loader2 className="h-3 w-3 animate-spin" /> {pt ? "gerando…" : "generating…"}
-                    </span>
-                  )}
-                  {j.status === "done" && (
-                    <Button size="sm" variant="outline" onClick={() => download(j)} className="shrink-0">
-                      <Download className="h-4 w-4 mr-2" /> JSON
-                    </Button>
-                  )}
-                  {j.status === "error" && (
-                    <span className="text-xs text-red-500 inline-flex items-center gap-1 shrink-0" title={j.error || ""}>
-                      <AlertTriangle className="h-3 w-3" /> {pt ? "erro" : "error"}
-                    </span>
-                  )}
-                </div>
-              ))}
+                );
+              })}
             </CardContent>
           </Card>
         )}
