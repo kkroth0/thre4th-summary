@@ -1706,10 +1706,9 @@ app.post('/api/feed/generate', scanLimiter, async (req, res) => {
         const type = req.body?.type === 'campaign' ? 'campaign' : 'vuln';
         const title = (req.body?.title || '').toString().slice(0, 300);
         if (!/^https?:\/\//i.test(url)) return res.status(400).json({ error: 'url http(s) obrigatória' });
-        const feedUrls = new Set((memoryCache.newsletter.data || []).map((i) => i.link || ''));
-        if (!feedUrls.has(url)) {
-            try { await assertSafePublicUrl(url); } catch (e) { return res.status(400).json({ error: e.message || 'URL rejeitada' }); }
-        }
+        // Sempre valida (sem atalho de "confiar em URL do feed") — o guard SSRF
+        // bloqueia IP privado/loopback/metadata. O worker na VPS revalida também.
+        try { await assertSafePublicUrl(url); } catch (e) { return res.status(400).json({ error: e.message || 'URL rejeitada' }); }
         const id = crypto.randomUUID();
         const now = new Date().toISOString();
         jobsStore[id] = { id, url, type, title, status: 'pending', json: null, error: null, createdAt: now, updatedAt: now };
