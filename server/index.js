@@ -1552,29 +1552,7 @@ app.get('/api/feed/daily-suggestions', async (req, res) => {
     }
 });
 
-// ─── Boletim diário · store persistente (seleção curada + boletim gerado) ──
-// Loop do Feed Generator: o site grava a SELEÇÃO curada (POST selection); o
-// emissor na VPS lê a seleção (GET selection, com segredo), gera o JSON e o
-// PUBLICA (POST boletim, com segredo); o site e o render agent local leem o
-// boletim (GET boletim). Persistido em disco p/ sobreviver a restart.
-const FEED_STORE_PATH = path.join(__dirname, '.feed-store.json');
-function loadFeedStore() {
-    try { return JSON.parse(fs.readFileSync(FEED_STORE_PATH, 'utf8')); }
-    catch { return {}; }
-}
-function saveFeedStore(store) {
-    try { fs.writeFileSync(FEED_STORE_PATH, JSON.stringify(store, null, 2)); }
-    catch (e) { console.error('feed store write failed:', e.message); }
-}
-let feedStore = loadFeedStore();   // { "YYYY-MM-DD": { selection, boletins, updatedAt } }
-
-const dateKey = (d) => {
-    const s = (d || new Date().toISOString()).toString().slice(0, 10);
-    return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : new Date().toISOString().slice(0, 10);
-};
-const dayEntry = (key) => (feedStore[key] = feedStore[key] || { selection: [], boletins: {}, updatedAt: null });
-
-// Segredo compartilhado p/ as rotas servidor-a-servidor (emissor/render agent).
+// Segredo compartilhado p/ as rotas servidor-a-servidor (worker).
 // Sem FEED_AGENT_SECRET definido, as rotas protegidas ficam desabilitadas (503),
 // pra não exporem leitura/escrita de boletim sem auth.
 function requireFeedSecret(req, res) {
@@ -1583,88 +1561,6 @@ function requireFeedSecret(req, res) {
     if (req.get('X-Feed-Secret') !== secret) { res.status(401).json({ error: 'unauthorized' }); return false; }
     return true;
 }
-
-// UI grava a seleção curada do dia. Público + rate-limit + validação SSRF.
-//   POST /api/feed/daily-selection  { date?, items:[{url,type,title}] }
-app.post('/api/feed/daily-selection', scanLimiter, async (req, res) => {
-    try {
-        const key = dateKey(req.body?.date);
-        const rawItems = Array.isArray(req.body?.items) ? req.body.items : [];
-        if (!rawItems.length) return res.status(400).json({ error: 'items vazio' });
-        if (rawItems.length > 50) return res.status(400).json({ error: 'máx. 50 itens' });
-
-        // URLs vindas do feed (curadoria das sugestões) são confiáveis pela
-        // allowlist — mesmo modelo do /hunt-pack. Só URL externa avulsa passa
-        // pelo guard SSRF.
-        const feedUrls = new Set((memoryCache.newsletter.data || []).map((i) => i.link || ''));
-        const items = [];
-        for (const it of rawItems) {
-            const url = (it?.url || '').toString();
-            if (!/^https?:\/\//i.test(url)) continue;
-            if (!feedUrls.has(url)) {
-                try { await assertSafePublicUrl(url); } catch { continue; }
-            }
-            items.push({
-                url,
-                type: it?.type === 'campaign' ? 'campaign' : 'vuln',
-                title: (it?.title || '').toString().slice(0, 300),
-            });
-        }
-        if (!items.length) return res.status(400).json({ error: 'nenhuma URL válida' });
-
-        const e = dayEntry(key);
-        e.selection = items;
-        e.updatedAt = new Date().toISOString();
-        saveFeedStore(feedStore);
-        res.json({ date: key, count: items.length, selection: items });
-    } catch (error) {
-        const { status, message } = sanitizeError(error);
-        res.status(status).json({ error: message });
-    }
-});
-
-// Emissor (VPS) lê a seleção curada. Protegido por segredo.
-//   GET /api/feed/daily-selection?date=YYYY-MM-DD
-app.get('/api/feed/daily-selection', async (req, res) => {
-    if (!requireFeedSecret(req, res)) return;
-    const key = dateKey(req.query.date);
-    const e = feedStore[key] || { selection: [], updatedAt: null };
-    res.json({ date: key, selection: e.selection || [], updatedAt: e.updatedAt || null });
-});
-
-// Emissor (VPS) publica o JSON do boletim gerado. Protegido por segredo.
-//   POST /api/feed/daily-boletim  { date?, type, json }
-app.post('/api/feed/daily-boletim', async (req, res) => {
-    if (!requireFeedSecret(req, res)) return;
-    try {
-        const key = dateKey(req.body?.date);
-        const type = req.body?.type === 'campaign' ? 'campaign' : 'vuln';
-        const json = req.body?.json;
-        if (!json || typeof json !== 'object') return res.status(400).json({ error: 'json ausente/inválido' });
-
-        const e = dayEntry(key);
-        e.boletins[type] = { json, publishedAt: new Date().toISOString() };
-        e.updatedAt = new Date().toISOString();
-        saveFeedStore(feedStore);
-        res.json({ date: key, type, ok: true });
-    } catch (error) {
-        const { status, message } = sanitizeError(error);
-        res.status(status).json({ error: message });
-    }
-});
-
-// Site (UI) + render agent local leem o boletim do dia. Leitura pública.
-//   GET /api/feed/daily-boletim?date=YYYY-MM-DD
-app.get('/api/feed/daily-boletim', (req, res) => {
-    const key = dateKey(req.query.date);
-    const e = feedStore[key] || { selection: [], boletins: {}, updatedAt: null };
-    res.json({
-        date: key,
-        selection: e.selection || [],
-        boletins: e.boletins || {},
-        updatedAt: e.updatedAt || null,
-    });
-});
 
 // ─── Boletim · jobs de geração por URL (1 URL = 1 boletim) ─────────────────
 // O front escolhe UMA url e pede a geração (POST generate); um worker na VPS

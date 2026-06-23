@@ -949,8 +949,8 @@ export const fetchDnsLookup = async (domain: string): Promise<DnsLookupResult> =
 };
 
 // ─── Boletim diário (Feed Generator) ───────────────────────────────────────
-// Sugestões CTI do dia -> curadoria (seleção) -> o emissor na VPS gera o JSON e
-// publica -> o render agent local renderiza o .pptx oficial dos templates.
+// 1 URL = 1 boletim: o front escolhe uma URL -> o worker na VPS gera o JSON ->
+// download -> o .pptx oficial é preenchido localmente com os templates.
 export type DeckType = 'vuln' | 'campaign';
 
 export interface DailySuggestion {
@@ -966,44 +966,12 @@ export interface DailySuggestion {
     suggestedType: DeckType;
 }
 
-export interface DailySelectionItem {
-    url: string;
-    type: DeckType;
-    title: string;
-}
-
-export interface DailyBoletim {
-    date: string;
-    selection: DailySelectionItem[];
-    boletins: Record<string, { json: unknown; publishedAt: string }>;
-    updatedAt: string | null;
-}
-
 export const fetchDailySuggestions = async (
     hours = 36,
     limit = 10,
 ): Promise<{ generatedAt: string; windowHours: number; count: number; suggestions: DailySuggestion[] }> => {
     const r = await fetch(`/api/feed/daily-suggestions?hours=${hours}&limit=${limit}`);
     if (!r.ok) throw new Error(`Suggestions API error: ${r.status}`);
-    return r.json();
-};
-
-export const saveDailySelection = async (items: DailySelectionItem[], date?: string) => {
-    const r = await fetch('/api/feed/daily-selection', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ items, ...(date ? { date } : {}) }),
-    });
-    if (!r.ok) {
-        const e = await r.json().catch(() => ({}));
-        throw new Error(e.error || `Selection API error: ${r.status}`);
-    }
-    return r.json();
-};
-
-export const fetchDailyBoletim = async (date?: string): Promise<DailyBoletim> => {
-    const r = await fetch(`/api/feed/daily-boletim${date ? `?date=${date}` : ''}`);
-    if (!r.ok) throw new Error(`Boletim API error: ${r.status}`);
     return r.json();
 };
 
