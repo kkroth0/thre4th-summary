@@ -1666,6 +1666,74 @@ app.get('/api/feed/daily-boletim', (req, res) => {
     });
 });
 
+// ─── Boletim · jobs de geração por URL (1 URL = 1 boletim) ─────────────────
+// O front escolhe UMA url e pede a geração (POST generate); um worker na VPS
+// (saída-só, porta fechada) faz poll dos pendentes (GET jobs/pending, 🔒), roda
+// o motor pesado, e devolve o JSON (POST job/result, 🔒). O front faz poll do
+// job (GET job) e baixa o JSON quando pronto; o PPT é preenchido localmente.
+const JOBS_STORE_PATH = path.join(__dirname, '.feed-jobs.json');
+function loadJobs() { try { return JSON.parse(fs.readFileSync(JOBS_STORE_PATH, 'utf8')); } catch { return {}; } }
+function saveJobs() { try { fs.writeFileSync(JOBS_STORE_PATH, JSON.stringify(jobsStore, null, 2)); } catch (e) { console.error('jobs store write failed:', e.message); } }
+let jobsStore = loadJobs();   // { id: { id,url,type,title,status,json,error,createdAt,updatedAt } }
+
+function pruneJobs(max = 100) {
+    const ids = Object.keys(jobsStore).sort((a, b) => (jobsStore[a].createdAt || '').localeCompare(jobsStore[b].createdAt || ''));
+    while (ids.length > max) delete jobsStore[ids.shift()];
+}
+
+// Front pede a geração de UMA url. Público + rate-limit + validação SSRF.
+//   POST /api/feed/generate  { url, type, title? }
+app.post('/api/feed/generate', scanLimiter, async (req, res) => {
+    try {
+        const url = (req.body?.url || '').toString();
+        const type = req.body?.type === 'campaign' ? 'campaign' : 'vuln';
+        const title = (req.body?.title || '').toString().slice(0, 300);
+        if (!/^https?:\/\//i.test(url)) return res.status(400).json({ error: 'url http(s) obrigatória' });
+        const feedUrls = new Set((memoryCache.newsletter.data || []).map((i) => i.link || ''));
+        if (!feedUrls.has(url)) {
+            try { await assertSafePublicUrl(url); } catch (e) { return res.status(400).json({ error: e.message || 'URL rejeitada' }); }
+        }
+        const id = crypto.randomUUID();
+        const now = new Date().toISOString();
+        jobsStore[id] = { id, url, type, title, status: 'pending', json: null, error: null, createdAt: now, updatedAt: now };
+        pruneJobs();
+        saveJobs();
+        res.json({ id, status: 'pending' });
+    } catch (error) {
+        const { status, message } = sanitizeError(error);
+        res.status(status).json({ error: message });
+    }
+});
+
+// Front faz poll do job. Público.   GET /api/feed/job?id=...
+app.get('/api/feed/job', (req, res) => {
+    const job = jobsStore[(req.query.id || '').toString()];
+    if (!job) return res.status(404).json({ error: 'job não encontrado' });
+    res.json(job);
+});
+
+// Worker (VPS) lê os jobs pendentes. 🔒   GET /api/feed/jobs/pending
+app.get('/api/feed/jobs/pending', (req, res) => {
+    if (!requireFeedSecret(req, res)) return;
+    const pending = Object.values(jobsStore)
+        .filter((j) => j.status === 'pending')
+        .map((j) => ({ id: j.id, url: j.url, type: j.type, title: j.title }));
+    res.json({ pending });
+});
+
+// Worker (VPS) devolve o resultado. 🔒   POST /api/feed/job/result {id, json|error}
+app.post('/api/feed/job/result', (req, res) => {
+    if (!requireFeedSecret(req, res)) return;
+    const job = jobsStore[(req.body?.id || '').toString()];
+    if (!job) return res.status(404).json({ error: 'job não encontrado' });
+    if (req.body?.error) { job.status = 'error'; job.error = String(req.body.error).slice(0, 500); }
+    else if (req.body?.json && typeof req.body.json === 'object') { job.status = 'done'; job.json = req.body.json; }
+    else return res.status(400).json({ error: 'json ou error obrigatório' });
+    job.updatedAt = new Date().toISOString();
+    saveJobs();
+    res.json({ id: job.id, status: job.status });
+});
+
 // ─── Groq-powered on-demand advisory analysis ─────────────────────────────
 const GROQ_BASE_URL = 'https://api.groq.com/openai/v1';
 const GROQ_MODELS = ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'gemma2-9b-it'];

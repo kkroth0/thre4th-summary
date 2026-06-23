@@ -1006,3 +1006,36 @@ export const fetchDailyBoletim = async (date?: string): Promise<DailyBoletim> =>
     if (!r.ok) throw new Error(`Boletim API error: ${r.status}`);
     return r.json();
 };
+
+// 1 URL = 1 boletim: o front pede a geração de uma URL; o worker na VPS gera o
+// JSON e devolve. O front faz poll do job até ficar pronto e baixa o JSON.
+export interface BoletimJob {
+    id: string;
+    url: string;
+    type: DeckType;
+    title: string;
+    status: 'pending' | 'done' | 'error';
+    json: unknown | null;
+    error: string | null;
+    createdAt: string;
+    updatedAt: string;
+}
+
+export const generateBoletim = async (url: string, type: DeckType, title = ''): Promise<{ id: string; status: string }> => {
+    const r = await fetch('/api/feed/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url, type, title }),
+    });
+    if (!r.ok) {
+        const e = await r.json().catch(() => ({}));
+        throw new Error(e.error || `Generate API error: ${r.status}`);
+    }
+    return r.json();
+};
+
+export const fetchJob = async (id: string): Promise<BoletimJob> => {
+    const r = await fetch(`/api/feed/job?id=${encodeURIComponent(id)}`);
+    if (!r.ok) throw new Error(`Job API error: ${r.status}`);
+    return r.json();
+};
