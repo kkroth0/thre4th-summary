@@ -57,7 +57,15 @@ const corsOptionsDelegate = (req, callback) => {
 app.use(cors(corsOptionsDelegate));
 
 // Express Settings - Payload Limits
-app.use(express.json({ limit: '10kb' }));
+// Padrão apertado (10kb) p/ todas as rotas; a rota interna autenticada de upload
+// do boletim (POST /api/feed/job/result) usa parser próprio maior (ver abaixo),
+// pois o JSON do boletim gerado pelo motor excede 10kb e dava 413 Payload Too Large.
+const tightJson = express.json({ limit: '10kb' });
+const bulkJson = express.json({ limit: '15mb' });
+app.use((req, res, next) => {
+    if (req.method === 'POST' && req.path === '/api/feed/job/result') return bulkJson(req, res, next);
+    return tightJson(req, res, next);
+});
 app.use(express.urlencoded({ extended: false, limit: '10kb' }));
 
 // Rate limiting
@@ -217,7 +225,7 @@ const detectQueryType = (query) => {
 
 // Security middleware to validate query format on requests
 const validateRequest = (req, res, next) => {
-    if (req.method === 'POST' && req.body.query) {
+    if (req.method === 'POST' && req.body?.query) {
         const type = detectQueryType(req.body.query);
         if (type === "unknown") {
             return res.status(400).json({ error: "Invalid query format. Must be a valid IP, Domain, Hash, or URL." });
