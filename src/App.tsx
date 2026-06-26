@@ -3,7 +3,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { LanguageProvider } from "./contexts/LanguageContext";
 import { SidebarProvider } from "./contexts/SidebarContext";
 
@@ -50,7 +50,8 @@ const App = () => (
                 <Route path="/newsletter" element={<Newsletter />} />
                 <Route path="/phishing-analyzer" element={<PhishingAnalyzer />} />
                 <Route path="/threat-hunting" element={<ThreatHunting />} />
-                <Route path="/daily-bulletin" element={<DailyBulletin />} />
+                <Route path="/threat-brief" element={<DailyBulletin />} />
+                <Route path="/daily-bulletin" element={<Navigate to="/threat-brief" replace />} />
 
                 <Route path="*" element={<NotFound />} />
               </Routes>

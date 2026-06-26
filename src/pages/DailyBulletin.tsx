@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
-import { RefreshCw, Download, ShieldAlert, Loader2, ExternalLink, CalendarDays, Sparkles, AlertTriangle } from "lucide-react";
+import { RefreshCw, Download, ShieldAlert, Loader2, ExternalLink, FileText, Sparkles, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -30,6 +30,11 @@ const slug = (s: string) => (s || "boletim").normalize("NFKD").replace(/[^\w\s-]
 // backend reiniciou e perdeu o job -> 404). Evita "gerando…" eterno.
 const CLIENT_TIMEOUT_MS = 10 * 60 * 1000;
 
+// Histórico dos boletins gerados, persistido no navegador (sobrevive a sair da
+// página / recarregar) — assim você não regenera nem gasta API ao voltar.
+const STORAGE_KEY = "ts-bulletins-v1";
+const MAX_HISTORY = 40;
+
 // Fases estimadas pelo tempo decorrido (mapeiam o pipeline real: coleta ~10-15s,
 // análise LLM ~15-30s). Não é progresso real, mas dá feedback agradável.
 const PHASES = [
@@ -48,7 +53,12 @@ const DailyBulletin: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [pasteUrl, setPasteUrl] = useState("");
   const [pasteType, setPasteType] = useState<DeckType>("vuln");
-  const [jobs, setJobs] = useState<BoletimJob[]>([]);
+  const [jobs, setJobs] = useState<BoletimJob[]>(() => {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      return raw ? (JSON.parse(raw) as BoletimJob[]) : [];
+    } catch { return []; }
+  });
   const [nowMs, setNowMs] = useState(Date.now());
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -65,6 +75,12 @@ const DailyBulletin: React.FC = () => {
   }, [pt]);
 
   useEffect(() => { loadSuggestions(); }, [loadSuggestions]);
+
+  // Persiste o histórico no navegador a cada mudança (guarda só os mais recentes).
+  useEffect(() => {
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(jobs.slice(0, MAX_HISTORY))); }
+    catch { /* quota cheia: ignora */ }
+  }, [jobs]);
 
   // Poll dos jobs não-terminais a cada 3s.
   useEffect(() => {
@@ -131,13 +147,13 @@ const DailyBulletin: React.FC = () => {
       <main className="flex-1 container mx-auto px-4 py-8 max-w-5xl">
         <div className="mb-6">
           <h1 className="text-3xl font-bold flex items-center gap-2">
-            <CalendarDays className="h-7 w-7 text-primary" />
-            {pt ? "Gerar Boletim" : "Generate Bulletin"}
+            <FileText className="h-7 w-7 text-primary" />
+            Threat Brief
           </h1>
           <p className="text-muted-foreground mt-2">
             {pt
-              ? "Escolha (ou cole) uma URL. A VPS faz a coleta + análise e devolve o JSON; baixe e preencha o PPT oficial localmente com o template confidencial."
-              : "Pick (or paste) a URL. The VPS scrapes + analyzes and returns the JSON; download it and fill the official PPT locally with the confidential template."}
+              ? "Transforme qualquer relatório, advisory ou notícia em um brief de inteligência estruturado. Cole a URL — a análise roda automaticamente e você baixa o JSON pronto para o slide oficial."
+              : "Turn any report, advisory or news item into a structured intelligence brief. Paste a URL — the analysis runs automatically and you download a ready-to-render JSON for the official deck."}
           </p>
         </div>
 

@@ -1,5 +1,5 @@
 import { Link, useLocation } from "react-router-dom";
-import { BookOpen, Shield, Mail, Activity, Terminal, ArrowLeft, ShieldAlert, MailWarning, ChevronLeft, ChevronRight, Globe, CalendarCheck, Crosshair, CalendarDays } from "lucide-react";
+import { BookOpen, Shield, Mail, Activity, Terminal, ArrowLeft, ShieldAlert, MailWarning, ChevronLeft, ChevronRight, Globe, CalendarCheck, Crosshair, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { LanguageToggle } from "@/components/LanguageToggle";
@@ -35,7 +35,7 @@ export function Header({ actions, logoAddon, onLogoClick, showBackButton = false
     { path: "/dns-visualizer", label: t("dnsVisualizer") || "DNS Visualizer", icon: Globe },
     { path: "/phishing-analyzer", label: language === "pt" ? "Análise de Phishing" : "Phishing Analyzer", icon: MailWarning },
     { path: "/threat-hunting", label: language === "pt" ? "Threat Hunting" : "Threat Hunting", icon: Crosshair },
-    { path: "/daily-bulletin", label: language === "pt" ? "Boletim Diário" : "Daily Bulletin", icon: CalendarDays },
+    { path: "/threat-brief", label: "Threat Brief", icon: FileText },
     { path: "/newsletter", label: language === "pt" ? "Feed de Advisories" : "Advisory Feed", icon: Mail },
     { path: "/cves", label: language === "pt" ? "Painel de CVEs" : "CVE Dashboard", icon: Shield },
     { path: "/patch-tuesday", label: language === "pt" ? "Patch Tuesday" : "Patch Tuesday", icon: CalendarCheck },
@@ -51,11 +51,11 @@ export function Header({ actions, logoAddon, onLogoClick, showBackButton = false
           "w-full gap-3 h-10.5 rounded-xl text-[13px] font-semibold transition-all duration-200",
           isCollapsed ? "justify-center px-0 w-11 h-11 rounded-xl mx-auto" : "justify-start px-3.5",
           isActive
-            ? "bg-primary/10 text-primary hover:bg-primary/15 hover:text-primary"
+            ? "bg-primary/15 text-primary ring-1 ring-inset ring-primary/20 hover:bg-primary/20 hover:text-primary"
             : "text-muted-foreground/80 hover:text-foreground hover:bg-muted/20"
         )}
       >
-        <Icon className={cn("h-5 w-5 shrink-0", isActive ? "text-primary" : "text-muted-foreground")} />
+        <Icon strokeWidth={isActive ? 2.25 : 1.9} className={cn("h-[18px] w-[18px] shrink-0", isActive ? "text-primary" : "text-muted-foreground")} />
         {!isCollapsed && <span>{item.label}</span>}
       </Button>
     );
@@ -64,8 +64,8 @@ export function Header({ actions, logoAddon, onLogoClick, showBackButton = false
       <Link key={item.path} to={item.path} className="w-full relative block">
         {isActive && (
           <div className={cn(
-            "absolute bg-primary rounded-r transition-all duration-300", 
-            isCollapsed ? "left-0 top-2 bottom-2 w-1" : "left-0 top-1.5 bottom-1.5 w-0.5"
+            "absolute bg-primary rounded-r-full transition-all duration-300",
+            isCollapsed ? "left-0 top-2 bottom-2 w-1" : "left-0 top-1.5 bottom-1.5 w-1"
           )} />
         )}
         {isCollapsed ? (
@@ -81,6 +81,25 @@ export function Header({ actions, logoAddon, onLogoClick, showBackButton = false
           buttonElement
         )}
       </Link>
+    );
+  };
+
+  const renderCategory = (label: string, paths: string[]) => {
+    const items = navItems.filter((i) => paths.includes(i.path));
+    if (!items.length) return null;
+    return (
+      <div>
+        {!isCollapsed ? (
+          <div className="px-3 mb-2 text-[11px] font-bold text-muted-foreground/70 uppercase tracking-wider">
+            {label}
+          </div>
+        ) : (
+          <div className="h-px bg-primary/10 my-3 mx-2" />
+        )}
+        <div className="flex flex-col gap-1">
+          {items.map((item) => renderNavItem(item, pathname === item.path))}
+        </div>
+      </div>
     );
   };
 
@@ -183,46 +202,23 @@ export function Header({ actions, logoAddon, onLogoClick, showBackButton = false
 
           {/* Navigation Links Grouped by Categories */}
           <div className="flex flex-col gap-5">
-            {/* Category 1: SCAN & SEARCH */}
-            <div>
-              {!isCollapsed ? (
-                <div className="px-3 mb-2.5 text-[11px] font-bold text-muted-foreground/50 uppercase tracking-wider">
-                  {language === 'pt' ? 'Escaneamento' : 'Scan & Search'}
-                </div>
-              ) : (
-                <div className="h-px bg-primary/10 my-3.5 mx-2" />
-              )}
-              <div className="flex flex-col gap-1">
-                {navItems.filter(item => item.isHome).map((item) => renderNavItem(item, pathname === "/"))}
-              </div>
+            {/* Home — sem header de categoria */}
+            <div className="flex flex-col gap-1">
+              {navItems.filter((item) => item.isHome).map((item) => renderNavItem(item, pathname === "/"))}
             </div>
 
-            {/* Category 2: INTELLIGENCE TOOLS */}
-            <div>
-              {!isCollapsed ? (
-                <div className="px-3 mb-2.5 text-[11px] font-bold text-muted-foreground/50 uppercase tracking-wider">
-                  {language === 'pt' ? 'Ferramentas' : 'Intelligence Tools'}
-                </div>
-              ) : (
-                <div className="h-px bg-primary/10 my-3.5 mx-2" />
-              )}
-              <div className="flex flex-col gap-1">
-                {navItems.filter(item => !item.isHome && item.path !== "/newsletter" && item.path !== "/cves" && item.path !== "/patch-tuesday").map((item) => renderNavItem(item, pathname === item.path))}
-              </div>
-            </div>
+            {renderCategory(language === 'pt' ? 'Investigar' : 'Investigate',
+              ["/vendors", "/dnsbl", "/dns-visualizer", "/phishing-analyzer", "/threat-hunting"])}
 
-            {/* Category 3: THREAT FEEDS */}
-            <div>
-              {!isCollapsed ? (
-                <div className="px-3 mb-2.5 text-[11px] font-bold text-muted-foreground/50 uppercase tracking-wider">
-                  {language === 'pt' ? 'Feeds de Ameaças' : 'Threat Feeds'}
-                </div>
-              ) : (
-                <div className="h-px bg-primary/10 my-3.5 mx-2" />
-              )}
-              <div className="flex flex-col gap-1">
-                {navItems.filter(item => item.path === "/newsletter" || item.path === "/cves" || item.path === "/patch-tuesday").map((item) => renderNavItem(item, pathname === item.path))}
-              </div>
+            {renderCategory(language === 'pt' ? 'Inteligência' : 'Intelligence',
+              ["/newsletter", "/cves", "/patch-tuesday"])}
+
+            {renderCategory(language === 'pt' ? 'Relatórios' : 'Reports',
+              ["/threat-brief"])}
+
+            {/* Features — discreto, sem categoria */}
+            <div className="flex flex-col gap-1">
+              {navItems.filter((item) => item.path === "/features").map((item) => renderNavItem(item, pathname === item.path))}
             </div>
           </div>
         </div>
