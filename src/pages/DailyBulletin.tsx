@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
-import { RefreshCw, Download, ShieldAlert, Loader2, ExternalLink, FileText, Sparkles, AlertTriangle } from "lucide-react";
+import { RefreshCw, Download, ShieldAlert, Loader2, FileText, Sparkles, AlertTriangle, Eye, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/select";
 import { Footer } from "@/components/Footer";
 import { Header } from "@/components/Header";
+import { BoletimView } from "@/components/BoletimView";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useSidebar } from "@/contexts/SidebarContext";
 import { toast } from "sonner";
@@ -17,11 +18,11 @@ import {
   type DailySuggestion, type BoletimJob, type DeckType,
 } from "@/services/threatApi";
 
-const SEVERITY_STYLES: Record<string, string> = {
-  Critical: "bg-red-500/10 text-red-500 border-red-500/20",
-  High: "bg-orange-500/10 text-orange-500 border-orange-500/20",
-  Medium: "bg-yellow-500/10 text-yellow-600 border-yellow-500/20",
-  Low: "bg-slate-500/10 text-slate-400 border-slate-500/20",
+const SEVERITY_DOT: Record<string, string> = {
+  Critical: "bg-red-500",
+  High: "bg-orange-500",
+  Medium: "bg-yellow-500",
+  Low: "bg-slate-400",
 };
 
 const slug = (s: string) => (s || "boletim").normalize("NFKD").replace(/[^\w\s-]/g, "").trim().toLowerCase().replace(/[\s_-]+/g, "-").slice(0, 50) || "boletim";
@@ -60,6 +61,7 @@ const DailyBulletin: React.FC = () => {
     } catch { return []; }
   });
   const [nowMs, setNowMs] = useState(Date.now());
+  const [expandedId, setExpandedId] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const loadSuggestions = useCallback(async () => {
@@ -209,9 +211,16 @@ const DailyBulletin: React.FC = () => {
                         </span>
                       )}
                       {j.status === "done" && (
-                        <Button size="sm" variant="outline" onClick={() => download(j)} className="shrink-0">
-                          <Download className="h-4 w-4 mr-2" /> JSON
-                        </Button>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <Button size="sm" variant="outline" onClick={() => setExpandedId((id) => (id === j.id ? null : j.id))}>
+                            {expandedId === j.id
+                              ? <><ChevronDown className="h-4 w-4 mr-2" /> {pt ? "Ocultar" : "Hide"}</>
+                              : <><Eye className="h-4 w-4 mr-2" /> {pt ? "Ver" : "View"}</>}
+                          </Button>
+                          <Button size="sm" variant="outline" onClick={() => download(j)}>
+                            <Download className="h-4 w-4 mr-2" /> JSON
+                          </Button>
+                        </div>
                       )}
                       {j.status === "error" && (
                         <span className="text-xs text-red-500 inline-flex items-center gap-1 shrink-0" title={j.error || ""}>
@@ -235,6 +244,9 @@ const DailyBulletin: React.FC = () => {
                         </div>
                       </div>
                     )}
+                    {j.status === "done" && expandedId === j.id && j.json && (
+                      <BoletimView report={j.json} />
+                    )}
                   </div>
                 );
               })}
@@ -250,36 +262,28 @@ const DailyBulletin: React.FC = () => {
             {pt ? "Atualizar" : "Refresh"}
           </Button>
         </div>
-        <div className="space-y-3">
+        {suggestions.length > 0 && (
+        <div className="rounded-md border divide-y">
           {suggestions.map((s) => (
-            <Card key={s.url}>
-              <CardContent className="p-4 flex items-start gap-3">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <Badge variant="outline" className={SEVERITY_STYLES[s.severity] || SEVERITY_STYLES.Low}>{s.severity}</Badge>
-                    <span className="text-xs text-muted-foreground">{s.source}</span>
-                    <span className="text-xs text-muted-foreground">· score {s.score}</span>
-                    {s.kev && (
-                      <Badge variant="outline" className="bg-red-500/10 text-red-500 border-red-500/20">
-                        <ShieldAlert className="h-3 w-3 mr-1" /> CISA KEV
-                      </Badge>
-                    )}
-                    {s.cves?.slice(0, 3).map((c) => (<Badge key={c} variant="secondary" className="text-[10px]">{c}</Badge>))}
-                  </div>
-                  <a href={s.url} target="_blank" rel="noopener noreferrer" className="font-medium hover:underline inline-flex items-center gap-1 mt-1">
-                    {s.title} <ExternalLink className="h-3 w-3 shrink-0" />
-                  </a>
-                </div>
-                <Button size="sm" onClick={() => generate(s.url, s.suggestedType, s.title)} className="shrink-0">
-                  <Sparkles className="h-4 w-4 mr-2" /> {pt ? "Gerar" : "Generate"}
-                </Button>
-              </CardContent>
-            </Card>
+            <div key={s.url} className="flex items-center gap-2 px-3 py-2 hover:bg-muted/30">
+              <span className={`h-2 w-2 rounded-full shrink-0 ${SEVERITY_DOT[s.severity] || SEVERITY_DOT.Low}`} title={s.severity} />
+              <a href={s.url} target="_blank" rel="noopener noreferrer"
+                 className="flex-1 min-w-0 truncate text-sm font-medium hover:underline" title={s.title}>
+                {s.title}
+              </a>
+              {s.kev && <ShieldAlert className="h-3.5 w-3.5 text-red-500 shrink-0" aria-label="CISA KEV" />}
+              {s.cves?.[0] && <Badge variant="secondary" className="text-[10px] shrink-0 hidden sm:inline-flex">{s.cves[0]}</Badge>}
+              <span className="text-xs text-muted-foreground shrink-0 hidden md:inline tabular-nums">{s.source} · {s.score}</span>
+              <Button size="sm" variant="ghost" onClick={() => generate(s.url, s.suggestedType, s.title)} className="shrink-0 h-7 px-2 text-primary">
+                <Sparkles className="h-3.5 w-3.5 mr-1" /> {pt ? "Gerar" : "Generate"}
+              </Button>
+            </div>
           ))}
-          {!loading && !suggestions.length && (
-            <p className="text-center text-muted-foreground py-8">{pt ? "Nenhuma sugestão no momento." : "No suggestions right now."}</p>
-          )}
         </div>
+        )}
+        {!loading && !suggestions.length && (
+          <p className="text-center text-muted-foreground py-8">{pt ? "Nenhuma sugestão no momento." : "No suggestions right now."}</p>
+        )}
       </main>
       <Footer />
     </div>

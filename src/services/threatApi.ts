@@ -975,6 +975,33 @@ export const fetchDailySuggestions = async (
     return r.json();
 };
 
+// Forma do JSON do boletim (sidecar gerado pelo motor — ver serialize.py). Campos
+// opcionais porque variam por deck_type (vuln vs campaign) e podem faltar.
+export interface BoletimReport {
+    deck_type?: DeckType;
+    source_url?: string;
+    generated_at?: string;
+    tlp?: string;
+    titulo?: string;
+    sumario_executivo?: string;
+    descricao?: string;
+    impactos?: string[];
+    cve_id?: string;
+    tecnologias_afetadas?: {
+        fabricante?: string; software?: string; versao?: string; cve?: string;
+        cvss?: string; severidade?: string; cwe?: string; kev?: boolean;
+    }[];
+    superficie_de_ataque?: { categoria?: string; tecnologia?: string; utilizacao?: string }[];
+    ator?: {
+        threat_actor?: string; tipo?: string; motivation?: string;
+        sectors?: string[]; diferencial?: string; onion?: string[];
+    };
+    recomendacoes?: { titulo?: string; itens?: string[] }[];
+    iocs?: { categoria?: string; tipo?: string; valor?: string }[];
+    mitre_ttps?: { id?: string; nome?: string; tatica?: string; descricao?: string; contexto?: string; url?: string }[];
+    referencias_coletadas?: { titulo?: string; url?: string }[];
+}
+
 // 1 URL = 1 boletim: o front pede a geração de uma URL; o worker na VPS gera o
 // JSON e devolve. O front faz poll do job até ficar pronto e baixa o JSON.
 export interface BoletimJob {
@@ -983,7 +1010,7 @@ export interface BoletimJob {
     type: DeckType;
     title: string;
     status: 'pending' | 'done' | 'error';
-    json: unknown | null;
+    json: BoletimReport | null;
     error: string | null;
     createdAt: string;
     updatedAt: string;
