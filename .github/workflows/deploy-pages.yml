@@ -1,0 +1,38 @@
+name: Deploy to Cloudflare Pages
+
+# Publica o front no Cloudflare Pages a cada push na main (substitui a integração
+# Git do Pages, que não estava republicando). Build determinístico aqui e upload
+# direto via wrangler. As Pages Functions em functions/ vão junto automaticamente.
+#
+# Requer (Settings -> Secrets and variables -> Actions):
+#   - secret  CLOUDFLARE_API_TOKEN      (permissão "Cloudflare Pages: Edit")
+#   - secret  CLOUDFLARE_ACCOUNT_ID
+#   - variable CLOUDFLARE_PAGES_PROJECT (nome do projeto Pages; o job só roda com ela setada)
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    if: ${{ vars.CLOUDFLARE_PAGES_PROJECT != '' }}
+    permissions:
+      contents: read
+      deployments: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+      - run: npm run build
+
+      - name: Publish to Cloudflare Pages
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy dist --project-name=${{ vars.CLOUDFLARE_PAGES_PROJECT }} --branch=main
