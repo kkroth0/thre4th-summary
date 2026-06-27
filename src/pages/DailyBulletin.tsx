@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
-import { RefreshCw, Download, ShieldAlert, Loader2, FileText, Sparkles, AlertTriangle, Eye, ChevronDown } from "lucide-react";
+import { RefreshCw, Download, ShieldAlert, Loader2, FileText, Sparkles, AlertTriangle, Eye, ChevronDown, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -7,6 +7,11 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
+import {
+  AlertDialog, AlertDialogTrigger, AlertDialogContent, AlertDialogHeader,
+  AlertDialogFooter, AlertDialogTitle, AlertDialogDescription, AlertDialogAction,
+  AlertDialogCancel,
+} from "@/components/ui/alert-dialog";
 import { Footer } from "@/components/Footer";
 import { Header } from "@/components/Header";
 import { BoletimView } from "@/components/BoletimView";
@@ -143,6 +148,13 @@ const DailyBulletin: React.FC = () => {
     URL.revokeObjectURL(url);
   };
 
+  // Apaga o histórico de boletins (estado + localStorage, via efeito de persistência).
+  const clearHistory = () => {
+    setJobs([]);
+    setExpandedId(null);
+    toast.success(pt ? "Histórico apagado" : "History cleared");
+  };
+
   return (
     <div className={`min-h-screen bg-background flex flex-col transition-all duration-300 ${isCollapsed ? "lg:pl-20" : "lg:pl-64"}`}>
       <Header showBackButton />
@@ -185,10 +197,35 @@ const DailyBulletin: React.FC = () => {
         {!!jobs.length && (
           <Card className="mb-6">
             <CardHeader className="pb-2">
-              <CardTitle className="text-lg">{pt ? "Seus boletins" : "Your bulletins"}</CardTitle>
-              <CardDescription>
-                {pt ? "Quando ficar pronto, baixe o JSON e rode o gerar_slide local." : "When ready, download the JSON and run gerar_slide locally."}
-              </CardDescription>
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <CardTitle className="text-lg">{pt ? "Seus boletins" : "Your bulletins"}</CardTitle>
+                  <CardDescription>
+                    {pt ? "Quando ficar pronto, baixe o JSON e rode o gerar_slide local." : "When ready, download the JSON and run gerar_slide locally."}
+                  </CardDescription>
+                </div>
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button variant="ghost" size="sm" className="shrink-0 text-muted-foreground hover:text-destructive">
+                      <Trash2 className="h-4 w-4 mr-2" /> {pt ? "Limpar histórico" : "Clear history"}
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>{pt ? "Limpar histórico de boletins?" : "Clear bulletin history?"}</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        {pt
+                          ? "Isso apaga todos os boletins desta lista (incluindo os JSON gerados) deste navegador. Não dá pra desfazer."
+                          : "This removes all bulletins from this list (including the generated JSON) on this browser. This can't be undone."}
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>{pt ? "Cancelar" : "Cancel"}</AlertDialogCancel>
+                      <AlertDialogAction onClick={clearHistory}>{pt ? "Apagar" : "Delete"}</AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              </div>
             </CardHeader>
             <CardContent className="space-y-2">
               {jobs.map((j) => {
