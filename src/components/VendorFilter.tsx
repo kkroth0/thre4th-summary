@@ -45,7 +45,6 @@ const VENDOR_LIST: VendorConfig[] = [
     { name: "Spamhaus", free: true, supportsIP: true, supportsDomain: true, supportsHash: false },
     { name: "Blocklist.de", free: true, supportsIP: true, supportsDomain: false, supportsHash: false },
     { name: "OpenPhish", free: true, supportsIP: false, supportsDomain: true, supportsHash: false },
-    { name: "DShield", free: true, supportsIP: true, supportsDomain: false, supportsHash: false },
     { name: "Team Cymru", free: true, supportsIP: true, supportsDomain: false, supportsHash: true },
 ];
 

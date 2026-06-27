@@ -43,7 +43,6 @@ export const VENDOR_IOC_SUPPORT: Record<string, ('ip' | 'domain' | 'hash' | 'url
     "MetaDefender": ['ip', 'hash'],
     "PhishStats": ['url', 'domain'],
     "OpenPhish": ['url', 'domain'],
-    "DShield": ['ip'],
     "Team Cymru": ['ip', 'hash'],
     "Censys": ['ip'],
     // Intentionally excluded from per-IOC routing:
@@ -519,7 +518,6 @@ const getVendorLink = (vendorName: string, query: string): string | undefined =>
         case "Ransomware.live": return `https://ransomware.live/`;
 
         case "OpenPhish": return `https://openphish.com/`;
-        case "DShield": return `https://isc.sans.edu/ipinfo.html?ip=${query}`;
         case "Team Cymru": return `https://team-cymru.com/community-services/ip-asn-mapping/`;
         case "Censys": return `https://search.censys.io/hosts/${query}`;
         case "WHOIS": return `https://who.is/whois/${query}`;
@@ -706,7 +704,6 @@ export const fetchMetaDefenderData = (query: string) => fetchFromBackend('metade
 export const fetchPhishStatsData = (query: string) => fetchFromBackend('phishstats', query, "PhishStats");
 export const fetchRansomwareLiveData = (query: string) => fetchFromBackend('ransomwarelive', query, "Ransomware.live");
 export const fetchOpenPhishData = (query: string) => fetchFromBackend('openphish', query, "OpenPhish");
-export const fetchDShieldData = (query: string) => fetchFromBackend('dshield', query, "DShield");
 export const fetchTeamCymruData = (query: string) => fetchFromBackend('teamcymru', query, "Team Cymru");
 export const fetchCensysData = (query: string) => fetchFromBackend('censys', query, "Censys");
 
@@ -770,7 +767,6 @@ const buildVendorMap = (query: string): Record<string, () => Promise<VendorData>
     "PhishStats": () => fetchPhishStatsData(query),
     "Ransomware.live": () => fetchRansomwareLiveData(query),
     "OpenPhish": () => fetchOpenPhishData(query),
-    "DShield": () => fetchDShieldData(query),
     "Team Cymru": () => fetchTeamCymruData(query),
     "Censys": () => fetchCensysData(query),
 });

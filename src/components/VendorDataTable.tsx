@@ -304,7 +304,6 @@ export const VendorDataTable = ({ vendorData, getVendorLink }: VendorDataTablePr
                           vendor.name === "PhishStats" ? "phishstats.info" :
                           vendor.name === "Ransomware.live" ? "ransomware.live" :
                           vendor.name === "OpenPhish" ? "openphish.com" :
-                          vendor.name === "DShield" ? "dshield.org" :
                           "team-cymru.com"
                         }`}
                         alt=""

@@ -329,7 +329,7 @@ const ALL_VENDORS = [
   "PhishTank", "Pulsedive",
   "Hybrid Analysis", "CIRCL hashlookup",
   "Criminal IP", "MetaDefender", "PhishStats", "Ransomware.live",
-  "OpenPhish", "DShield", "Team Cymru", "Censys"
+  "OpenPhish", "Team Cymru", "Censys"
 ];
 
 const Index = () => {
@@ -1374,7 +1374,6 @@ const Index = () => {
       "IP Geolocation": "ip-api.com",
       "Censys": "censys.io",
       "OpenPhish": "openphish.com",
-      "DShield": "dshield.org",
       "Team Cymru": "team-cymru.com"
     };
 

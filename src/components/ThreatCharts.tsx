@@ -425,7 +425,6 @@ export const ThreatCharts = ({ vendorData, detections, totalVendors }: ThreatCha
                               vendor.name === "PhishStats" ? "phishstats.info" :
                               vendor.name === "Ransomware.live" ? "ransomware.live" :
                               vendor.name === "OpenPhish" ? "openphish.com" :
-                              vendor.name === "DShield" ? "dshield.org" :
                               "team-cymru.com"
                             }`}
                             alt=""

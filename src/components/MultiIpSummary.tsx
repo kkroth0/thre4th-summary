@@ -73,7 +73,6 @@ const getVendorDomain = (name: string) => {
         case "PhishStats": return "phishstats.info";
         case "Ransomware.live": return "ransomware.live";
         case "OpenPhish": return "openphish.com";
-        case "DShield": return "dshield.org";
         case "Team Cymru": return "team-cymru.com";
         default: return "google.com";
     }

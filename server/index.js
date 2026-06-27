@@ -995,22 +995,6 @@ app.post('/api/openphish', scanLimiter, async (req, res) => {
     }
 });
 
-// DShield (SANS ISC)
-app.post('/api/dshield', scanLimiter, async (req, res) => {
-    const { query } = req.body;
-    try {
-        const queryType = detectQueryType(query);
-        if (queryType !== "ip") return res.json({ data: { "Status": "IP only" } });
-
-        const sanitized = sanitizeQuery(query, 'ip');
-        const response = await axios.get(`https://isc.sans.edu/api/ip/${sanitized}?json`);
-        res.json(response.data);
-    } catch (error) {
-        const { status, message } = sanitizeError(error);
-        res.status(status).json({ error: message });
-    }
-});
-
 // Team Cymru
 app.post('/api/teamcymru', scanLimiter, async (req, res) => {
     const { query } = req.body;
