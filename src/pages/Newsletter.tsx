@@ -62,11 +62,23 @@ interface Advisory {
   iocs?: IocSet;
 }
 
-const SEVERITY_STYLES: Record<string, string> = {
-  Critical: "bg-red-500/10 text-red-500 border-red-500/20",
-  High: "bg-orange-500/10 text-orange-500 border-orange-500/20",
-  Medium: "bg-yellow-500/10 text-yellow-600 border-yellow-500/20",
-  Low: "bg-slate-500/10 text-slate-400 border-slate-500/20",
+const SEVERITY_DOT: Record<string, string> = {
+  Critical: "bg-red-500",
+  High: "bg-orange-500",
+  Medium: "bg-yellow-500",
+  Low: "bg-slate-400",
+};
+
+// Compact relative time: "agora"/"now", "12m", "3h", "5d", else short date.
+const relTime = (d: string | number | Date, lang = "pt"): string => {
+  const t = new Date(d).getTime();
+  if (isNaN(t)) return "";
+  const s = Math.max(0, (Date.now() - t) / 1000);
+  if (s < 60) return lang === "pt" ? "agora" : "now";
+  if (s < 3600) return `${Math.floor(s / 60)}m`;
+  if (s < 86400) return `${Math.floor(s / 3600)}h`;
+  if (s < 604800) return `${Math.floor(s / 86400)}d`;
+  return new Date(t).toLocaleDateString(lang === "pt" ? "pt-BR" : "en-US", { day: "2-digit", month: "short" });
 };
 
 interface EnrichData {
@@ -683,57 +695,29 @@ const Newsletter = () => {
                   : "Threat intelligence news and security advisories aggregated from multiple sources"}
               </p>
             </div>
-            {/* Auto-polling / Last Updated Status */}
-            <div className="flex items-center gap-3 text-xs text-muted-foreground">
-              <div className="flex items-center gap-2 bg-muted/25 border border-border/40 p-1.5 rounded-md px-3 shadow-inner">
-                <span className="relative flex h-2 w-2">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
-                </span>
-                <span className="font-semibold text-foreground/90">{language === "pt" ? "Auto-polling ativo" : "Auto-polling active"}</span>
-                <span className="text-muted-foreground/30">|</span>
-                <div className="flex items-center gap-1">
-                  <svg className="h-3 w-3 transform -rotate-90 text-green-500 shrink-0" viewBox="0 0 24 24">
-                    <circle
-                      className="text-muted/20 dark:text-muted/10"
-                      strokeWidth="3.5"
-                      stroke="currentColor"
-                      fill="transparent"
-                      r="8"
-                      cx="12"
-                      cy="12"
-                    />
-                    <circle
-                      className="text-green-500 transition-all duration-1000 ease-linear"
-                      strokeWidth="3.5"
-                      strokeDasharray="50.27"
-                      strokeDashoffset={50.27 * (1 - secondsRemaining / 300)}
-                      strokeLinecap="round"
-                      stroke="currentColor"
-                      fill="transparent"
-                      r="8"
-                      cx="12"
-                      cy="12"
-                    />
-                  </svg>
-                  <span className="font-mono text-[10px] text-muted-foreground/90 tabular-nums">{formatTime(secondsRemaining)}</span>
-                </div>
-              </div>
-              {isRefreshingNews && <span className="animate-pulse text-primary font-medium">{language === "pt" ? "Atualizando..." : "Refreshing..."}</span>}
-              <span>
-                {language === "pt" ? "Última atualização: " : "Last updated: "}
-                {lastUpdatedNews ? lastUpdatedNews.toLocaleTimeString() : "Pending"}
-              </span>
+            {/* Auto-polling / última atualização — status enxuto */}
+            <div className="flex items-center gap-2 text-xs text-muted-foreground shrink-0 tabular-nums">
+              <span className={`h-1.5 w-1.5 rounded-full ${isRefreshingNews ? "bg-primary animate-pulse" : "bg-green-500"}`} />
+              {isRefreshingNews
+                ? (language === "pt" ? "atualizando…" : "refreshing…")
+                : (
+                  <span>
+                    {language === "pt" ? "atualizado " : "updated "}
+                    {lastUpdatedNews ? lastUpdatedNews.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "—"}
+                    <span className="text-muted-foreground/40"> · {language === "pt" ? "próx." : "next"} </span>
+                    {formatTime(secondsRemaining)}
+                  </span>
+                )}
             </div>
           </div>
 
           {/* Calendar Month Selector Bar */}
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-card/25 backdrop-blur-xl border border-primary/10 rounded-2xl p-4 shadow-lg">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-card border rounded-lg p-2.5">
             <div className="flex items-center gap-3">
               <Button
                 variant="outline"
                 size="icon"
-                className="h-9.5 w-9.5 rounded-xl border-primary/15 hover:bg-primary/5 shrink-0"
+                className="h-9 w-9 rounded-md shrink-0"
                 onClick={handlePrevMonth}
                 title={language === "pt" ? "Mês Anterior" : "Previous Month"}
               >
@@ -748,7 +732,7 @@ const Newsletter = () => {
               <Button
                 variant="outline"
                 size="icon"
-                className="h-9.5 w-9.5 rounded-xl border-primary/15 hover:bg-primary/5 shrink-0"
+                className="h-9 w-9 rounded-md shrink-0"
                 onClick={handleNextMonth}
                 title={language === "pt" ? "Próximo Mês" : "Next Month"}
               >
@@ -759,7 +743,7 @@ const Newsletter = () => {
             {/* Quick Month Select Dropdown */}
             <div className="flex items-center gap-2.5 w-full sm:w-auto">
               <Select value={selectedMonth.toString()} onValueChange={(val) => setSelectedMonth(parseInt(val))}>
-                <SelectTrigger className="h-9.5 w-full sm:w-[130px] bg-background/50 border-primary/15 rounded-xl text-xs font-semibold focus:ring-primary/20 hover:bg-background/60 transition-all">
+                <SelectTrigger className="h-9 w-full sm:w-[130px] rounded-md text-xs font-semibold">
                   <SelectValue placeholder={language === "pt" ? "Mês" : "Month"} />
                 </SelectTrigger>
                 <SelectContent className="max-h-60 border-primary/10 bg-popover/95 backdrop-blur-md rounded-xl">
@@ -772,7 +756,7 @@ const Newsletter = () => {
               </Select>
 
               <Select value={selectedYear.toString()} onValueChange={(val) => setSelectedYear(parseInt(val))}>
-                <SelectTrigger className="h-9.5 w-full sm:w-[95px] bg-background/50 border-primary/15 rounded-xl text-xs font-semibold focus:ring-primary/20 hover:bg-background/60 transition-all">
+                <SelectTrigger className="h-9 w-full sm:w-[95px] rounded-md text-xs font-semibold">
                   <SelectValue placeholder={language === "pt" ? "Ano" : "Year"} />
                 </SelectTrigger>
                 <SelectContent className="border-primary/10 bg-popover/95 backdrop-blur-md rounded-xl">
@@ -787,7 +771,7 @@ const Newsletter = () => {
           </div>
 
           {/* Search, Layer Filter, and Action Bar at the Top */}
-          <div className="flex flex-col xl:flex-row gap-3 bg-card/40 border p-3 rounded-xl backdrop-blur-sm">
+          <div className="flex flex-col xl:flex-row gap-3 bg-card border p-3 rounded-lg">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
               <Input
@@ -906,20 +890,17 @@ const Newsletter = () => {
           <div className="space-y-6">
             
             {/* Top Banner: Digest Builder Tool */}
-            <Card className="border border-primary/10 shadow-lg bg-card/45 backdrop-blur-lg relative overflow-hidden group">
-              {/* Premium gradient accent top bar */}
-              <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-primary via-blue-500 to-cyan-500" />
-              
-              <CardContent className="p-4 md:p-6 flex flex-col md:flex-row md:items-center justify-between gap-6">
-                <div className="flex items-start gap-3.5 flex-1 min-w-0">
-                  <div className="p-2.5 rounded-xl bg-primary/10 border border-primary/20 text-primary shrink-0">
-                    <Layers className="h-6 w-6" />
+            <Card className="border bg-card">
+              <CardContent className="p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div className="flex items-center gap-3 flex-1 min-w-0">
+                  <div className="p-2 rounded-md bg-primary/10 text-primary shrink-0">
+                    <Layers className="h-5 w-5" />
                   </div>
-                  <div className="space-y-1 min-w-0">
-                    <CardTitle className="text-base flex items-center gap-2">
+                  <div className="space-y-0.5 min-w-0">
+                    <CardTitle className="text-sm flex items-center gap-2">
                       {t("generateWeeklyDigest") || "Generate Weekly Digest"}
-                      <Badge variant={selectedCount > 0 ? "default" : "secondary"} className={selectedCount > 0 ? "bg-primary text-primary-foreground shadow-sm shadow-primary/25 animate-pulse ml-1.5" : "ml-1.5"}>
-                        {selectedCount} {language === "pt" ? "Selecionados" : "Selected"}
+                      <Badge variant={selectedCount > 0 ? "default" : "secondary"} className="text-[10px]">
+                        {selectedCount} {language === "pt" ? "selecionados" : "selected"}
                       </Badge>
                     </CardTitle>
                     <CardDescription className="text-xs max-w-2xl truncate">
@@ -932,13 +913,8 @@ const Newsletter = () => {
                   <Dialog open={isDigestOpen} onOpenChange={setIsDigestOpen}>
                     <DialogTrigger asChild>
                       <Button
-                        className={`w-full md:w-auto gap-2 text-xs h-9 px-5 transition-all duration-300 ${
-                          selectedCount > 0 
-                            ? "bg-gradient-to-r from-primary to-blue-600 hover:from-primary/90 hover:to-blue-600/90 text-primary-foreground shadow-md shadow-primary/15 hover:shadow-lg hover:shadow-primary/25 hover:scale-[1.02] active:scale-[0.98]" 
-                            : "bg-muted/50 text-muted-foreground cursor-not-allowed"
-                        }`}
+                        className="w-full md:w-auto gap-2 text-xs h-9 px-4"
                         disabled={selectedCount === 0}
-                        variant={selectedCount > 0 ? "default" : "secondary"}
                       >
                         <Sparkles className="h-4 w-4" />
                         {t("generateWeeklyDigest") || "Generate weekly digest"}
@@ -946,15 +922,15 @@ const Newsletter = () => {
                     </DialogTrigger>
                     <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col p-6">
                       <DialogHeader className="border-b pb-4">
-                        <DialogTitle className="text-2xl font-bold flex items-center gap-2">
-                          <Sparkles className="h-6 w-6 text-primary" />
+                        <DialogTitle className="text-lg font-bold flex items-center gap-2">
+                          <Sparkles className="h-5 w-5 text-primary" />
                           {t("weeklyDigestTitle") || "Threat Weekly Digest"}
                         </DialogTitle>
                       </DialogHeader>
 
                       <div className="flex-1 overflow-y-auto pr-1 py-4">
                         {/* Compiled newsletter template print container */}
-                        <div id="compiled-digest-preview" className="space-y-6 text-slate-800 dark:text-slate-100 p-4 border rounded-xl bg-card/50 backdrop-blur-sm">
+                        <div id="compiled-digest-preview" className="space-y-6 text-slate-800 dark:text-slate-100 p-4 border rounded-lg bg-card">
                           <h1>{t("weeklyDigestTitle") || "Weekly Threat Digest"}</h1>
                           <p className="meta">
                             <strong>Date:</strong> {new Date().toLocaleDateString()}<br />
@@ -1030,7 +1006,7 @@ const Newsletter = () => {
               {loadingNews ? (
                 <div className="space-y-4">
                   {[1, 2, 3].map((n) => (
-                    <div key={n} className="p-6 rounded-xl border bg-card/60 animate-pulse space-y-3">
+                    <div key={n} className="p-4 rounded-lg border bg-card animate-pulse space-y-3">
                       <div className="h-4 w-1/4 bg-muted rounded"></div>
                       <div className="h-6 w-3/4 bg-muted rounded"></div>
                       <div className="h-4 w-5/6 bg-muted rounded"></div>
@@ -1038,13 +1014,13 @@ const Newsletter = () => {
                   ))}
                 </div>
               ) : newsError ? (
-                <div className="p-8 border border-destructive/20 rounded-xl bg-destructive/5 text-center">
+                <div className="p-8 border border-destructive/20 rounded-lg bg-destructive/5 text-center">
                   <AlertTriangle className="h-10 w-10 text-destructive mx-auto mb-3" />
                   <p className="text-destructive font-medium">{newsError}</p>
                   <p className="text-sm text-muted-foreground mt-1">Please try again later.</p>
                 </div>
               ) : filteredAdvisories.length === 0 ? (
-                <div className="p-12 border border-dashed rounded-xl text-center bg-card space-y-4">
+                <div className="p-12 border border-dashed rounded-lg text-center bg-card space-y-4">
                   <BookOpen className="h-12 w-12 text-muted-foreground/50 mx-auto mb-3" />
                   <div>
                     <p className="text-muted-foreground font-medium">{language === "pt" ? "Nenhuma notícia encontrada para este mês no cache local" : "No threat advisories found for this month in local cache"}</p>
@@ -1052,7 +1028,7 @@ const Newsletter = () => {
                   </div>
                   <Button
                     onClick={() => loadNews()}
-                    className="gap-2 h-9 px-4 rounded-xl text-xs font-semibold bg-primary hover:bg-primary/90 text-white mx-auto"
+                    className="gap-2 h-9 px-4 rounded-md text-xs font-semibold bg-primary hover:bg-primary/90 text-white mx-auto"
                   >
                     <RefreshCw className="h-3.5 w-3.5" />
                     {language === "pt" ? "Buscar Notícias Recentes" : "Fetch Recent Advisories"}
@@ -1072,17 +1048,12 @@ const Newsletter = () => {
                     const mIocs: IocSet | undefined = hasIocs(enr?.iocs) ? (enr?.iocs ?? undefined) : item.iocs;
                     const isCisa = item.source.toLowerCase().includes("cisa");
                     const isBleeping = item.source.toLowerCase().includes("bleeping");
-                    const badgeColor = isCisa
-                      ? "bg-red-500/10 text-red-500 border-red-500/20 hover:bg-red-500/20"
-                      : isBleeping
-                      ? "bg-blue-500/10 text-blue-500 border-blue-500/20 hover:bg-blue-500/20"
-                      : "bg-amber-500/10 text-amber-500 border-amber-500/20 hover:bg-amber-500/20";
 
                     return (
                       <div
                         key={idx}
-                        className={`p-5 rounded-xl border bg-card shadow-sm hover:shadow-md transition-all flex items-start gap-4 ${
-                          selectedNews[item.title] ? "border-primary/50 bg-primary/5" : ""
+                        className={`p-4 rounded-lg border bg-card transition-colors flex items-start gap-3 ${
+                          selectedNews[item.title] ? "border-primary/50 bg-primary/5" : "hover:border-primary/30"
                         }`}
                       >
                         <Checkbox
@@ -1090,29 +1061,29 @@ const Newsletter = () => {
                           onCheckedChange={() => toggleSelectNews(item.title)}
                           className="mt-1"
                         />
-                        
-                        <div className="flex-1 space-y-2">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <Badge variant="outline" className={badgeColor}>
-                              {item.source}
-                            </Badge>
+
+                        <div className="flex-1 min-w-0 space-y-1.5">
+                          <div className="flex items-center gap-2 flex-wrap text-xs">
                             {item.severity && (
-                              <Badge
-                                variant="outline"
+                              <span
                                 title={item.reasons?.length ? `${language === "pt" ? "Por quê" : "Why"}: ${item.reasons.join(" · ")}` : undefined}
-                                className={`text-[10px] font-bold ${item.reasons?.length ? "cursor-help" : ""} ${SEVERITY_STYLES[item.severity] || SEVERITY_STYLES.Low}`}
+                                className={`inline-flex items-center gap-1.5 font-semibold ${item.reasons?.length ? "cursor-help" : ""}`}
                               >
+                                <span className={`h-2 w-2 rounded-full ${SEVERITY_DOT[item.severity] || SEVERITY_DOT.Low}`} />
                                 {item.severity}
-                                {typeof item.score === "number" && <span className="ml-1 opacity-70">{item.score}</span>}
-                              </Badge>
+                                {typeof item.score === "number" && <span className="font-normal text-muted-foreground">{item.score}</span>}
+                              </span>
                             )}
+                            <span className={`font-medium ${isCisa ? "text-red-500" : isBleeping ? "text-blue-500" : "text-amber-500"}`}>
+                              {item.source}
+                            </span>
                             {item.kev && (
                               <Badge
                                 variant="outline"
                                 title={item.kevDetails ? `CISA KEV · ${item.kevDetails.cve}${item.kevDetails.dateAdded ? ` · ${language === "pt" ? "adicionado" : "added"} ${item.kevDetails.dateAdded}` : ""}${item.kevDetails.ransomware ? " · ransomware" : ""}` : "CISA KEV"}
-                                className="text-[10px] font-bold bg-red-600/15 text-red-500 border-red-600/30 animate-pulse cursor-help"
+                                className="text-[10px] font-bold bg-red-600/15 text-red-500 border-red-600/30 cursor-help"
                               >
-                                {language === "pt" ? "⚠ Explorado Ativamente" : "⚠ Actively Exploited"}
+                                {language === "pt" ? "Explorado" : "Exploited"}
                                 {typeof item.epss === "number" && <span className="ml-1 opacity-80">EPSS {Math.round(item.epss * 100)}%</span>}
                               </Badge>
                             )}
@@ -1131,17 +1102,17 @@ const Newsletter = () => {
                                 href={`https://nvd.nist.gov/vuln/detail/${cve}`}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded border border-primary/20 text-primary hover:bg-primary/10 transition-colors"
+                                className="font-mono font-semibold text-primary hover:underline"
                               >
                                 {cve}
                               </a>
                             ))}
-                            <span className="text-xs text-muted-foreground">
-                              {new Date(item.pubDate).toLocaleString()}
+                            <span className="text-muted-foreground ml-auto tabular-nums shrink-0" title={new Date(item.pubDate).toLocaleString()}>
+                              {relTime(item.pubDate, language)}
                             </span>
                           </div>
                           
-                          <h3 className="font-bold text-lg text-foreground hover:text-primary transition-colors flex items-center gap-2 flex-wrap">
+                          <h3 className="font-semibold text-base text-foreground hover:text-primary transition-colors flex items-center gap-2 flex-wrap">
                             <a href={item.link} target="_blank" rel="noopener noreferrer">
                               {language === "pt" ? (item.titlePt || item.title) : item.title}
                             </a>
