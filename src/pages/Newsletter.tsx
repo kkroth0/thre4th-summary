@@ -1038,10 +1038,6 @@ const Newsletter = () => {
                 <div className="grid grid-cols-1 gap-4">
                   {filteredAdvisories.map((item, idx) => {
                     const enr = enrichment[item.link]?.data;
-                    const mThreats = mergedField(item, enr, "threats");
-                    const mSectors = mergedField(item, enr, "sectors");
-                    const mTtps = mergedField(item, enr, "ttps");
-                    const mAssets = mergedField(item, enr, "assets");
                     const mCves = mergedField(item, enr, "cves");
                     // Prefer the richer full-article IOCs (enrich) over the
                     // lightweight collection-time set.
@@ -1163,27 +1159,6 @@ const Newsletter = () => {
                           {/* Collapsible actionable analysis */}
                           {expanded[item.link] && (
                             <div className="mt-2 rounded-xl border border-border/50 bg-muted/20 p-4 space-y-3 text-sm font-sans">
-                              {/* Metadata block (mirrors the SOC bot card) */}
-                              <div className="space-y-0.5 text-[13px] text-foreground/90">
-                                <div><span className="font-bold">Source:</span> {item.source}</div>
-                                <div><span className="font-bold">Date:</span> {new Date(item.pubDate).toISOString().slice(0, 10)}</div>
-                                {mAssets.length ? <div><span className="font-bold">Monitored Assets:</span> {mAssets.join(", ")}</div> : null}
-                                {mThreats.length ? <div><span className="font-bold">Threats:</span> {mThreats.join(", ")}</div> : null}
-                                {mSectors.length ? <div><span className="font-bold">Targeted Sectors:</span> {mSectors.join(", ")}</div> : null}
-                              </div>
-
-                              {/* MITRE ATT&CK */}
-                              {mTtps.length ? (
-                                <div>
-                                  <div className="text-[11px] font-bold text-muted-foreground/80 tracking-wide mb-1">[ MITRE ATT&CK ]</div>
-                                  <ul className="space-y-0.5">
-                                    {mTtps.map((tp) => (
-                                      <li key={tp} className="text-xs font-mono">• {tp}</li>
-                                    ))}
-                                  </ul>
-                                </div>
-                              ) : null}
-
                               {/* Analysis (LLM, or scraped + translated) */}
                               {enrichment[item.link]?.loading ? (
                                 <div className="flex items-center gap-2 text-xs text-muted-foreground py-1">
@@ -1199,12 +1174,10 @@ const Newsletter = () => {
                                         || renderHighlightedDescription(language === "pt" ? (item.descriptionPt || item.description) : item.description)}
                                     </p>
                                   </div>
-                                  {enrichment[item.link]?.data?.impactMitigation ? (
-                                    <div>
-                                      <div className="text-[11px] font-bold text-muted-foreground/80 tracking-wide mb-1">[ {language === "pt" ? "IMPACTO & MITIGAÇÃO" : "IMPACT & MITIGATION"} ]</div>
-                                      <p className="text-sm leading-relaxed text-foreground/90 whitespace-pre-line">{enrichment[item.link]?.data?.impactMitigation}</p>
-                                    </div>
-                                  ) : null}
+                                  {/* Copyable source line: "Source - Link" */}
+                                  <div className="pt-1 text-xs text-foreground/80 select-all break-all">
+                                    {item.source} - {item.link}
+                                  </div>
                                   {enrichment[item.link]?.data?.source === "translate" ? (
                                     <p className="text-[10px] text-muted-foreground/60 italic">
                                       {language === "pt" ? "Conteúdo do artigo traduzido (Google Translate) — análise por IA desativada" : "Article content translated (Google Translate) — AI analysis off"}

@@ -1661,15 +1661,12 @@ const GROQ_BASE_URL = 'https://api.groq.com/openai/v1';
 const GROQ_MODELS = ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'gemma2-9b-it'];
 
 const newsIntelPrompt = (lang) => (
-    'You are a senior Cyber Threat Intelligence analyst. Produce a concise, technical report. ' +
+    'You are a senior Cyber Threat Intelligence analyst. ' +
     'Respond ONLY with a JSON object with these keys:\n' +
     '1. "title": the advisory title, professionally normalized.\n' +
-    '2. "summary": EXACTLY TWO paragraphs separated by \\n\\n. Paragraph 1 technically describes WHAT happened ' +
-    '(the threat, incident or fact). Paragraph 2 depends on the type: for a vulnerability/incident give the IMPACT ' +
-    'and concrete MITIGATION measures; for market/regulatory/geopolitical/regional news give the STRATEGIC RELEVANCE ' +
-    'for a SOC/CTI operation. NEVER invent mitigations for non-technical facts.\n' +
-    '3. "iocs": an object with keys "IPs", "Domains", "Hashes" listing every technical indicator found, ' +
-    'or "None identified" when there are none.\n' +
+    '2. "summary": ONE concise technical paragraph — an executive summary describing WHAT happened ' +
+    '(the threat, incident or fact) and why it matters for a SOC/CTI operation. ' +
+    'Do NOT include mitigations, recommendations, remediation steps or IOC lists.\n' +
     `OUTPUT LANGUAGE: ${lang === 'en' ? 'English' : 'Português (Brasil)'}. Respond ONLY the JSON, no extra text.`
 );
 
@@ -1831,12 +1828,13 @@ app.post('/api/newsletter/enrich', scanLimiter, async (req, res) => {
 
         let payload;
         if (ai && ai.summary) {
-            const paras = String(ai.summary).split(/\n\n+/).map((p) => p.trim()).filter(Boolean);
+            // Single executive-summary paragraph only (prompt no longer asks for
+            // impact/mitigation, to save output tokens).
             payload = {
                 available: true, source: 'groq', scraped: !!fullText,
                 title: ai.title || item.title,
-                executiveSummary: paras[0] || String(ai.summary),
-                impactMitigation: paras.slice(1).join('\n\n'),
+                executiveSummary: String(ai.summary).trim(),
+                impactMitigation: '',
                 iocs, ...enriched,
             };
         } else {
