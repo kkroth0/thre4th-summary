@@ -1554,6 +1554,185 @@ function requireFeedSecret(req, res) {
     return true;
 }
 
+// ─── Auth GitHub + BYOK (chave Groq por usuário, cifrada em repouso) ────────
+// Login via GitHub OAuth (fluxo escrito à mão, sem passport). A sessão é um
+// cookie httpOnly assinado por HMAC — mesma origem que o app (Pages serve o app
+// e faz proxy de /api pelo túnel), então não há CORS com credenciais. Só quem
+// está na allow-list entra. Cada usuário traz a própria chave Groq (BYOK): ela é
+// cifrada (AES-256-GCM) e guardada em .users.json; nunca vai pro store de jobs
+// (que é persistido em disco), nunca ao /job público, nunca ao log.
+
+// Chave-mestra p/ cifrar segredos dos usuários. Aceita 64-hex, base64 de 32B, ou
+// deriva de uma passphrase via sha256. Sem ela, guardar chave fica desabilitado.
+function loadEncKey() {
+    const raw = (process.env.SECRETS_ENCRYPTION_KEY || '').trim();
+    if (!raw) return null;
+    if (/^[0-9a-fA-F]{64}$/.test(raw)) return Buffer.from(raw, 'hex');
+    const b = Buffer.from(raw, 'base64');
+    if (b.length === 32) return b;
+    return crypto.createHash('sha256').update(raw).digest();
+}
+const ENC_KEY = loadEncKey();
+function encryptSecret(plain) {
+    const iv = crypto.randomBytes(12);
+    const cipher = crypto.createCipheriv('aes-256-gcm', ENC_KEY, iv);
+    const ct = Buffer.concat([cipher.update(String(plain), 'utf8'), cipher.final()]);
+    return Buffer.concat([iv, cipher.getAuthTag(), ct]).toString('base64');
+}
+function decryptSecret(blob) {
+    const buf = Buffer.from(String(blob), 'base64');
+    const d = crypto.createDecipheriv('aes-256-gcm', ENC_KEY, buf.subarray(0, 12));
+    d.setAuthTag(buf.subarray(12, 28));
+    return Buffer.concat([d.update(buf.subarray(28)), d.final()]).toString('utf8');
+}
+
+// Sessão: token compacto <payload>.<hmac>, verificado em tempo constante + exp.
+const SESSION_SECRET = process.env.SESSION_SECRET || '';
+const SESSION_TTL_S = 7 * 24 * 3600;
+const COOKIE_SECURE = process.env.NODE_ENV !== 'development';
+const b64url = (buf) => Buffer.from(buf).toString('base64url');
+function signSession(payload) {
+    const body = b64url(JSON.stringify(payload));
+    const sig = b64url(crypto.createHmac('sha256', SESSION_SECRET).update(body).digest());
+    return `${body}.${sig}`;
+}
+function verifySession(token) {
+    if (!token || !SESSION_SECRET) return null;
+    const [body, sig] = token.split('.');
+    if (!body || !sig) return null;
+    const expect = b64url(crypto.createHmac('sha256', SESSION_SECRET).update(body).digest());
+    const a = Buffer.from(sig), b = Buffer.from(expect);
+    if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;
+    try {
+        const p = JSON.parse(Buffer.from(body, 'base64url').toString('utf8'));
+        return (p.exp && p.exp * 1000 > Date.now()) ? p : null;
+    } catch { return null; }
+}
+function getCookie(req, name) {
+    const h = req.headers.cookie;
+    if (!h) return null;
+    for (const part of h.split(';')) {
+        const i = part.indexOf('=');
+        if (i > -1 && part.slice(0, i).trim() === name) return decodeURIComponent(part.slice(i + 1).trim());
+    }
+    return null;
+}
+
+// Store de usuários (flat JSON, como os jobs). groqKeyEnc = chave Groq cifrada.
+const USERS_STORE_PATH = path.join(__dirname, '.users.json');
+function loadUsers() { try { return JSON.parse(fs.readFileSync(USERS_STORE_PATH, 'utf8')); } catch { return {}; } }
+function saveUsers() { try { fs.writeFileSync(USERS_STORE_PATH, JSON.stringify(usersStore, null, 2)); } catch (e) { console.error('users store write failed:', e.message); } }
+let usersStore = loadUsers();   // { githubId: { login, groqKeyEnc, createdAt, updatedAt } }
+
+// Allow-list: por login e/ou por org. Sem nenhum dos dois configurado => nega
+// todos (fail-safe: não abrir o site por engano se a env não subiu).
+const ALLOWED_LOGINS = (process.env.GITHUB_ALLOWED_LOGINS || '').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
+const ALLOWED_ORG = (process.env.GITHUB_ALLOWED_ORG || '').trim();
+async function isAllowed(login, accessToken) {
+    if (ALLOWED_LOGINS.includes(login.toLowerCase())) return true;
+    if (ALLOWED_ORG) {
+        const r = await axios.get(`https://api.github.com/orgs/${ALLOWED_ORG}/members/${login}`, {
+            headers: { Authorization: `Bearer ${accessToken}`, 'User-Agent': 'threatsumm4ry', Accept: 'application/vnd.github+json' },
+            validateStatus: () => true, timeout: 10000,
+        }).catch(() => ({ status: 0 }));
+        if (r.status === 204) return true;
+    }
+    return false;
+}
+
+function requireAuth(req, res, next) {
+    const p = verifySession(getCookie(req, 'ts_session'));
+    if (!p) return res.status(401).json({ error: 'não autenticado', needAuth: true });
+    req.user = p;
+    next();
+}
+
+const APP_BASE_URL = (process.env.APP_BASE_URL || 'https://threatsumm4ry.app').replace(/\/$/, '');
+const GH_CLIENT_ID = process.env.GITHUB_OAUTH_CLIENT_ID || '';
+const GH_CLIENT_SECRET = process.env.GITHUB_OAUTH_CLIENT_SECRET || '';
+const OAUTH_SCOPE = ALLOWED_ORG ? 'read:user read:org' : 'read:user';
+const REDIRECT_URI = `${APP_BASE_URL}/api/auth/github/callback`;
+
+// Início do fluxo: guarda um `state` anti-CSRF num cookie curto e redireciona.
+app.get('/api/auth/github/login', (req, res) => {
+    if (!GH_CLIENT_ID) return res.status(500).json({ error: 'auth não configurado' });
+    const state = crypto.randomBytes(16).toString('hex');
+    res.cookie('ts_oauth_state', state, { httpOnly: true, secure: COOKIE_SECURE, sameSite: 'lax', path: '/', maxAge: 600000 });
+    const u = new URL('https://github.com/login/oauth/authorize');
+    u.searchParams.set('client_id', GH_CLIENT_ID);
+    u.searchParams.set('redirect_uri', REDIRECT_URI);
+    u.searchParams.set('scope', OAUTH_SCOPE);
+    u.searchParams.set('state', state);
+    u.searchParams.set('allow_signup', 'false');
+    res.redirect(u.toString());
+});
+
+// Callback: valida state, troca code->token, confere allow-list, cria sessão.
+app.get('/api/auth/github/callback', async (req, res) => {
+    const back = (q) => res.redirect(`${APP_BASE_URL}/boletim?auth=${q}`);
+    try {
+        const { code, state } = req.query;
+        const saved = getCookie(req, 'ts_oauth_state');
+        res.clearCookie('ts_oauth_state', { path: '/' });
+        if (!code || !state || !saved || state !== saved) return back('erro');
+        const tok = await axios.post('https://github.com/login/oauth/access_token',
+            { client_id: GH_CLIENT_ID, client_secret: GH_CLIENT_SECRET, code, redirect_uri: REDIRECT_URI },
+            { headers: { Accept: 'application/json' }, timeout: 10000 });
+        const accessToken = tok.data?.access_token;
+        if (!accessToken) return back('erro');
+        const gh = await axios.get('https://api.github.com/user', {
+            headers: { Authorization: `Bearer ${accessToken}`, 'User-Agent': 'threatsumm4ry', Accept: 'application/vnd.github+json' },
+            timeout: 10000,
+        });
+        const login = gh.data?.login;
+        const id = String(gh.data?.id || '');
+        if (!login || !id) return back('erro');
+        if (!(await isAllowed(login, accessToken))) return back('negado');
+        const u = usersStore[id] || (usersStore[id] = { login, groqKeyEnc: null, createdAt: new Date().toISOString() });
+        u.login = login;
+        u.updatedAt = new Date().toISOString();
+        saveUsers();
+        setSessionCookie(res, signSession({ sub: id, login, exp: Math.floor(Date.now() / 1000) + SESSION_TTL_S }));
+        return back('ok');
+    } catch (e) {
+        console.error('oauth callback:', e.message);
+        return back('erro');
+    }
+});
+function setSessionCookie(res, token) {
+    res.cookie('ts_session', token, { httpOnly: true, secure: COOKIE_SECURE, sameSite: 'lax', path: '/', maxAge: SESSION_TTL_S * 1000 });
+}
+
+app.get('/api/auth/me', (req, res) => {
+    const p = verifySession(getCookie(req, 'ts_session'));
+    if (!p) return res.json({ authenticated: false });
+    const u = usersStore[p.sub];
+    res.json({ authenticated: true, login: p.login, hasKey: !!(u && u.groqKeyEnc) });
+});
+
+app.post('/api/auth/logout', (req, res) => {
+    res.clearCookie('ts_session', { path: '/' });
+    res.json({ ok: true });
+});
+
+// BYOK: grava/apaga a chave Groq do usuário (cifrada). Nunca devolve a chave.
+const validGroqKey = (k) => typeof k === 'string' && /^gsk_[A-Za-z0-9_-]{20,}$/.test(k);
+app.put('/api/user/groq-key', requireAuth, (req, res) => {
+    if (!ENC_KEY) return res.status(500).json({ error: 'armazenamento de chave não configurado no servidor' });
+    const key = (req.body?.key || '').toString().trim();
+    if (!validGroqKey(key)) return res.status(400).json({ error: 'chave Groq inválida (esperado formato gsk_...)' });
+    const u = usersStore[req.user.sub] || (usersStore[req.user.sub] = { login: req.user.login, groqKeyEnc: null, createdAt: new Date().toISOString() });
+    u.groqKeyEnc = encryptSecret(key);
+    u.updatedAt = new Date().toISOString();
+    saveUsers();
+    res.json({ hasKey: true });
+});
+app.delete('/api/user/groq-key', requireAuth, (req, res) => {
+    const u = usersStore[req.user.sub];
+    if (u) { u.groqKeyEnc = null; u.updatedAt = new Date().toISOString(); saveUsers(); }
+    res.json({ hasKey: false });
+});
+
 // ─── Boletim · jobs de geração por URL (1 URL = 1 boletim) ─────────────────
 // O front escolhe UMA url e pede a geração (POST generate); um worker na VPS
 // (saída-só, porta fechada) faz poll dos pendentes (GET jobs/pending, 🔒), roda
@@ -1564,14 +1743,29 @@ function loadJobs() { try { return JSON.parse(fs.readFileSync(JOBS_STORE_PATH, '
 function saveJobs() { try { fs.writeFileSync(JOBS_STORE_PATH, JSON.stringify(jobsStore, null, 2)); } catch (e) { console.error('jobs store write failed:', e.message); } }
 let jobsStore = loadJobs();   // { id: { id,url,type,title,status,json,error,createdAt,updatedAt } }
 
+// Chave Groq (BYOK) por job — só em RAM. Nunca persiste: se persistisse iria pro
+// disco em claro no .feed-jobs.json. É entregue ao worker só via /jobs/pending
+// (rota com segredo) e descartada assim que o job sai de 'pending'.
+const jobSecrets = new Map();   // jobId -> chave Groq (texto claro, efêmera)
+function dropSecret(id) { jobSecrets.delete(id); }
+
 function pruneJobs(max = 100) {
     const ids = Object.keys(jobsStore).sort((a, b) => (jobsStore[a].createdAt || '').localeCompare(jobsStore[b].createdAt || ''));
-    while (ids.length > max) delete jobsStore[ids.shift()];
+    while (ids.length > max) { const id = ids.shift(); dropSecret(id); delete jobsStore[id]; }
 }
 
 // Expira jobs presos em 'pending' além do TTL (worker caiu / geração longa demais),
 // pra não deixar o front em "gerando…" pra sempre nem o worker pegar job morto.
-const JOB_TTL_MS = parseInt(process.env.FEED_JOB_TTL_MS, 10) || 10 * 60 * 1000;
+// TTL alto o bastante pra uma fila cheia (FEED_MAX_QUEUE jobs) drenar num worker
+// com concorrência 2 mesmo se cada job bater o teto de 240s: 12/2*240s = 24 min.
+// Abaixo disso, o usuário no fim da fila via "expirou" sem nada estar quebrado.
+const JOB_TTL_MS = parseInt(process.env.FEED_JOB_TTL_MS, 10) || 25 * 60 * 1000;
+// Teto de jobs 'pending' aceitos ao mesmo tempo. Ao encher, o próximo /generate
+// recebe 429 com a posição na fila em vez de um wait silencioso de dezenas de min.
+const FEED_MAX_QUEUE = parseInt(process.env.FEED_MAX_QUEUE, 10) || 12;
+function pendingCount() {
+    return Object.values(jobsStore).filter((j) => j.status === 'pending').length;
+}
 function expireStaleJobs() {
     const now = Date.now();
     let changed = false;
@@ -1580,26 +1774,46 @@ function expireStaleJobs() {
             j.status = 'error';
             j.error = 'expirou (worker indisponível ou geração longa demais)';
             j.updatedAt = new Date().toISOString();
+            dropSecret(j.id);
             changed = true;
         }
     }
     if (changed) saveJobs();
 }
 
-// Front pede a geração de UMA url. Público + rate-limit + validação SSRF.
+// Front pede a geração de UMA url. Requer login + chave Groq própria (BYOK).
 //   POST /api/feed/generate  { url, type, title? }
-app.post('/api/feed/generate', scanLimiter, async (req, res) => {
+app.post('/api/feed/generate', requireAuth, scanLimiter, async (req, res) => {
     try {
         const url = (req.body?.url || '').toString();
         const type = req.body?.type === 'campaign' ? 'campaign' : 'vuln';
         const title = (req.body?.title || '').toString().slice(0, 300);
         if (!/^https?:\/\//i.test(url)) return res.status(400).json({ error: 'url http(s) obrigatória' });
+        // BYOK obrigatório: sem a chave do usuário não há como gerar. Decifra aqui
+        // e guarda só em RAM (jobSecrets) — o worker pega via /jobs/pending.
+        const u = usersStore[req.user.sub];
+        if (!u || !u.groqKeyEnc) return res.status(400).json({ error: 'adicione sua chave Groq nas configurações antes de gerar', needKey: true });
+        let userKey;
+        try { userKey = decryptSecret(u.groqKeyEnc); }
+        catch { return res.status(500).json({ error: 'falha ao ler sua chave; reinsira-a nas configurações' }); }
         // Sempre valida (sem atalho de "confiar em URL do feed") — o guard SSRF
         // bloqueia IP privado/loopback/metadata. O worker na VPS revalida também.
         try { await assertSafePublicUrl(url); } catch (e) { return res.status(400).json({ error: e.message || 'URL rejeitada' }); }
+        // Fila cheia: recusa cedo com posição, em vez de aceitar e deixar o job
+        // esperar tanto que expira. 503 (não 429) pra não colidir com o rate-limit.
+        expireStaleJobs();
+        const queued = pendingCount();
+        if (queued >= FEED_MAX_QUEUE) {
+            return res.status(503).json({
+                error: `Servidor ocupado: ${queued} boletins na fila. Tente de novo em alguns minutos.`,
+                queueDepth: queued,
+                retryable: true,
+            });
+        }
         const id = crypto.randomUUID();
         const now = new Date().toISOString();
         jobsStore[id] = { id, url, type, title, status: 'pending', json: null, error: null, createdAt: now, updatedAt: now };
+        jobSecrets.set(id, userKey);
         pruneJobs();
         saveJobs();
         res.json({ id, status: 'pending' });
@@ -1614,16 +1828,27 @@ app.get('/api/feed/job', (req, res) => {
     expireStaleJobs();
     const job = jobsStore[(req.query.id || '').toString()];
     if (!job) return res.status(404).json({ error: 'job não encontrado' });
-    res.json(job);
+    // Posição na fila = quantos jobs pending foram criados antes deste (0 = já
+    // sendo processado / próximo). Deixa o front mostrar "N na sua frente".
+    let queuePosition = 0;
+    if (job.status === 'pending') {
+        queuePosition = Object.values(jobsStore).filter(
+            (j) => j.status === 'pending' && j.createdAt < job.createdAt,
+        ).length;
+    }
+    res.json({ ...job, queuePosition });
 });
 
 // Worker (VPS) lê os jobs pendentes. 🔒   GET /api/feed/jobs/pending
 app.get('/api/feed/jobs/pending', (req, res) => {
     if (!requireFeedSecret(req, res)) return;
     expireStaleJobs();
+    // Só entrega jobs que ainda têm a chave BYOK em RAM. Após um restart do
+    // servidor o jobSecrets zera; jobs pending órfãos (sem chave) não vão pro
+    // worker (não dá pra gerar sem chave) e expiram sozinhos pelo TTL.
     const pending = Object.values(jobsStore)
-        .filter((j) => j.status === 'pending')
-        .map((j) => ({ id: j.id, url: j.url, type: j.type, title: j.title }));
+        .filter((j) => j.status === 'pending' && jobSecrets.has(j.id))
+        .map((j) => ({ id: j.id, url: j.url, type: j.type, title: j.title, groqKey: jobSecrets.get(j.id) }));
     res.json({ pending });
 });
 
@@ -1636,6 +1861,7 @@ app.post('/api/feed/job/result', (req, res) => {
     else if (req.body?.json && typeof req.body.json === 'object') { job.status = 'done'; job.json = req.body.json; }
     else return res.status(400).json({ error: 'json ou error obrigatório' });
     job.updatedAt = new Date().toISOString();
+    dropSecret(job.id);   // job terminou: descarta a chave BYOK da RAM
     saveJobs();
     res.json({ id: job.id, status: job.status });
 });

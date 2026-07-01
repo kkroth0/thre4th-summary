@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
-import { RefreshCw, Download, ShieldAlert, Loader2, FileText, Sparkles, AlertTriangle, Eye, ChevronDown, Trash2 } from "lucide-react";
+import { RefreshCw, Download, ShieldAlert, Loader2, FileText, Sparkles, AlertTriangle, Eye, ChevronDown, Trash2, Github, KeyRound, LogOut, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -20,7 +20,8 @@ import { useSidebar } from "@/contexts/SidebarContext";
 import { toast } from "sonner";
 import {
   fetchDailySuggestions, generateBoletim, fetchJob,
-  type DailySuggestion, type BoletimJob, type DeckType,
+  fetchAuth, loginUrl, logout, saveGroqKey, deleteGroqKey,
+  type DailySuggestion, type BoletimJob, type DeckType, type AuthState,
 } from "@/services/threatApi";
 
 const SEVERITY_DOT: Record<string, string> = {
@@ -33,8 +34,9 @@ const SEVERITY_DOT: Record<string, string> = {
 const slug = (s: string) => (s || "boletim").normalize("NFKD").replace(/[^\w\s-]/g, "").trim().toLowerCase().replace(/[\s_-]+/g, "-").slice(0, 50) || "boletim";
 
 // Após esse tempo um job ainda "pending" vira erro no front (worker caiu, ou o
-// backend reiniciou e perdeu o job -> 404). Evita "gerando…" eterno.
-const CLIENT_TIMEOUT_MS = 10 * 60 * 1000;
+// backend reiniciou e perdeu o job -> 404). Evita "gerando…" eterno. Casado com
+// o JOB_TTL_MS do servidor (25 min) pra não expirar antes dele numa fila cheia.
+const CLIENT_TIMEOUT_MS = 25 * 60 * 1000;
 
 // Histórico dos boletins gerados, persistido no navegador (sobrevive a sair da
 // página / recarregar) — assim você não regenera nem gasta API ao voltar.
@@ -68,6 +70,48 @@ const DailyBulletin: React.FC = () => {
   const [nowMs, setNowMs] = useState(Date.now());
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Auth GitHub + BYOK. `auth === null` = ainda carregando /me.
+  const [auth, setAuth] = useState<AuthState | null>(null);
+  const [keyInput, setKeyInput] = useState("");
+  const [savingKey, setSavingKey] = useState(false);
+
+  const refreshAuth = useCallback(async () => { setAuth(await fetchAuth()); }, []);
+  useEffect(() => { refreshAuth(); }, [refreshAuth]);
+
+  // Feedback do retorno do OAuth (?auth=ok|negado|erro) — limpa a query depois.
+  useEffect(() => {
+    const p = new URLSearchParams(window.location.search).get("auth");
+    if (!p) return;
+    if (p === "ok") toast.success(pt ? "Login efetuado" : "Signed in");
+    else if (p === "negado") toast.error(pt ? "Conta não autorizada" : "Account not allow-listed");
+    else if (p === "erro") toast.error(pt ? "Falha no login" : "Sign-in failed");
+    window.history.replaceState({}, "", window.location.pathname);
+  }, [pt]);
+
+  const submitKey = async () => {
+    const k = keyInput.trim();
+    if (!k) return;
+    setSavingKey(true);
+    try {
+      await saveGroqKey(k);
+      setKeyInput("");
+      toast.success(pt ? "Chave Groq salva" : "Groq key saved");
+      await refreshAuth();
+    } catch (e) {
+      toast.error((e as Error).message || (pt ? "Falha ao salvar a chave" : "Failed to save key"));
+    } finally {
+      setSavingKey(false);
+    }
+  };
+
+  const removeKey = async () => {
+    await deleteGroqKey();
+    toast.success(pt ? "Chave removida" : "Key removed");
+    await refreshAuth();
+  };
+
+  const doLogout = async () => { await logout(); await refreshAuth(); };
 
   const loadSuggestions = useCallback(async () => {
     setLoading(true);
@@ -124,6 +168,8 @@ const DailyBulletin: React.FC = () => {
   }, [jobs]);
 
   const generate = async (url: string, type: DeckType, title: string) => {
+    if (!auth?.authenticated) { toast.error(pt ? "Entre com o GitHub para gerar" : "Sign in with GitHub to generate"); return; }
+    if (!auth?.hasKey) { toast.error(pt ? "Adicione sua chave Groq antes de gerar" : "Add your Groq key before generating"); return; }
     if (!/^https?:\/\//i.test(url)) { toast.error(pt ? "URL inválida" : "Invalid URL"); return; }
     try {
       const { id } = await generateBoletim(url, type, title);
@@ -171,27 +217,75 @@ const DailyBulletin: React.FC = () => {
           </p>
         </div>
 
-        {/* Colar URL avulsa */}
-        <Card className="mb-6">
-          <CardContent className="p-4 flex flex-col sm:flex-row gap-2">
-            <Input
-              placeholder={pt ? "Cole uma URL de relatório/notícia…" : "Paste a report/news URL…"}
-              value={pasteUrl}
-              onChange={(e) => setPasteUrl(e.target.value)}
-              className="flex-1"
-            />
-            <Select value={pasteType} onValueChange={(v) => setPasteType(v as DeckType)}>
-              <SelectTrigger className="w-full sm:w-[150px]"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="vuln">{pt ? "Vulnerabilidade" : "Vulnerability"}</SelectItem>
-                <SelectItem value="campaign">{pt ? "Campanha" : "Campaign"}</SelectItem>
-              </SelectContent>
-            </Select>
-            <Button onClick={() => { generate(pasteUrl.trim(), pasteType, ""); setPasteUrl(""); }} disabled={!pasteUrl.trim()}>
-              <Sparkles className="h-4 w-4 mr-2" /> {pt ? "Gerar boletim" : "Generate"}
-            </Button>
-          </CardContent>
-        </Card>
+        {/* Gate de login + BYOK: sign-in -> chave Groq -> gerador */}
+        {auth === null ? (
+          <Card className="mb-6"><CardContent className="p-4 flex items-center gap-2 text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" /> {pt ? "Verificando sessão…" : "Checking session…"}
+          </CardContent></Card>
+        ) : !auth.authenticated ? (
+          <Card className="mb-6">
+            <CardContent className="p-6 flex flex-col items-center text-center gap-3">
+              <Github className="h-8 w-8 text-primary" />
+              <div>
+                <div className="font-medium">{pt ? "Entre para gerar boletins" : "Sign in to generate bulletins"}</div>
+                <div className="text-sm text-muted-foreground">{pt ? "Acesso restrito à lista autorizada. Você usa sua própria chave Groq." : "Access restricted to the allow-list. You bring your own Groq key."}</div>
+              </div>
+              <Button asChild><a href={loginUrl}><Github className="h-4 w-4 mr-2" /> {pt ? "Entrar com GitHub" : "Sign in with GitHub"}</a></Button>
+            </CardContent>
+          </Card>
+        ) : !auth.hasKey ? (
+          <Card className="mb-6">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-lg flex items-center gap-2"><KeyRound className="h-5 w-5 text-primary" /> {pt ? "Sua chave Groq" : "Your Groq key"}</CardTitle>
+              <CardDescription>
+                {pt ? "Cole sua chave da Groq (gsk_…). Ela é cifrada no servidor e usada só para gerar seus boletins. " : "Paste your Groq key (gsk_…). It's encrypted server-side and used only to generate your bulletins. "}
+                <a href="https://console.groq.com/keys" target="_blank" rel="noreferrer" className="text-primary underline">console.groq.com/keys</a>
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="p-4 pt-2 flex flex-col sm:flex-row gap-2">
+              <Input type="password" placeholder="gsk_…" value={keyInput} onChange={(e) => setKeyInput(e.target.value)} className="flex-1" />
+              <Button onClick={submitKey} disabled={savingKey || !keyInput.trim()}>
+                {savingKey ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <KeyRound className="h-4 w-4 mr-2" />}
+                {pt ? "Salvar chave" : "Save key"}
+              </Button>
+              <Button variant="ghost" onClick={doLogout} title={pt ? "Sair" : "Sign out"}><LogOut className="h-4 w-4" /></Button>
+            </CardContent>
+          </Card>
+        ) : (
+          <>
+            <div className="mb-3 flex items-center justify-between gap-2 text-sm text-muted-foreground">
+              <span className="inline-flex items-center gap-1.5">
+                <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                {pt ? "Conectado como" : "Signed in as"} <strong className="text-foreground">{auth.login}</strong> · {pt ? "chave Groq ativa" : "Groq key active"}
+              </span>
+              <span className="flex items-center gap-1">
+                <Button variant="ghost" size="sm" onClick={removeKey}><KeyRound className="h-3.5 w-3.5 mr-1" /> {pt ? "Trocar chave" : "Change key"}</Button>
+                <Button variant="ghost" size="sm" onClick={doLogout}><LogOut className="h-3.5 w-3.5 mr-1" /> {pt ? "Sair" : "Sign out"}</Button>
+              </span>
+            </div>
+            {/* Colar URL avulsa */}
+            <Card className="mb-6">
+              <CardContent className="p-4 flex flex-col sm:flex-row gap-2">
+                <Input
+                  placeholder={pt ? "Cole uma URL de relatório/notícia…" : "Paste a report/news URL…"}
+                  value={pasteUrl}
+                  onChange={(e) => setPasteUrl(e.target.value)}
+                  className="flex-1"
+                />
+                <Select value={pasteType} onValueChange={(v) => setPasteType(v as DeckType)}>
+                  <SelectTrigger className="w-full sm:w-[150px]"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="vuln">{pt ? "Vulnerabilidade" : "Vulnerability"}</SelectItem>
+                    <SelectItem value="campaign">{pt ? "Campanha" : "Campaign"}</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Button onClick={() => { generate(pasteUrl.trim(), pasteType, ""); setPasteUrl(""); }} disabled={!pasteUrl.trim()}>
+                  <Sparkles className="h-4 w-4 mr-2" /> {pt ? "Gerar boletim" : "Generate"}
+                </Button>
+              </CardContent>
+            </Card>
+          </>
+        )}
 
         {/* Jobs em andamento / prontos */}
         {!!jobs.length && (
@@ -272,7 +366,11 @@ const DailyBulletin: React.FC = () => {
                         </div>
                         <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
                           <Sparkles className="h-3.5 w-3.5 text-primary animate-pulse" />
-                          <span>{pt ? PHASES[pidx].pt : PHASES[pidx].en}</span>
+                          <span>
+                            {j.queuePosition && j.queuePosition > 0
+                              ? (pt ? `Na fila — ${j.queuePosition} na sua frente` : `In queue — ${j.queuePosition} ahead of you`)
+                              : (pt ? PHASES[pidx].pt : PHASES[pidx].en)}
+                          </span>
                           <span className="ml-auto flex gap-1">
                             {PHASES.map((_, i) => (
                               <span key={i} className={`h-1.5 w-1.5 rounded-full transition-colors ${i <= pidx ? "bg-primary" : "bg-muted-foreground/30"}`} />

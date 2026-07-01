@@ -31,3 +31,5 @@ hunt-service-env.txt
 
 # Boletim · store de jobs do Feed Generator
 server/.feed-jobs.json
+# Auth/BYOK · store de usuários (contém chaves Groq CIFRADAS — nunca commitar)
+server/.users.json

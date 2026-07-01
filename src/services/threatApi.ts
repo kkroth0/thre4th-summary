@@ -1010,6 +1010,7 @@ export interface BoletimJob {
     error: string | null;
     createdAt: string;
     updatedAt: string;
+    queuePosition?: number;   // quantos jobs pending estão à frente deste (0 = próximo)
 }
 
 export const generateBoletim = async (url: string, type: DeckType, title = ''): Promise<{ id: string; status: string }> => {
@@ -1029,4 +1030,40 @@ export const fetchJob = async (id: string): Promise<BoletimJob> => {
     const r = await fetch(`/api/feed/job?id=${encodeURIComponent(id)}`);
     if (!r.ok) throw new Error(`Job API error: ${r.status}`);
     return r.json();
+};
+
+// ── Auth GitHub + BYOK (chave Groq por usuário) ──────────────────────────────
+export interface AuthState { authenticated: boolean; login?: string; hasKey?: boolean; }
+
+// Estado de login (cookie de sessão é httpOnly — o front só sabe via /me).
+export const fetchAuth = async (): Promise<AuthState> => {
+    try {
+        const r = await fetch('/api/auth/me');
+        if (!r.ok) return { authenticated: false };
+        return r.json();
+    } catch { return { authenticated: false }; }
+};
+
+export const loginUrl = '/api/auth/github/login';
+
+export const logout = async (): Promise<void> => {
+    await fetch('/api/auth/logout', { method: 'POST' }).catch(() => {});
+};
+
+// Salva a chave Groq do usuário (cifrada no servidor). Devolve { hasKey }.
+export const saveGroqKey = async (key: string): Promise<{ hasKey: boolean }> => {
+    const r = await fetch('/api/user/groq-key', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key }),
+    });
+    if (!r.ok) {
+        const e = await r.json().catch(() => ({}));
+        throw new Error(e.error || `Key API error: ${r.status}`);
+    }
+    return r.json();
+};
+
+export const deleteGroqKey = async (): Promise<void> => {
+    await fetch('/api/user/groq-key', { method: 'DELETE' }).catch(() => {});
 };
