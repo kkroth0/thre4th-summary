@@ -1669,7 +1669,7 @@ app.get('/api/auth/github/login', (req, res) => {
 
 // Callback: valida state, troca code->token, confere allow-list, cria sessão.
 app.get('/api/auth/github/callback', async (req, res) => {
-    const back = (q) => res.redirect(`${APP_BASE_URL}/boletim?auth=${q}`);
+    const back = (q) => res.redirect(`${APP_BASE_URL}/threat-brief?auth=${q}`);
     try {
         const { code, state } = req.query;
         const saved = getCookie(req, 'ts_oauth_state');
