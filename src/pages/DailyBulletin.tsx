@@ -302,6 +302,12 @@ const DailyBulletin: React.FC = () => {
                         </span>
                       )}
                     </div>
+                    {j.status === "error" && j.error && (
+                      <div className="mt-2 text-xs text-red-500/90 flex items-start gap-1.5">
+                        <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                        <span>{j.error}</span>
+                      </div>
+                    )}
                     {j.status === "pending" && (
                       <div className="mt-3">
                         <div className="relative h-1.5 w-full overflow-hidden rounded-full bg-muted">
