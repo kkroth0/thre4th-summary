@@ -33,3 +33,5 @@ hunt-service-env.txt
 server/.feed-jobs.json
 # Auth/BYOK · store de usuários (contém chaves Groq CIFRADAS — nunca commitar)
 server/.users.json
+# Catálogo de feeds RSS · overrides do dono (desativados + custom)
+server/.feed-sources.json

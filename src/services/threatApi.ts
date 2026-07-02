@@ -1046,6 +1046,56 @@ export const fetchAuth = async (): Promise<AuthState> => {
 
 export const loginUrl = '/api/auth/github/login';
 
+// ─── Catálogo de feeds RSS monitorados pelo coletor ────────────────────────
+export interface FeedHealth { ok: boolean; count: number; error: string | null; at: string; }
+export interface FeedSource {
+    url: string;
+    source: string;
+    layer: number;
+    weight_boost: number;
+    builtin: boolean;
+    enabled: boolean;
+    health: FeedHealth | null;
+}
+export interface FeedsResponse { feeds: FeedSource[]; isAdmin: boolean; }
+
+const feedError = async (r: Response): Promise<never> => {
+    const e = await r.json().catch(() => ({}));
+    throw new Error((e as { error?: string }).error || `Feeds API error: ${r.status}`);
+};
+
+export const fetchFeeds = async (): Promise<FeedsResponse> => {
+    const r = await fetch('/api/feeds');
+    if (!r.ok) return feedError(r);
+    return r.json();
+};
+
+export const addFeed = async (feed: { url: string; source: string; layer: number; weight_boost: number }): Promise<FeedSource[]> => {
+    const r = await fetch('/api/feeds', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(feed),
+    });
+    if (!r.ok) return feedError(r);
+    return (await r.json()).feeds;
+};
+
+export const toggleFeed = async (url: string, enabled: boolean): Promise<FeedSource[]> => {
+    const r = await fetch('/api/feeds', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url, enabled }),
+    });
+    if (!r.ok) return feedError(r);
+    return (await r.json()).feeds;
+};
+
+export const deleteFeed = async (url: string): Promise<FeedSource[]> => {
+    const r = await fetch(`/api/feeds?url=${encodeURIComponent(url)}`, { method: 'DELETE' });
+    if (!r.ok) return feedError(r);
+    return (await r.json()).feeds;
+};
+
 export const logout = async (): Promise<void> => {
     await fetch('/api/auth/logout', { method: 'POST' }).catch(() => {});
 };

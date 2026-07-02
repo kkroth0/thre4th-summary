@@ -11,6 +11,7 @@ import { Footer } from "@/components/Footer";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useSidebar } from "@/contexts/SidebarContext";
 import { Header } from "@/components/Header";
+import FeedSourcesManager from "@/components/FeedSourcesManager";
 import { toast } from "sonner";
 import {
   Select,
@@ -695,19 +696,22 @@ const Newsletter = () => {
                   : "Threat intelligence news and security advisories aggregated from multiple sources"}
               </p>
             </div>
-            {/* Auto-polling / última atualização — status enxuto */}
-            <div className="flex items-center gap-2 text-xs text-muted-foreground shrink-0 tabular-nums">
-              <span className={`h-1.5 w-1.5 rounded-full ${isRefreshingNews ? "bg-primary animate-pulse" : "bg-green-500"}`} />
-              {isRefreshingNews
-                ? (language === "pt" ? "atualizando…" : "refreshing…")
-                : (
-                  <span>
-                    {language === "pt" ? "atualizado " : "updated "}
-                    {lastUpdatedNews ? lastUpdatedNews.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "—"}
-                    <span className="text-muted-foreground/40"> · {language === "pt" ? "próx." : "next"} </span>
-                    {formatTime(secondsRemaining)}
-                  </span>
-                )}
+            {/* Auto-polling / última atualização — status enxuto + gestão de fontes */}
+            <div className="flex items-center gap-3 shrink-0">
+              <div className="flex items-center gap-2 text-xs text-muted-foreground tabular-nums">
+                <span className={`h-1.5 w-1.5 rounded-full ${isRefreshingNews ? "bg-primary animate-pulse" : "bg-green-500"}`} />
+                {isRefreshingNews
+                  ? (language === "pt" ? "atualizando…" : "refreshing…")
+                  : (
+                    <span>
+                      {language === "pt" ? "atualizado " : "updated "}
+                      {lastUpdatedNews ? lastUpdatedNews.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "—"}
+                      <span className="text-muted-foreground/40"> · {language === "pt" ? "próx." : "next"} </span>
+                      {formatTime(secondsRemaining)}
+                    </span>
+                  )}
+              </div>
+              <FeedSourcesManager />
             </div>
           </div>
 

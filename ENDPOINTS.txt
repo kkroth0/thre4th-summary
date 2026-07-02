@@ -1,0 +1,115 @@
+ThreatSumm4ry - API endpoints (server/index.js)
+Total: 46 HTTP endpoints
+
+Guard legend:
+  [auth]   GitHub session cookie required (requireAuth)
+  [admin]  session + login na admin list (requireAdmin; GITHUB_ADMIN_LOGINS)
+  [secret] server-to-server, X-Feed-Secret header (worker only)
+  [rl]     rate-limited (scanLimiter)
+  (blank)  public
+
+====================================================================
+AUTH & SESSION
+====================================================================
+  GET     /api/auth/github/login
+  GET     /api/auth/github/callback
+  GET     /api/auth/me
+  POST    /api/auth/logout
+
+====================================================================
+USER KEYS (BYOK)
+====================================================================
+  GET     /api/user/keys                       [auth]
+  PUT     /api/user/keys/:provider             [auth]
+  DELETE  /api/user/keys/:provider             [auth]
+  PUT     /api/user/groq-key                   [auth]
+  DELETE  /api/user/groq-key                   [auth]
+
+====================================================================
+THREAT BRIEF (FEED JOBS)
+====================================================================
+  POST    /api/feed/generate                   [auth] [rl]
+  GET     /api/feed/job                         (status polling)
+  GET     /api/feed/jobs/pending               [secret] (worker)
+  POST    /api/feed/job/result                 [secret] (worker)
+  GET     /api/feed/daily-suggestions
+
+====================================================================
+RSS FEED CATALOG  (fontes monitoradas pelo coletor)
+====================================================================
+  GET     /api/feeds                           [auth]  list + saúde + isAdmin
+  POST    /api/feeds                           [admin] adiciona feed custom
+  PATCH   /api/feeds                           [admin] liga/desliga um feed
+  DELETE  /api/feeds?url=…                     [admin] remove feed custom
+
+====================================================================
+NEWSLETTER / ADVISORY FEED
+====================================================================
+  GET     /api/newsletter
+  POST    /api/newsletter/enrich               [rl]
+  POST    /api/newsletter/hunt-pack            [rl]
+
+====================================================================
+CVEs & PATCH TUESDAY
+====================================================================
+  GET     /api/cves/recent
+  GET     /api/cves/exploited
+  GET     /api/patch-tuesday/months
+  GET     /api/patch-tuesday/:id
+
+====================================================================
+DNS / DNSBL
+====================================================================
+  POST    /api/dns/lookup                      [rl]
+  POST    /api/dnsbl                           [rl]
+  POST    /api/dnsbl/batch                     [rl]
+
+====================================================================
+VENDOR / THREAT-INTEL LOOKUPS  (all POST, all [rl])
+====================================================================
+  POST    /api/virustotal                      [rl]
+  POST    /api/abuseipdb                       [rl]
+  POST    /api/abuseipdb/check-block           [rl]
+  POST    /api/alienvault                       [rl]
+  POST    /api/shodan                          [rl]
+  POST    /api/urlhaus                         [rl]
+  POST    /api/malwarebazaar                   [rl]
+  POST    /api/threatfox                       [rl]
+  POST    /api/phishtank                       [rl]
+  POST    /api/pulsedive                       [rl]
+  POST    /api/hybridanalysis                  [rl]
+  POST    /api/circl                           [rl]
+  POST    /api/criminalip                      [rl]
+  POST    /api/metadefender                    [rl]
+  POST    /api/phishstats                      [rl]
+  POST    /api/ransomwarelive                  [rl]
+  POST    /api/whois                           [rl]
+  POST    /api/ipgeo                           [rl]
+  POST    /api/openphish                       [rl]
+  POST    /api/teamcymru                       [rl]
+  POST    /api/censys                          [rl]
+
+====================================================================
+STATUS
+====================================================================
+  GET     /api/vendors/status
+
+====================================================================
+FRONTEND APP ROUTES (SPA, not HTTP endpoints)   * = premium/sign-in gated
+====================================================================
+  /                     Index
+  /cves                 CVE Dashboard
+  /dns-visualizer       DNS Visualizer
+  /patch-tuesday        Patch Tuesday
+  /features             Features
+  /vendors              Vendor Directory
+  /dnsbl                DNSBL Check
+  /phishing-analyzer    Phishing Analyzer
+  /threat-brief     *   Threat Brief
+  /newsletter       *   Advisory Feed
+  /threat-hunting   *   Threat Hunting
+  /login                Login
+  /profile              Profile
+  /settings             Settings
+  /daily-bulletin       -> redirects to /threat-brief
+  *                     NotFound

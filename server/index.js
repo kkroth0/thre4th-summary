@@ -1385,12 +1385,48 @@ async function getEpssMap(cveIds) {
     return map;
 }
 
+// ─── Catálogo de feeds RSS (base estática + overrides em disco) ────────────
+// CTI_FEEDS é o catálogo built-in. Os overrides ficam num JSON flat (como os
+// stores de users/jobs): { disabled: [url…], custom: [{url, source, layer,
+// weight_boost}] }. Assim o dono liga/desliga fontes e adiciona novas sem
+// mexer no código nem redeployar.
+const FEED_SOURCES_PATH = path.join(__dirname, '.feed-sources.json');
+function loadFeedOverrides() {
+    try {
+        const o = JSON.parse(fs.readFileSync(FEED_SOURCES_PATH, 'utf8'));
+        return { disabled: Array.isArray(o.disabled) ? o.disabled : [],
+                 custom: Array.isArray(o.custom) ? o.custom : [] };
+    } catch { return { disabled: [], custom: [] }; }
+}
+function saveFeedOverrides() {
+    try { fs.writeFileSync(FEED_SOURCES_PATH, JSON.stringify(feedOverrides, null, 2)); }
+    catch (e) { console.error('feed sources write failed:', e.message); }
+}
+let feedOverrides = loadFeedOverrides();
+
+// Saúde por feed, preenchida a cada refresh: { ok, count, error, at }. Deixa a
+// UI mostrar quais fontes responderam e quantos itens trouxeram.
+const feedHealth = new Map();
+
+// Catálogo efetivo p/ a UI: built-ins + custom, cada um marcado com `builtin`
+// (built-in só pode ser desativado, nunca deletado) e `enabled`.
+function catalogFeeds() {
+    const disabled = new Set(feedOverrides.disabled);
+    const builtins = CTI_FEEDS.map((f) => ({ ...f, builtin: true, enabled: !disabled.has(f.url) }));
+    const custom = feedOverrides.custom.map((f) => ({ ...f, builtin: false, enabled: !disabled.has(f.url) }));
+    return [...builtins, ...custom];
+}
+// Só os feeds ligados — é o que o coletor realmente busca.
+function effectiveFeeds() {
+    return catalogFeeds().filter((f) => f.enabled);
+}
+
 // Background newsletter feed refresher
 async function refreshNewsletterFeed() {
     try {
-        // Specialized feed catalog with per-source confidence (weight_boost),
-        // ported from the soc-sentinela CTI bot.
-        const feeds = CTI_FEEDS;
+        // Catálogo efetivo (built-ins ligados + custom do dono). weight_boost é a
+        // confiança por fonte, herdada do bot CTI soc-sentinela.
+        const feeds = effectiveFeeds();
 
         const feedPromises = feeds.map(async (f) => {
             try {
@@ -1400,11 +1436,14 @@ async function refreshNewsletterFeed() {
                 });
                 // Enrich each item with the CTI relevance score + categorization.
                 // `reasons` is kept so the UI can explain WHY an item scored.
-                return parseFeed(response.data, f.source, f.layer).map((item) => {
+                const enriched = parseFeed(response.data, f.source, f.layer).map((item) => {
                     const intel = scoreArticle(`${item.title} ${item.description}`, f.weight_boost);
                     return { ...item, weight_boost: f.weight_boost, ...intel };
                 });
+                feedHealth.set(f.url, { ok: true, count: enriched.length, error: null, at: new Date().toISOString() });
+                return enriched;
             } catch (err) {
+                feedHealth.set(f.url, { ok: false, count: 0, error: err.message, at: new Date().toISOString() });
                 console.error(`Error fetching feed ${f.source}:`, err.message);
                 return [];
             }
@@ -1544,6 +1583,75 @@ app.get('/api/feed/daily-suggestions', async (req, res) => {
     }
 });
 
+// ─── Gestão do catálogo de feeds RSS (monitorados pelo coletor) ────────────
+// GET é aberto pra qualquer sessão (o painel de Fontes fica no Advisory Feed,
+// que já é gated). As escritas exigem admin. Toda mutação dispara um refresh em
+// background pra valer sem esperar o próximo ciclo.
+function feedListForClient() {
+    return catalogFeeds().map((f) => {
+        const h = feedHealth.get(f.url);
+        return {
+            url: f.url, source: f.source, layer: f.layer, weight_boost: f.weight_boost,
+            builtin: f.builtin, enabled: f.enabled,
+            health: h ? { ok: h.ok, count: h.count, error: h.error, at: h.at } : null,
+        };
+    });
+}
+
+app.get('/api/feeds', requireAuth, (req, res) => {
+    res.json({ feeds: feedListForClient(), isAdmin: isAdmin(req.user.login) });
+});
+
+// Adiciona um feed custom. Body: { url, source, layer?, weight_boost? }.
+app.post('/api/feeds', requireAdmin, (req, res) => {
+    const { url, source } = req.body || {};
+    let u;
+    try { u = new URL(String(url)); } catch { return res.status(400).json({ error: 'URL inválida' }); }
+    if (u.protocol !== 'http:' && u.protocol !== 'https:') return res.status(400).json({ error: 'URL deve ser http(s)' });
+    const clean = u.toString();
+    if (!source || !String(source).trim()) return res.status(400).json({ error: 'nome da fonte obrigatório' });
+    const known = new Set([...CTI_FEEDS, ...feedOverrides.custom].map((f) => f.url));
+    if (known.has(clean)) return res.status(409).json({ error: 'feed já existe' });
+    const layer = Math.min(Math.max(parseInt(req.body.layer, 10) || 2, 1), 4);
+    const weight_boost = Math.min(Math.max(parseInt(req.body.weight_boost, 10) || 10, 0), 25);
+    feedOverrides.custom.push({ url: clean, source: String(source).trim(), layer, weight_boost });
+    // adicionar já implica ligado: garante que não fique num disabled antigo.
+    feedOverrides.disabled = feedOverrides.disabled.filter((d) => d !== clean);
+    saveFeedOverrides();
+    refreshNewsletterFeed().catch(() => {});
+    res.status(201).json({ feeds: feedListForClient() });
+});
+
+// Liga/desliga um feed (built-in ou custom). Body: { url, enabled }.
+app.patch('/api/feeds', requireAdmin, (req, res) => {
+    const url = String((req.body || {}).url || '');
+    const enabled = !!(req.body || {}).enabled;
+    const known = new Set([...CTI_FEEDS, ...feedOverrides.custom].map((f) => f.url));
+    if (!known.has(url)) return res.status(404).json({ error: 'feed não encontrado' });
+    const set = new Set(feedOverrides.disabled);
+    if (enabled) set.delete(url); else set.add(url);
+    feedOverrides.disabled = [...set];
+    saveFeedOverrides();
+    refreshNewsletterFeed().catch(() => {});
+    res.json({ feeds: feedListForClient() });
+});
+
+// Remove um feed custom (built-ins só podem ser desativados). ?url=…
+app.delete('/api/feeds', requireAdmin, (req, res) => {
+    const url = String(req.query.url || (req.body || {}).url || '');
+    const before = feedOverrides.custom.length;
+    feedOverrides.custom = feedOverrides.custom.filter((f) => f.url !== url);
+    if (feedOverrides.custom.length === before) {
+        return res.status(CTI_FEEDS.some((f) => f.url === url) ? 400 : 404)
+            .json({ error: CTI_FEEDS.some((f) => f.url === url) ? 'feed built-in só pode ser desativado' : 'feed não encontrado' });
+    }
+    feedOverrides.disabled = feedOverrides.disabled.filter((d) => d !== url);
+    feedHealth.delete(url);
+    saveFeedOverrides();
+    refreshNewsletterFeed().catch(() => {});
+    res.json({ feeds: feedListForClient() });
+});
+
 // Segredo compartilhado p/ as rotas servidor-a-servidor (worker).
 // Sem FEED_AGENT_SECRET definido, as rotas protegidas ficam desabilitadas (503),
 // pra não exporem leitura/escrita de boletim sem auth.
@@ -1643,6 +1751,21 @@ async function isAllowed(login, accessToken) {
 function requireAuth(req, res, next) {
     const p = verifySession(getCookie(req, 'ts_session'));
     if (!p) return res.status(401).json({ error: 'não autenticado', needAuth: true });
+    req.user = p;
+    next();
+}
+
+// Admins podem editar o catálogo de feeds. Por padrão, cai na allow-list de
+// logins (o dono já entra sem config extra); GITHUB_ADMIN_LOGINS restringe mais.
+const ADMIN_LOGINS = (process.env.GITHUB_ADMIN_LOGINS || process.env.GITHUB_ALLOWED_LOGINS || '')
+    .split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
+function isAdmin(login) {
+    return !ADMIN_LOGINS.length || ADMIN_LOGINS.includes((login || '').toLowerCase());
+}
+function requireAdmin(req, res, next) {
+    const p = verifySession(getCookie(req, 'ts_session'));
+    if (!p) return res.status(401).json({ error: 'não autenticado', needAuth: true });
+    if (!isAdmin(p.login)) return res.status(403).json({ error: 'somente administrador' });
     req.user = p;
     next();
 }
