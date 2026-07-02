@@ -13,16 +13,16 @@ type Feature = "threat-brief" | "advisory-feed" | "threat-hunting";
 
 const COPY: Record<Feature, { pt: [string, string]; en: [string, string] }> = {
   "threat-brief": {
-    pt: ["Threat Brief", "Transforme qualquer relatório ou advisory num brief de inteligência estruturado."],
-    en: ["Threat Brief", "Turn any report or advisory into a structured intelligence brief."],
+    pt: ["Threat Brief", "Cole o link de um relatório ou notícia e receba um resumo organizado."],
+    en: ["Threat Brief", "Paste a link to a report or news post and get an organized summary."],
   },
   "advisory-feed": {
-    pt: ["Feed de Advisories", "Um feed diário e curado dos advisories que realmente importam."],
-    en: ["Advisory Feed", "A daily, curated feed of the advisories that actually matter."],
+    pt: ["Feed de Advisories", "Um resumo diário dos avisos de segurança que importam."],
+    en: ["Advisory Feed", "A daily rundown of the security alerts that matter."],
   },
   "threat-hunting": {
-    pt: ["Threat Hunting", "Consultas assistidas e enriquecimento de IOCs para caçar ameaças."],
-    en: ["Threat Hunting", "Assisted queries and IOC enrichment to hunt threats."],
+    pt: ["Threat Hunting", "Ferramentas pra investigar e cruzar indicadores (IOCs)."],
+    en: ["Threat Hunting", "Tools to dig into and cross-check indicators (IOCs)."],
   },
 };
 
@@ -60,9 +60,9 @@ export function PremiumRoute({ children, feature }: { children: React.ReactNode;
             <CardContent className="p-6 pt-5 flex flex-col gap-4">
               <ul className="space-y-2 text-sm text-muted-foreground">
                 {[
-                  { icon: FileText, t: pt ? "Threat Briefs a partir de qualquer URL" : "Threat Briefs from any URL" },
-                  { icon: Mail, t: pt ? "Feed de advisories curado" : "Curated advisory feed" },
-                  { icon: Crosshair, t: pt ? "Threat hunting assistido" : "Assisted threat hunting" },
+                  { icon: FileText, t: pt ? "Um resumo a partir de qualquer link" : "A summary from any link" },
+                  { icon: Mail, t: pt ? "Um feed dos avisos que importam" : "A feed of the alerts that matter" },
+                  { icon: Crosshair, t: pt ? "Ajuda pra investigar ameaças" : "Help digging into threats" },
                 ].map((r) => (
                   <li key={r.t} className="flex items-center gap-2.5">
                     <r.icon className="h-4 w-4 text-primary shrink-0" /> {r.t}
@@ -73,7 +73,7 @@ export function PremiumRoute({ children, feature }: { children: React.ReactNode;
                 <Link to="/login"><Github className="h-4 w-4 mr-2" /> {pt ? "Entrar com GitHub" : "Sign in with GitHub"} <ArrowRight className="h-4 w-4 ml-1.5" /></Link>
               </Button>
               <p className="text-xs text-center text-muted-foreground inline-flex items-center justify-center gap-1">
-                <ShieldCheck className="h-3 w-3" /> {pt ? "Acesso restrito à lista autorizada." : "Access restricted to the allow-list."}
+                <ShieldCheck className="h-3 w-3" /> {pt ? "Só quem está na lista entra." : "Only people on the list can sign in."}
               </p>
             </CardContent>
           </Card>

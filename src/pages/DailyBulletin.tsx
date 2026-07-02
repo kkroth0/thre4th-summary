@@ -141,7 +141,7 @@ const DailyBulletin: React.FC = () => {
         { id, url, type, title, status: "pending", json: null, error: null, createdAt: now, updatedAt: now },
         ...prev,
       ]);
-      toast.success(pt ? "Geração iniciada — aguarde o JSON" : "Generation started — wait for the JSON");
+      toast.success(pt ? "Começou. O JSON vai aparecer aqui." : "Started. The JSON will show up here.");
     } catch (e) {
       toast.error((e as Error).message || (pt ? "Falha ao iniciar" : "Failed to start"));
     }
@@ -175,8 +175,8 @@ const DailyBulletin: React.FC = () => {
           </h1>
           <p className="text-muted-foreground mt-2">
             {pt
-              ? "Transforme qualquer relatório, advisory ou notícia em um brief de inteligência estruturado. Cole a URL — a análise roda automaticamente e você baixa o JSON pronto para o slide oficial."
-              : "Turn any report, advisory or news item into a structured intelligence brief. Paste a URL — the analysis runs automatically and you download a ready-to-render JSON for the official deck."}
+              ? "Cole o link de um relatório ou notícia de segurança. Ele é resumido sozinho e você baixa o JSON pronto pro seu slide."
+              : "Paste a link to a security report or news post. It gets summarized on its own and you download the JSON for your slide."}
           </p>
         </div>
 
@@ -317,7 +317,7 @@ const DailyBulletin: React.FC = () => {
                           <Sparkles className="h-3.5 w-3.5 text-primary animate-pulse" />
                           <span>
                             {j.queuePosition && j.queuePosition > 0
-                              ? (pt ? `Na fila — ${j.queuePosition} na sua frente` : `In queue — ${j.queuePosition} ahead of you`)
+                              ? (pt ? `Na fila, ${j.queuePosition} na sua frente` : `In queue, ${j.queuePosition} ahead of you`)
                               : (pt ? PHASES[pidx].pt : PHASES[pidx].en)}
                           </span>
                           <span className="ml-auto flex gap-1">

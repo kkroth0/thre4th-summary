@@ -24,9 +24,9 @@ const Login = () => {
   if (!loading && auth.authenticated) return <Navigate to="/profile" replace />;
 
   const perks = [
-    { icon: FileText, label: pt ? "Threat Briefs a partir de qualquer URL" : "Threat Briefs from any URL" },
-    { icon: Mail, label: pt ? "Feed de advisories curado" : "Curated advisory feed" },
-    { icon: Crosshair, label: pt ? "Threat hunting assistido" : "Assisted threat hunting" },
+    { icon: FileText, label: pt ? "Um resumo a partir de qualquer link" : "A summary from any link" },
+    { icon: Mail, label: pt ? "Um feed dos avisos que importam" : "A feed of the alerts that matter" },
+    { icon: Crosshair, label: pt ? "Ajuda pra investigar ameaças" : "Help digging into threats" },
   ];
 
   return (
@@ -47,12 +47,12 @@ const Login = () => {
 
         <div className="relative max-w-md">
           <h1 className="text-4xl font-bold leading-tight tracking-tight">
-            {pt ? "Transforme dados brutos em inteligência." : "Turn raw data into intelligence."}
+            {pt ? "Cole um link e entenda o que importa." : "Paste a link and see what matters."}
           </h1>
           <p className="mt-4 text-muted-foreground text-lg">
             {pt
-              ? "Entre para acessar os recursos premium — briefs, feed curado e threat hunting."
-              : "Sign in to unlock the premium tools — briefs, curated feed and threat hunting."}
+              ? "Entre para usar as ferramentas abaixo."
+              : "Sign in to use the tools below."}
           </p>
           <ul className="mt-8 space-y-3">
             {perks.map((p) => (
@@ -67,7 +67,7 @@ const Login = () => {
         </div>
 
         <p className="relative text-xs text-muted-foreground/70">
-          © {new Date().getFullYear()} ThreatSumm4ry — {pt ? "inteligência contra ameaças" : "threat intelligence"}
+          © {new Date().getFullYear()} ThreatSumm4ry
         </p>
       </div>
 
@@ -86,7 +86,7 @@ const Login = () => {
             </div>
             <h2 className="text-2xl font-bold">{pt ? "Entrar" : "Sign in"}</h2>
             <p className="text-muted-foreground mt-1.5 text-sm">
-              {pt ? "Acesso restrito à lista autorizada." : "Access is restricted to the allow-list."}
+              {pt ? "Só quem está na lista consegue entrar." : "Only people on the list can sign in."}
             </p>
           </div>
 
@@ -100,11 +100,11 @@ const Login = () => {
           <div className="mt-6 space-y-2.5 text-sm text-muted-foreground border-t border-border/60 pt-5">
             <div className="flex items-start gap-2.5">
               <ShieldCheck className="h-4 w-4 mt-0.5 text-primary shrink-0" />
-              <span>{pt ? "Somente contas autorizadas conseguem entrar." : "Only allow-listed accounts can sign in."}</span>
+              <span>{pt ? "Só contas liberadas entram." : "Only approved accounts can get in."}</span>
             </div>
             <div className="flex items-start gap-2.5">
               <KeyRound className="h-4 w-4 mt-0.5 text-primary shrink-0" />
-              <span>{pt ? "Você traz suas próprias chaves (BYOK), cifradas no servidor." : "You bring your own keys (BYOK), encrypted server-side."}</span>
+              <span>{pt ? "Você usa suas próprias chaves de API. Elas ficam guardadas cifradas." : "You use your own API keys. They're stored encrypted."}</span>
             </div>
           </div>
 
