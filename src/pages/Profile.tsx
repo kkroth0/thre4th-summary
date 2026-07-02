@@ -1,36 +1,28 @@
 import { useEffect, useState } from "react";
 import { Navigate, Link } from "react-router-dom";
 import {
-  Github, KeyRound, LogOut, CheckCircle2, Loader2, ShieldCheck, Trash2,
-  ArrowRight, FileText, ExternalLink,
+  Github, KeyRound, LogOut, CheckCircle2, Loader2, ArrowRight, FileText,
+  ExternalLink, Settings as SettingsIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import {
-  AlertDialog, AlertDialogTrigger, AlertDialogContent, AlertDialogHeader,
-  AlertDialogFooter, AlertDialogTitle, AlertDialogDescription, AlertDialogAction,
-  AlertDialogCancel,
-} from "@/components/ui/alert-dialog";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useSidebar } from "@/contexts/SidebarContext";
 import { useAuth } from "@/contexts/AuthContext";
-import { saveGroqKey, deleteGroqKey } from "@/services/threatApi";
+import { fetchApiKeys } from "@/services/threatApi";
 import { toast } from "sonner";
 
 const Profile = () => {
   const { language } = useLanguage();
   const { isCollapsed } = useSidebar();
-  const { auth, loading, refresh, signOut } = useAuth();
+  const { auth, loading, signOut } = useAuth();
   const pt = language === "pt";
 
-  const [keyInput, setKeyInput] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [changing, setChanging] = useState(false);
+  const [keyCount, setKeyCount] = useState<number | null>(null);
 
   // Feedback do retorno do OAuth (?auth=ok) — o callback de sucesso cai aqui.
   useEffect(() => {
@@ -40,6 +32,10 @@ const Profile = () => {
     else if (p === "erro") toast.error(pt ? "Falha no login" : "Sign-in failed");
     if (p) window.history.replaceState({}, "", window.location.pathname);
   }, [pt]);
+
+  useEffect(() => {
+    if (auth.authenticated) fetchApiKeys().then((k) => setKeyCount(Object.values(k).filter(Boolean).length));
+  }, [auth.authenticated]);
 
   const shell = (children: React.ReactNode) => (
     <div className={`min-h-screen bg-background flex flex-col transition-all duration-300 ${isCollapsed ? "lg:pl-20" : "lg:pl-64"}`}>
@@ -58,39 +54,13 @@ const Profile = () => {
   }
   if (!auth.authenticated) return <Navigate to="/login" replace />;
 
-  const submitKey = async () => {
-    const k = keyInput.trim();
-    if (!k) return;
-    setSaving(true);
-    try {
-      await saveGroqKey(k);
-      setKeyInput("");
-      setChanging(false);
-      toast.success(pt ? "Chave Groq salva" : "Groq key saved");
-      await refresh();
-    } catch (e) {
-      toast.error((e as Error).message || (pt ? "Falha ao salvar a chave" : "Failed to save key"));
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const removeKey = async () => {
-    await deleteGroqKey();
-    setChanging(false);
-    toast.success(pt ? "Chave removida" : "Key removed");
-    await refresh();
-  };
-
   const avatarUrl = `https://github.com/${auth.login}.png?size=160`;
 
   return shell(
     <>
       <div className="mb-6">
         <h1 className="text-3xl font-bold">{pt ? "Perfil" : "Profile"}</h1>
-        <p className="text-muted-foreground mt-1">
-          {pt ? "Sua conta, chave Groq e sessão." : "Your account, Groq key and session."}
-        </p>
+        <p className="text-muted-foreground mt-1">{pt ? "Sua conta e sessão." : "Your account and session."}</p>
       </div>
 
       {/* Identidade */}
@@ -120,79 +90,30 @@ const Profile = () => {
         </CardContent>
       </Card>
 
-      {/* Chave Groq (BYOK) */}
-      <Card className="mb-5">
-        <CardHeader className="pb-2">
-          <CardTitle className="text-lg flex items-center gap-2">
-            <KeyRound className="h-5 w-5 text-primary" /> {pt ? "Chave Groq" : "Groq key"}
-            {auth.hasKey && !changing && (
-              <Badge variant="secondary" className="ml-1 gap-1"><CheckCircle2 className="h-3 w-3 text-emerald-500" /> {pt ? "Ativa" : "Active"}</Badge>
-            )}
-          </CardTitle>
-          <CardDescription>
-            {pt
-              ? "Usada só para gerar seus boletins. É cifrada no servidor e nunca exibida de volta. "
-              : "Used only to generate your bulletins. It's encrypted server-side and never shown back. "}
-            <a href="https://console.groq.com/keys" target="_blank" rel="noreferrer" className="text-primary underline underline-offset-2">
-              console.groq.com/keys
-            </a>
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="pt-1">
-          {auth.hasKey && !changing ? (
-            <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-              <div className="flex items-center gap-2 font-mono text-sm text-muted-foreground flex-1">
-                <ShieldCheck className="h-4 w-4 text-emerald-500 shrink-0" />
-                gsk_••••••••••••••••••••••••
+      {/* Chaves de API -> Settings */}
+      <Link to="/settings" className="block mb-5 group">
+        <Card className="transition-colors group-hover:border-primary/30">
+          <CardContent className="p-5 flex items-center gap-4">
+            <span className="h-11 w-11 rounded-xl bg-primary/10 ring-1 ring-inset ring-primary/20 flex items-center justify-center shrink-0">
+              <KeyRound className="h-5 w-5 text-primary" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <div className="font-medium flex items-center gap-2">
+                {pt ? "Chaves de API (BYOK)" : "API keys (BYOK)"}
+                {auth.hasKey && <Badge variant="secondary" className="gap-1"><CheckCircle2 className="h-3 w-3 text-emerald-500" /> Groq</Badge>}
               </div>
-              <div className="flex items-center gap-2">
-                <Button variant="outline" size="sm" onClick={() => setChanging(true)}>
-                  <KeyRound className="h-3.5 w-3.5 mr-1.5" /> {pt ? "Trocar" : "Change"}
-                </Button>
-                <AlertDialog>
-                  <AlertDialogTrigger asChild>
-                    <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-destructive">
-                      <Trash2 className="h-3.5 w-3.5 mr-1.5" /> {pt ? "Remover" : "Remove"}
-                    </Button>
-                  </AlertDialogTrigger>
-                  <AlertDialogContent>
-                    <AlertDialogHeader>
-                      <AlertDialogTitle>{pt ? "Remover a chave Groq?" : "Remove your Groq key?"}</AlertDialogTitle>
-                      <AlertDialogDescription>
-                        {pt
-                          ? "Sem a chave você não consegue gerar boletins até adicionar outra."
-                          : "Without a key you won't be able to generate bulletins until you add another."}
-                      </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                      <AlertDialogCancel>{pt ? "Cancelar" : "Cancel"}</AlertDialogCancel>
-                      <AlertDialogAction onClick={removeKey}>{pt ? "Remover" : "Remove"}</AlertDialogAction>
-                    </AlertDialogFooter>
-                  </AlertDialogContent>
-                </AlertDialog>
+              <div className="text-sm text-muted-foreground">
+                {keyCount === null
+                  ? (pt ? "Gerencie suas chaves de API." : "Manage your API keys.")
+                  : keyCount > 0
+                    ? (pt ? `${keyCount} chave(s) configurada(s).` : `${keyCount} key(s) configured.`)
+                    : (pt ? "Nenhuma chave ainda — adicione a sua chave Groq para gerar." : "No keys yet — add your Groq key to generate.")}
               </div>
             </div>
-          ) : (
-            <div className="flex flex-col sm:flex-row gap-2">
-              <Input
-                type="password" placeholder="gsk_…" value={keyInput}
-                onChange={(e) => setKeyInput(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter") submitKey(); }}
-                className="flex-1"
-              />
-              <Button onClick={submitKey} disabled={saving || !keyInput.trim()}>
-                {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <KeyRound className="h-4 w-4 mr-2" />}
-                {pt ? "Salvar chave" : "Save key"}
-              </Button>
-              {auth.hasKey && (
-                <Button variant="ghost" onClick={() => { setChanging(false); setKeyInput(""); }}>
-                  {pt ? "Cancelar" : "Cancel"}
-                </Button>
-              )}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+            <SettingsIcon className="h-4 w-4 text-muted-foreground shrink-0" />
+          </CardContent>
+        </Card>
+      </Link>
 
       {/* Atalho pro gerador */}
       <Card className="bg-muted/20 border-dashed">
@@ -200,11 +121,11 @@ const Profile = () => {
           <div className="flex items-center gap-3 min-w-0">
             <FileText className="h-5 w-5 text-primary shrink-0" />
             <div className="min-w-0">
-              <div className="font-medium">{pt ? "Threat Brief" : "Threat Brief"}</div>
+              <div className="font-medium">Threat Brief</div>
               <div className="text-sm text-muted-foreground truncate">
                 {auth.hasKey
                   ? (pt ? "Tudo pronto — cole uma URL e gere seu boletim." : "All set — paste a URL and generate your bulletin.")
-                  : (pt ? "Adicione sua chave Groq acima para começar." : "Add your Groq key above to get started.")}
+                  : (pt ? "Adicione sua chave Groq nas configurações para começar." : "Add your Groq key in settings to get started.")}
               </div>
             </div>
           </div>

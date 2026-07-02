@@ -1,18 +1,15 @@
 import { useEffect } from "react";
 import { Navigate, Link } from "react-router-dom";
-import { Github, ShieldCheck, KeyRound, ArrowRight, Loader2 } from "lucide-react";
+import { Github, ShieldCheck, KeyRound, ArrowLeft, Loader2, FileText, Mail, Crosshair } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Header } from "@/components/Header";
-import { Footer } from "@/components/Footer";
+import { ThemeToggle } from "@/components/ThemeToggle";
+import { LanguageToggle } from "@/components/LanguageToggle";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { useSidebar } from "@/contexts/SidebarContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 
 const Login = () => {
   const { language } = useLanguage();
-  const { isCollapsed } = useSidebar();
   const { auth, loading, loginUrl } = useAuth();
   const pt = language === "pt";
 
@@ -24,53 +21,100 @@ const Login = () => {
     if (p) window.history.replaceState({}, "", window.location.pathname);
   }, [pt]);
 
-  // Já logado? vai pro perfil.
   if (!loading && auth.authenticated) return <Navigate to="/profile" replace />;
 
+  const perks = [
+    { icon: FileText, label: pt ? "Threat Briefs a partir de qualquer URL" : "Threat Briefs from any URL" },
+    { icon: Mail, label: pt ? "Feed de advisories curado" : "Curated advisory feed" },
+    { icon: Crosshair, label: pt ? "Threat hunting assistido" : "Assisted threat hunting" },
+  ];
+
   return (
-    <div className={`min-h-screen bg-background flex flex-col transition-all duration-300 ${isCollapsed ? "lg:pl-20" : "lg:pl-64"}`}>
-      <Header showBackButton />
-      <main className="flex-1 container mx-auto px-4 py-10 max-w-md w-full flex flex-col justify-center">
-        <Card className="border-primary/10 shadow-lg shadow-primary/5">
-          <CardHeader className="text-center items-center gap-2 pb-3">
-            <div className="h-14 w-14 rounded-2xl bg-primary/10 ring-1 ring-inset ring-primary/20 flex items-center justify-center mb-1">
+    <div className="min-h-screen w-full bg-background lg:grid lg:grid-cols-2">
+      {/* Toggles no canto */}
+      <div className="absolute top-4 right-4 z-20 flex items-center gap-1">
+        <LanguageToggle />
+        <ThemeToggle />
+      </div>
+
+      {/* Painel hero (esquerda) */}
+      <div className="relative hidden lg:flex flex-col justify-between overflow-hidden bg-gradient-to-br from-primary/12 via-primary/5 to-background p-12 border-r border-primary/10">
+        <div className="absolute inset-0 bg-[radial-gradient(60%_60%_at_30%_20%,hsl(var(--primary)/0.10),transparent)]" />
+        <Link to="/" className="relative flex items-center gap-2.5 w-fit">
+          <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center font-black text-primary-foreground text-sm shadow-sm shadow-primary/30">T</div>
+          <span className="font-bold tracking-tight text-xl bg-gradient-to-r from-primary via-primary/80 to-primary/50 bg-clip-text text-transparent">ThreatSumm4ry</span>
+        </Link>
+
+        <div className="relative max-w-md">
+          <h1 className="text-4xl font-bold leading-tight tracking-tight">
+            {pt ? "Transforme dados brutos em inteligência." : "Turn raw data into intelligence."}
+          </h1>
+          <p className="mt-4 text-muted-foreground text-lg">
+            {pt
+              ? "Entre para acessar os recursos premium — briefs, feed curado e threat hunting."
+              : "Sign in to unlock the premium tools — briefs, curated feed and threat hunting."}
+          </p>
+          <ul className="mt-8 space-y-3">
+            {perks.map((p) => (
+              <li key={p.label} className="flex items-center gap-3 text-[15px]">
+                <span className="h-9 w-9 rounded-xl bg-primary/10 ring-1 ring-inset ring-primary/20 flex items-center justify-center shrink-0">
+                  <p.icon className="h-4 w-4 text-primary" />
+                </span>
+                {p.label}
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        <p className="relative text-xs text-muted-foreground/70">
+          © {new Date().getFullYear()} ThreatSumm4ry — {pt ? "inteligência contra ameaças" : "threat intelligence"}
+        </p>
+      </div>
+
+      {/* Painel de login (direita) */}
+      <div className="flex min-h-screen lg:min-h-0 flex-col items-center justify-center px-6 py-12">
+        <div className="w-full max-w-sm">
+          {/* Brand no mobile */}
+          <Link to="/" className="lg:hidden flex items-center justify-center gap-2.5 mb-8">
+            <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center font-black text-primary-foreground text-sm">T</div>
+            <span className="font-bold tracking-tight text-xl bg-gradient-to-r from-primary via-primary/80 to-primary/50 bg-clip-text text-transparent">ThreatSumm4ry</span>
+          </Link>
+
+          <div className="text-center mb-8">
+            <div className="mx-auto mb-4 h-14 w-14 rounded-2xl bg-primary/10 ring-1 ring-inset ring-primary/20 flex items-center justify-center">
               <ShieldCheck className="h-7 w-7 text-primary" />
             </div>
-            <CardTitle className="text-2xl">{pt ? "Entrar no ThreatSumm4ry" : "Sign in to ThreatSumm4ry"}</CardTitle>
-            <CardDescription className="max-w-xs">
-              {pt
-                ? "Acesso restrito à lista autorizada. Entre com sua conta do GitHub."
-                : "Access is restricted to the allow-list. Continue with your GitHub account."}
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-5">
-            <Button asChild size="lg" className="w-full h-11 text-[15px]">
-              <a href={loginUrl}>
-                {loading
-                  ? <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  : <Github className="h-4 w-4 mr-2" />}
-                {pt ? "Entrar com GitHub" : "Continue with GitHub"}
-              </a>
-            </Button>
-            <div className="space-y-2.5 text-sm text-muted-foreground border-t border-border/60 pt-4">
-              <div className="flex items-start gap-2.5">
-                <ShieldCheck className="h-4 w-4 mt-0.5 text-primary shrink-0" />
-                <span>{pt ? "Somente contas autorizadas conseguem entrar." : "Only allow-listed accounts can sign in."}</span>
-              </div>
-              <div className="flex items-start gap-2.5">
-                <KeyRound className="h-4 w-4 mt-0.5 text-primary shrink-0" />
-                <span>{pt ? "Você usa sua própria chave Groq (BYOK), cifrada no servidor." : "You bring your own Groq key (BYOK), encrypted server-side."}</span>
-              </div>
+            <h2 className="text-2xl font-bold">{pt ? "Entrar" : "Sign in"}</h2>
+            <p className="text-muted-foreground mt-1.5 text-sm">
+              {pt ? "Acesso restrito à lista autorizada." : "Access is restricted to the allow-list."}
+            </p>
+          </div>
+
+          <Button asChild size="lg" className="w-full h-12 text-[15px]">
+            <a href={loginUrl}>
+              {loading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Github className="h-5 w-5 mr-2" />}
+              {pt ? "Entrar com GitHub" : "Continue with GitHub"}
+            </a>
+          </Button>
+
+          <div className="mt-6 space-y-2.5 text-sm text-muted-foreground border-t border-border/60 pt-5">
+            <div className="flex items-start gap-2.5">
+              <ShieldCheck className="h-4 w-4 mt-0.5 text-primary shrink-0" />
+              <span>{pt ? "Somente contas autorizadas conseguem entrar." : "Only allow-listed accounts can sign in."}</span>
             </div>
-          </CardContent>
-        </Card>
-        <p className="text-center text-xs text-muted-foreground mt-4">
-          <Link to="/features" className="hover:text-foreground underline underline-offset-2 inline-flex items-center gap-1">
-            {pt ? "O que é o Threat Brief?" : "What is Threat Brief?"} <ArrowRight className="h-3 w-3" />
-          </Link>
-        </p>
-      </main>
-      <Footer />
+            <div className="flex items-start gap-2.5">
+              <KeyRound className="h-4 w-4 mt-0.5 text-primary shrink-0" />
+              <span>{pt ? "Você traz suas próprias chaves (BYOK), cifradas no servidor." : "You bring your own keys (BYOK), encrypted server-side."}</span>
+            </div>
+          </div>
+
+          <div className="mt-8 text-center">
+            <Link to="/" className="text-xs text-muted-foreground hover:text-foreground inline-flex items-center gap-1">
+              <ArrowLeft className="h-3 w-3" /> {pt ? "Voltar para o início" : "Back to home"}
+            </Link>
+          </div>
+        </div>
+      </div>
     </div>
   );
 };

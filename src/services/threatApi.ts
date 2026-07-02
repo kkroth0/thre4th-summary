@@ -1067,3 +1067,31 @@ export const saveGroqKey = async (key: string): Promise<{ hasKey: boolean }> => 
 export const deleteGroqKey = async (): Promise<void> => {
     await fetch('/api/user/groq-key', { method: 'DELETE' }).catch(() => {});
 };
+
+// BYOK genérico: quais providers têm chave configurada (booleans, nunca os valores).
+export type ApiKeysState = Record<string, boolean>;
+
+export const fetchApiKeys = async (): Promise<ApiKeysState> => {
+    try {
+        const r = await fetch('/api/user/keys');
+        if (!r.ok) return {};
+        const d = await r.json();
+        return d.keys || {};
+    } catch { return {}; }
+};
+
+export const saveApiKey = async (provider: string, key: string): Promise<void> => {
+    const r = await fetch(`/api/user/keys/${encodeURIComponent(provider)}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key }),
+    });
+    if (!r.ok) {
+        const e = await r.json().catch(() => ({}));
+        throw new Error(e.error || `Key API error: ${r.status}`);
+    }
+};
+
+export const deleteApiKey = async (provider: string): Promise<void> => {
+    await fetch(`/api/user/keys/${encodeURIComponent(provider)}`, { method: 'DELETE' }).catch(() => {});
+};

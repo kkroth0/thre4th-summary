@@ -7,10 +7,12 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { LanguageProvider } from "./contexts/LanguageContext";
 import { SidebarProvider } from "./contexts/SidebarContext";
 import { AuthProvider } from "./contexts/AuthContext";
+import { PremiumRoute } from "./components/PremiumRoute";
 
 const Index = lazy(() => import("./pages/Index"));
 const Login = lazy(() => import("./pages/Login"));
 const Profile = lazy(() => import("./pages/Profile"));
+const Settings = lazy(() => import("./pages/Settings"));
 const VendorDirectory = lazy(() => import("./pages/VendorDirectory"));
 const DnsblCheck = lazy(() => import("./pages/DnsblCheck"));
 const Newsletter = lazy(() => import("./pages/Newsletter"));
@@ -51,15 +53,18 @@ const App = () => (
                 {/* Tool Routes */}
                 <Route path="/vendors" element={<VendorDirectory />} />
                 <Route path="/dnsbl" element={<DnsblCheck />} />
-                <Route path="/newsletter" element={<Newsletter />} />
                 <Route path="/phishing-analyzer" element={<PhishingAnalyzer />} />
-                <Route path="/threat-hunting" element={<ThreatHunting />} />
-                <Route path="/threat-brief" element={<DailyBulletin />} />
+
+                {/* Premium Routes (require sign-in) */}
+                <Route path="/threat-brief" element={<PremiumRoute feature="threat-brief"><DailyBulletin /></PremiumRoute>} />
+                <Route path="/newsletter" element={<PremiumRoute feature="advisory-feed"><Newsletter /></PremiumRoute>} />
+                <Route path="/threat-hunting" element={<PremiumRoute feature="threat-hunting"><ThreatHunting /></PremiumRoute>} />
                 <Route path="/daily-bulletin" element={<Navigate to="/threat-brief" replace />} />
 
                 {/* Auth */}
                 <Route path="/login" element={<Login />} />
                 <Route path="/profile" element={<Profile />} />
+                <Route path="/settings" element={<Settings />} />
 
                 <Route path="*" element={<NotFound />} />
               </Routes>

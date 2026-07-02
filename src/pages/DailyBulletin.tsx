@@ -74,7 +74,7 @@ const DailyBulletin: React.FC = () => {
 
   // Sessão compartilhada (GitHub + BYOK). Identidade e chave vivem em /profile;
   // aqui a gente só usa o estado pra liberar (ou barrar) o gerador.
-  const { auth, loading: authLoading } = useAuth();
+  const { auth } = useAuth();
 
   const loadSuggestions = useCallback(async () => {
     setLoading(true);
@@ -180,35 +180,18 @@ const DailyBulletin: React.FC = () => {
           </p>
         </div>
 
-        {/* Gate: sessão -> chave Groq -> gerador. Identidade e chave são geridas
-            em /profile; aqui só encaminhamos pra lá. */}
-        {authLoading ? (
-          <Card className="mb-6"><CardContent className="p-4 flex items-center gap-2 text-muted-foreground">
-            <Loader2 className="h-4 w-4 animate-spin" /> {pt ? "Verificando sessão…" : "Checking session…"}
-          </CardContent></Card>
-        ) : !auth.authenticated ? (
-          <Card className="mb-6">
-            <CardContent className="p-6 flex flex-col items-center text-center gap-3">
-              <Github className="h-8 w-8 text-primary" />
-              <div>
-                <div className="font-medium">{pt ? "Entre para gerar boletins" : "Sign in to generate bulletins"}</div>
-                <div className="text-sm text-muted-foreground">{pt ? "Acesso restrito à lista autorizada. Você usa sua própria chave Groq." : "Access restricted to the allow-list. You bring your own Groq key."}</div>
-              </div>
-              <Button asChild>
-                <Link to="/login"><Github className="h-4 w-4 mr-2" /> {pt ? "Entrar com GitHub" : "Sign in with GitHub"}</Link>
-              </Button>
-            </CardContent>
-          </Card>
-        ) : !auth.hasKey ? (
+        {/* Gate da chave Groq (a sessão já é garantida pelo PremiumRoute).
+            A chave é gerida em /settings. */}
+        {!auth.hasKey ? (
           <Card className="mb-6">
             <CardContent className="p-6 flex flex-col items-center text-center gap-3">
               <KeyRound className="h-8 w-8 text-primary" />
               <div>
                 <div className="font-medium">{pt ? "Adicione sua chave Groq" : "Add your Groq key"}</div>
-                <div className="text-sm text-muted-foreground">{pt ? "Você precisa de uma chave Groq (BYOK) no seu perfil para gerar boletins." : "You need a Groq key (BYOK) in your profile to generate bulletins."}</div>
+                <div className="text-sm text-muted-foreground">{pt ? "Você precisa de uma chave Groq (BYOK) nas configurações para gerar boletins." : "You need a Groq key (BYOK) in settings to generate bulletins."}</div>
               </div>
               <Button asChild>
-                <Link to="/profile"><KeyRound className="h-4 w-4 mr-2" /> {pt ? "Ir para o perfil" : "Go to profile"} <ArrowRight className="h-4 w-4 ml-1.5" /></Link>
+                <Link to="/settings"><KeyRound className="h-4 w-4 mr-2" /> {pt ? "Ir para configurações" : "Go to settings"} <ArrowRight className="h-4 w-4 ml-1.5" /></Link>
               </Button>
             </CardContent>
           </Card>
@@ -220,7 +203,7 @@ const DailyBulletin: React.FC = () => {
                 {pt ? "Conectado como" : "Signed in as"} <strong className="text-foreground">{auth.login}</strong> · {pt ? "chave Groq ativa" : "Groq key active"}
               </span>
               <Button asChild variant="ghost" size="sm">
-                <Link to="/profile"><KeyRound className="h-3.5 w-3.5 mr-1" /> {pt ? "Gerenciar" : "Manage"}</Link>
+                <Link to="/settings"><KeyRound className="h-3.5 w-3.5 mr-1" /> {pt ? "Gerenciar" : "Manage"}</Link>
               </Button>
             </div>
             {/* Colar URL avulsa */}

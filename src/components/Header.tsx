@@ -1,5 +1,5 @@
 import { Link, useLocation } from "react-router-dom";
-import { BookOpen, Shield, Mail, Activity, Terminal, ArrowLeft, ShieldAlert, MailWarning, ChevronLeft, ChevronRight, Globe, CalendarCheck, Crosshair, FileText, LogIn } from "lucide-react";
+import { BookOpen, Shield, Mail, Activity, Terminal, ArrowLeft, ShieldAlert, MailWarning, ChevronLeft, ChevronRight, Globe, CalendarCheck, Crosshair, FileText, LogIn, Settings as SettingsIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -98,9 +98,9 @@ export function Header({ actions, logoAddon, onLogoClick, showBackButton = false
     { path: "/dnsbl", label: t("dnsblCheck") || "DNSBL Check", icon: ShieldAlert },
     { path: "/dns-visualizer", label: t("dnsVisualizer") || "DNS Visualizer", icon: Globe },
     { path: "/phishing-analyzer", label: language === "pt" ? "Análise de Phishing" : "Phishing Analyzer", icon: MailWarning },
-    { path: "/threat-hunting", label: language === "pt" ? "Threat Hunting" : "Threat Hunting", icon: Crosshair },
-    { path: "/threat-brief", label: "Threat Brief", icon: FileText },
-    { path: "/newsletter", label: language === "pt" ? "Feed de Advisories" : "Advisory Feed", icon: Mail },
+    { path: "/threat-hunting", label: language === "pt" ? "Threat Hunting" : "Threat Hunting", icon: Crosshair, premium: true },
+    { path: "/threat-brief", label: "Threat Brief", icon: FileText, premium: true },
+    { path: "/newsletter", label: language === "pt" ? "Feed de Advisories" : "Advisory Feed", icon: Mail, premium: true },
     { path: "/cves", label: language === "pt" ? "Painel de CVEs" : "CVE Dashboard", icon: Shield },
     { path: "/patch-tuesday", label: language === "pt" ? "Patch Tuesday" : "Patch Tuesday", icon: CalendarCheck },
     { path: "/features", label: language === "pt" ? "Funcionalidades" : "Features", icon: Terminal },
@@ -120,7 +120,10 @@ export function Header({ actions, logoAddon, onLogoClick, showBackButton = false
         )}
       >
         <Icon strokeWidth={isActive ? 2.25 : 1.9} className={cn("h-[18px] w-[18px] shrink-0", isActive ? "text-primary" : "text-muted-foreground")} />
-        {!isCollapsed && <span>{item.label}</span>}
+        {!isCollapsed && <span className="flex-1 text-left truncate">{item.label}</span>}
+        {!isCollapsed && (item as { premium?: boolean }).premium && (
+          <span className="ml-auto shrink-0 text-[9px] font-bold tracking-wider px-1.5 py-0.5 rounded-md bg-amber-500/15 text-amber-600 dark:text-amber-400 ring-1 ring-inset ring-amber-500/20">PRO</span>
+        )}
       </Button>
     );
 
@@ -309,6 +312,26 @@ export function Header({ actions, logoAddon, onLogoClick, showBackButton = false
         <div className="flex flex-col gap-4 border-t border-primary/10 pt-4">
           {/* User / auth */}
           {renderUser()}
+
+          {/* Settings (signed-in only) */}
+          {!authLoading && auth.authenticated && (
+            <Link to="/settings" className="w-full block -mt-2">
+              {isCollapsed ? (
+                <Tooltip delayDuration={150}>
+                  <TooltipTrigger asChild>
+                    <Button variant="ghost" className={cn("w-11 h-11 rounded-xl mx-auto justify-center px-0", pathname === "/settings" ? "bg-primary/15 text-primary ring-1 ring-inset ring-primary/20" : "text-muted-foreground/80 hover:text-foreground hover:bg-muted/20")}>
+                      <SettingsIcon className="h-[18px] w-[18px]" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="right" className="font-semibold text-xs">{language === "pt" ? "Configurações" : "Settings"}</TooltipContent>
+                </Tooltip>
+              ) : (
+                <Button variant="ghost" className={cn("w-full h-10 rounded-xl justify-start px-3.5 gap-3 text-[13px] font-semibold", pathname === "/settings" ? "bg-primary/15 text-primary ring-1 ring-inset ring-primary/20" : "text-muted-foreground/80 hover:text-foreground hover:bg-muted/20")}>
+                  <SettingsIcon className="h-[18px] w-[18px]" /> {language === "pt" ? "Configurações" : "Settings"}
+                </Button>
+              )}
+            </Link>
+          )}
 
           {/* Collapse Trigger Button */}
           <Button

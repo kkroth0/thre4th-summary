@@ -1734,6 +1734,50 @@ app.delete('/api/user/groq-key', requireAuth, (req, res) => {
     res.json({ hasKey: false });
 });
 
+// ─── BYOK genérico: chaves de API por provider, cifradas (apiKeysEnc). O 'groq'
+// é roteado pro groqKeyEnc (que o gerador já usa). Nunca devolve valores — só
+// quais providers estão configurados. Wiring por-vendor nos lookups fica pra depois.
+const BYOK_PROVIDERS = new Set([
+    'groq', 'virustotal', 'abuseipdb', 'shodan', 'alienvault', 'pulsedive',
+    'hybridanalysis', 'metadefender', 'criminalip', 'censys',
+    'urlhaus', 'threatfox', 'phishtank', 'whois', 'dnsdumpster',
+]);
+function userKeysStatus(u) {
+    const out = { groq: !!(u && u.groqKeyEnc) };
+    const m = (u && u.apiKeysEnc) || {};
+    for (const p of BYOK_PROVIDERS) if (p !== 'groq') out[p] = !!m[p];
+    return out;
+}
+app.get('/api/user/keys', requireAuth, (req, res) => {
+    res.json({ keys: userKeysStatus(usersStore[req.user.sub]) });
+});
+app.put('/api/user/keys/:provider', requireAuth, (req, res) => {
+    if (!ENC_KEY) return res.status(500).json({ error: 'armazenamento de chave não configurado no servidor' });
+    const provider = String(req.params.provider || '').toLowerCase();
+    if (!BYOK_PROVIDERS.has(provider)) return res.status(400).json({ error: 'provider desconhecido' });
+    const key = (req.body?.key || '').toString().trim();
+    if (!key || key.length < 8 || key.length > 400) return res.status(400).json({ error: 'chave inválida' });
+    if (provider === 'groq' && !validGroqKey(key)) return res.status(400).json({ error: 'chave Groq inválida (esperado gsk_...)' });
+    const u = usersStore[req.user.sub] || (usersStore[req.user.sub] = { login: req.user.login, groqKeyEnc: null, createdAt: new Date().toISOString() });
+    if (provider === 'groq') u.groqKeyEnc = encryptSecret(key);
+    else (u.apiKeysEnc || (u.apiKeysEnc = {}))[provider] = encryptSecret(key);
+    u.updatedAt = new Date().toISOString();
+    saveUsers();
+    res.json({ provider, hasKey: true });
+});
+app.delete('/api/user/keys/:provider', requireAuth, (req, res) => {
+    const provider = String(req.params.provider || '').toLowerCase();
+    if (!BYOK_PROVIDERS.has(provider)) return res.status(400).json({ error: 'provider desconhecido' });
+    const u = usersStore[req.user.sub];
+    if (u) {
+        if (provider === 'groq') u.groqKeyEnc = null;
+        else if (u.apiKeysEnc) delete u.apiKeysEnc[provider];
+        u.updatedAt = new Date().toISOString();
+        saveUsers();
+    }
+    res.json({ provider, hasKey: false });
+});
+
 // ─── Boletim · jobs de geração por URL (1 URL = 1 boletim) ─────────────────
 // O front escolhe UMA url e pede a geração (POST generate); um worker na VPS
 // (saída-só, porta fechada) faz poll dos pendentes (GET jobs/pending, 🔒), roda
