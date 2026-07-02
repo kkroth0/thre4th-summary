@@ -6,8 +6,11 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { LanguageProvider } from "./contexts/LanguageContext";
 import { SidebarProvider } from "./contexts/SidebarContext";
+import { AuthProvider } from "./contexts/AuthContext";
 
 const Index = lazy(() => import("./pages/Index"));
+const Login = lazy(() => import("./pages/Login"));
+const Profile = lazy(() => import("./pages/Profile"));
 const VendorDirectory = lazy(() => import("./pages/VendorDirectory"));
 const DnsblCheck = lazy(() => import("./pages/DnsblCheck"));
 const Newsletter = lazy(() => import("./pages/Newsletter"));
@@ -26,6 +29,7 @@ const App = () => (
   <QueryClientProvider client={queryClient}>
     <LanguageProvider>
       <SidebarProvider>
+        <AuthProvider>
         <TooltipProvider>
           <Toaster />
           <Sonner />
@@ -53,11 +57,16 @@ const App = () => (
                 <Route path="/threat-brief" element={<DailyBulletin />} />
                 <Route path="/daily-bulletin" element={<Navigate to="/threat-brief" replace />} />
 
+                {/* Auth */}
+                <Route path="/login" element={<Login />} />
+                <Route path="/profile" element={<Profile />} />
+
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </Suspense>
           </BrowserRouter>
         </TooltipProvider>
+        </AuthProvider>
       </SidebarProvider>
     </LanguageProvider>
   </QueryClientProvider>

@@ -1,10 +1,12 @@
 import { Link, useLocation } from "react-router-dom";
-import { BookOpen, Shield, Mail, Activity, Terminal, ArrowLeft, ShieldAlert, MailWarning, ChevronLeft, ChevronRight, Globe, CalendarCheck, Crosshair, FileText } from "lucide-react";
+import { BookOpen, Shield, Mail, Activity, Terminal, ArrowLeft, ShieldAlert, MailWarning, ChevronLeft, ChevronRight, Globe, CalendarCheck, Crosshair, FileText, LogIn } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { LanguageToggle } from "@/components/LanguageToggle";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useSidebar } from "@/contexts/SidebarContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
@@ -18,8 +20,70 @@ interface HeaderProps {
 export function Header({ actions, logoAddon, onLogoClick, showBackButton = false }: HeaderProps) {
   const { t, language } = useLanguage();
   const { isCollapsed, toggleSidebar } = useSidebar();
+  const { auth, loading: authLoading } = useAuth();
   const location = useLocation();
   const pathname = location.pathname;
+
+  // Bloco de usuário (sidebar): avatar -> /profile, ou botão "Entrar" -> /login.
+  const renderUser = () => {
+    if (authLoading) {
+      return <div className={cn("h-11 rounded-xl bg-muted/30 animate-pulse", isCollapsed ? "w-11 mx-auto" : "w-full")} />;
+    }
+    if (auth.authenticated) {
+      const chip = (
+        <Button
+          variant="ghost"
+          className={cn(
+            "w-full transition-all duration-200",
+            isCollapsed ? "justify-center px-0 w-11 h-11 rounded-xl mx-auto" : "justify-start px-2.5 gap-2.5 h-12 rounded-xl",
+            pathname === "/profile"
+              ? "bg-primary/15 ring-1 ring-inset ring-primary/20 hover:bg-primary/20"
+              : "hover:bg-muted/20"
+          )}
+        >
+          <Avatar className="h-7 w-7 ring-1 ring-primary/20 shrink-0">
+            <AvatarImage src={`https://github.com/${auth.login}.png?size=64`} alt={auth.login} />
+            <AvatarFallback className="text-xs font-semibold bg-primary/10 text-primary">{auth.login?.[0]?.toUpperCase() ?? "?"}</AvatarFallback>
+          </Avatar>
+          {!isCollapsed && (
+            <div className="flex flex-col items-start leading-tight min-w-0">
+              <span className="text-[13px] font-semibold truncate max-w-[150px]">{auth.login}</span>
+              <span className="text-[10px] text-muted-foreground">{language === "pt" ? "Ver perfil" : "View profile"}</span>
+            </div>
+          )}
+        </Button>
+      );
+      return (
+        <Link to="/profile" className="w-full block">
+          {isCollapsed ? (
+            <Tooltip delayDuration={150}>
+              <TooltipTrigger asChild>{chip}</TooltipTrigger>
+              <TooltipContent side="right" className="font-semibold text-xs">{auth.login}</TooltipContent>
+            </Tooltip>
+          ) : chip}
+        </Link>
+      );
+    }
+    const signInBtn = (
+      <Button
+        variant="outline"
+        className={cn("gap-2 rounded-xl font-semibold", isCollapsed ? "px-0 w-11 h-11 mx-auto" : "w-full h-10 text-[13px]")}
+      >
+        <LogIn className="h-4 w-4" />
+        {!isCollapsed && <span>{language === "pt" ? "Entrar" : "Sign in"}</span>}
+      </Button>
+    );
+    return (
+      <Link to="/login" className="w-full block">
+        {isCollapsed ? (
+          <Tooltip delayDuration={150}>
+            <TooltipTrigger asChild>{signInBtn}</TooltipTrigger>
+            <TooltipContent side="right" className="font-semibold text-xs">{language === "pt" ? "Entrar" : "Sign in"}</TooltipContent>
+          </Tooltip>
+        ) : signInBtn}
+      </Link>
+    );
+  };
 
   const handleLogoClick = (e: React.MouseEvent) => {
     if (onLogoClick) {
@@ -172,6 +236,24 @@ export function Header({ actions, logoAddon, onLogoClick, showBackButton = false
               <LanguageToggle />
               <ThemeToggle />
             </div>
+
+            {/* User / auth (mobile) */}
+            {!authLoading && (
+              auth.authenticated ? (
+                <Link to="/profile" className="shrink-0 ml-0.5">
+                  <Avatar className="h-7 w-7 ring-1 ring-primary/20">
+                    <AvatarImage src={`https://github.com/${auth.login}.png?size=48`} alt={auth.login} />
+                    <AvatarFallback className="text-[10px] font-semibold bg-primary/10 text-primary">{auth.login?.[0]?.toUpperCase() ?? "?"}</AvatarFallback>
+                  </Avatar>
+                </Link>
+              ) : (
+                <Link to="/login" className="shrink-0 ml-0.5">
+                  <Button variant="ghost" size="icon" className="h-7 w-7 rounded-full text-muted-foreground hover:text-foreground">
+                    <LogIn className="h-4 w-4" />
+                  </Button>
+                </Link>
+              )
+            )}
           </div>
         </div>
       </header>
@@ -225,6 +307,9 @@ export function Header({ actions, logoAddon, onLogoClick, showBackButton = false
 
         {/* Bottom Part */}
         <div className="flex flex-col gap-4 border-t border-primary/10 pt-4">
+          {/* User / auth */}
+          {renderUser()}
+
           {/* Collapse Trigger Button */}
           <Button
             variant="ghost"

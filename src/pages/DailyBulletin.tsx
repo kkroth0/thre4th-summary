@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
-import { RefreshCw, Download, ShieldAlert, Loader2, FileText, Sparkles, AlertTriangle, Eye, ChevronDown, Trash2, Github, KeyRound, LogOut, CheckCircle2 } from "lucide-react";
+import { Link } from "react-router-dom";
+import { RefreshCw, Download, ShieldAlert, Loader2, FileText, Sparkles, AlertTriangle, Eye, ChevronDown, Trash2, Github, KeyRound, CheckCircle2, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -17,11 +18,11 @@ import { Header } from "@/components/Header";
 import { BoletimView } from "@/components/BoletimView";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useSidebar } from "@/contexts/SidebarContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import {
   fetchDailySuggestions, generateBoletim, fetchJob,
-  fetchAuth, loginUrl, logout, saveGroqKey, deleteGroqKey,
-  type DailySuggestion, type BoletimJob, type DeckType, type AuthState,
+  type DailySuggestion, type BoletimJob, type DeckType,
 } from "@/services/threatApi";
 
 const SEVERITY_DOT: Record<string, string> = {
@@ -71,47 +72,9 @@ const DailyBulletin: React.FC = () => {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Auth GitHub + BYOK. `auth === null` = ainda carregando /me.
-  const [auth, setAuth] = useState<AuthState | null>(null);
-  const [keyInput, setKeyInput] = useState("");
-  const [savingKey, setSavingKey] = useState(false);
-
-  const refreshAuth = useCallback(async () => { setAuth(await fetchAuth()); }, []);
-  useEffect(() => { refreshAuth(); }, [refreshAuth]);
-
-  // Feedback do retorno do OAuth (?auth=ok|negado|erro) — limpa a query depois.
-  useEffect(() => {
-    const p = new URLSearchParams(window.location.search).get("auth");
-    if (!p) return;
-    if (p === "ok") toast.success(pt ? "Login efetuado" : "Signed in");
-    else if (p === "negado") toast.error(pt ? "Conta não autorizada" : "Account not allow-listed");
-    else if (p === "erro") toast.error(pt ? "Falha no login" : "Sign-in failed");
-    window.history.replaceState({}, "", window.location.pathname);
-  }, [pt]);
-
-  const submitKey = async () => {
-    const k = keyInput.trim();
-    if (!k) return;
-    setSavingKey(true);
-    try {
-      await saveGroqKey(k);
-      setKeyInput("");
-      toast.success(pt ? "Chave Groq salva" : "Groq key saved");
-      await refreshAuth();
-    } catch (e) {
-      toast.error((e as Error).message || (pt ? "Falha ao salvar a chave" : "Failed to save key"));
-    } finally {
-      setSavingKey(false);
-    }
-  };
-
-  const removeKey = async () => {
-    await deleteGroqKey();
-    toast.success(pt ? "Chave removida" : "Key removed");
-    await refreshAuth();
-  };
-
-  const doLogout = async () => { await logout(); await refreshAuth(); };
+  // Sessão compartilhada (GitHub + BYOK). Identidade e chave vivem em /profile;
+  // aqui a gente só usa o estado pra liberar (ou barrar) o gerador.
+  const { auth, loading: authLoading } = useAuth();
 
   const loadSuggestions = useCallback(async () => {
     setLoading(true);
@@ -217,8 +180,9 @@ const DailyBulletin: React.FC = () => {
           </p>
         </div>
 
-        {/* Gate de login + BYOK: sign-in -> chave Groq -> gerador */}
-        {auth === null ? (
+        {/* Gate: sessão -> chave Groq -> gerador. Identidade e chave são geridas
+            em /profile; aqui só encaminhamos pra lá. */}
+        {authLoading ? (
           <Card className="mb-6"><CardContent className="p-4 flex items-center gap-2 text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin" /> {pt ? "Verificando sessão…" : "Checking session…"}
           </CardContent></Card>
@@ -230,25 +194,22 @@ const DailyBulletin: React.FC = () => {
                 <div className="font-medium">{pt ? "Entre para gerar boletins" : "Sign in to generate bulletins"}</div>
                 <div className="text-sm text-muted-foreground">{pt ? "Acesso restrito à lista autorizada. Você usa sua própria chave Groq." : "Access restricted to the allow-list. You bring your own Groq key."}</div>
               </div>
-              <Button asChild><a href={loginUrl}><Github className="h-4 w-4 mr-2" /> {pt ? "Entrar com GitHub" : "Sign in with GitHub"}</a></Button>
+              <Button asChild>
+                <Link to="/login"><Github className="h-4 w-4 mr-2" /> {pt ? "Entrar com GitHub" : "Sign in with GitHub"}</Link>
+              </Button>
             </CardContent>
           </Card>
         ) : !auth.hasKey ? (
           <Card className="mb-6">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-lg flex items-center gap-2"><KeyRound className="h-5 w-5 text-primary" /> {pt ? "Sua chave Groq" : "Your Groq key"}</CardTitle>
-              <CardDescription>
-                {pt ? "Cole sua chave da Groq (gsk_…). Ela é cifrada no servidor e usada só para gerar seus boletins. " : "Paste your Groq key (gsk_…). It's encrypted server-side and used only to generate your bulletins. "}
-                <a href="https://console.groq.com/keys" target="_blank" rel="noreferrer" className="text-primary underline">console.groq.com/keys</a>
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="p-4 pt-2 flex flex-col sm:flex-row gap-2">
-              <Input type="password" placeholder="gsk_…" value={keyInput} onChange={(e) => setKeyInput(e.target.value)} className="flex-1" />
-              <Button onClick={submitKey} disabled={savingKey || !keyInput.trim()}>
-                {savingKey ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <KeyRound className="h-4 w-4 mr-2" />}
-                {pt ? "Salvar chave" : "Save key"}
+            <CardContent className="p-6 flex flex-col items-center text-center gap-3">
+              <KeyRound className="h-8 w-8 text-primary" />
+              <div>
+                <div className="font-medium">{pt ? "Adicione sua chave Groq" : "Add your Groq key"}</div>
+                <div className="text-sm text-muted-foreground">{pt ? "Você precisa de uma chave Groq (BYOK) no seu perfil para gerar boletins." : "You need a Groq key (BYOK) in your profile to generate bulletins."}</div>
+              </div>
+              <Button asChild>
+                <Link to="/profile"><KeyRound className="h-4 w-4 mr-2" /> {pt ? "Ir para o perfil" : "Go to profile"} <ArrowRight className="h-4 w-4 ml-1.5" /></Link>
               </Button>
-              <Button variant="ghost" onClick={doLogout} title={pt ? "Sair" : "Sign out"}><LogOut className="h-4 w-4" /></Button>
             </CardContent>
           </Card>
         ) : (
@@ -258,10 +219,9 @@ const DailyBulletin: React.FC = () => {
                 <CheckCircle2 className="h-4 w-4 text-emerald-500" />
                 {pt ? "Conectado como" : "Signed in as"} <strong className="text-foreground">{auth.login}</strong> · {pt ? "chave Groq ativa" : "Groq key active"}
               </span>
-              <span className="flex items-center gap-1">
-                <Button variant="ghost" size="sm" onClick={removeKey}><KeyRound className="h-3.5 w-3.5 mr-1" /> {pt ? "Trocar chave" : "Change key"}</Button>
-                <Button variant="ghost" size="sm" onClick={doLogout}><LogOut className="h-3.5 w-3.5 mr-1" /> {pt ? "Sair" : "Sign out"}</Button>
-              </span>
+              <Button asChild variant="ghost" size="sm">
+                <Link to="/profile"><KeyRound className="h-3.5 w-3.5 mr-1" /> {pt ? "Gerenciar" : "Manage"}</Link>
+              </Button>
             </div>
             {/* Colar URL avulsa */}
             <Card className="mb-6">
