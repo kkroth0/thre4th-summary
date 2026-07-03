@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
 import { fetchAuth, logout as apiLogout, loginUrl, type AuthState } from "@/services/threatApi";
+import { identify } from "@/lib/analytics";
 
 interface AuthContextType {
   /** Estado da sessão. `authenticated` false enquanto `loading` = ainda checando /me. */
@@ -26,6 +27,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const a = await fetchAuth();
     setAuth(a);
     setLoading(false);
+    // Identify the signed-in user to Himetrica. The browser only knows the
+    // GitHub login (email/name are never sent to the client), so that's all we
+    // pass — no PII is invented here.
+    if (a.authenticated && a.login) {
+      identify({ name: a.login, metadata: { login: a.login, hasKey: !!a.hasKey } });
+    }
   }, []);
 
   useEffect(() => { refresh(); }, [refresh]);

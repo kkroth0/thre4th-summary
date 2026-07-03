@@ -1,0 +1,221 @@
+==========================================================================
+THREAT SUMM4RY — DOCUMENTO DE IDEIA DE PRODUTO (RASCUNHO PARA FORMATAÇÃO)
+==========================================================================
+
+Objetivo deste documento: consolidar a ideia do produto em um texto único,
+para ser enviado a uma LLM (Gemini) que vai refinar, estruturar e formatar
+o pitch / documento de concepção. Está em linguagem direta e propositalmente
+"cru" — a formatação final fica por conta da etapa seguinte.
+
+--------------------------------------------------------------------------
+1. RESUMO EM UMA FRASE
+--------------------------------------------------------------------------
+Threat Summ4ry é um "Open Router de Threat Intelligence": o analista faz
+UMA busca (IP, hash, domínio, URL) e recebe UM veredito unificado (score
+0-100) correlacionado de 20+ fornecedores de segurança — e, a partir desse
+veredito, consegue AGIR em 1 clique (gerar regra Sigma/YARA/KQL, relatório
+de SOC, ou puxar uma hipótese de caça pronta).
+
+Slogan: "One Search. A Lot of Verdicts." / "Uma busca. Vinte vendors. Um veredito."
+
+Mercado inicial: Brasil (relatórios e interface em português, faturamento
+em BRL/Pix, foco em SOCs, MSSPs, bancos e fintechs sob pressão de LGPD).
+
+--------------------------------------------------------------------------
+2. O PROBLEMA
+--------------------------------------------------------------------------
+- Operações de SOC e Resposta a Incidentes (IR) sofrem com FRAGMENTAÇÃO de
+  dados. Para investigar um único indicador, o analista abre 5 a 10 abas
+  (VirusTotal, AbuseIPDB, Shodan, OTX, etc.), cada uma com login, layout e
+  formato de resposta diferente.
+- Isso custa tempo (o recurso mais escasso do SOC) e gera retrabalho: dois
+  analistas investigam o mesmo IP sem saber.
+- Depois de investigar, ainda falta a parte que dá trabalho: documentar o
+  incidente e transformar a descoberta em DETECÇÃO aplicável no ambiente.
+- No Brasil há uma dor extra: quase tudo é em inglês. Times locais precisam
+  de contexto e relatórios em português para CISOs, auditoria e LGPD.
+
+--------------------------------------------------------------------------
+3. A SOLUÇÃO (3 PILARES QUE SE COMBINAM)
+--------------------------------------------------------------------------
+O produto une três ativos que hoje existem separados:
+
+PILAR A — O AGREGADOR ("Open Router")
+  Núcleo do produto. Uma busca dispara consultas paralelas a múltiplos
+  vendors; um motor de normalização traduz respostas díspares em um schema
+  JSON único e calcula um score/veredito (malicioso, suspeito, limpo) com
+  nível de confiança. É o "veredito herói" que aparece primeiro.
+
+PILAR B — A BIBLIOTECA DE CAÇA (inspirado/integrado ao HEARTH)
+  HEARTH é uma biblioteca open-source (licença MIT) com 130+ hipóteses de
+  threat hunting estruturadas no framework PEAK e mapeadas ao MITRE ATT&CK,
+  com um "coverage heatmap" de cobertura. Vamos ingerir esse acervo (com
+  atribuição), traduzir para PT, e ligar cada hunt ao motor de busca: ao
+  investigar um IOC/técnica, o analista vê hipóteses de caça relacionadas e
+  o mapa de cobertura MITRE. Já temos um "hunt-service" próprio (Python +
+  Groq/Llama) que transforma a URL de um relatório de ameaça em um "Hunt
+  Pack" completo: ator, TTPs MITRE, IOCs, hipótese, KQL de Sentinel e Sigma.
+  >>> Esse é o nosso diferencial: o HEARTH para na hipótese; nós entregamos
+  a QUERY pronta para rodar + enriquecimento ao vivo dos IOCs.
+
+PILAR C — ACIONABILIDADE (Detection-as-Code + Relatórios)
+  Transformar investigação em ação imediata:
+   - 1-Click SOC Report: exportar a investigação em Markdown/PDF pronto para
+     colar em Jira, TheHive, ServiceNow (já temos libs de PDF/PPTX/Excel).
+   - Geração dinâmica de regras: blocos copiáveis de Sigma, YARA e queries
+     de SIEM (KQL/SPL) quando o indicador casa com família de malware/TTP.
+   - Threat Timeline: contexto histórico do indicador (primeira detecção,
+     pico de atividade) para separar infra ativa de IP legado.
+
+--------------------------------------------------------------------------
+4. INSPIRAÇÃO DE DESIGN
+--------------------------------------------------------------------------
+- Referência visual principal: Hunt.io — visual moderno, escuro, denso em
+  dados porém limpo, "operacional", com cara de ferramenta séria de SOC.
+- Dois modos de interface, seguindo um funil de Product-Led Growth (PLG):
+   * VITRINE PÚBLICA (pré-login): Light Mode, foco em clareza e conversão.
+     Hero = barra de busca + proposta de valor imediata. Usuário testa sem
+     atrito e recebe o "Veredito Herói" (o score). Detalhes avançados e uso
+     contínuo exigem conta.
+   * WORKSPACE DO ANALISTA (pós-login): Dark Mode (reduz fadiga em turnos
+     longos). Ferramenta de trabalho: gestão de integrações (cards BYOK),
+     cotas, relatórios detalhados, feed contínuo de inteligência.
+
+--------------------------------------------------------------------------
+5. FONTES DE DADOS / VENDORS
+--------------------------------------------------------------------------
+Integrar o ponto forte de cada fonte para formar o veredito consolidado:
+
+  VirusTotal   - Reputação de arquivos/hashes; comportamento de sandbox.
+                 (500 req/dia free; ToS rígido contra wrappers comerciais.)
+  AbuseIPDB    - Relatos crowdsourced de scans/ataques em tempo real.
+                 (1.000 req/dia free; planos a partir de ~US$19/mês.)
+  OTX AlienVault - Contexto de campanhas e inteligência humana (Pulses).
+                 (Aberto via API/DirectConnect; sem SLA garantido.)
+  Shodan/Censys - Mapeamento de infra exposta, portas, certs, banners.
+                 (Limites por créditos; modelos por assinatura.)
+  ThreatFox/URLHaus/MalwareBazaar - IOCs confirmados de malware (C2,
+                 payloads), atividade recente. (Licença paga p/ uso
+                 comercial em SaaS.)
+  + outros já integrados no backend atual: Pulsedive, Hybrid Analysis,
+    CriminalIP, MetaDefender, PhishTank, GreyNoise, Censys, WHOIS, IPGeo,
+    DNSBL, Ransomware.live, CIRCL, PhishStats. (Total ~20-23 fontes.)
+
+--------------------------------------------------------------------------
+6. ARQUITETURA / ESTRATÉGIA TÉCNICA (contornando ToS e rate limits)
+--------------------------------------------------------------------------
+6.1. BYOK (Bring Your Own Key)
+   A plataforma fornece a infra de correlação; o analista cadastra suas
+   PRÓPRIAS chaves de API (Shodan, VT, etc.). Isso descentraliza o consumo
+   de tokens e protege a plataforma de violar ToS de fornecedores.
+
+6.2. Cache Agressivo
+   Requisições externas são caras. Cache em memória (Redis/Memcached) com
+   TTL de 24-48h para indicadores. Buscas redundantes de usuários diferentes
+   são resolvidas internamente, economizando cota/API.
+
+6.3. Ingestão "Bulk" (Data Feeds)
+   Fontes que permitem download massivo (OTX, Abuse.ch) NÃO são consultadas
+   por REST individual. Jobs periódicos espelham esses bancos localmente:
+   reduz latência da busca "One Search" e zera custo de cota para essas
+   fontes. (Essas fontes locais ficam liberadas no plano grátis.)
+
+6.4. Motor de Normalização e Scoring
+   Coração do produto: traduz respostas díspares em um veredito 0-100.
+   Exemplo de schema JSON unificado:
+   {
+     "indicator": "192.0.2.50",
+     "type": "ipv4",
+     "threat_summ4ry": { "score": 85, "verdict": "malicious",
+                         "confidence": "high" },
+     "context": { "tags": ["c2", "cobalt strike", "scanner"] },
+     "vendor_results": {
+       "virustotal": { "positives": 12, "total": 89 },
+       "abuseipdb": { "confidence_score": 100, "total_reports": 450 }
+     }
+   }
+
+6.5. Stack técnica (atual / proposta)
+   - Frontend: React 18 + Vite + TypeScript + Tailwind + shadcn/ui.
+   - Backend: Node/Express (proxy dos vendors, rate limit).
+   - Microsserviço de caça: Python + FastAPI + Groq (Llama 3.3 70B) com
+     validação Pydantic; saída defanged (IOCs neutralizados).
+   - Cache: Redis. Filas/jobs para ingestão bulk.
+   - i18n PT/EN já existente. Export PDF/PPTX/Excel já existente.
+
+--------------------------------------------------------------------------
+7. MODELO DE NEGÓCIO (Freemium / B2B)
+--------------------------------------------------------------------------
+7.1. Community Tier (Free) — tração entre pesquisadores e estudantes.
+   - Acesso ilimitado às fontes "bulk" locais (OTX, Abuse.ch, motor de
+     notícias, biblioteca de hunts).
+   - Limite rígido em APIs externas (ex.: 5 buscas/dia via proxy).
+
+7.2. Pro Analyst Tier (assinatura individual) — analista de SOC.
+   - Desbloqueio do BYOK (usa as cotas do próprio usuário; custo de infra
+     do Threat Summ4ry tende a zero).
+   - Grafos e correlação visual (campanhas <-> IPs <-> malware).
+   - Geração de Hunt Pack (KQL/Sigma) e relatórios em PT.
+
+7.3. Enterprise & SOC Tier (B2B) — escala, MSSPs, automação.
+   - API normalizada (integração com Splunk/SOAR).
+   - Pool corporativo de chaves (gestão centralizada de licenças premium).
+   - Team Workspace: histórico colaborativo por tenant (Analista B vê a
+     investigação cacheada do Analista A — evita retrabalho e gasto de cota).
+   - Biblioteca de hunts privada + rastreio de gaps de cobertura MITRE.
+
+--------------------------------------------------------------------------
+8. DIFERENCIAIS COMPETITIVOS
+--------------------------------------------------------------------------
+- Não é só agregador de busca: é busca + caça + acionabilidade num só fluxo.
+- Entrega a DETECÇÃO pronta (Sigma/YARA/KQL), não só a informação.
+- Biblioteca de hunts integrada e em português.
+- Modelo BYOK + cache + bulk torna o custo operacional baixíssimo.
+- Foco Brasil: PT nativo, Pix/BRL, narrativa de LGPD, venda via MSSPs.
+
+--------------------------------------------------------------------------
+9. GO-TO-MARKET (Brasil primeiro)
+--------------------------------------------------------------------------
+- Idioma e relatórios em português como vantagem injusta (mercado desatendido).
+- LGPD como gatilho de orçamento; design "external-only / defanged" ajuda
+  no discurso de conformidade.
+- Vender primeiro para MSSPs (revendem para muitos clientes -> 1 venda =
+  receita recorrente em volume).
+- PLG: vitrine pública gratuita gera tração e SEO; conversão para conta.
+- Faturamento: Pix + BRL via processador local (Asaas, Pagar.me, Mercado
+  Pago ou Stripe Brasil).
+
+--------------------------------------------------------------------------
+10. ESCOPO DO MVP (primeira versão a construir)
+--------------------------------------------------------------------------
+Candidato a feature-herói do MVP (a decidir):
+  (A) Unified Search + Verdict — o motor "One Search" com score 0-100 e
+      schema unificado. É a promessa central e o gancho de conversão público.
+  (B) Hunt Pack + catálogo HEARTH — caça e geração de regras (já é nosso
+      ativo mais maduro).
+  (C) Fatia fina dos dois — buscar IOC, mostrar score, e ligar a hunts +
+      regras + relatório de SOC em 1 clique.
+
+Itens que faltam para conseguir COBRAR (independente da feature-herói):
+  - Contas/login, multi-tenancy e isolamento de dados.
+  - Cotas/limites por plano.
+  - Billing com Pix/BRL.
+
+Base de código: novo repositório (greenfield) com arquitetura limpa,
+portando peças já provadas do repo atual (proxies de vendors, hunt-service)
+conforme necessário. Design inspirado no Hunt.io.
+
+--------------------------------------------------------------------------
+11. ATIVOS QUE JÁ EXISTEM HOJE (não começar do zero)
+--------------------------------------------------------------------------
+- Backend Node/Express com ~20-23 integrações de vendors funcionando.
+- Microsserviço Python de Hunt Pack (scrape -> LLM -> Sigma/KQL/IOCs).
+- Frontend React/Vite/shadcn com páginas: CVE Dashboard, Daily Bulletin/
+  Newsletter, DNS Visualizer, DNSBL Check, Patch Tuesday, Phishing Analyzer,
+  Threat Hunting, Vendor Directory.
+- i18n PT/EN. Exportação PDF/PPTX/Excel. OAuth GitHub (scaffolding).
+- HEARTH (open-source MIT) como fonte de 130+ hunts + coverage heatmap.
+
+==========================================================================
+FIM DO RASCUNHO — enviar para o Gemini formatar/refinar.
+==========================================================================
