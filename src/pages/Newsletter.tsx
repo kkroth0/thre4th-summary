@@ -20,6 +20,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Separator } from "@/components/ui/separator";
 
 interface IocSet {
   ips?: string[];
@@ -68,6 +70,15 @@ const SEVERITY_DOT: Record<string, string> = {
   High: "bg-orange-500",
   Medium: "bg-yellow-500",
   Low: "bg-slate-400",
+};
+
+// Left-accent border + soft tint per severity — carries the visual hierarchy so
+// the eye lands on Critical/High first when scanning the feed.
+const SEVERITY_ACCENT: Record<string, string> = {
+  Critical: "border-l-red-500",
+  High: "border-l-orange-500",
+  Medium: "border-l-yellow-500",
+  Low: "border-l-slate-400",
 };
 
 // Compact relative time: "agora"/"now", "12m", "3h", "5d", else short date.
@@ -666,6 +677,20 @@ const Newsletter = () => {
   const selectedCount = Object.values(selectedNews).filter(Boolean).length;
   const selectedAdvisoriesList = advisories.filter(item => selectedNews[item.title]);
 
+  // How many filters are narrowing the feed — drives the badge on the Filters button.
+  const activeFilterCount = [
+    selectedLayer !== "all",
+    selectedSeverity !== "all",
+    sortByRelevance,
+    kevOnly,
+  ].filter(Boolean).length;
+  const clearFilters = () => {
+    setSelectedLayer("all");
+    setSelectedSeverity("all");
+    setSortByRelevance(false);
+    setKevOnly(false);
+  };
+
   // Pre-load the LLM analysis for selected items when the digest opens, so the
   // exported PDF includes the Executive Summary + Impact & Mitigation.
   useEffect(() => {
@@ -787,82 +812,101 @@ const Newsletter = () => {
             </div>
             
             {/* Feed Layers pill filter group & Actions */}
-            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 xl:pb-0 shrink-0">
-              <Button
-                variant={selectedLayer === "all" ? "default" : "outline"}
-                size="sm"
-                className="h-9 text-xs font-semibold px-3"
-                onClick={() => setSelectedLayer("all")}
-              >
-                {language === "pt" ? "Todos os Feeds" : "All Feeds"}
-              </Button>
-              <Button
-                variant={selectedLayer === "l1" ? "default" : "outline"}
-                size="sm"
-                className="h-9 text-xs font-semibold px-3 gap-1.5"
-                onClick={() => setSelectedLayer("l1")}
-              >
-                <span className="h-2 w-2 rounded-full bg-red-500" />
-                L1: PSIRT
-              </Button>
-              <Button
-                variant={selectedLayer === "l2" ? "default" : "outline"}
-                size="sm"
-                className="h-9 text-xs font-semibold px-3 gap-1.5"
-                onClick={() => setSelectedLayer("l2")}
-              >
-                <span className="h-2 w-2 rounded-full bg-amber-500" />
-                L2: CTI Research
-              </Button>
-              <Button
-                variant={selectedLayer === "l3" ? "default" : "outline"}
-                size="sm"
-                className="h-9 text-xs font-semibold px-3 gap-1.5"
-                onClick={() => setSelectedLayer("l3")}
-              >
-                <span className="h-2 w-2 rounded-full bg-blue-500" />
-                L3: Research/BR
-              </Button>
+            <div className="flex items-center gap-1.5 shrink-0">
+              {/* All filters collapsed into one popover — keeps the bar clean */}
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant={activeFilterCount > 0 ? "default" : "outline"}
+                    size="sm"
+                    className="h-9 text-xs font-semibold px-3 gap-1.5"
+                  >
+                    <Filter className="h-3.5 w-3.5" />
+                    {language === "pt" ? "Filtros" : "Filters"}
+                    {activeFilterCount > 0 && (
+                      <Badge variant="secondary" className="ml-0.5 h-4 min-w-[16px] px-1 text-[10px] tabular-nums">
+                        {activeFilterCount}
+                      </Badge>
+                    )}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent align="end" className="w-72 space-y-3">
+                  {/* Layer */}
+                  <div className="space-y-1.5">
+                    <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                      {language === "pt" ? "Camada" : "Layer"}
+                    </div>
+                    <div className="grid grid-cols-2 gap-1.5">
+                      {[
+                        { k: "all", label: language === "pt" ? "Todos" : "All", dot: "" },
+                        { k: "l1", label: "L1 · PSIRT", dot: "bg-red-500" },
+                        { k: "l2", label: "L2 · CTI", dot: "bg-amber-500" },
+                        { k: "l3", label: "L3 · Research/BR", dot: "bg-blue-500" },
+                      ].map((o) => (
+                        <Button
+                          key={o.k}
+                          variant={selectedLayer === o.k ? "default" : "outline"}
+                          size="sm"
+                          className="h-8 justify-start text-xs font-semibold gap-1.5"
+                          onClick={() => setSelectedLayer(o.k)}
+                        >
+                          {o.dot && <span className={`h-2 w-2 rounded-full ${o.dot}`} />}
+                          {o.label}
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
 
-              <div className="h-4 w-px bg-border/60 mx-1 shrink-0" />
+                  {/* Severity */}
+                  <div className="space-y-1.5">
+                    <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                      {language === "pt" ? "Severidade" : "Severity"}
+                    </div>
+                    <Select value={selectedSeverity} onValueChange={setSelectedSeverity}>
+                      <SelectTrigger className="h-8 text-xs font-semibold">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">{language === "pt" ? "Toda Severidade" : "All Severity"}</SelectItem>
+                        <SelectItem value="Critical">Critical</SelectItem>
+                        <SelectItem value="High">High</SelectItem>
+                        <SelectItem value="Medium">Medium</SelectItem>
+                        <SelectItem value="Low">Low</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
 
-              {/* Severity filter (CTI relevance) */}
-              <Select value={selectedSeverity} onValueChange={setSelectedSeverity}>
-                <SelectTrigger className="h-9 w-[140px] text-xs font-semibold shrink-0">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">{language === "pt" ? "Toda Severidade" : "All Severity"}</SelectItem>
-                  <SelectItem value="Critical">Critical</SelectItem>
-                  <SelectItem value="High">High</SelectItem>
-                  <SelectItem value="Medium">Medium</SelectItem>
-                  <SelectItem value="Low">Low</SelectItem>
-                </SelectContent>
-              </Select>
+                  <Separator />
 
-              {/* Relevance sort toggle */}
-              <Button
-                variant={sortByRelevance ? "default" : "outline"}
-                size="sm"
-                className="h-9 text-xs font-semibold px-3 gap-1.5 shrink-0"
-                onClick={() => setSortByRelevance(v => !v)}
-                title={language === "pt" ? "Ordenar por relevância" : "Sort by relevance"}
-              >
-                <Sparkles className="h-3.5 w-3.5" />
-                {language === "pt" ? "Relevância" : "Relevance"}
-              </Button>
+                  {/* Sort + KEV toggles */}
+                  <div className="grid grid-cols-2 gap-1.5">
+                    <Button
+                      variant={sortByRelevance ? "default" : "outline"}
+                      size="sm"
+                      className="h-8 text-xs font-semibold gap-1.5"
+                      onClick={() => setSortByRelevance((v) => !v)}
+                    >
+                      <Sparkles className="h-3.5 w-3.5" />
+                      {language === "pt" ? "Relevância" : "Relevance"}
+                    </Button>
+                    <Button
+                      variant={kevOnly ? "default" : "outline"}
+                      size="sm"
+                      className={`h-8 text-xs font-semibold gap-1.5 ${kevOnly ? "bg-red-600 hover:bg-red-600/90 text-white" : "text-red-500 border-red-500/30 hover:bg-red-500/5"}`}
+                      onClick={() => setKevOnly((v) => !v)}
+                    >
+                      <AlertTriangle className="h-3.5 w-3.5" />
+                      {language === "pt" ? "Explorado" : "Exploited"}
+                    </Button>
+                  </div>
 
-              {/* KEV-only filter (actively exploited) */}
-              <Button
-                variant={kevOnly ? "default" : "outline"}
-                size="sm"
-                className={`h-9 text-xs font-semibold px-3 gap-1.5 shrink-0 ${kevOnly ? "bg-red-600 hover:bg-red-600/90 text-white" : "text-red-500 border-red-500/30 hover:bg-red-500/5"}`}
-                onClick={() => setKevOnly(v => !v)}
-                title={language === "pt" ? "Apenas explorados ativamente (CISA KEV)" : "Actively exploited only (CISA KEV)"}
-              >
-                <AlertTriangle className="h-3.5 w-3.5" />
-                {language === "pt" ? "Explorado" : "Exploited"}
-              </Button>
+                  {activeFilterCount > 0 && (
+                    <Button variant="ghost" size="sm" className="h-8 w-full text-xs text-muted-foreground" onClick={clearFilters}>
+                      {language === "pt" ? "Limpar filtros" : "Clear filters"}
+                    </Button>
+                  )}
+                </PopoverContent>
+              </Popover>
 
               <div className="h-4 w-px bg-border/60 mx-1 shrink-0" />
 
@@ -1039,7 +1083,7 @@ const Newsletter = () => {
                   </Button>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 gap-4">
+                <div className="flex flex-col gap-2.5">
                   {filteredAdvisories.map((item, idx) => {
                     const enr = enrichment[item.link]?.data;
                     const mCves = mergedField(item, enr, "cves");
@@ -1048,11 +1092,17 @@ const Newsletter = () => {
                     const mIocs: IocSet | undefined = hasIocs(enr?.iocs) ? (enr?.iocs ?? undefined) : item.iocs;
                     const isCisa = item.source.toLowerCase().includes("cisa");
                     const isBleeping = item.source.toLowerCase().includes("bleeping");
+                    // Magazine layout: the first item (top of the current sort —
+                    // highest relevance or newest) renders as the featured story.
+                    const featured = idx === 0;
+                    const accent = item.severity ? (SEVERITY_ACCENT[item.severity] || SEVERITY_ACCENT.Low) : "border-l-transparent";
 
                     return (
                       <div
                         key={idx}
-                        className={`p-4 rounded-lg border bg-card transition-colors flex items-start gap-3 ${
+                        className={`rounded-lg border border-l-[3px] bg-card transition-colors flex items-start gap-3 ${accent} ${
+                          featured ? "p-5 shadow-sm ring-1 ring-primary/10" : "p-3"
+                        } ${
                           selectedNews[item.title] ? "border-primary/50 bg-primary/5" : "hover:border-primary/30"
                         }`}
                       >
@@ -1064,6 +1114,12 @@ const Newsletter = () => {
 
                         <div className="flex-1 min-w-0 space-y-1.5">
                           <div className="flex items-center gap-2 flex-wrap text-xs">
+                            {featured && (
+                              <Badge className="text-[10px] font-bold gap-1 bg-primary text-primary-foreground">
+                                <Sparkles className="h-3 w-3" />
+                                {language === "pt" ? "Destaque" : "Top story"}
+                              </Badge>
+                            )}
                             {item.severity && (
                               <span
                                 title={item.reasons?.length ? `${language === "pt" ? "Por quê" : "Why"}: ${item.reasons.join(" · ")}` : undefined}
@@ -1112,7 +1168,7 @@ const Newsletter = () => {
                             </span>
                           </div>
                           
-                          <h3 className="font-semibold text-base text-foreground hover:text-primary transition-colors flex items-center gap-2 flex-wrap">
+                          <h3 className={`font-semibold text-foreground hover:text-primary transition-colors flex items-center gap-2 flex-wrap ${featured ? "text-lg md:text-xl leading-snug" : "text-[15px]"}`}>
                             <a href={item.link} target="_blank" rel="noopener noreferrer">
                               {language === "pt" ? (item.titlePt || item.title) : item.title}
                             </a>
@@ -1128,7 +1184,14 @@ const Newsletter = () => {
                               </Badge>
                             )}
                           </h3>
-                          
+
+                          {/* Featured story gets a short teaser under the headline */}
+                          {featured && (
+                            <p className="text-sm text-muted-foreground leading-relaxed line-clamp-2">
+                              {language === "pt" ? (item.descriptionPt || item.description) : item.description}
+                            </p>
+                          )}
+
                           {/* Action row (collapsed view = title + source + these) */}
                           <div className="pt-1 flex items-center gap-1.5 flex-wrap">
                             <Button
