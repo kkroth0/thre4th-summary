@@ -1652,6 +1652,57 @@ app.delete('/api/feeds', requireAdmin, (req, res) => {
     res.json({ feeds: feedListForClient() });
 });
 
+// ─── Gestão da allow-list (quem pode logar no Threat Brief) ────────────────
+// Só admin. Entradas vindas do env (GITHUB_ALLOWED_LOGINS) aparecem marcadas
+// como "env" e não são removíveis pela UI — para tirá-las, mexe na env e
+// reinicia. O resto vem do store dinâmico em disco e é editável aqui.
+// Username GitHub: alfanumérico + hífen, sem hífen no início/fim, até 39 chars.
+const VALID_GH_LOGIN = /^[a-z0-9](?:-?[a-z0-9]){0,38}$/;
+function allowlistForClient() {
+    const seen = new Set();
+    const out = [];
+    for (const l of ALLOWED_LOGINS) {
+        if (seen.has(l)) continue;
+        seen.add(l);
+        out.push({ login: l, source: 'env', admin: isAdmin(l), removable: false });
+    }
+    for (const l of dynamicAllowlist) {
+        if (seen.has(l)) continue;
+        seen.add(l);
+        out.push({ login: l, source: 'dynamic', admin: isAdmin(l), removable: true });
+    }
+    return out;
+}
+
+app.get('/api/admin/allowlist', requireAdmin, (req, res) => {
+    res.json({ allowlist: allowlistForClient(), org: ALLOWED_ORG || null });
+});
+
+// Adiciona um login à allow-list dinâmica. Body: { login }.
+app.post('/api/admin/allowlist', requireAdmin, (req, res) => {
+    const login = String((req.body || {}).login || '').trim().toLowerCase();
+    if (!VALID_GH_LOGIN.test(login)) return res.status(400).json({ error: 'login GitHub inválido' });
+    if (ALLOWED_LOGINS.includes(login) || dynamicAllowlist.includes(login)) {
+        return res.status(409).json({ error: 'usuário já está na allow-list' });
+    }
+    dynamicAllowlist.push(login);
+    saveAllowlist();
+    res.status(201).json({ allowlist: allowlistForClient() });
+});
+
+// Remove um login da allow-list dinâmica (os do env só saem pela env). ?login=…
+app.delete('/api/admin/allowlist', requireAdmin, (req, res) => {
+    const login = String(req.query.login || (req.body || {}).login || '').trim().toLowerCase();
+    if (ALLOWED_LOGINS.includes(login)) {
+        return res.status(400).json({ error: 'login definido por env só pode ser removido na env do servidor' });
+    }
+    const before = dynamicAllowlist.length;
+    dynamicAllowlist = dynamicAllowlist.filter((l) => l !== login);
+    if (dynamicAllowlist.length === before) return res.status(404).json({ error: 'usuário não está na allow-list' });
+    saveAllowlist();
+    res.json({ allowlist: allowlistForClient() });
+});
+
 // Segredo compartilhado p/ as rotas servidor-a-servidor (worker).
 // Sem FEED_AGENT_SECRET definido, as rotas protegidas ficam desabilitadas (503),
 // pra não exporem leitura/escrita de boletim sem auth.
@@ -1736,8 +1787,29 @@ let usersStore = loadUsers();   // { githubId: { login, groqKeyEnc, createdAt, u
 // todos (fail-safe: não abrir o site por engano se a env não subiu).
 const ALLOWED_LOGINS = (process.env.GITHUB_ALLOWED_LOGINS || '').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
 const ALLOWED_ORG = (process.env.GITHUB_ALLOWED_ORG || '').trim();
+
+// Allow-list dinâmica: logins que o admin adiciona em runtime pela UI, persistidos
+// em disco (como .users.json). Somam-se aos GITHUB_ALLOWED_LOGINS (o env é o seed
+// fixo, não removível pela UI) e à org. O fail-safe do env continua valendo: sem
+// env nem org configurados, a lista dinâmica sozinha ainda deixa entrar quem foi
+// adicionado — então cuide para não esvaziar tudo sem querer.
+const ALLOWLIST_STORE_PATH = path.join(__dirname, '.allowlist.json');
+function loadAllowlist() {
+    try {
+        const arr = JSON.parse(fs.readFileSync(ALLOWLIST_STORE_PATH, 'utf8'));
+        return Array.isArray(arr) ? [...new Set(arr.map((s) => String(s).trim().toLowerCase()).filter(Boolean))] : [];
+    } catch { return []; }
+}
+function saveAllowlist() {
+    try { fs.writeFileSync(ALLOWLIST_STORE_PATH, JSON.stringify(dynamicAllowlist, null, 2)); }
+    catch (e) { console.error('allowlist store write failed:', e.message); }
+}
+let dynamicAllowlist = loadAllowlist();
+
 async function isAllowed(login, accessToken) {
-    if (ALLOWED_LOGINS.includes(login.toLowerCase())) return true;
+    const l = login.toLowerCase();
+    if (ALLOWED_LOGINS.includes(l)) return true;
+    if (dynamicAllowlist.includes(l)) return true;
     if (ALLOWED_ORG) {
         const r = await axios.get(`https://api.github.com/orgs/${ALLOWED_ORG}/members/${login}`, {
             headers: { Authorization: `Bearer ${accessToken}`, 'User-Agent': 'threatsumm4ry', Accept: 'application/vnd.github+json' },
@@ -1831,7 +1903,7 @@ app.get('/api/auth/me', (req, res) => {
     const p = verifySession(getCookie(req, 'ts_session'));
     if (!p) return res.json({ authenticated: false });
     const u = usersStore[p.sub];
-    res.json({ authenticated: true, login: p.login, hasKey: !!(u && u.groqKeyEnc) });
+    res.json({ authenticated: true, login: p.login, hasKey: !!(u && u.groqKeyEnc), isAdmin: isAdmin(p.login) });
 });
 
 app.post('/api/auth/logout', (req, res) => {

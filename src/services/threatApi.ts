@@ -1033,7 +1033,7 @@ export const fetchJob = async (id: string): Promise<BoletimJob> => {
 };
 
 // ── Auth GitHub + BYOK (chave Groq por usuário) ──────────────────────────────
-export interface AuthState { authenticated: boolean; login?: string; hasKey?: boolean; }
+export interface AuthState { authenticated: boolean; login?: string; hasKey?: boolean; isAdmin?: boolean; }
 
 // Estado de login (cookie de sessão é httpOnly — o front só sabe via /me).
 export const fetchAuth = async (): Promise<AuthState> => {
@@ -1098,6 +1098,37 @@ export const deleteFeed = async (url: string): Promise<FeedSource[]> => {
 
 export const logout = async (): Promise<void> => {
     await fetch('/api/auth/logout', { method: 'POST' }).catch(() => {});
+};
+
+// ─── Allow-list (admin) ────────────────────────────────────────────────────
+export interface AllowlistEntry { login: string; source: 'env' | 'dynamic'; admin: boolean; removable: boolean; }
+export interface AllowlistResponse { allowlist: AllowlistEntry[]; org: string | null; }
+
+const allowlistError = async (r: Response): Promise<never> => {
+    const e = await r.json().catch(() => ({}));
+    throw new Error((e as { error?: string }).error || `Allowlist API error: ${r.status}`);
+};
+
+export const fetchAllowlist = async (): Promise<AllowlistResponse> => {
+    const r = await fetch('/api/admin/allowlist');
+    if (!r.ok) return allowlistError(r);
+    return r.json();
+};
+
+export const addAllowlistEntry = async (login: string): Promise<AllowlistEntry[]> => {
+    const r = await fetch('/api/admin/allowlist', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ login }),
+    });
+    if (!r.ok) return allowlistError(r);
+    return (await r.json()).allowlist;
+};
+
+export const removeAllowlistEntry = async (login: string): Promise<AllowlistEntry[]> => {
+    const r = await fetch(`/api/admin/allowlist?login=${encodeURIComponent(login)}`, { method: 'DELETE' });
+    if (!r.ok) return allowlistError(r);
+    return (await r.json()).allowlist;
 };
 
 // Salva a chave Groq do usuário (cifrada no servidor). Devolve { hasKey }.

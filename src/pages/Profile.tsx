@@ -10,6 +10,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
+import AllowlistManager from "@/components/AllowlistManager";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useSidebar } from "@/contexts/SidebarContext";
 import { useAuth } from "@/contexts/AuthContext";
@@ -89,6 +90,9 @@ const Profile = () => {
           </Button>
         </CardContent>
       </Card>
+
+      {/* Allow-list (só admin): adicionar/remover quem pode logar */}
+      {auth.isAdmin && <AllowlistManager />}
 
       {/* Chaves de API -> Settings */}
       <Link to="/settings" className="block mb-5 group">
