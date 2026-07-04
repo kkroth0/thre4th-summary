@@ -1,5 +1,5 @@
 import { Link, useLocation } from "react-router-dom";
-import { BookOpen, Shield, Mail, Activity, Terminal, ArrowLeft, ShieldAlert, MailWarning, ChevronLeft, ChevronRight, Globe, CalendarCheck, Crosshair, FileText, LogIn, Settings as SettingsIcon, Megaphone } from "lucide-react";
+import { BookOpen, Shield, Mail, Activity, Terminal, ArrowLeft, ShieldAlert, MailWarning, ChevronLeft, ChevronRight, Globe, CalendarCheck, Crosshair, FileText, LogIn, Settings as SettingsIcon, Megaphone, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -313,6 +313,26 @@ export function Header({ actions, logoAddon, onLogoClick, showBackButton = false
         <div className="flex flex-col gap-4 border-t border-primary/10 pt-4">
           {/* User / auth */}
           {renderUser()}
+
+          {/* Admin (admin only) */}
+          {!authLoading && auth.authenticated && auth.isAdmin && (
+            <Link to="/admin" className="w-full block -mt-2">
+              {isCollapsed ? (
+                <Tooltip delayDuration={150}>
+                  <TooltipTrigger asChild>
+                    <Button variant="ghost" className={cn("w-11 h-11 rounded-xl mx-auto justify-center px-0", pathname === "/admin" ? "bg-primary/15 text-primary ring-1 ring-inset ring-primary/20" : "text-muted-foreground/80 hover:text-foreground hover:bg-muted/20")}>
+                      <ShieldCheck className="h-[18px] w-[18px]" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="right" className="font-semibold text-xs">Admin</TooltipContent>
+                </Tooltip>
+              ) : (
+                <Button variant="ghost" className={cn("w-full h-10 rounded-xl justify-start px-3.5 gap-3 text-[13px] font-semibold", pathname === "/admin" ? "bg-primary/15 text-primary ring-1 ring-inset ring-primary/20" : "text-muted-foreground/80 hover:text-foreground hover:bg-muted/20")}>
+                  <ShieldCheck className="h-[18px] w-[18px]" /> Admin
+                </Button>
+              )}
+            </Link>
+          )}
 
           {/* Settings (signed-in only) */}
           {!authLoading && auth.authenticated && (

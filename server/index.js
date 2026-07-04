@@ -1732,6 +1732,30 @@ app.delete('/api/admin/allowlist', requireAdmin, (req, res) => {
     res.json({ allowlist: allowlistForClient() });
 });
 
+// Status das chaves de integração do IOC search (admin). Diz o que está
+// configurado vs faltando, pra o painel /admin. Reaproveita getKeys()/abuseChKey().
+app.get('/api/admin/integrations', requireAdmin, (req, res) => {
+    const has = (env) => getKeys(env).length > 0;
+    const set = (env) => !!(process.env[env] || '').trim();
+    const integrations = [
+        { name: 'VirusTotal', env: 'VIRUSTOTAL_API_KEY', configured: has('VIRUSTOTAL_API_KEY'), required: true },
+        { name: 'AbuseIPDB', env: 'ABUSEIPDB_API_KEY', configured: has('ABUSEIPDB_API_KEY'), required: true },
+        { name: 'AlienVault OTX', env: 'ALIENVAULT_API_KEY', configured: set('ALIENVAULT_API_KEY'), required: false, note: 'sem chave a OTX limita por IP (a VPS dá 500 em lookups de IP)' },
+        { name: 'Shodan', env: 'SHODAN_API_KEY', configured: set('SHODAN_API_KEY'), required: true },
+        { name: 'abuse.ch (MalwareBazaar/ThreatFox/URLhaus)', env: 'ABUSE_CH_API_KEY', configured: !!abuseChKey(), required: true },
+        { name: 'Hybrid Analysis', env: 'HYBRID_ANALYSIS_API_KEY', configured: set('HYBRID_ANALYSIS_API_KEY'), required: true },
+        { name: 'Criminal IP', env: 'CRIMINALIP_API_KEY', configured: set('CRIMINALIP_API_KEY'), required: true },
+        { name: 'MetaDefender', env: 'METADEFENDER_API_KEY', configured: set('METADEFENDER_API_KEY'), required: true },
+        { name: 'WHOIS', env: 'WHOIS_API_KEY', configured: set('WHOIS_API_KEY'), required: true },
+        { name: 'Censys', env: 'CENSYS_API_KEY', configured: set('CENSYS_API_KEY'), required: true },
+        { name: 'Pulsedive', env: 'PULSEDIVE_API_KEY', configured: set('PULSEDIVE_API_KEY'), required: false, note: 'usa o tier free sem chave' },
+        { name: 'PhishTank', env: 'PHISHTANK_API_KEY', configured: set('PHISHTANK_API_KEY'), required: false },
+    ];
+    // Provedores que não precisam de chave nenhuma.
+    const keyless = ['PhishStats', 'OpenPhish', 'Team Cymru', 'CIRCL hashlookup', 'IP Geolocation', 'Ransomware.live', 'DNSBL'];
+    res.json({ integrations, keyless });
+});
+
 // ─── Publicações / Advisories (blog do CISO advisor) ───────────────────────
 // Posts em Markdown, store flat em disco (como .users.json). Leitura é pública,
 // mas só de publicados; rascunhos e qualquer escrita são só admin. O slug é a

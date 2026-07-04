@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Navigate, Link } from "react-router-dom";
 import {
   Github, KeyRound, LogOut, CheckCircle2, Loader2, ArrowRight, FileText,
-  ExternalLink, Settings as SettingsIcon,
+  ExternalLink, Settings as SettingsIcon, ShieldCheck,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -10,7 +10,6 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
-import AllowlistManager from "@/components/AllowlistManager";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useSidebar } from "@/contexts/SidebarContext";
 import { useAuth } from "@/contexts/AuthContext";
@@ -91,8 +90,25 @@ const Profile = () => {
         </CardContent>
       </Card>
 
-      {/* Allow-list (só admin): adicionar/remover quem pode logar */}
-      {auth.isAdmin && <AllowlistManager />}
+      {/* Admin (só admin): allow-list, publicações, integrações num só lugar */}
+      {auth.isAdmin && (
+        <Link to="/admin" className="block mb-5 group">
+          <Card className="transition-colors group-hover:border-primary/30">
+            <CardContent className="p-5 flex items-center gap-4">
+              <span className="h-11 w-11 rounded-xl bg-primary/10 ring-1 ring-inset ring-primary/20 flex items-center justify-center shrink-0">
+                <ShieldCheck className="h-5 w-5 text-primary" />
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="font-medium">{pt ? "Painel de administração" : "Admin panel"}</div>
+                <div className="text-sm text-muted-foreground">
+                  {pt ? "Allow-list, publicações e status das integrações." : "Allow-list, posts and integration status."}
+                </div>
+              </div>
+              <ArrowRight className="h-4 w-4 text-muted-foreground shrink-0" />
+            </CardContent>
+          </Card>
+        </Link>
+      )}
 
       {/* Chaves de API -> Settings */}
       <Link to="/settings" className="block mb-5 group">

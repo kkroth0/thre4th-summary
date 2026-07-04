@@ -25,6 +25,7 @@ const PatchTuesday = lazy(() => import("./pages/PatchTuesday"));
 const Features = lazy(() => import("./pages/Features"));
 const Advisories = lazy(() => import("./pages/Advisories"));
 const AdvisoryPost = lazy(() => import("./pages/AdvisoryPost"));
+const Admin = lazy(() => import("./pages/Admin"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
 const queryClient = new QueryClient();
@@ -69,6 +70,7 @@ const App = () => (
                 <Route path="/login" element={<Login />} />
                 <Route path="/profile" element={<Profile />} />
                 <Route path="/settings" element={<Settings />} />
+                <Route path="/admin" element={<Admin />} />
 
                 <Route path="*" element={<NotFound />} />
               </Routes>

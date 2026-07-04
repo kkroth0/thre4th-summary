@@ -1145,6 +1145,16 @@ export const removeAllowlistEntry = async (login: string): Promise<AllowlistEntr
     return (await r.json()).allowlist;
 };
 
+// ─── Status das integrações (admin) ────────────────────────────────────────
+export interface IntegrationStatus { name: string; env: string; configured: boolean; required: boolean; note?: string; }
+export interface IntegrationsResponse { integrations: IntegrationStatus[]; keyless: string[]; }
+
+export const fetchIntegrationStatus = async (): Promise<IntegrationsResponse> => {
+    const r = await fetch('/api/admin/integrations');
+    if (!r.ok) return allowlistError(r);
+    return r.json();
+};
+
 // ─── Publicações / Advisories (blog) ───────────────────────────────────────
 export interface Post {
     id: string; slug: string; title: string; summary: string; body: string;
