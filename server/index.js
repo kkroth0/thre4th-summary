@@ -470,6 +470,13 @@ app.post('/api/shodan', scanLimiter, async (req, res) => {
     }
 });
 
+// abuse.ch usa UMA Auth-Key por conta, válida em MalwareBazaar, ThreatFox e
+// URLhaus (e YARAify). Aceita uma env dedicada `ABUSE_CH_API_KEY` ou cai em
+// qualquer uma das específicas — assim configurar uma só chave já liga todos os
+// serviços abuse.ch. Desde 2024 a auth é obrigatória: sem chave, tudo dá 401.
+const abuseChKey = () => (process.env.ABUSE_CH_API_KEY || process.env.THREATFOX_API_KEY
+    || process.env.URLHAUS_API_KEY || process.env.MALWAREBAZAAR_API_KEY || '').trim();
+
 // URLhaus
 app.post('/api/urlhaus', scanLimiter, async (req, res) => {
     const { query } = req.body;
@@ -486,7 +493,8 @@ app.post('/api/urlhaus', scanLimiter, async (req, res) => {
 
         // abuse.ch now requires an Auth-Key header on all URLhaus API queries.
         const headers = { "Content-Type": "application/x-www-form-urlencoded" };
-        if (process.env.URLHAUS_API_KEY) headers['Auth-Key'] = process.env.URLHAUS_API_KEY;
+        const abKey = abuseChKey();
+        if (abKey) headers['Auth-Key'] = abKey;
 
         const response = await axios.post(`https://urlhaus-api.abuse.ch/v1/host/`,
             params.toString(),
@@ -513,9 +521,14 @@ app.post('/api/malwarebazaar', scanLimiter, async (req, res) => {
         params.append('query', 'get_info');
         params.append('hash', sanitized);
 
+        // abuse.ch exige Auth-Key em todas as consultas (inclusive MalwareBazaar).
+        const headers = { "Content-Type": "application/x-www-form-urlencoded" };
+        const abKey = abuseChKey();
+        if (abKey) headers["Auth-Key"] = abKey;
+
         const response = await axios.post(`https://mb-api.abuse.ch/api/v1/`,
             params.toString(),
-            { headers: { "Content-Type": "application/x-www-form-urlencoded" } }
+            { headers }
         );
         res.json(response.data);
     } catch (error) {
@@ -536,7 +549,8 @@ app.post('/api/threatfox', scanLimiter, async (req, res) => {
         const sanitized = sanitizeQuery(query, queryType);
 
         const headers = { "Content-Type": "application/json" };
-        if (process.env.THREATFOX_API_KEY) headers["Auth-Key"] = process.env.THREATFOX_API_KEY;
+        const abKey = abuseChKey();
+        if (abKey) headers["Auth-Key"] = abKey;
 
         const response = await axios.post(
             `https://threatfox-api.abuse.ch/api/v1/`,
@@ -646,7 +660,11 @@ app.post('/api/circl', scanLimiter, async (req, res) => {
         if (queryType !== "hash") return res.json({ data: { "Status": "Hash only" } });
 
         const sanitized = sanitizeQuery(query, 'hash');
-        const response = await axios.get(`https://hashlookup.circl.lu/lookup/sha256/${sanitized}`);
+        // CIRCL hashlookup tem endpoints separados por algoritmo — usar o certo
+        // pelo tamanho (MD5=32, SHA1=40, SHA256=64), senão devolve 400/404.
+        const algo = sanitized.length === 32 ? 'md5' : sanitized.length === 40 ? 'sha1' : 'sha256';
+        const response = await axios.get(`https://hashlookup.circl.lu/lookup/${algo}/${sanitized}`,
+            { headers: { Accept: 'application/json' } });
         res.json(response.data);
     } catch (error) {
         const { status, message } = sanitizeError(error);
