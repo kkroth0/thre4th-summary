@@ -1902,6 +1902,47 @@ ${items}
     res.send(xml);
 });
 
+// ─── Scans salvos por usuário (histórico do IOC search) ────────────────────
+// Store flat por usuário: cada scan guarda a query + o veredito consensual, pra
+// revisitar de qualquer dispositivo. De-dup por query (mantém o mais recente),
+// cap por usuário. Só a própria sessão lê/escreve os seus.
+const SCANS_STORE_PATH = path.join(__dirname, '.scans.json');
+function loadScansStore() { try { const o = JSON.parse(fs.readFileSync(SCANS_STORE_PATH, 'utf8')); return (o && typeof o === 'object') ? o : {}; } catch { return {}; } }
+function saveScansStore() { try { fs.writeFileSync(SCANS_STORE_PATH, JSON.stringify(scansStore, null, 2)); } catch (e) { console.error('scans store write failed:', e.message); } }
+let scansStore = loadScansStore();   // { userId: [ {id, query, queryType, threatLevel, score, detections, totalVendors, at} ] }
+const SCANS_CAP = 100;
+
+app.get('/api/user/scans', requireAuth, (req, res) => {
+    res.json({ scans: scansStore[req.user.sub] || [] });
+});
+
+app.post('/api/user/scans', requireAuth, (req, res) => {
+    const b = req.body || {};
+    const query = String(b.query || '').trim();
+    if (!query) return res.status(400).json({ error: 'query obrigatória' });
+    const entry = {
+        id: crypto.randomBytes(6).toString('hex'),
+        query: query.slice(0, 512),
+        queryType: String(b.queryType || '').slice(0, 16),
+        threatLevel: String(b.threatLevel || 'unknown').slice(0, 16),
+        score: Number(b.score) || 0,
+        detections: Number(b.detections) || 0,
+        totalVendors: Number(b.totalVendors) || 0,
+        at: new Date().toISOString(),
+    };
+    const list = (scansStore[req.user.sub] || []).filter((s) => s.query !== entry.query);
+    list.unshift(entry);
+    scansStore[req.user.sub] = list.slice(0, SCANS_CAP);
+    saveScansStore();
+    res.status(201).json({ scans: scansStore[req.user.sub] });
+});
+
+app.delete('/api/user/scans/:id', requireAuth, (req, res) => {
+    scansStore[req.user.sub] = (scansStore[req.user.sub] || []).filter((s) => s.id !== req.params.id);
+    saveScansStore();
+    res.json({ scans: scansStore[req.user.sub] });
+});
+
 // Segredo compartilhado p/ as rotas servidor-a-servidor (worker).
 // Sem FEED_AGENT_SECRET definido, as rotas protegidas ficam desabilitadas (503),
 // pra não exporem leitura/escrita de boletim sem auth.

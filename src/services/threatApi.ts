@@ -1155,6 +1155,40 @@ export const fetchIntegrationStatus = async (): Promise<IntegrationsResponse> =>
     return r.json();
 };
 
+// ─── Scans salvos (histórico do IOC search, por usuário) ───────────────────
+export interface SavedScan {
+    id: string; query: string; queryType: string;
+    threatLevel: string; score: number; detections: number; totalVendors: number; at: string;
+}
+export interface SaveScanInput { query: string; queryType?: string; threatLevel?: string; score?: number; detections?: number; totalVendors?: number; }
+
+const scanError = async (r: Response): Promise<never> => {
+    const e = await r.json().catch(() => ({}));
+    throw new Error((e as { error?: string }).error || `Scans API error: ${r.status}`);
+};
+
+export const fetchScans = async (): Promise<SavedScan[]> => {
+    const r = await fetch('/api/user/scans');
+    if (!r.ok) return scanError(r);
+    return (await r.json()).scans;
+};
+
+export const saveScan = async (input: SaveScanInput): Promise<SavedScan[]> => {
+    const r = await fetch('/api/user/scans', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(input),
+    });
+    if (!r.ok) return scanError(r);
+    return (await r.json()).scans;
+};
+
+export const deleteScan = async (id: string): Promise<SavedScan[]> => {
+    const r = await fetch(`/api/user/scans/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    if (!r.ok) return scanError(r);
+    return (await r.json()).scans;
+};
+
 // ─── Publicações / Advisories (blog) ───────────────────────────────────────
 export interface Post {
     id: string; slug: string; title: string; summary: string; body: string;

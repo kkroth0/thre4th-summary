@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
 import { getFieldCategory } from "@/components/VendorDataTable";
-import { Shield, AlertTriangle, Bug, FileSearch, Globe, Link as LinkIcon, Radar, Database, Eye, Search, BookOpen, Layers, LayoutGrid, CheckCircle2, Mail, ArrowRight, Upload, Copy, Check, Clock, Download, FileJson, FileCode, ChevronDown } from "lucide-react";
+import { Shield, AlertTriangle, Bug, FileSearch, Globe, Link as LinkIcon, Radar, Database, Eye, Search, BookOpen, Layers, LayoutGrid, CheckCircle2, Mail, ArrowRight, Upload, Copy, Check, Clock, Download, FileJson, FileCode, ChevronDown, Bookmark } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -30,7 +30,9 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { MultiIpSummary } from "@/components/MultiIpSummary";
-import { fetchThreatDataProgressive } from "@/services/threatApi";
+import { fetchThreatDataProgressive, saveScan } from "@/services/threatApi";
+import { ScanHistory } from "@/components/ScanHistory";
+import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { ThreatIntelligenceResult } from "@/types/threat-intelligence";
 // jsPDF + autoTable are loaded lazily inside exportGlobalPDF (see below) so the
@@ -334,6 +336,8 @@ const ALL_VENDORS = [
 
 const Index = () => {
   const { isCollapsed } = useSidebar();
+  const { auth } = useAuth();
+  const [savingScans, setSavingScans] = useState(false);
   const [query, setQuery] = useState("");
   const [selectedVendors, setSelectedVendors] = useState<string[]>(ALL_VENDORS);
 
@@ -434,10 +438,36 @@ const Index = () => {
     }
   }, []);
 
-  const handleSearch = async (e?: React.FormEvent) => {
+  // Salva os resultados atuais (com veredito) no histórico da conta.
+  const saveCurrentScans = async () => {
+    const done = results.filter((r) => r.threatLevel && r.threatLevel !== "unknown");
+    if (!done.length) return;
+    setSavingScans(true);
+    try {
+      for (const r of done) {
+        await saveScan({
+          query: r.query,
+          threatLevel: r.threatLevel,
+          score: r.overallScore,
+          detections: r.detections,
+          totalVendors: r.totalVendors,
+        });
+      }
+      toast({
+        title: language === "pt" ? "Scan salvo" : "Scan saved",
+        description: language === "pt" ? `${done.length} scan(s) no seu histórico.` : `${done.length} scan(s) in your history.`,
+      });
+    } catch (err) {
+      toast({ title: t('error'), description: err instanceof Error ? err.message : "", variant: "destructive" });
+    } finally {
+      setSavingScans(false);
+    }
+  };
+
+  const handleSearch = async (e?: React.FormEvent, override?: string) => {
     if (e) e.preventDefault();
 
-    const rawQuery = query.trim();
+    const rawQuery = (typeof override === "string" ? override : query).trim();
 
     if (!rawQuery) {
       toast({
@@ -1681,6 +1711,22 @@ const Index = () => {
                 </TabsList>
 
                 <div className="flex items-center gap-2 self-start sm:self-auto">
+                  {auth.authenticated && (
+                    <>
+                      <ScanHistory onPick={(q) => { setQuery(q); handleSearch(undefined, q); }} />
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-9 px-4 rounded-full border-primary/20 hover:bg-primary/10 shadow-sm flex items-center gap-2"
+                        onClick={saveCurrentScans}
+                        disabled={savingScans}
+                        title={language === "pt" ? "Salvar scan no histórico" : "Save scan to history"}
+                      >
+                        <Bookmark className="h-4 w-4" />
+                        <span>{language === "pt" ? "Salvar" : "Save"}</span>
+                      </Button>
+                    </>
+                  )}
                   <Button
                     variant="outline"
                     size="sm"
