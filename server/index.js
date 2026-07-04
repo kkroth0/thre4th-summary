@@ -1703,6 +1703,116 @@ app.delete('/api/admin/allowlist', requireAdmin, (req, res) => {
     res.json({ allowlist: allowlistForClient() });
 });
 
+// ─── Publicações / Advisories (blog do CISO advisor) ───────────────────────
+// Posts em Markdown, store flat em disco (como .users.json). Leitura é pública,
+// mas só de publicados; rascunhos e qualquer escrita são só admin. O slug é a
+// chave estável na URL. Sem render de Markdown no servidor — o corpo vai cru pro
+// cliente, que renderiza (react-markdown, sem HTML bruto, então sem risco de XSS).
+const POSTS_STORE_PATH = path.join(__dirname, '.posts.json');
+function loadPosts() { try { const a = JSON.parse(fs.readFileSync(POSTS_STORE_PATH, 'utf8')); return Array.isArray(a) ? a : []; } catch { return []; } }
+function savePosts() { try { fs.writeFileSync(POSTS_STORE_PATH, JSON.stringify(postsStore, null, 2)); } catch (e) { console.error('posts store write failed:', e.message); } }
+let postsStore = loadPosts();
+
+function slugify(s) {
+    return String(s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+        .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 80) || 'post';
+}
+function uniqueSlug(base, ignoreId) {
+    let slug = base, n = 2;
+    while (postsStore.some((p) => p.slug === slug && p.id !== ignoreId)) slug = `${base}-${n++}`;
+    return slug;
+}
+function normTags(t) {
+    const arr = Array.isArray(t) ? t : (typeof t === 'string' ? t.split(',') : []);
+    return [...new Set(arr.map((x) => String(x).trim()).filter(Boolean))].slice(0, 12);
+}
+// Resumo p/ a listagem: tudo menos o corpo (economiza payload).
+function postCard(p) {
+    const { body, ...rest } = p;
+    return rest;
+}
+// true se a sessão atual é de um admin (leitura opcional: não exige login).
+function sessionAdmin(req) {
+    const p = verifySession(getCookie(req, 'ts_session'));
+    return !!(p && isAdmin(p.login));
+}
+
+// Lista. Público vê só publicados (mais novo primeiro); admin vê tudo.
+app.get('/api/posts', (req, res) => {
+    const admin = sessionAdmin(req);
+    const list = postsStore
+        .filter((p) => admin || p.published)
+        .sort((a, b) => String(b.publishedAt || b.createdAt).localeCompare(String(a.publishedAt || a.createdAt)))
+        .map(postCard);
+    res.json({ posts: list, isAdmin: admin });
+});
+
+// Post por slug (com corpo). Rascunho só admin.
+app.get('/api/posts/:slug', (req, res) => {
+    const admin = sessionAdmin(req);
+    const p = postsStore.find((x) => x.slug === req.params.slug);
+    if (!p || (!p.published && !admin)) return res.status(404).json({ error: 'publicação não encontrada' });
+    res.json({ post: p, isAdmin: admin });
+});
+
+// Cria. Admin. Body: { title, summary, body, tags, published, slug? }.
+app.post('/api/posts', requireAdmin, (req, res) => {
+    const b = req.body || {};
+    const title = String(b.title || '').trim();
+    if (!title) return res.status(400).json({ error: 'título obrigatório' });
+    const now = new Date().toISOString();
+    const published = !!b.published;
+    const post = {
+        id: crypto.randomBytes(8).toString('hex'),
+        slug: uniqueSlug(slugify(b.slug || title)),
+        title,
+        summary: String(b.summary || '').trim(),
+        body: String(b.body || ''),
+        tags: normTags(b.tags),
+        author: req.user.login,
+        published,
+        createdAt: now,
+        updatedAt: now,
+        publishedAt: published ? now : null,
+    };
+    postsStore.push(post);
+    savePosts();
+    res.status(201).json({ post });
+});
+
+// Edita (parcial). Admin. :id na rota.
+app.patch('/api/posts/:id', requireAdmin, (req, res) => {
+    const p = postsStore.find((x) => x.id === req.params.id);
+    if (!p) return res.status(404).json({ error: 'publicação não encontrada' });
+    const b = req.body || {};
+    if (b.title !== undefined) {
+        const t = String(b.title).trim();
+        if (!t) return res.status(400).json({ error: 'título obrigatório' });
+        p.title = t;
+    }
+    if (b.summary !== undefined) p.summary = String(b.summary).trim();
+    if (b.body !== undefined) p.body = String(b.body);
+    if (b.tags !== undefined) p.tags = normTags(b.tags);
+    if (b.slug !== undefined) p.slug = uniqueSlug(slugify(b.slug || p.title), p.id);
+    if (b.published !== undefined) {
+        const np = !!b.published;
+        if (np && !p.published) p.publishedAt = new Date().toISOString();
+        p.published = np;
+    }
+    p.updatedAt = new Date().toISOString();
+    savePosts();
+    res.json({ post: p });
+});
+
+// Remove. Admin.
+app.delete('/api/posts/:id', requireAdmin, (req, res) => {
+    const before = postsStore.length;
+    postsStore = postsStore.filter((x) => x.id !== req.params.id);
+    if (postsStore.length === before) return res.status(404).json({ error: 'publicação não encontrada' });
+    savePosts();
+    res.json({ ok: true });
+});
+
 // Segredo compartilhado p/ as rotas servidor-a-servidor (worker).
 // Sem FEED_AGENT_SECRET definido, as rotas protegidas ficam desabilitadas (503),
 // pra não exporem leitura/escrita de boletim sem auth.

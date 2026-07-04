@@ -17,8 +17,8 @@ const COPY: Record<Feature, { pt: [string, string]; en: [string, string] }> = {
     en: ["Threat Brief", "Paste a link to a report or news post and get an organized summary."],
   },
   "advisory-feed": {
-    pt: ["Feed de Advisories", "Um resumo diário dos avisos de segurança que importam."],
-    en: ["Advisory Feed", "A daily rundown of the security alerts that matter."],
+    pt: ["Coletor de Intel", "Um resumo diário dos avisos de segurança que importam."],
+    en: ["Intel Collector", "A daily rundown of the security alerts that matter."],
   },
   "threat-hunting": {
     pt: ["Threat Hunting", "Ferramentas pra investigar e cruzar indicadores (IOCs)."],

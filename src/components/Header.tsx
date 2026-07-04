@@ -1,5 +1,5 @@
 import { Link, useLocation } from "react-router-dom";
-import { BookOpen, Shield, Mail, Activity, Terminal, ArrowLeft, ShieldAlert, MailWarning, ChevronLeft, ChevronRight, Globe, CalendarCheck, Crosshair, FileText, LogIn, Settings as SettingsIcon } from "lucide-react";
+import { BookOpen, Shield, Mail, Activity, Terminal, ArrowLeft, ShieldAlert, MailWarning, ChevronLeft, ChevronRight, Globe, CalendarCheck, Crosshair, FileText, LogIn, Settings as SettingsIcon, Megaphone } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -94,13 +94,14 @@ export function Header({ actions, logoAddon, onLogoClick, showBackButton = false
 
   const navItems = [
     { path: "/", label: t("appName") || "ThreatSumm4ry", icon: Activity, isHome: true },
+    { path: "/advisories", label: "Advisories", icon: Megaphone },
     { path: "/vendors", label: t("vendors") || "Vendors", icon: BookOpen },
     { path: "/dnsbl", label: t("dnsblCheck") || "DNSBL Check", icon: ShieldAlert },
     { path: "/dns-visualizer", label: t("dnsVisualizer") || "DNS Visualizer", icon: Globe },
     { path: "/phishing-analyzer", label: language === "pt" ? "Análise de Phishing" : "Phishing Analyzer", icon: MailWarning },
     { path: "/threat-hunting", label: language === "pt" ? "Threat Hunting" : "Threat Hunting", icon: Crosshair, premium: true },
     { path: "/threat-brief", label: "Threat Brief", icon: FileText, premium: true },
-    { path: "/newsletter", label: language === "pt" ? "Feed de Advisories" : "Advisory Feed", icon: Mail, premium: true },
+    { path: "/newsletter", label: language === "pt" ? "Coletor de Intel" : "Intel Collector", icon: Mail, premium: true },
     { path: "/cves", label: language === "pt" ? "Painel de CVEs" : "CVE Dashboard", icon: Shield },
     { path: "/patch-tuesday", label: language === "pt" ? "Patch Tuesday" : "Patch Tuesday", icon: CalendarCheck },
     { path: "/features", label: language === "pt" ? "Funcionalidades" : "Features", icon: Terminal },

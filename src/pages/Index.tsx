@@ -1493,7 +1493,7 @@ const Index = () => {
               to="/newsletter"
               className="text-xs font-semibold text-muted-foreground hover:text-foreground hover:underline underline-offset-4 transition-all duration-200"
             >
-              {language === "pt" ? "Feed de Advisories" : "Advisory Feed"}
+              {language === "pt" ? "Coletor de Intel" : "Intel Collector"}
             </Link>
             <Link
               to="/cves"

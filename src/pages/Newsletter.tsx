@@ -713,7 +713,7 @@ const Newsletter = () => {
             <div>
               <h1 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
                 <Mail className="h-6 w-6 text-primary" />
-                {language === "pt" ? "Feed de Advisories" : "Advisory Feed"}
+                {language === "pt" ? "Coletor de Intel" : "Intel Collector"}
               </h1>
               <p className="text-xs text-muted-foreground mt-1">
                 {language === "pt"

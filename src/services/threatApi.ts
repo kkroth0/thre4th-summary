@@ -1131,6 +1131,57 @@ export const removeAllowlistEntry = async (login: string): Promise<AllowlistEntr
     return (await r.json()).allowlist;
 };
 
+// ─── Publicações / Advisories (blog) ───────────────────────────────────────
+export interface Post {
+    id: string; slug: string; title: string; summary: string; body: string;
+    tags: string[]; author: string; published: boolean;
+    createdAt: string; updatedAt: string; publishedAt: string | null;
+}
+export type PostCard = Omit<Post, "body">;
+export interface PostInput { title: string; summary?: string; body?: string; tags?: string[]; published?: boolean; slug?: string; }
+
+const postError = async (r: Response): Promise<never> => {
+    const e = await r.json().catch(() => ({}));
+    throw new Error((e as { error?: string }).error || `Posts API error: ${r.status}`);
+};
+
+export const fetchPosts = async (): Promise<{ posts: PostCard[]; isAdmin: boolean }> => {
+    const r = await fetch('/api/posts');
+    if (!r.ok) return postError(r);
+    return r.json();
+};
+
+export const fetchPost = async (slug: string): Promise<{ post: Post; isAdmin: boolean }> => {
+    const r = await fetch(`/api/posts/${encodeURIComponent(slug)}`);
+    if (!r.ok) return postError(r);
+    return r.json();
+};
+
+export const createPost = async (input: PostInput): Promise<Post> => {
+    const r = await fetch('/api/posts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(input),
+    });
+    if (!r.ok) return postError(r);
+    return (await r.json()).post;
+};
+
+export const updatePost = async (id: string, input: Partial<PostInput>): Promise<Post> => {
+    const r = await fetch(`/api/posts/${encodeURIComponent(id)}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(input),
+    });
+    if (!r.ok) return postError(r);
+    return (await r.json()).post;
+};
+
+export const deletePost = async (id: string): Promise<void> => {
+    const r = await fetch(`/api/posts/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    if (!r.ok) return postError(r);
+};
+
 // Salva a chave Groq do usuário (cifrada no servidor). Devolve { hasKey }.
 export const saveGroqKey = async (key: string): Promise<{ hasKey: boolean }> => {
     const r = await fetch('/api/user/groq-key', {

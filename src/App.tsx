@@ -23,6 +23,8 @@ const DailyBulletin = lazy(() => import("./pages/DailyBulletin"));
 const DnsVisualizer = lazy(() => import("./pages/DnsVisualizer"));
 const PatchTuesday = lazy(() => import("./pages/PatchTuesday"));
 const Features = lazy(() => import("./pages/Features"));
+const Advisories = lazy(() => import("./pages/Advisories"));
+const AdvisoryPost = lazy(() => import("./pages/AdvisoryPost"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
 const queryClient = new QueryClient();
@@ -49,6 +51,8 @@ const App = () => (
                 <Route path="/dns-visualizer" element={<DnsVisualizer />} />
                 <Route path="/patch-tuesday" element={<PatchTuesday />} />
                 <Route path="/features" element={<Features />} />
+                <Route path="/advisories" element={<Advisories />} />
+                <Route path="/advisories/:slug" element={<AdvisoryPost />} />
 
                 {/* Tool Routes */}
                 <Route path="/vendors" element={<VendorDirectory />} />
