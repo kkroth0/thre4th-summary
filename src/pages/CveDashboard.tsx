@@ -44,7 +44,7 @@ interface ExploitedCve {
 
 const CveDashboard = () => {
   const { isCollapsed } = useSidebar();
-  const { t, language } = useLanguage();
+  const { t, language, tr } = useLanguage();
   
   // CVE Dashboard States
   const [recentCves, setRecentCves] = useState<CveItem[]>([]);
@@ -164,7 +164,7 @@ const CveDashboard = () => {
       if (!isBackground) {
         setCveError(err.message);
       } else {
-        toast.error(language === "pt" ? "Erro ao atualizar CVEs em segundo plano" : "Failed to background refresh CVEs");
+        toast.error(tr({ pt: "Erro ao atualizar CVEs em segundo plano", en: "Failed to background refresh CVEs", es: "Error al actualizar CVEs en segundo plano", fr: "Échec de l'actualisation des CVE en arrière-plan" }));
       }
     } finally {
       setLoadingCves(false);
@@ -189,7 +189,7 @@ const CveDashboard = () => {
   // Trigger Pivot Search on main dashboard
   const handlePivotSearch = (cveId: string) => {
     localStorage.setItem("pivotSearchQuery", cveId);
-    toast.success(language === "pt" ? `Pesquisando ${cveId} no painel...` : `Searching ${cveId} on main dashboard...`);
+    toast.success(tr({ pt: `Pesquisando ${cveId} no painel...`, en: `Searching ${cveId} on main dashboard...`, es: `Buscando ${cveId} en el panel...`, fr: `Recherche de ${cveId} dans le tableau de bord...` }));
     window.location.href = "/";
   };
 
@@ -405,16 +405,19 @@ const CveDashboard = () => {
                 {t("cveDashboard") || "CVE Dashboard"}
               </h1>
               <p className="text-xs text-muted-foreground mt-1">
-                {language === "pt"
-                  ? "Acompanhe e analise vulnerabilidades críticas recentemente publicadas e explorações ativas relatadas pela CISA"
-                  : "Track and analyze critical vulnerabilities and active exploits in the wild reported by CISA"}
+                {tr({
+                  pt: "Acompanhe e analise vulnerabilidades críticas recentemente publicadas e explorações ativas relatadas pela CISA",
+                  en: "Track and analyze critical vulnerabilities and active exploits in the wild reported by CISA",
+                  es: "Monitorea y analiza vulnerabilidades críticas recién publicadas y exploits activos reportados por CISA",
+                  fr: "Suivez et analysez les vulnérabilités critiques récemment publiées et les exploits actifs signalés par la CISA",
+                })}
               </p>
             </div>
             {/* Last updated and refresh controls */}
             <div className="flex items-center gap-3 text-xs text-muted-foreground">
-              {isRefreshingCves && <span className="animate-pulse text-primary font-medium">{language === "pt" ? "Atualizando..." : "Refreshing..."}</span>}
+              {isRefreshingCves && <span className="animate-pulse text-primary font-medium">{tr({ pt: "Atualizando...", en: "Refreshing...", es: "Actualizando...", fr: "Actualisation..." })}</span>}
               <span>
-                {language === "pt" ? "Última atualização: " : "Last updated: "}
+                {tr({ pt: "Última atualização: ", en: "Last updated: ", es: "Última actualización: ", fr: "Dernière mise à jour : " })}
                 {lastUpdatedCves ? lastUpdatedCves.toLocaleTimeString() : "Pending"}
               </span>
               <Button
@@ -423,7 +426,7 @@ const CveDashboard = () => {
                 className="h-8 w-8 border-primary/20 hover:bg-primary/5 shrink-0"
                 disabled={loadingCves || isRefreshingCves}
                 onClick={() => loadCves()}
-                title={language === "pt" ? "Atualizar dados" : "Refresh data"}
+                title={tr({ pt: "Atualizar dados", en: "Refresh data", es: "Actualizar datos", fr: "Actualiser les données" })}
               >
                 <RefreshCw className={`h-4 w-4 ${(loadingCves || isRefreshingCves) ? "animate-spin" : ""}`} />
               </Button>
@@ -434,7 +437,7 @@ const CveDashboard = () => {
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <Card className="border shadow-sm bg-card/60 backdrop-blur-sm">
               <CardHeader className="py-4 flex flex-row items-center justify-between pb-2">
-                <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{language === "pt" ? "Total de Ameaças" : t("totalTracked") || "Total Tracked"}</span>
+                <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{tr({ pt: "Total de Ameaças", en: "Total Tracked", es: "Total Rastreado", fr: "Total Suivi" })}</span>
                 <BarChart2 className="h-4 w-4 text-primary" />
               </CardHeader>
               <CardContent className="pt-0">
@@ -480,10 +483,10 @@ const CveDashboard = () => {
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
                   <BarChart2 className="h-4 w-4 text-primary" />
-                  {language === "pt" ? "Distribuição de Severidade CVSS" : "CVSS Severity Distribution"}
+                  {tr({ pt: "Distribuição de Severidade CVSS", en: "CVSS Severity Distribution", es: "Distribución de Severidad CVSS", fr: "Distribution de la Gravité CVSS" })}
                 </CardTitle>
                 <CardDescription className="text-xs">
-                  {language === "pt" ? "Contagem baseada nos relatórios de vulnerabilidades recentes + KEV" : "Breakdown of recent CVEs + active exploits by CVSS score bands"}
+                  {tr({ pt: "Contagem baseada nos relatórios de vulnerabilidades recentes + KEV", en: "Breakdown of recent CVEs + active exploits by CVSS score bands", es: "Desglose de CVEs recientes + exploits activos por bandas de puntuación CVSS", fr: "Répartition des CVE récents + exploits actifs par tranches de score CVSS" })}
                 </CardDescription>
               </CardHeader>
               <CardContent className="pt-4 flex flex-col justify-end min-h-[220px]">
@@ -541,16 +544,16 @@ const CveDashboard = () => {
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
                   <Globe className="h-4 w-4 text-primary animate-pulse" />
-                  {language === "pt" ? "Fabricantes Mais Visados (CISA KEV)" : "Top Targeted Vendors (CISA KEV)"}
+                  {tr({ pt: "Fabricantes Mais Visados (CISA KEV)", en: "Top Targeted Vendors (CISA KEV)", es: "Proveedores Más Atacados (CISA KEV)", fr: "Fournisseurs les Plus Ciblés (CISA KEV)" })}
                 </CardTitle>
                 <CardDescription className="text-xs">
-                  {language === "pt" ? "Fabricantes com maior frequência no catálogo de exploração activa" : "Most targeted vendors in CISA's Known Exploited Vulnerabilities catalog"}
+                  {tr({ pt: "Fabricantes com maior frequência no catálogo de exploração activa", en: "Most targeted vendors in CISA's Known Exploited Vulnerabilities catalog", es: "Proveedores con mayor frecuencia en el catálogo de explotación activa de CISA", fr: "Fournisseurs les plus fréquents dans le catalogue d'exploitation active de la CISA" })}
                 </CardDescription>
               </CardHeader>
               <CardContent className="pt-4 flex-1 flex flex-col justify-center space-y-3.5">
                 {topTargetedVendors.length === 0 ? (
                   <div className="text-center text-xs text-muted-foreground py-8">
-                    {language === "pt" ? "Nenhum dado disponível." : "No data available."}
+                    {tr({ pt: "Nenhum dado disponível.", en: "No data available.", es: "No hay datos disponibles.", fr: "Aucune donnée disponible." })}
                   </div>
                 ) : (
                   (() => {
@@ -600,15 +603,15 @@ const CveDashboard = () => {
               {/* Vendor Select */}
               <div className="flex flex-col gap-1.5">
                 <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider pl-1">
-                  {language === "pt" ? "Fabricante" : "Vendor"}
+                  {tr({ pt: "Fabricante", en: "Vendor", es: "Proveedor", fr: "Fournisseur" })}
                 </span>
                 <Select value={selectedVendor} onValueChange={setSelectedVendor}>
                   <SelectTrigger className="h-10.5 bg-background/40 border-primary/15 rounded-xl text-xs font-semibold focus:ring-primary/20 hover:bg-background/60 transition-all">
-                    <SelectValue placeholder={language === "pt" ? "Todos Fabricantes" : "All Vendors"} />
+                    <SelectValue placeholder={tr({ pt: "Todos Fabricantes", en: "All Vendors", es: "Todos los Proveedores", fr: "Tous les Fournisseurs" })} />
                   </SelectTrigger>
                   <SelectContent className="max-h-80 border-primary/10 bg-popover/95 backdrop-blur-md rounded-xl">
                     <SelectItem value="all" className="text-xs font-semibold rounded-lg">
-                      {language === "pt" ? "Todos Fabricantes" : "All Vendors"}
+                      {tr({ pt: "Todos Fabricantes", en: "All Vendors", es: "Todos los Proveedores", fr: "Tous les Fournisseurs" })}
                     </SelectItem>
                     {uniqueVendors.map(vendor => (
                       <SelectItem key={vendor} value={vendor} className="text-xs rounded-lg">
@@ -622,15 +625,15 @@ const CveDashboard = () => {
               {/* Software Select */}
               <div className="flex flex-col gap-1.5">
                 <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider pl-1">
-                  {language === "pt" ? "Software / Produto" : "Software / Product"}
+                  {tr({ pt: "Software / Produto", en: "Software / Product", es: "Software / Producto", fr: "Logiciel / Produit" })}
                 </span>
                 <Select value={selectedSoftware} onValueChange={setSelectedSoftware}>
                   <SelectTrigger className="h-10.5 bg-background/40 border-primary/15 rounded-xl text-xs font-semibold focus:ring-primary/20 hover:bg-background/60 transition-all">
-                    <SelectValue placeholder={language === "pt" ? "Todos Softwares" : "All Softwares"} />
+                    <SelectValue placeholder={tr({ pt: "Todos Softwares", en: "All Softwares", es: "Todos los Software", fr: "Tous les Logiciels" })} />
                   </SelectTrigger>
                   <SelectContent className="max-h-80 border-primary/10 bg-popover/95 backdrop-blur-md rounded-xl">
                     <SelectItem value="all" className="text-xs font-semibold rounded-lg">
-                      {language === "pt" ? "Todos Softwares" : "All Softwares"}
+                      {tr({ pt: "Todos Softwares", en: "All Softwares", es: "Todos los Software", fr: "Tous les Logiciels" })}
                     </SelectItem>
                     {uniqueSoftwares.map(software => (
                       <SelectItem key={software} value={software} className="text-xs rounded-lg">
@@ -644,15 +647,15 @@ const CveDashboard = () => {
               {/* Severity Select */}
               <div className="flex flex-col gap-1.5">
                 <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider pl-1">
-                  {language === "pt" ? "Severidade" : "Severity"}
+                  {tr({ pt: "Severidade", en: "Severity", es: "Severidad", fr: "Gravité" })}
                 </span>
                 <Select value={selectedSeverity} onValueChange={setSelectedSeverity}>
                   <SelectTrigger className="h-10.5 bg-background/40 border-primary/15 rounded-xl text-xs font-semibold focus:ring-primary/20 hover:bg-background/60 transition-all">
-                    <SelectValue placeholder={language === "pt" ? "Todas Severidades" : "All Severities"} />
+                    <SelectValue placeholder={tr({ pt: "Todas Severidades", en: "All Severities", es: "Todas las Severidades", fr: "Toutes les Gravités" })} />
                   </SelectTrigger>
                   <SelectContent className="border-primary/10 bg-popover/95 backdrop-blur-md rounded-xl">
                     <SelectItem value="all" className="text-xs font-semibold rounded-lg">
-                      {language === "pt" ? "Todas Severidades" : "All Severities"}
+                      {tr({ pt: "Todas Severidades", en: "All Severities", es: "Todas las Severidades", fr: "Toutes les Gravités" })}
                     </SelectItem>
                     <SelectItem value="Critical" className="text-xs rounded-lg text-red-500 font-medium">Critical</SelectItem>
                     <SelectItem value="High" className="text-xs rounded-lg text-orange-500 font-medium">High</SelectItem>
@@ -678,7 +681,7 @@ const CveDashboard = () => {
                 className="h-10 px-4 rounded-xl text-xs text-muted-foreground hover:text-foreground hover:bg-muted/50 gap-1.5 transition-all font-semibold shrink-0 self-start md:self-end"
               >
                 <X className="h-4 w-4" />
-                {language === "pt" ? "Limpar Filtros" : "Clear Filters"}
+                {tr({ pt: "Limpar Filtros", en: "Clear Filters", es: "Limpiar Filtros", fr: "Effacer les Filtres" })}
               </Button>
             ) : null}
           </div>
