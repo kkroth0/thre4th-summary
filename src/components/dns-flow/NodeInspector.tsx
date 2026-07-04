@@ -45,7 +45,7 @@ const typeDescription = (type: string, lang: string) => {
 
 export function NodeInspector({ node, whoisData, onPivotSearch, onClose }: NodeInspectorProps) {
   const { toast } = useToast();
-  const { language } = useLanguage();
+  const { language, tr } = useLanguage();
 
   if (!node) return null;
 
@@ -54,7 +54,7 @@ export function NodeInspector({ node, whoisData, onPivotSearch, onClose }: NodeI
 
   const copy = (text: string, label: string) => {
     navigator.clipboard.writeText(text);
-    toast({ title: language === "pt" ? "Copiado!" : "Copied!", description: `${label} copied.` });
+    toast({ title: tr({ pt: "Copiado!", en: "Copied!", es: "¡Copiado!", fr: "Copié !" }), description: `${label} copied.` });
   };
 
   return (
@@ -97,16 +97,19 @@ export function NodeInspector({ node, whoisData, onPivotSearch, onClose }: NodeI
           <div className={`rounded-xl p-3 border ${colors.border} ${colors.bg} space-y-2`}>
             <div className="text-xs font-bold text-foreground/90 flex items-center gap-1.5">
               <Activity className="h-3.5 w-3.5 text-primary" />
-              {language === "pt" ? "Pivot de Inteligência" : "Threat Intel Pivot"}
+              {tr({ pt: "Pivot de Inteligência", en: "Threat Intel Pivot", es: "Pivote de Inteligencia", fr: "Pivot de Renseignement" })}
             </div>
             <p className="text-[10px] text-muted-foreground leading-normal">
-              {language === "pt"
-                ? "Cruzar este IP com VirusTotal, AbuseIPDB e Shodan."
-                : "Cross-query this IP through VirusTotal, AbuseIPDB and Shodan."}
+              {tr({
+                pt: "Cruzar este IP com VirusTotal, AbuseIPDB e Shodan.",
+                en: "Cross-query this IP through VirusTotal, AbuseIPDB and Shodan.",
+                es: "Cruzar esta IP con VirusTotal, AbuseIPDB y Shodan.",
+                fr: "Croiser cette IP avec VirusTotal, AbuseIPDB et Shodan.",
+              })}
             </p>
             <Button size="sm" className="w-full h-8 rounded-lg text-xs font-semibold gap-1.5" onClick={() => onPivotSearch(node.value)}>
               <ExternalLink className="h-3 w-3" />
-              {language === "pt" ? "Analisar Reputação" : "Analyze Reputation"}
+              {tr({ pt: "Analisar Reputação", en: "Analyze Reputation", es: "Analizar Reputación", fr: "Analyser la Réputation" })}
             </Button>
           </div>
         )}

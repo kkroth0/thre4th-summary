@@ -22,7 +22,7 @@ const levelBadge = (level: string) => {
 // Histórico de scans salvos do usuário (persistido no servidor). Clicar numa
 // linha re-executa a busca via onPick; a lixeira remove.
 export function ScanHistory({ onPick }: { onPick: (query: string) => void }) {
-    const { language } = useLanguage();
+    const { language, tr } = useLanguage();
     const pt = language === "pt";
     const [open, setOpen] = useState(false);
     const [scans, setScans] = useState<SavedScan[]>([]);
@@ -34,7 +34,7 @@ export function ScanHistory({ onPick }: { onPick: (query: string) => void }) {
         setLoading(true);
         fetchScans()
             .then(setScans)
-            .catch((e) => toast.error(e instanceof Error ? e.message : (pt ? "Falha ao carregar histórico" : "Failed to load history")))
+            .catch((e) => toast.error(e instanceof Error ? e.message : tr({ pt: "Falha ao carregar histórico", en: "Failed to load history", es: "Error al cargar el historial", fr: "Échec du chargement de l'historique" })))
             .finally(() => setLoading(false));
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [open]);
@@ -42,7 +42,7 @@ export function ScanHistory({ onPick }: { onPick: (query: string) => void }) {
     const onDelete = async (id: string) => {
         setBusyId(id);
         try { setScans(await deleteScan(id)); }
-        catch (e) { toast.error(e instanceof Error ? e.message : (pt ? "Falha ao remover" : "Failed to delete")); }
+        catch (e) { toast.error(e instanceof Error ? e.message : tr({ pt: "Falha ao remover", en: "Failed to delete", es: "Error al eliminar", fr: "Échec de la suppression" })); }
         finally { setBusyId(null); }
     };
 
@@ -53,21 +53,21 @@ export function ScanHistory({ onPick }: { onPick: (query: string) => void }) {
             <DialogTrigger asChild>
                 <Button variant="outline" size="sm" className="h-9 px-4 rounded-full border-primary/20 hover:bg-primary/10 shadow-sm flex items-center gap-2">
                     <History className="h-4 w-4" />
-                    <span>{pt ? "Histórico" : "History"}</span>
+                    <span>{tr({ pt: "Histórico", en: "History", es: "Historial", fr: "Historique" })}</span>
                 </Button>
             </DialogTrigger>
             <DialogContent className="max-w-lg">
                 <DialogHeader>
-                    <DialogTitle className="flex items-center gap-2"><History className="h-5 w-5" /> {pt ? "Scans salvos" : "Saved scans"}</DialogTitle>
-                    <DialogDescription>{pt ? "Seus scans salvos, sincronizados na sua conta. Clique para refazer." : "Your saved scans, synced to your account. Click to re-run."}</DialogDescription>
+                    <DialogTitle className="flex items-center gap-2"><History className="h-5 w-5" /> {tr({ pt: "Scans salvos", en: "Saved scans", es: "Escaneos guardados", fr: "Scans enregistrés" })}</DialogTitle>
+                    <DialogDescription>{tr({ pt: "Seus scans salvos, sincronizados na sua conta. Clique para refazer.", en: "Your saved scans, synced to your account. Click to re-run.", es: "Tus escaneos guardados, sincronizados en tu cuenta. Haz clic para repetir.", fr: "Vos scans enregistrés, synchronisés sur votre compte. Cliquez pour relancer." })}</DialogDescription>
                 </DialogHeader>
                 <ScrollArea className="max-h-[55vh] pr-3">
                     {loading ? (
                         <div className="flex items-center gap-2 text-sm text-muted-foreground py-8 justify-center">
-                            <Loader2 className="h-4 w-4 animate-spin" /> {pt ? "Carregando…" : "Loading…"}
+                            <Loader2 className="h-4 w-4 animate-spin" /> {tr({ pt: "Carregando…", en: "Loading…", es: "Cargando…", fr: "Chargement…" })}
                         </div>
                     ) : !scans.length ? (
-                        <div className="text-sm text-muted-foreground py-8 text-center">{pt ? "Nenhum scan salvo ainda." : "No saved scans yet."}</div>
+                        <div className="text-sm text-muted-foreground py-8 text-center">{tr({ pt: "Nenhum scan salvo ainda.", en: "No saved scans yet.", es: "Aún no hay escaneos guardados.", fr: "Aucun scan enregistré pour l'instant." })}</div>
                     ) : (
                         <div className="space-y-1.5">
                             {scans.map((s) => {

@@ -18,7 +18,7 @@ interface HeaderProps {
 }
 
 export function Header({ actions, logoAddon, onLogoClick, showBackButton = false }: HeaderProps) {
-  const { t, language } = useLanguage();
+  const { t, language, tr } = useLanguage();
   const { isCollapsed, toggleSidebar } = useSidebar();
   const { auth, loading: authLoading } = useAuth();
   const location = useLocation();
@@ -48,7 +48,7 @@ export function Header({ actions, logoAddon, onLogoClick, showBackButton = false
           {!isCollapsed && (
             <div className="flex flex-col items-start leading-tight min-w-0">
               <span className="text-[13px] font-semibold truncate max-w-[150px]">{auth.login}</span>
-              <span className="text-[10px] text-muted-foreground">{language === "pt" ? "Ver perfil" : "View profile"}</span>
+              <span className="text-[10px] text-muted-foreground">{tr({ pt: "Ver perfil", en: "View profile", es: "Ver perfil", fr: "Voir le profil" })}</span>
             </div>
           )}
         </Button>
@@ -70,7 +70,7 @@ export function Header({ actions, logoAddon, onLogoClick, showBackButton = false
         className={cn("gap-2 rounded-xl font-semibold", isCollapsed ? "px-0 w-11 h-11 mx-auto" : "w-full h-10 text-[13px]")}
       >
         <LogIn className="h-4 w-4" />
-        {!isCollapsed && <span>{language === "pt" ? "Entrar" : "Sign in"}</span>}
+        {!isCollapsed && <span>{tr({ pt: "Entrar", en: "Sign in", es: "Iniciar sesión", fr: "Se connecter" })}</span>}
       </Button>
     );
     return (
@@ -78,7 +78,7 @@ export function Header({ actions, logoAddon, onLogoClick, showBackButton = false
         {isCollapsed ? (
           <Tooltip delayDuration={150}>
             <TooltipTrigger asChild>{signInBtn}</TooltipTrigger>
-            <TooltipContent side="right" className="font-semibold text-xs">{language === "pt" ? "Entrar" : "Sign in"}</TooltipContent>
+            <TooltipContent side="right" className="font-semibold text-xs">{tr({ pt: "Entrar", en: "Sign in", es: "Iniciar sesión", fr: "Se connecter" })}</TooltipContent>
           </Tooltip>
         ) : signInBtn}
       </Link>
@@ -98,13 +98,13 @@ export function Header({ actions, logoAddon, onLogoClick, showBackButton = false
     { path: "/vendors", label: t("vendors") || "Vendors", icon: BookOpen },
     { path: "/dnsbl", label: t("dnsblCheck") || "DNSBL Check", icon: ShieldAlert },
     { path: "/dns-visualizer", label: t("dnsVisualizer") || "DNS Visualizer", icon: Globe },
-    { path: "/phishing-analyzer", label: language === "pt" ? "Análise de Phishing" : "Phishing Analyzer", icon: MailWarning },
-    { path: "/threat-hunting", label: language === "pt" ? "Threat Hunting" : "Threat Hunting", icon: Crosshair, premium: true },
+    { path: "/phishing-analyzer", label: tr({ pt: "Análise de Phishing", en: "Phishing Analyzer", es: "Análisis de Phishing", fr: "Analyse de Phishing" }), icon: MailWarning },
+    { path: "/threat-hunting", label: "Threat Hunting", icon: Crosshair, premium: true },
     { path: "/threat-brief", label: "Threat Brief", icon: FileText, premium: true },
-    { path: "/newsletter", label: language === "pt" ? "Coletor de Intel" : "Intel Collector", icon: Mail, premium: true },
-    { path: "/cves", label: language === "pt" ? "Painel de CVEs" : "CVE Dashboard", icon: Shield },
-    { path: "/patch-tuesday", label: language === "pt" ? "Patch Tuesday" : "Patch Tuesday", icon: CalendarCheck },
-    { path: "/features", label: language === "pt" ? "Funcionalidades" : "Features", icon: Terminal },
+    { path: "/newsletter", label: tr({ pt: "Coletor de Intel", en: "Intel Collector", es: "Colector de Intel", fr: "Collecteur d'Intel" }), icon: Mail, premium: true },
+    { path: "/cves", label: tr({ pt: "Painel de CVEs", en: "CVE Dashboard", es: "Panel de CVEs", fr: "Tableau de bord CVE" }), icon: Shield },
+    { path: "/patch-tuesday", label: "Patch Tuesday", icon: CalendarCheck },
+    { path: "/features", label: tr({ pt: "Funcionalidades", en: "Features", es: "Funciones", fr: "Fonctionnalités" }), icon: Terminal },
   ];
 
   const renderNavItem = (item: typeof navItems[0], isActive: boolean) => {
@@ -344,11 +344,11 @@ export function Header({ actions, logoAddon, onLogoClick, showBackButton = false
                       <SettingsIcon className="h-[18px] w-[18px]" />
                     </Button>
                   </TooltipTrigger>
-                  <TooltipContent side="right" className="font-semibold text-xs">{language === "pt" ? "Configurações" : "Settings"}</TooltipContent>
+                  <TooltipContent side="right" className="font-semibold text-xs">{tr({ pt: "Configurações", en: "Settings", es: "Configuración", fr: "Paramètres" })}</TooltipContent>
                 </Tooltip>
               ) : (
                 <Button variant="ghost" className={cn("w-full h-10 rounded-xl justify-start px-3.5 gap-3 text-[13px] font-semibold", pathname === "/settings" ? "bg-primary/15 text-primary ring-1 ring-inset ring-primary/20" : "text-muted-foreground/80 hover:text-foreground hover:bg-muted/20")}>
-                  <SettingsIcon className="h-[18px] w-[18px]" /> {language === "pt" ? "Configurações" : "Settings"}
+                  <SettingsIcon className="h-[18px] w-[18px]" /> {tr({ pt: "Configurações", en: "Settings", es: "Configuración", fr: "Paramètres" })}
                 </Button>
               )}
             </Link>
@@ -362,14 +362,14 @@ export function Header({ actions, logoAddon, onLogoClick, showBackButton = false
               "w-full h-10 rounded-xl text-muted-foreground/80 hover:text-foreground hover:bg-muted/20 flex items-center gap-3 transition-all duration-200",
               isCollapsed ? "justify-center px-0 w-11 h-11 rounded-xl mx-auto" : "px-3.5 justify-start"
             )}
-            title={isCollapsed ? (language === "pt" ? "Expandir" : "Expand") : (language === "pt" ? "Colapsar" : "Collapse")}
+            title={isCollapsed ? tr({ pt: "Expandir", en: "Expand", es: "Expandir", fr: "Développer" }) : tr({ pt: "Colapsar", en: "Collapse", es: "Contraer", fr: "Réduire" })}
           >
             {isCollapsed ? (
               <ChevronRight className="h-5 w-5 text-muted-foreground" />
             ) : (
               <>
                 <ChevronLeft className="h-5 w-5 text-muted-foreground" />
-                <span className="text-xs font-semibold">{language === "pt" ? "Recolher Menu" : "Collapse Sidebar"}</span>
+                <span className="text-xs font-semibold">{tr({ pt: "Recolher Menu", en: "Collapse Sidebar", es: "Contraer Menú", fr: "Réduire le Menu" })}</span>
               </>
             )}
           </Button>

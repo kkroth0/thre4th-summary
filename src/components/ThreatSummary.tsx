@@ -28,7 +28,7 @@ interface ThreatSummaryProps {
 
 export const ThreatSummary = ({ query, overallScore, threatLevel, totalVendors, detections, vendorData = [], confidence, disagreement, reportingVendors }: ThreatSummaryProps) => {
   const { toast } = useToast();
-  const { t, language } = useLanguage();
+  const { t, language, tr } = useLanguage();
 
   const formatVendorData = (vendor: VendorData): string => {
     let text = `\n${vendor.name}\n${'='.repeat(vendor.name.length)}\n`;
@@ -251,17 +251,20 @@ export const ThreatSummary = ({ query, overallScore, threatLevel, totalVendors, 
             {typeof confidence === "number" && (reportingVendors ?? 0) > 0 && (
               <div className="flex items-center gap-1.5 mt-0.5">
                 <span className="text-[10px] font-mono text-muted-foreground">
-                  {language === "pt" ? "Confiança" : "Confidence"}: <strong className="text-foreground">{confidence}%</strong>
-                  <span className="opacity-60"> · {reportingVendors} {language === "pt" ? "fontes" : "vendors"}</span>
+                  {tr({ pt: "Confiança", en: "Confidence", es: "Confianza", fr: "Confiance" })}: <strong className="text-foreground">{confidence}%</strong>
+                  <span className="opacity-60"> · {reportingVendors} {tr({ pt: "fontes", en: "vendors", es: "fuentes", fr: "sources" })}</span>
                 </span>
                 {disagreement && (
                   <span
                     className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-orange-500/10 border border-orange-500/20 text-[9px] font-bold text-orange-500 uppercase tracking-wide"
-                    title={language === "pt"
-                      ? "Fontes divergem — revise o relatório minoritário antes de agir"
-                      : "Vendors disagree — review the minority report before acting"}
+                    title={tr({
+                      pt: "Fontes divergem — revise o relatório minoritário antes de agir",
+                      en: "Vendors disagree — review the minority report before acting",
+                      es: "Las fuentes divergen — revisa el informe minoritario antes de actuar",
+                      fr: "Les sources divergent — examinez le rapport minoritaire avant d'agir",
+                    })}
                   >
-                    <Info className="h-2.5 w-2.5" /> {language === "pt" ? "fontes divergem" : "vendors disagree"}
+                    <Info className="h-2.5 w-2.5" /> {tr({ pt: "fontes divergem", en: "vendors disagree", es: "las fuentes divergen", fr: "les sources divergent" })}
                   </span>
                 )}
               </div>
