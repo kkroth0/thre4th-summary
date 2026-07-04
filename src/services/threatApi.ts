@@ -32,7 +32,7 @@ export const VENDOR_IOC_SUPPORT: Record<string, ('ip' | 'domain' | 'hash' | 'url
     "AbuseIPDB": ['ip'],
     "AlienVault OTX": ['ip', 'domain', 'hash', 'url'],
     "Shodan": ['ip', 'domain'],
-    "URLhaus": ['url', 'domain'],
+    "URLhaus": ['url', 'domain', 'hash'],
     "MalwareBazaar": ['hash'],
     "ThreatFox": ['ip', 'domain', 'url', 'hash'],
     "PhishTank": ['url'],
@@ -40,7 +40,7 @@ export const VENDOR_IOC_SUPPORT: Record<string, ('ip' | 'domain' | 'hash' | 'url
     "Hybrid Analysis": ['hash'],
     "CIRCL hashlookup": ['hash'],
     "Criminal IP": ['ip', 'domain'],
-    "MetaDefender": ['ip', 'hash'],
+    "MetaDefender": ['ip', 'hash', 'domain', 'url'],
     "PhishStats": ['url', 'domain'],
     "OpenPhish": ['url', 'domain'],
     "Team Cymru": ['ip', 'hash'],
@@ -137,6 +137,20 @@ const formatVendorData = (vendorName: string, data: any, query: string): any => 
             };
         case "URLhaus":
             if (data.query_status === "ok") {
+                // Payload lookup (hash query): URLhaus indexes the malware sample.
+                if (data.md5_hash || data.sha256_hash) {
+                    return {
+                        "Status": "Malware Payload Found",
+                        "Signature": data.signature || "Unknown",
+                        "File Type": data.file_type || "Unknown",
+                        "File Size": data.file_size ? `${data.file_size} bytes` : "Unknown",
+                        "MD5": data.md5_hash || "Unknown",
+                        "SHA256": data.sha256_hash || "Unknown",
+                        "URL Count": data.url_count ?? data.urls?.length ?? 0,
+                        "First Seen": data.firstseen || "Unknown",
+                    };
+                }
+                // Host lookup (url/domain query).
                 return {
                     "Status": data.urls?.length > 0 ? "Malicious URLs Found" : "Clean",
                     "URL Count": data.urls?.length || 0,

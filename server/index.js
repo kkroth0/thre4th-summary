@@ -482,24 +482,32 @@ app.post('/api/urlhaus', scanLimiter, async (req, res) => {
     const { query } = req.body;
     try {
         const queryType = detectQueryType(query);
-        if (queryType !== "url" && queryType !== "domain") {
-            return res.status(400).json({ error: "URL or Domain query required" });
+        if (!["url", "domain", "hash"].includes(queryType)) {
+            return res.status(400).json({ error: "URL, Domain or Hash query required" });
         }
-        const sanitized = sanitizeQuery(query, queryType);
 
         // Safe x-www-form-urlencoded formatting (VULN-08)
         const params = new URLSearchParams();
-        params.append('host', sanitized);
+        let endpoint;
+        if (queryType === "hash") {
+            // Payload lookup: URLhaus indexes malware samples by MD5/SHA256
+            // (SHA1 isn't supported by this endpoint).
+            const sanitized = sanitizeQuery(query, 'hash');
+            if (sanitized.length === 40) return res.json({ data: { "Status": "MD5/SHA256 only" } });
+            params.append(sanitized.length === 32 ? 'md5_hash' : 'sha256_hash', sanitized);
+            endpoint = `https://urlhaus-api.abuse.ch/v1/payload/`;
+        } else {
+            const sanitized = sanitizeQuery(query, queryType);
+            params.append('host', sanitized);
+            endpoint = `https://urlhaus-api.abuse.ch/v1/host/`;
+        }
 
         // abuse.ch now requires an Auth-Key header on all URLhaus API queries.
         const headers = { "Content-Type": "application/x-www-form-urlencoded" };
         const abKey = abuseChKey();
         if (abKey) headers['Auth-Key'] = abKey;
 
-        const response = await axios.post(`https://urlhaus-api.abuse.ch/v1/host/`,
-            params.toString(),
-            { headers }
-        );
+        const response = await axios.post(endpoint, params.toString(), { headers });
         res.json(response.data);
     } catch (error) {
         const { status, message } = sanitizeError(error);
@@ -704,12 +712,15 @@ app.post('/api/metadefender', scanLimiter, async (req, res) => {
 
     try {
         const queryType = detectQueryType(query);
-        if (queryType !== "hash" && queryType !== "ip") return res.json({ data: { "Status": "Hash/IP only" } });
+        if (!["hash", "ip", "domain", "url"].includes(queryType)) return res.json({ data: { "Status": "Hash/IP/Domain/URL only" } });
         const sanitized = sanitizeQuery(query, queryType);
 
-        const endpoint = queryType === "hash"
-            ? `https://api.metadefender.com/v4/hash/${sanitized}`
-            : `https://api.metadefender.com/v4/ip/${sanitized}`;
+        // MetaDefender v4 has a reputation endpoint per IOC type.
+        const path = queryType === "hash" ? `hash/${sanitized}`
+            : queryType === "ip" ? `ip/${sanitized}`
+            : queryType === "domain" ? `domain/${sanitized}`
+            : `url/${encodeURIComponent(sanitized)}`;
+        const endpoint = `https://api.metadefender.com/v4/${path}`;
 
         const response = await axios.get(endpoint, {
             headers: { "apikey": process.env.METADEFENDER_API_KEY },
