@@ -13,15 +13,15 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { useSidebar } from "@/contexts/SidebarContext";
 import { fetchPost, type Post } from "@/services/threatApi";
 
-const fmtDate = (iso: string | null, pt: boolean) =>
-    iso ? new Date(iso).toLocaleDateString(pt ? "pt-BR" : "en-US", { day: "2-digit", month: "long", year: "numeric" }) : "";
+const LOCALE: Record<string, string> = { pt: "pt-BR", en: "en-US", es: "es-ES", fr: "fr-FR" };
+const fmtDate = (iso: string | null, lang: string) =>
+    iso ? new Date(iso).toLocaleDateString(LOCALE[lang] || "en-US", { day: "2-digit", month: "long", year: "numeric" }) : "";
 
 const AdvisoryPost = () => {
     const { slug } = useParams<{ slug: string }>();
     const navigate = useNavigate();
-    const { language } = useLanguage();
+    const { language, tr } = useLanguage();
     const { isCollapsed } = useSidebar();
-    const pt = language === "pt";
 
     const [post, setPost] = useState<Post | null>(null);
     const [isAdmin, setIsAdmin] = useState(false);
@@ -55,7 +55,7 @@ const AdvisoryPost = () => {
     if (loading) {
         return shell(
             <div className="flex items-center gap-2 text-muted-foreground py-16 justify-center">
-                <Loader2 className="h-5 w-5 animate-spin" /> {pt ? "Carregando…" : "Loading…"}
+                <Loader2 className="h-5 w-5 animate-spin" /> {tr({ pt: "Carregando…", en: "Loading…", es: "Cargando…", fr: "Chargement…" })}
             </div>
         );
     }
@@ -65,8 +65,8 @@ const AdvisoryPost = () => {
             <Card className="border-dashed">
                 <CardContent className="p-10 flex flex-col items-center text-center gap-3 text-muted-foreground">
                     <Megaphone className="h-8 w-8" />
-                    <div className="font-medium text-foreground">{pt ? "Publicação não encontrada" : "Post not found"}</div>
-                    <Button asChild variant="outline" size="sm"><Link to="/advisories"><ArrowLeft className="h-4 w-4 mr-1.5" /> {pt ? "Voltar" : "Back"}</Link></Button>
+                    <div className="font-medium text-foreground">{tr({ pt: "Publicação não encontrada", en: "Post not found", es: "Publicación no encontrada", fr: "Publication introuvable" })}</div>
+                    <Button asChild variant="outline" size="sm"><Link to="/advisories"><ArrowLeft className="h-4 w-4 mr-1.5" /> {tr({ pt: "Voltar", en: "Back", es: "Volver", fr: "Retour" })}</Link></Button>
                 </CardContent>
             </Card>
         );
@@ -81,7 +81,7 @@ const AdvisoryPost = () => {
                 {isAdmin && (
                     <PostEditor
                         post={post}
-                        trigger={<Button variant="outline" size="sm" className="gap-1.5"><Pencil className="h-4 w-4" /> {pt ? "Editar" : "Edit"}</Button>}
+                        trigger={<Button variant="outline" size="sm" className="gap-1.5"><Pencil className="h-4 w-4" /> {tr({ pt: "Editar", en: "Edit", es: "Editar", fr: "Modifier" })}</Button>}
                         onSaved={(p) => { if (p.slug !== post.slug) navigate(`/advisories/${p.slug}`, { replace: true }); else load(post.slug); }}
                         onDeleted={() => navigate("/advisories", { replace: true })}
                     />
@@ -92,7 +92,7 @@ const AdvisoryPost = () => {
                 <div className="flex items-center gap-2 flex-wrap mb-3">
                     {isAdmin && !post.published && (
                         <Badge variant="outline" className="text-[10px] border-amber-500/40 text-amber-600 dark:text-amber-400">
-                            {pt ? "rascunho" : "draft"}
+                            {tr({ pt: "rascunho", en: "draft", es: "borrador", fr: "brouillon" })}
                         </Badge>
                     )}
                     {post.tags.map((t) => <Badge key={t} variant="secondary" className="text-[10px]">{t}</Badge>)}
@@ -100,7 +100,7 @@ const AdvisoryPost = () => {
                 <h1 className="text-3xl font-bold leading-tight">{post.title}</h1>
                 {post.summary && <p className="text-lg text-muted-foreground mt-2">{post.summary}</p>}
                 <div className="flex items-center gap-4 mt-4 pb-6 border-b text-sm text-muted-foreground">
-                    <span className="inline-flex items-center gap-1.5"><CalendarDays className="h-4 w-4" /> {fmtDate(post.publishedAt || post.createdAt, pt)}</span>
+                    <span className="inline-flex items-center gap-1.5"><CalendarDays className="h-4 w-4" /> {fmtDate(post.publishedAt || post.createdAt, language)}</span>
                     <span className="inline-flex items-center gap-1.5"><User className="h-4 w-4" /> {post.author}</span>
                 </div>
 

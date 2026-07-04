@@ -12,13 +12,13 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { useSidebar } from "@/contexts/SidebarContext";
 import { fetchPosts, type PostCard } from "@/services/threatApi";
 
-const fmtDate = (iso: string | null, pt: boolean) =>
-    iso ? new Date(iso).toLocaleDateString(pt ? "pt-BR" : "en-US", { day: "2-digit", month: "short", year: "numeric" }) : "";
+const LOCALE: Record<string, string> = { pt: "pt-BR", en: "en-US", es: "es-ES", fr: "fr-FR" };
+const fmtDate = (iso: string | null, lang: string) =>
+    iso ? new Date(iso).toLocaleDateString(LOCALE[lang] || "en-US", { day: "2-digit", month: "short", year: "numeric" }) : "";
 
 const Advisories = () => {
-    const { language } = useLanguage();
+    const { language, tr } = useLanguage();
     const { isCollapsed } = useSidebar();
-    const pt = language === "pt";
 
     const [posts, setPosts] = useState<PostCard[]>([]);
     const [isAdmin, setIsAdmin] = useState(false);
@@ -31,7 +31,7 @@ const Advisories = () => {
             setPosts(r.posts);
             setIsAdmin(r.isAdmin);
         } catch (e) {
-            toast.error(e instanceof Error ? e.message : (pt ? "Falha ao carregar publicações" : "Failed to load posts"));
+            toast.error(e instanceof Error ? e.message : tr({ pt: "Falha ao carregar publicações", en: "Failed to load posts", es: "Error al cargar las publicaciones", fr: "Échec du chargement des publications" }));
         } finally {
             setLoading(false);
         }
@@ -49,9 +49,12 @@ const Advisories = () => {
                             <Megaphone className="h-7 w-7 text-primary" /> Advisories
                         </h1>
                         <p className="text-muted-foreground mt-1">
-                            {pt
-                                ? "Análises e alertas sobre campanhas, ameaças e tendências."
-                                : "Analysis and alerts on campaigns, threats and trends."}
+                            {tr({
+                                pt: "Análises e alertas sobre campanhas, ameaças e tendências.",
+                                en: "Analysis and alerts on campaigns, threats and trends.",
+                                es: "Análisis y alertas sobre campañas, amenazas y tendencias.",
+                                fr: "Analyses et alertes sur les campagnes, menaces et tendances.",
+                            })}
                         </p>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
@@ -60,7 +63,7 @@ const Advisories = () => {
                         </Button>
                         {isAdmin && (
                             <PostEditor
-                                trigger={<Button className="gap-2"><Plus className="h-4 w-4" /> {pt ? "Nova publicação" : "New post"}</Button>}
+                                trigger={<Button className="gap-2"><Plus className="h-4 w-4" /> {tr({ pt: "Nova publicação", en: "New post", es: "Nueva publicación", fr: "Nouvelle publication" })}</Button>}
                                 onSaved={() => load()}
                             />
                         )}
@@ -69,18 +72,18 @@ const Advisories = () => {
 
                 {loading ? (
                     <div className="flex items-center gap-2 text-muted-foreground py-16 justify-center">
-                        <Loader2 className="h-5 w-5 animate-spin" /> {pt ? "Carregando…" : "Loading…"}
+                        <Loader2 className="h-5 w-5 animate-spin" /> {tr({ pt: "Carregando…", en: "Loading…", es: "Cargando…", fr: "Chargement…" })}
                     </div>
                 ) : !posts.length ? (
                     <Card className="border-dashed">
                         <CardContent className="p-10 flex flex-col items-center text-center gap-3 text-muted-foreground">
                             <FileText className="h-8 w-8" />
                             <div>
-                                <div className="font-medium text-foreground">{pt ? "Nenhuma publicação ainda" : "No posts yet"}</div>
+                                <div className="font-medium text-foreground">{tr({ pt: "Nenhuma publicação ainda", en: "No posts yet", es: "Aún no hay publicaciones", fr: "Aucune publication pour l'instant" })}</div>
                                 <p className="text-sm mt-1">
                                     {isAdmin
-                                        ? (pt ? "Clique em “Nova publicação” para escrever a primeira." : "Click “New post” to write the first one.")
-                                        : (pt ? "Volte em breve." : "Check back soon.")}
+                                        ? tr({ pt: "Clique em “Nova publicação” para escrever a primeira.", en: "Click “New post” to write the first one.", es: "Haz clic en “Nueva publicación” para escribir la primera.", fr: "Cliquez sur « Nouvelle publication » pour écrire la première." })
+                                        : tr({ pt: "Volte em breve.", en: "Check back soon.", es: "Vuelve pronto.", fr: "Revenez bientôt." })}
                                 </p>
                             </div>
                         </CardContent>
@@ -94,7 +97,7 @@ const Advisories = () => {
                                         <div className="flex items-center gap-2 flex-wrap mb-1.5">
                                             {isAdmin && !p.published && (
                                                 <Badge variant="outline" className="text-[10px] border-amber-500/40 text-amber-600 dark:text-amber-400">
-                                                    {pt ? "rascunho" : "draft"}
+                                                    {tr({ pt: "rascunho", en: "draft", es: "borrador", fr: "brouillon" })}
                                                 </Badge>
                                             )}
                                             {p.tags.slice(0, 4).map((t) => (
@@ -104,7 +107,7 @@ const Advisories = () => {
                                         <h2 className="text-lg font-semibold group-hover:text-primary transition-colors">{p.title}</h2>
                                         {p.summary && <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{p.summary}</p>}
                                         <div className="flex items-center gap-4 mt-3 text-xs text-muted-foreground">
-                                            <span className="inline-flex items-center gap-1"><CalendarDays className="h-3.5 w-3.5" /> {fmtDate(p.publishedAt || p.createdAt, pt)}</span>
+                                            <span className="inline-flex items-center gap-1"><CalendarDays className="h-3.5 w-3.5" /> {fmtDate(p.publishedAt || p.createdAt, language)}</span>
                                             <span className="inline-flex items-center gap-1"><User className="h-3.5 w-3.5" /> {p.author}</span>
                                         </div>
                                     </CardContent>
