@@ -14,6 +14,8 @@ import {
 import { Footer } from "@/components/Footer";
 import { Header } from "@/components/Header";
 import { BoletimView } from "@/components/BoletimView";
+import { PostEditor } from "@/components/PostEditor";
+import { boletimToDraft } from "@/services/boletimMarkdown";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useSidebar } from "@/contexts/SidebarContext";
 import { useAuth } from "@/contexts/AuthContext";
@@ -316,6 +318,21 @@ const DailyBulletin: React.FC = () => {
                     )}
                     {isSel && selectedJob && selectedJob.id === j.id && selectedJob.json && (
                       <div className="mt-3 pl-5">
+                        {auth.isAdmin && (
+                          <div className="mb-3">
+                            <PostEditor
+                              key={selectedJob.id}
+                              initial={boletimToDraft(selectedJob.json)}
+                              trigger={
+                                <Button variant="outline" size="sm" className="gap-1.5">
+                                  <Sparkles className="h-4 w-4" />
+                                  {pt ? "Salvar como rascunho de Advisory" : "Save as Advisory draft"}
+                                </Button>
+                              }
+                              onSaved={() => toast.success(pt ? "Rascunho salvo em Advisories" : "Draft saved to Advisories")}
+                            />
+                          </div>
+                        )}
                         <BoletimView report={selectedJob.json} />
                       </div>
                     )}

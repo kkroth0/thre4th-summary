@@ -19,9 +19,12 @@ import { createPost, updatePost, deletePost, type Post, type PostCard } from "@/
 // pro corpo Markdown. `post` presente => modo edição. Chama onSaved/onDeleted
 // pra a página recarregar a lista.
 export function PostEditor({
-    post, trigger, onSaved, onDeleted,
+    post, initial, trigger, onSaved, onDeleted,
 }: {
     post?: Post | PostCard;
+    // Seed para o modo de criação (ex.: rascunho vindo de um Threat Brief).
+    // Ignorado quando `post` está presente (modo edição).
+    initial?: { title?: string; summary?: string; body?: string; tags?: string[] };
     trigger: React.ReactNode;
     onSaved: (p: Post) => void;
     onDeleted?: (id: string) => void;
@@ -31,10 +34,10 @@ export function PostEditor({
     const editing = !!post;
 
     const [open, setOpen] = useState(false);
-    const [title, setTitle] = useState(post?.title ?? "");
-    const [summary, setSummary] = useState(post?.summary ?? "");
-    const [tags, setTags] = useState((post?.tags ?? []).join(", "));
-    const [body, setBody] = useState((post as Post | undefined)?.body ?? "");
+    const [title, setTitle] = useState(post?.title ?? initial?.title ?? "");
+    const [summary, setSummary] = useState(post?.summary ?? initial?.summary ?? "");
+    const [tags, setTags] = useState((post?.tags ?? initial?.tags ?? []).join(", "));
+    const [body, setBody] = useState((post as Post | undefined)?.body ?? initial?.body ?? "");
     const [published, setPublished] = useState(post?.published ?? false);
     const [saving, setSaving] = useState(false);
     const [deleting, setDeleting] = useState(false);
