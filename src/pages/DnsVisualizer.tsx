@@ -32,17 +32,17 @@ const DnsVisualizer = () => {
   const [subdomainSearch, setSubdomainSearch] = useState("");
 
   const { toast } = useToast();
-  const { t, language } = useLanguage();
+  const { t, language, tr } = useLanguage();
 
   const fetchDnsAndWhois = async (targetDomain: string) => {
     const trimmed = targetDomain.trim();
     if (!trimmed) {
-      toast({ title: t("error"), description: language === "pt" ? "Por favor, digite um domínio válido" : "Please enter a valid domain", variant: "destructive" });
+      toast({ title: t("error"), description: tr({ pt: "Por favor, digite um domínio válido", en: "Please enter a valid domain", es: "Por favor, introduce un dominio válido", fr: "Veuillez saisir un domaine valide" }), variant: "destructive" });
       return;
     }
     const domainRegex = /^([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$/;
     if (!domainRegex.test(trimmed)) {
-      toast({ title: t("invalidInput"), description: language === "pt" ? "Formato de domínio inválido" : "Invalid domain format", variant: "destructive" });
+      toast({ title: t("invalidInput"), description: tr({ pt: "Formato de domínio inválido", en: "Invalid domain format", es: "Formato de dominio inválido", fr: "Format de domaine invalide" }), variant: "destructive" });
       return;
     }
 
@@ -60,8 +60,8 @@ const DnsVisualizer = () => {
       if (whoisResult?.WhoisRecord) setWhoisData(whoisResult.WhoisRecord);
       setSelectedNode({ id: "domain-center", type: "domain", value: dnsResult.domain, label: dnsResult.domain });
       toast({
-        title: language === "pt" ? "Varredura Concluída" : "Scan Completed",
-        description: language === "pt" ? `Registros DNS para ${trimmed} carregados.` : `DNS records for ${trimmed} loaded.`,
+        title: tr({ pt: "Varredura Concluída", en: "Scan Completed", es: "Escaneo Completado", fr: "Analyse Terminée" }),
+        description: tr({ pt: `Registros DNS para ${trimmed} carregados.`, en: `DNS records for ${trimmed} loaded.`, es: `Registros DNS de ${trimmed} cargados.`, fr: `Enregistrements DNS pour ${trimmed} chargés.` }),
       });
     } catch (err: any) {
       toast({ title: t("error"), description: err.message || "Failed to fetch DNS records", variant: "destructive" });
@@ -78,15 +78,15 @@ const DnsVisualizer = () => {
   const handlePivotSearch = (ip: string) => {
     localStorage.setItem("pivotSearchQuery", ip);
     toast({
-      title: language === "pt" ? "Redirecionando..." : "Redirecting...",
-      description: language === "pt" ? `Pesquisando ${ip} no painel principal...` : `Searching ${ip} on main dashboard...`,
+      title: tr({ pt: "Redirecionando...", en: "Redirecting...", es: "Redirigiendo...", fr: "Redirection..." }),
+      description: tr({ pt: `Pesquisando ${ip} no painel principal...`, en: `Searching ${ip} on main dashboard...`, es: `Buscando ${ip} en el panel principal...`, fr: `Recherche de ${ip} dans le tableau de bord principal...` }),
     });
     window.location.href = "/";
   };
 
   const copyToClipboard = (text: string, label: string) => {
     navigator.clipboard.writeText(text);
-    toast({ title: language === "pt" ? "Copiado!" : "Copied!", description: `${label} copied.` });
+    toast({ title: tr({ pt: "Copiado!", en: "Copied!", es: "¡Copiado!", fr: "Copié !" }), description: `${label} copied.` });
   };
 
   const onNodeSelect = useCallback((node: SelectedNode) => setSelectedNode(node), []);
@@ -98,7 +98,7 @@ const DnsVisualizer = () => {
           <div className="relative flex-1 min-w-0">
             <Globe className={`absolute text-muted-foreground/60 transition-all duration-500 ${isCompact ? "left-3 top-2.5 h-4 w-4" : "left-4 top-3.5 h-5 w-5"}`} />
             <Input
-              placeholder={language === "pt" ? "Domínio (Ex: google.com)" : "Domain (e.g. google.com)"}
+              placeholder={tr({ pt: "Domínio (Ex: google.com)", en: "Domain (e.g. google.com)", es: "Dominio (ej: google.com)", fr: "Domaine (ex : google.com)" })}
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               className={`w-full bg-background/50 border-border/40 font-medium placeholder:text-muted-foreground/40 transition-all duration-500 ${
@@ -114,7 +114,7 @@ const DnsVisualizer = () => {
             }`}
           >
             {isScanning ? <RotateCw className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
-            <span>{isScanning ? (language === "pt" ? "Escaneando..." : "Scanning...") : (language === "pt" ? "Escanear" : "Scan")}</span>
+            <span>{isScanning ? tr({ pt: "Escaneando...", en: "Scanning...", es: "Escaneando...", fr: "Analyse..." }) : tr({ pt: "Escanear", en: "Scan", es: "Escanear", fr: "Scanner" })}</span>
           </Button>
         </form>
 
@@ -167,12 +167,15 @@ const DnsVisualizer = () => {
                   <Globe className="h-8 w-8 text-primary animate-pulse" />
                 </div>
                 <h2 className="text-3xl font-extrabold tracking-tight bg-gradient-to-r from-foreground via-foreground/90 to-foreground/50 bg-clip-text text-transparent">
-                  {language === "pt" ? "Visualizador de DNS & WHOIS" : "DNS & WHOIS Graph Visualizer"}
+                  {tr({ pt: "Visualizador de DNS & WHOIS", en: "DNS & WHOIS Graph Visualizer", es: "Visualizador de DNS y WHOIS", fr: "Visualiseur de Graphe DNS et WHOIS" })}
                 </h2>
                 <p className="text-sm text-muted-foreground/75 max-w-lg mx-auto leading-relaxed">
-                  {language === "pt"
-                    ? "Explore graficamente conexões de DNS, dados WHOIS e registros DNSDumpster para mapear relacionamentos de infraestrutura."
-                    : "Graphically map DNS records, WHOIS registration history, and DNSDumpster datasets to analyze infrastructure relationships."}
+                  {tr({
+                    pt: "Explore graficamente conexões de DNS, dados WHOIS e registros DNSDumpster para mapear relacionamentos de infraestrutura.",
+                    en: "Graphically map DNS records, WHOIS registration history, and DNSDumpster datasets to analyze infrastructure relationships.",
+                    es: "Explora gráficamente conexiones DNS, datos WHOIS y registros DNSDumpster para mapear relaciones de infraestructura.",
+                    fr: "Explorez graphiquement les connexions DNS, les données WHOIS et les jeux de données DNSDumpster pour cartographier les relations d'infrastructure.",
+                  })}
                 </p>
               </div>
 
@@ -190,7 +193,7 @@ const DnsVisualizer = () => {
                 <Globe className="absolute inset-0 m-auto h-5 w-5 text-primary animate-pulse" />
               </div>
               <p className="text-sm font-semibold text-muted-foreground animate-pulse">
-                {language === "pt" ? "Resolvendo registros DNS..." : "Resolving DNS records..."}
+                {tr({ pt: "Resolvendo registros DNS...", en: "Resolving DNS records...", es: "Resolviendo registros DNS...", fr: "Résolution des enregistrements DNS..." })}
               </p>
             </div>
           </div>
@@ -257,7 +260,7 @@ const DnsVisualizer = () => {
                                     size="icon"
                                     className="h-6 w-6 rounded-md text-muted-foreground hover:text-primary hover:bg-primary/10"
                                     onClick={() => setSelectedNode({ id: `${type}-${val.replace(/[^a-zA-Z0-9.-]/g, '_')}`, type, value: val, label: val })}
-                                    title={language === "pt" ? "Localizar no gráfico" : "Locate in graph"}
+                                    title={tr({ pt: "Localizar no gráfico", en: "Locate in graph", es: "Localizar en el gráfico", fr: "Localiser dans le graphe" })}
                                   >
                                     <ExternalLink className="h-2.5 w-2.5" />
                                   </Button>
@@ -285,7 +288,7 @@ const DnsVisualizer = () => {
                       <div className="relative mb-2">
                         <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground/50" />
                         <Input
-                          placeholder={language === "pt" ? "Filtrar subdomínios..." : "Filter subdomains..."}
+                          placeholder={tr({ pt: "Filtrar subdomínios...", en: "Filter subdomains...", es: "Filtrar subdominios...", fr: "Filtrer les sous-domaines..." })}
                           value={subdomainSearch}
                           onChange={(e) => setSubdomainSearch(e.target.value)}
                           className="h-8 pl-8 text-xs bg-background/35 border-border/20 rounded-lg placeholder:text-muted-foreground/30 focus-visible:ring-1 focus-visible:ring-primary/30"
@@ -306,7 +309,7 @@ const DnsVisualizer = () => {
                         if (filtered.length === 0) {
                           return (
                             <div className="text-center py-6 text-xs text-muted-foreground/50">
-                              {language === "pt" ? "Nenhum subdomínio correspondente" : "No matching subdomains"}
+                              {tr({ pt: "Nenhum subdomínio correspondente", en: "No matching subdomains", es: "Ningún subdominio coincidente", fr: "Aucun sous-domaine correspondant" })}
                             </div>
                           );
                         }
@@ -328,7 +331,7 @@ const DnsVisualizer = () => {
                                         size="icon"
                                         className="h-5 w-5 rounded-md text-pink-400 hover:text-pink-300 hover:bg-pink-500/10"
                                         onClick={() => setSelectedNode({ id: `Subdomain-${hostItem.host}`, type: "Subdomain", value: hostItem.host, label: hostItem.host, meta: hostItem })}
-                                        title={language === "pt" ? "Localizar no gráfico" : "Locate in graph"}
+                                        title={tr({ pt: "Localizar no gráfico", en: "Locate in graph", es: "Localizar en el gráfico", fr: "Localiser dans le graphe" })}
                                       >
                                         <ExternalLink className="h-2.5 w-2.5" />
                                       </Button>
@@ -348,7 +351,7 @@ const DnsVisualizer = () => {
                                               size="icon"
                                               className="h-4 w-4 rounded-md text-muted-foreground/60 hover:text-primary hover:bg-primary/10 shrink-0"
                                               onClick={() => setSelectedNode({ id: `A-${ipObj.ip}`, type: "A", value: ipObj.ip, label: ipObj.ip, meta: { asn: ipObj.asn, asn_name: ipObj.asn_name, country: ipObj.country, banners: ipObj.banners, ptr: ipObj.ptr } })}
-                                              title={language === "pt" ? "Localizar IP no gráfico" : "Locate IP in graph"}
+                                              title={tr({ pt: "Localizar IP no gráfico", en: "Locate IP in graph", es: "Localizar IP en el gráfico", fr: "Localiser l'IP dans le graphe" })}
                                             >
                                               <ExternalLink className="h-2 w-2" />
                                             </Button>
@@ -382,7 +385,7 @@ const DnsVisualizer = () => {
                                     size="icon"
                                     className="h-5 w-5 rounded-md text-blue-400 hover:text-blue-300 hover:bg-blue-500/10"
                                     onClick={() => setSelectedNode({ id: `MX-${mxItem.host.replace(/[^a-zA-Z0-9.-]/g, '_')}`, type: "MX", value: mxItem.host, label: mxItem.host })}
-                                    title={language === "pt" ? "Localizar no gráfico" : "Locate in graph"}
+                                    title={tr({ pt: "Localizar no gráfico", en: "Locate in graph", es: "Localizar en el gráfico", fr: "Localiser dans le graphe" })}
                                   >
                                     <ExternalLink className="h-2.5 w-2.5" />
                                   </Button>
