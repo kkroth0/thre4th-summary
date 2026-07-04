@@ -297,7 +297,7 @@ export function Header({ actions, logoAddon, onLogoClick, showBackButton = false
               ["/vendors", "/dnsbl", "/dns-visualizer", "/phishing-analyzer", "/threat-hunting"])}
 
             {renderCategory(language === 'pt' ? 'Inteligência' : 'Intelligence',
-              ["/newsletter", "/cves", "/patch-tuesday"])}
+              ["/advisories", "/newsletter", "/cves", "/patch-tuesday"])}
 
             {renderCategory(language === 'pt' ? 'Relatórios' : 'Reports',
               ["/threat-brief"])}
