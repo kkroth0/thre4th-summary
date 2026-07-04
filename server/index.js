@@ -1842,6 +1842,42 @@ app.delete('/api/posts/:id', requireAdmin, (req, res) => {
     res.json({ ok: true });
 });
 
+// RSS 2.0 dos Advisories publicados — distribuição do blog (leitores, agregadores).
+app.get('/api/advisories/feed.xml', (req, res) => {
+    const base = APP_BASE_URL;
+    const published = postsStore
+        .filter((p) => p.published)
+        .sort((a, b) => String(b.publishedAt || b.createdAt).localeCompare(String(a.publishedAt || a.createdAt)))
+        .slice(0, 50);
+    const items = published.map((p) => {
+        const link = `${base}/advisories/${p.slug}`;
+        const date = new Date(p.publishedAt || p.createdAt).toUTCString();
+        const cats = (p.tags || []).map((t) => `<category>${escapeHtml(t)}</category>`).join('');
+        return `    <item>
+      <title>${escapeHtml(p.title)}</title>
+      <link>${escapeHtml(link)}</link>
+      <guid isPermaLink="false">${escapeHtml(p.id)}</guid>
+      <pubDate>${date}</pubDate>
+      <description>${escapeHtml(p.summary || '')}</description>
+      ${cats}
+    </item>`;
+    }).join('\n');
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>ThreatSumm4ry · Advisories</title>
+    <link>${base}/advisories</link>
+    <description>Análises e alertas sobre campanhas, ameaças e tendências.</description>
+    <language>pt-br</language>
+    <atom:link href="${base}/api/advisories/feed.xml" rel="self" type="application/rss+xml"/>
+${items}
+  </channel>
+</rss>`;
+    res.set('Content-Type', 'application/rss+xml; charset=utf-8');
+    res.set('Cache-Control', 'public, max-age=300');
+    res.send(xml);
+});
+
 // Segredo compartilhado p/ as rotas servidor-a-servidor (worker).
 // Sem FEED_AGENT_SECRET definido, as rotas protegidas ficam desabilitadas (503),
 // pra não exporem leitura/escrita de boletim sem auth.

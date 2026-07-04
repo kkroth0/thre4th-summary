@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { Megaphone, Plus, Loader2, CalendarDays, User, FileText } from "lucide-react";
+import { Megaphone, Plus, Loader2, CalendarDays, User, FileText, Rss } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -54,12 +54,17 @@ const Advisories = () => {
                                 : "Analysis and alerts on campaigns, threats and trends."}
                         </p>
                     </div>
-                    {isAdmin && (
-                        <PostEditor
-                            trigger={<Button className="gap-2 shrink-0"><Plus className="h-4 w-4" /> {pt ? "Nova publicação" : "New post"}</Button>}
-                            onSaved={() => load()}
-                        />
-                    )}
+                    <div className="flex items-center gap-2 shrink-0">
+                        <Button asChild variant="ghost" size="icon" className="text-muted-foreground" title="RSS">
+                            <a href="/api/advisories/feed.xml" target="_blank" rel="noreferrer"><Rss className="h-4 w-4" /></a>
+                        </Button>
+                        {isAdmin && (
+                            <PostEditor
+                                trigger={<Button className="gap-2"><Plus className="h-4 w-4" /> {pt ? "Nova publicação" : "New post"}</Button>}
+                                onSaved={() => load()}
+                            />
+                        )}
+                    </div>
                 </div>
 
                 {loading ? (
