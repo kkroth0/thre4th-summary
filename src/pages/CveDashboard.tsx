@@ -429,7 +429,7 @@ const CveDashboard = () => {
 
           {/* Metrics row */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <Card className="border shadow-sm bg-card/60 backdrop-blur-sm">
+            <Card className="border shadow-sm bg-muted/40 ">
               <CardHeader className="py-4 flex flex-row items-center justify-between pb-2">
                 <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{tr({ pt: "Total de Ameaças", en: "Total Tracked", es: "Total Rastreado", fr: "Total Suivi" })}</span>
                 <BarChart2 className="h-4 w-4 text-primary" />
@@ -439,7 +439,7 @@ const CveDashboard = () => {
               </CardContent>
             </Card>
 
-            <Card className="border shadow-sm bg-card/60 backdrop-blur-sm">
+            <Card className="border shadow-sm bg-muted/40 ">
               <CardHeader className="py-4 flex flex-row items-center justify-between pb-2">
                 <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{t("avgCvss") || "Avg CVSS"}</span>
                 <Shield className="h-4 w-4 text-amber-500" />
@@ -449,7 +449,7 @@ const CveDashboard = () => {
               </CardContent>
             </Card>
 
-            <Card className="border shadow-sm bg-card/60 backdrop-blur-sm">
+            <Card className="border shadow-sm bg-muted/40 ">
               <CardHeader className="py-4 flex flex-row items-center justify-between pb-2">
                 <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{t("criticalCves") || "Critical CVEs"}</span>
                 <AlertTriangle className="h-4 w-4 text-red-500" />
@@ -459,7 +459,7 @@ const CveDashboard = () => {
               </CardContent>
             </Card>
 
-            <Card className="border shadow-sm bg-card/60 backdrop-blur-sm">
+            <Card className="border shadow-sm bg-muted/40 ">
               <CardHeader className="py-4 flex flex-row items-center justify-between pb-2">
                 <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{t("activeExploits") || "Active Exploits"}</span>
                 <Globe className="h-4 w-4 text-red-500 animate-pulse" />
@@ -473,7 +473,7 @@ const CveDashboard = () => {
           {/* Visual Analytics Section */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Card 1: CVSS Severity Distribution */}
-            <Card className="border shadow-sm bg-card/65 backdrop-blur-md">
+            <Card className="border shadow-sm bg-muted/40 ">
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
                   <BarChart2 className="h-4 w-4 text-primary" />
@@ -534,7 +534,7 @@ const CveDashboard = () => {
             </Card>
 
             {/* Card 2: Top Targeted Vendors (CISA KEV) */}
-            <Card className="border shadow-sm bg-card/65 backdrop-blur-md flex flex-col justify-between">
+            <Card className="border shadow-sm bg-muted/40  flex flex-col justify-between">
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
                   <Globe className="h-4 w-4 text-primary animate-pulse" />
@@ -592,7 +592,7 @@ const CveDashboard = () => {
           </div>
 
           {/* Filters Bar */}
-          <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 bg-card/25 backdrop-blur-xl p-5 rounded-2xl border border-primary/10 shadow-lg">
+          <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 bg-muted/40  p-5 rounded-xl border border-primary/10 ">
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 flex-1">
               {/* Vendor Select */}
               <div className="flex flex-col gap-1.5">
@@ -603,7 +603,7 @@ const CveDashboard = () => {
                   <SelectTrigger className="h-10.5 bg-background/40 border-primary/15 rounded-xl text-xs font-semibold focus:ring-primary/20 hover:bg-background/60 transition-all">
                     <SelectValue placeholder={tr({ pt: "Todos Fabricantes", en: "All Vendors", es: "Todos los Proveedores", fr: "Tous les Fournisseurs" })} />
                   </SelectTrigger>
-                  <SelectContent className="max-h-80 border-primary/10 bg-popover/95 backdrop-blur-md rounded-xl">
+                  <SelectContent className="max-h-80 border-primary/10 bg-popover/95  rounded-xl">
                     <SelectItem value="all" className="text-xs font-semibold rounded-lg">
                       {tr({ pt: "Todos Fabricantes", en: "All Vendors", es: "Todos los Proveedores", fr: "Tous les Fournisseurs" })}
                     </SelectItem>
@@ -625,7 +625,7 @@ const CveDashboard = () => {
                   <SelectTrigger className="h-10.5 bg-background/40 border-primary/15 rounded-xl text-xs font-semibold focus:ring-primary/20 hover:bg-background/60 transition-all">
                     <SelectValue placeholder={tr({ pt: "Todos Softwares", en: "All Softwares", es: "Todos los Software", fr: "Tous les Logiciels" })} />
                   </SelectTrigger>
-                  <SelectContent className="max-h-80 border-primary/10 bg-popover/95 backdrop-blur-md rounded-xl">
+                  <SelectContent className="max-h-80 border-primary/10 bg-popover/95  rounded-xl">
                     <SelectItem value="all" className="text-xs font-semibold rounded-lg">
                       {tr({ pt: "Todos Softwares", en: "All Softwares", es: "Todos los Software", fr: "Tous les Logiciels" })}
                     </SelectItem>
@@ -647,7 +647,7 @@ const CveDashboard = () => {
                   <SelectTrigger className="h-10.5 bg-background/40 border-primary/15 rounded-xl text-xs font-semibold focus:ring-primary/20 hover:bg-background/60 transition-all">
                     <SelectValue placeholder={tr({ pt: "Todas Severidades", en: "All Severities", es: "Todas las Severidades", fr: "Toutes les Gravités" })} />
                   </SelectTrigger>
-                  <SelectContent className="border-primary/10 bg-popover/95 backdrop-blur-md rounded-xl">
+                  <SelectContent className="border-primary/10 bg-popover/95  rounded-xl">
                     <SelectItem value="all" className="text-xs font-semibold rounded-lg">
                       {tr({ pt: "Todas Severidades", en: "All Severities", es: "Todas las Severidades", fr: "Toutes les Gravités" })}
                     </SelectItem>

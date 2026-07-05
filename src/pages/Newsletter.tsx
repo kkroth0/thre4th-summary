@@ -769,7 +769,7 @@ const Newsletter = () => {
                 <SelectTrigger className="h-9 w-full sm:w-[130px] rounded-md text-xs font-semibold">
                   <SelectValue placeholder={language === "pt" ? "Mês" : "Month"} />
                 </SelectTrigger>
-                <SelectContent className="max-h-60 border-primary/10 bg-popover/95 backdrop-blur-md rounded-xl">
+                <SelectContent className="max-h-60 border-primary/10 bg-popover/95  rounded-xl">
                   {(language === "pt" ? monthNamesPt : monthNames).map((name, idx) => (
                     <SelectItem key={idx} value={idx.toString()} className="text-xs rounded-lg">
                       {name}
@@ -782,7 +782,7 @@ const Newsletter = () => {
                 <SelectTrigger className="h-9 w-full sm:w-[95px] rounded-md text-xs font-semibold">
                   <SelectValue placeholder={language === "pt" ? "Ano" : "Year"} />
                 </SelectTrigger>
-                <SelectContent className="border-primary/10 bg-popover/95 backdrop-blur-md rounded-xl">
+                <SelectContent className="border-primary/10 bg-popover/95  rounded-xl">
                   {["2024", "2025", "2026", "2027"].map(year => (
                     <SelectItem key={year} value={year} className="text-xs rounded-lg">
                       {year}

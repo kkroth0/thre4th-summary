@@ -76,7 +76,7 @@ export const ThreatSummary = ({ query, overallScore, threatLevel, totalVendors, 
   };
 
   return (
-    <Card className="border border-primary/15 bg-card/45 backdrop-blur-md shadow-md shadow-primary/5">
+    <Card className="border border-primary/15 bg-muted/40  shadow-md shadow-primary/5">
       <CardHeader className="py-2.5 px-5 border-b border-primary/5">
         <CardTitle className="flex items-center justify-between text-xs font-bold tracking-wider uppercase text-muted-foreground/80">
           <span>{t('threatSummary')}</span>

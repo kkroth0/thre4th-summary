@@ -294,7 +294,7 @@ const DnsblCheck = () => {
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                                 
                                 {/* A: Circular Progress Ring */}
-                                <Card className="border-primary/10 bg-card/40 backdrop-blur-md shadow-sm relative overflow-hidden flex flex-col justify-between">
+                                <Card className="border-primary/10 bg-muted/40  shadow-sm relative overflow-hidden flex flex-col justify-between">
                                     <CardHeader className="pb-2">
                                         <CardTitle className="text-sm font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
                                             <RotateCw className={`h-4 w-4 text-primary ${isScanning ? 'animate-spin' : ''}`} />
@@ -366,7 +366,7 @@ const DnsblCheck = () => {
                                 </Card>
 
                                 {/* B: Performance Latency Distribution */}
-                                <Card className="border-primary/10 bg-card/40 backdrop-blur-md shadow-sm flex flex-col justify-between">
+                                <Card className="border-primary/10 bg-muted/40  shadow-sm flex flex-col justify-between">
                                     <CardHeader className="pb-2">
                                         <CardTitle className="text-sm font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
                                             <Clock className="h-4 w-4 text-primary" />
@@ -445,7 +445,7 @@ const DnsblCheck = () => {
                                 </Card>
 
                                 {/* C: Summary & Report Actions */}
-                                <Card className="border-primary/10 bg-card/40 backdrop-blur-md shadow-sm flex flex-col justify-between">
+                                <Card className="border-primary/10 bg-muted/40  shadow-sm flex flex-col justify-between">
                                     <CardHeader className="pb-2">
                                         <CardTitle className="text-sm font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
                                             <BarChart2 className="h-4 w-4 text-primary" />
@@ -495,7 +495,7 @@ const DnsblCheck = () => {
                             </div>
 
                             {/* Filters and Blocklists Grid Toolbar */}
-                            <Card className="border-primary/10 bg-card/65 backdrop-blur-md shadow-md p-4">
+                            <Card className="border-primary/10 bg-muted/40  shadow-md p-4">
                                 <div className="flex flex-col sm:flex-row gap-4 items-center justify-between">
                                     
                                     {/* Search input for blocklist name */}
@@ -573,7 +573,7 @@ const DnsblCheck = () => {
 
                             {/* Providers Grid */}
                             {filteredResults.length === 0 ? (
-                                <div className="p-12 border border-dashed border-primary/10 rounded-xl text-center bg-card/25 backdrop-blur-sm">
+                                <div className="p-12 border border-dashed border-primary/10 rounded-xl text-center bg-muted/40 ">
                                     <Info className="h-10 w-10 text-muted-foreground/50 mx-auto mb-3" />
                                     <p className="text-muted-foreground font-medium">
                                         {language === 'pt' ? "Nenhum provedor encontrado para a filtragem atual." : "No providers found matching current filters."}
@@ -589,7 +589,7 @@ const DnsblCheck = () => {
                                                 onClick={() => toggleExpand(result.provider)}
                                                 className={`transition-all duration-300 cursor-pointer overflow-hidden border select-none ${
                                                     result.loading 
-                                                        ? 'border-primary/15 bg-card/45 animate-pulse shadow-sm shadow-primary/2' 
+                                                        ? 'border-primary/15 bg-muted/40 animate-pulse shadow-sm shadow-primary/2' 
                                                         : result.listed 
                                                             ? 'border-destructive/40 bg-destructive/5 shadow-md shadow-destructive/5 hover:border-destructive/70 scale-[1.01]' 
                                                             : 'border-border/60 hover:border-primary/30 hover:bg-accent/10 shadow-sm'

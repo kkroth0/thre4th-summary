@@ -81,7 +81,7 @@ const Login = () => {
           </Link>
 
           <div className="text-center mb-8">
-            <div className="mx-auto mb-4 h-14 w-14 rounded-2xl bg-primary/10 ring-1 ring-inset ring-primary/20 flex items-center justify-center">
+            <div className="mx-auto mb-4 h-14 w-14 rounded-xl bg-primary/10 ring-1 ring-inset ring-primary/20 flex items-center justify-center">
               <ShieldCheck className="h-7 w-7 text-primary" />
             </div>
             <h2 className="text-2xl font-bold">{pt ? "Entrar" : "Sign in"}</h2>

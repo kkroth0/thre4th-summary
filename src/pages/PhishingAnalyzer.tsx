@@ -591,7 +591,7 @@ const PhishingAnalyzer = () => {
           {!parsedData ? (
             /* Dropzone and Sample Loader Card */
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              <Card className="lg:col-span-2 border shadow-sm bg-card/65 backdrop-blur-sm flex flex-col justify-center min-h-[380px]">
+              <Card className="lg:col-span-2 border shadow-sm bg-muted/40  flex flex-col justify-center min-h-[380px]">
                 <CardContent className="p-6">
                   <div
                     onDragEnter={handleDrag}
@@ -634,7 +634,7 @@ const PhishingAnalyzer = () => {
               </Card>
 
               {/* Sample Files Card */}
-              <Card className="border shadow-sm bg-card/65 backdrop-blur-sm flex flex-col justify-between">
+              <Card className="border shadow-sm bg-muted/40  flex flex-col justify-between">
                 <CardHeader>
                   <CardTitle className="text-sm font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
                     <Sparkles className="h-4 w-4 text-primary animate-pulse" />
@@ -694,7 +694,7 @@ const PhishingAnalyzer = () => {
                       {/* Middle/Right: Score and Verdict */}
                       <div className="flex flex-wrap items-center gap-4 sm:gap-6 shrink-0 w-full md:w-auto justify-between md:justify-end">
                         {/* Compact score display */}
-                        <div className="flex items-center gap-3 bg-background/45 backdrop-blur-md px-4 py-2 rounded-xl border border-primary/5">
+                        <div className="flex items-center gap-3 bg-background/45  px-4 py-2 rounded-xl border border-primary/5">
                           <div className="flex flex-col text-right">
                             <span className="text-[9px] text-muted-foreground font-semibold uppercase tracking-wider">Risk Score</span>
                             <span className="text-xs text-muted-foreground/80"><span className="font-bold text-foreground text-sm">{parsedData.score}</span> / 100</span>
@@ -706,7 +706,7 @@ const PhishingAnalyzer = () => {
 
                         {/* Verdict Badge */}
                         <div className="flex flex-col items-end gap-1 shrink-0">
-                          <Badge variant="outline" className={`text-xs py-1.5 px-4 rounded-full font-bold uppercase tracking-wider ${style.color} bg-background/45 backdrop-blur-md`}>
+                          <Badge variant="outline" className={`text-xs py-1.5 px-4 rounded-full font-bold uppercase tracking-wider ${style.color} bg-background/45 `}>
                             {style.title}
                           </Badge>
                           {liveMalicious && parsedData.verdict !== "malicious" && (

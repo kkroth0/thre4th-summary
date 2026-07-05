@@ -58,7 +58,7 @@ export const IocTimeline = ({ vendorData }: Props) => {
   const feedCount = new Set(events.map((e) => e.vendor)).size;
 
   return (
-    <div className="rounded-xl border border-border/60 bg-card/40 p-5 animate-fade-in">
+    <div className="rounded-xl border border-border/60 bg-muted/40 p-5 animate-fade-in">
       <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
         <div className="flex items-center gap-2">
           <Clock className="h-5 w-5 text-primary" />

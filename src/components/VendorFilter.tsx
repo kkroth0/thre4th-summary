@@ -120,7 +120,7 @@ export function VendorFilter({ selectedVendors, onVendorsChange, className }: Ve
                     </span>
                 </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-2xl bg-background/95 backdrop-blur-md border-primary/20 shadow-2xl rounded-2xl p-4 sm:p-5">
+            <DialogContent className="max-w-2xl bg-background/95  border-primary/20 shadow-2xl rounded-xl p-4 sm:p-5">
                 <DialogHeader className="space-y-0.5">
                     <DialogTitle className="text-lg sm:text-xl font-bold tracking-tight flex items-center gap-2">
                         <span>Select Threat Intelligence Vendors</span>
@@ -133,7 +133,7 @@ export function VendorFilter({ selectedVendors, onVendorsChange, className }: Ve
                     </DialogDescription>
                 </DialogHeader>
 
-                <div className="bg-muted/10 border border-primary/5 p-3.5 rounded-2xl space-y-2 mt-1.5 animate-fade-in">
+                <div className="bg-muted/10 border border-primary/5 p-3.5 rounded-xl space-y-2 mt-1.5 animate-fade-in">
                     <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/80">Quick Selection Tools</p>
                     <div className="flex flex-wrap gap-2">
                         <Button 
@@ -297,7 +297,7 @@ export function VendorFilter({ selectedVendors, onVendorsChange, className }: Ve
                     <Button 
                         type="button" 
                         onClick={handleApply}
-                        className="rounded-full px-6 font-semibold bg-gradient-to-r from-primary to-primary/80 text-primary-foreground shadow-md hover:shadow-lg transition-all"
+                        className="rounded-full px-6 font-semibold bg-gradient-to-r from-primary to-primary/80 text-primary-foreground shadow-md hover: transition-all"
                     >
                         Apply Selection ({tempSelected.length})
                     </Button>

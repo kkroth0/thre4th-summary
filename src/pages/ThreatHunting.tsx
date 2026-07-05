@@ -405,7 +405,7 @@ const Section = ({
 }: {
   icon: React.ElementType; title: string; action?: React.ReactNode; children: React.ReactNode;
 }) => (
-  <section className="rounded-xl border border-border/50 bg-card/40 overflow-hidden">
+  <section className="rounded-xl border border-border/50 bg-muted/40 overflow-hidden">
     <div className="flex items-center justify-between gap-2 px-3.5 py-2.5 border-b border-border/40 bg-muted/20">
       <div className="flex items-center gap-2 text-[12px] font-bold tracking-wide text-foreground/90">
         <Icon className="h-3.5 w-3.5 text-primary" />
@@ -459,7 +459,7 @@ const CodeBlock = ({
 
 // A compact metric tile for the "at a glance" row.
 const StatTile = ({ icon: Icon, value, label }: { icon: React.ElementType; value: React.ReactNode; label: string }) => (
-  <div className="flex items-center gap-2.5 rounded-xl border border-border/50 bg-card/40 px-3 py-2.5">
+  <div className="flex items-center gap-2.5 rounded-xl border border-border/50 bg-muted/40 px-3 py-2.5">
     <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center text-primary shrink-0">
       <Icon className="h-4 w-4" />
     </div>
@@ -587,7 +587,7 @@ export default function ThreatHunting() {
     <PageLayout width="max-w-7xl">
       <div className="space-y-8">
         {/* Hero */}
-        <div className="relative overflow-hidden rounded-2xl border border-primary/15 bg-gradient-to-br from-primary/[0.07] via-primary/[0.02] to-transparent p-6 md:p-7">
+        <div className="relative overflow-hidden rounded-xl border border-primary/15 bg-gradient-to-br from-primary/[0.07] via-primary/[0.02] to-transparent p-6 md:p-7">
           <div className="absolute -right-8 -top-8 h-32 w-32 rounded-full bg-primary/10 blur-3xl" aria-hidden />
           <div className="relative space-y-3">
             <div className="flex items-center gap-3">
@@ -607,7 +607,7 @@ export default function ThreatHunting() {
                 { icon: FileCode2, label: t.detections },
                 { icon: Download, label: "PPTX" },
               ].map(({ icon: Icon, label }) => (
-                <span key={label} className="inline-flex items-center gap-1 text-[10.5px] px-2 py-1 rounded-full border border-border/50 bg-card/50 text-foreground/70">
+                <span key={label} className="inline-flex items-center gap-1 text-[10.5px] px-2 py-1 rounded-full border border-border/50 bg-muted/40 text-foreground/70">
                   <Icon className="h-3 w-3 text-primary" />
                   {label}
                 </span>
@@ -620,7 +620,7 @@ export default function ThreatHunting() {
           {/* Left: source picker — paste a URL first, then the live feed */}
           <div className="lg:col-span-5 space-y-4">
             {/* Primary action: analyze any URL */}
-            <div className="rounded-2xl border border-border/50 bg-card/40 p-4 space-y-2.5">
+            <div className="rounded-xl border border-border/50 bg-muted/40 p-4 space-y-2.5">
               <div className="flex items-center gap-2">
                 <Sparkles className="h-4 w-4 text-primary" />
                 <h2 className="text-sm font-bold text-foreground tracking-wide">{t.analyze}</h2>
@@ -643,7 +643,7 @@ export default function ThreatHunting() {
             </div>
 
             {/* Live advisory feed */}
-            <div className="rounded-2xl border border-border/50 bg-card/40 p-4 space-y-3">
+            <div className="rounded-xl border border-border/50 bg-muted/40 p-4 space-y-3">
               <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
                   <Newspaper className="h-4 w-4 text-primary" />
@@ -716,14 +716,14 @@ export default function ThreatHunting() {
           {/* Right: hunt pack panel */}
           <div className="lg:col-span-7">
             {!selected ? (
-              <div className="h-full min-h-[340px] rounded-2xl border border-dashed border-border/50 bg-card/20 flex flex-col items-center justify-center text-center gap-4 p-8">
-                <div className="h-14 w-14 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary/70">
+              <div className="h-full min-h-[340px] rounded-xl border border-dashed border-border/50 bg-muted/40 flex flex-col items-center justify-center text-center gap-4 p-8">
+                <div className="h-14 w-14 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary/70">
                   <Target className="h-7 w-7" />
                 </div>
                 <p className="text-sm text-muted-foreground/80 max-w-xs leading-relaxed">{t.pickPrompt}</p>
               </div>
             ) : (
-              <div className="rounded-2xl border border-border/60 bg-card/40 overflow-hidden">
+              <div className="rounded-xl border border-border/60 bg-muted/40 overflow-hidden">
                 {/* Pack header */}
                 <div className="flex flex-wrap items-center justify-between gap-3 px-4 md:px-5 py-3.5 border-b border-border/50 bg-gradient-to-r from-primary/[0.06] to-transparent">
                   <div className="flex items-center gap-2 text-[12px] font-bold text-primary tracking-wide">

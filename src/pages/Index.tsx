@@ -234,7 +234,7 @@ const SearchForm = ({
       <form onSubmit={onSubmit} className="w-full">
         <div className="space-y-3">
           {/* Search bar */}
-          <div className="relative flex items-center bg-[#0B0E1C]/90 backdrop-blur-2xl border border-white/[0.06] hover:border-primary/25 focus-within:border-primary/40 transition-all duration-500 shadow-[0_8px_40px_-12px_rgba(0,0,0,0.6)] focus-within:shadow-[0_8px_50px_-8px_rgba(30,96,255,0.15)] max-w-2xl mx-auto w-full rounded-full p-1.5 pl-5 flex-row items-center gap-2">
+          <div className="relative flex items-center bg-[#0B0E1C]/90  border border-white/[0.06] hover:border-primary/25 focus-within:border-primary/40 transition-all duration-500 shadow-[0_8px_40px_-12px_rgba(0,0,0,0.6)] focus-within:shadow-[0_8px_50px_-8px_rgba(30,96,255,0.15)] max-w-2xl mx-auto w-full rounded-full p-1.5 pl-5 flex-row items-center gap-2">
 
             {/* Search icon */}
             <div className="flex items-center shrink-0">
@@ -292,7 +292,7 @@ const SearchForm = ({
                 type="submit"
                 disabled={isLoading || !query.trim()}
                 size="icon"
-                className="h-9 w-9 rounded-full bg-primary hover:bg-blue-600 transition-all duration-200 flex items-center justify-center shrink-0 border-0 shadow-lg shadow-primary/20 hover:shadow-blue-600/30 disabled:opacity-30 disabled:shadow-none"
+                className="h-9 w-9 rounded-full bg-primary hover:bg-blue-600 transition-all duration-200 flex items-center justify-center shrink-0 border-0  shadow-primary/20 hover:shadow-blue-600/30 disabled:opacity-30 disabled:shadow-none"
                 title={language === "pt" ? "Analisar" : "Analyze"}
               >
                 {isLoading ? (
@@ -1666,7 +1666,7 @@ const Index = () => {
     <div className={`min-h-screen bg-background flex flex-col transition-all duration-300 ${isCollapsed ? "lg:pl-20" : "lg:pl-64"}`}>
       <Header onLogoClick={handleReset} />
       {/* Sticky Top Search Bar */}
-      <div className="sticky top-16 lg:top-0 z-20 w-full border-b border-primary/5 bg-background/55 backdrop-blur-md px-4 md:px-8 py-3.5 animate-fade-in">
+      <div className="sticky top-16 lg:top-0 z-20 w-full border-b border-primary/5 bg-background/55  px-4 md:px-8 py-3.5 animate-fade-in">
         <div className="max-w-7xl mx-auto">
           <SearchForm
             query={query}

@@ -48,9 +48,9 @@ export function PremiumRoute({ children, feature }: { children: React.ReactNode;
             <Loader2 className="h-4 w-4 animate-spin" /> {pt ? "Verificando sessão…" : "Checking session…"}
           </CardContent></Card>
         ) : (
-          <Card className="border-primary/10 shadow-lg shadow-primary/5 overflow-hidden">
+          <Card className="border-primary/10  shadow-primary/5 overflow-hidden">
             <div className="bg-gradient-to-br from-primary/10 to-transparent p-6 text-center">
-              <div className="mx-auto mb-3 h-14 w-14 rounded-2xl bg-primary/15 ring-1 ring-inset ring-primary/25 flex items-center justify-center">
+              <div className="mx-auto mb-3 h-14 w-14 rounded-xl bg-primary/15 ring-1 ring-inset ring-primary/25 flex items-center justify-center">
                 <Lock className="h-6 w-6 text-primary" />
               </div>
               <Badge className="mb-2 gap-1"><Sparkles className="h-3 w-3" /> {pt ? "Recurso premium" : "Premium feature"}</Badge>

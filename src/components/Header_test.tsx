@@ -31,7 +31,7 @@ export function Header({ actions, onLogoClick }: HeaderProps) {
   ];
 
   return (
-    <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/60 backdrop-blur-md supports-[backdrop-filter]:bg-background/40">
+    <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/60  supports-[backdrop-filter]:bg-background/40">
       <div className="container max-w-7xl mx-auto flex h-16 items-center justify-between px-4">
         {/* Brand Logo */}
         <div className="flex items-center gap-2 md:gap-6">

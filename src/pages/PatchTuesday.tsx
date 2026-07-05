@@ -208,7 +208,7 @@ const PatchTuesday = () => {
             <div className="flex-1 p-4 md:p-8">
                 <div className="max-w-6xl mx-auto space-y-6">
                     {/* Title + month selector */}
-                    <div className="flex flex-col lg:flex-row justify-between items-start lg:items-end gap-4 bg-card/20 p-6 rounded-3xl border border-primary/10 backdrop-blur-md">
+                    <div className="flex flex-col lg:flex-row justify-between items-start lg:items-end gap-4 bg-muted/40 p-6 rounded-xl border border-primary/10 ">
                         <div className="space-y-1.5">
                             <div className="flex items-center gap-2">
                                 <h1 className="text-2xl font-bold flex items-center gap-2.5">
@@ -245,7 +245,7 @@ const PatchTuesday = () => {
                     </div>
 
                     {/* Export bar */}
-                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-card/45 border border-primary/10 p-4 rounded-2xl">
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-muted/40 border border-primary/10 p-4 rounded-xl">
                         <div className="flex items-center gap-2 text-xs text-muted-foreground">
                             <Download className="h-4 w-4 text-primary" />
                             <span className="font-semibold text-foreground">
@@ -279,7 +279,7 @@ const PatchTuesday = () => {
 
                     {/* Error state */}
                     {error && !loadingSummary && (
-                        <div className="flex items-center gap-3 p-4 rounded-2xl border border-red-500/20 bg-red-500/5 text-sm text-red-500">
+                        <div className="flex items-center gap-3 p-4 rounded-xl border border-red-500/20 bg-red-500/5 text-sm text-red-500">
                             <AlertCircle className="h-5 w-5 shrink-0" />
                             <span>{error}</span>
                         </div>
@@ -325,7 +325,7 @@ const PatchTuesday = () => {
                                     return (
                                         <div
                                             key={k.label}
-                                            className="p-4 rounded-2xl border border-primary/10 bg-card/30 flex flex-col gap-1.5"
+                                            className="p-4 rounded-xl border border-primary/10 bg-muted/40 flex flex-col gap-1.5"
                                         >
                                             <div className="flex items-center justify-between">
                                                 <span className="text-[10px] font-bold text-muted-foreground/60 uppercase tracking-wider">
@@ -356,7 +356,7 @@ const PatchTuesday = () => {
                             </div>
 
                             {/* CVE Explorer */}
-                            <div className="rounded-2xl border border-primary/10 bg-card/30 overflow-hidden">
+                            <div className="rounded-xl border border-primary/10 bg-muted/40 overflow-hidden">
                                 <div className="px-5 py-3.5 border-b border-primary/10 flex flex-wrap items-center gap-2">
                                     <ShieldAlert className="h-4 w-4 text-primary" />
                                     <h2 className="text-sm font-bold">{isPt ? "Explorador de CVEs" : "CVE Explorer"}</h2>
@@ -368,7 +368,7 @@ const PatchTuesday = () => {
                                 </div>
 
                                 {/* Filter bar */}
-                                <div className="px-4 py-3 border-b border-primary/10 bg-card/20 flex flex-wrap items-center gap-2">
+                                <div className="px-4 py-3 border-b border-primary/10 bg-muted/40 flex flex-wrap items-center gap-2">
                                     <div className="relative flex-1 min-w-[180px]">
                                         <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground/60" />
                                         <Input
@@ -599,7 +599,7 @@ interface DistroPanelProps {
 }
 
 const DistroPanel = ({ title, rows, max, barClass }: DistroPanelProps) => (
-    <div className="rounded-2xl border border-primary/10 bg-card/30 p-5">
+    <div className="rounded-xl border border-primary/10 bg-muted/40 p-5">
         <h2 className="text-sm font-bold mb-4">{title}</h2>
         <div className="space-y-2.5">
             {rows.map((r) => (

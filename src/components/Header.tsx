@@ -141,7 +141,7 @@ export function Header({ actions, logoAddon, onLogoClick, showBackButton = false
             <TooltipTrigger asChild>
               {buttonElement}
             </TooltipTrigger>
-            <TooltipContent side="right" className="font-semibold text-xs bg-popover border border-primary/10 text-popover-foreground shadow-md backdrop-blur-md py-1.5 px-2.5">
+            <TooltipContent side="right" className="font-semibold text-xs bg-popover border border-primary/10 text-popover-foreground shadow-md  py-1.5 px-2.5">
               {item.label}
             </TooltipContent>
           </Tooltip>
@@ -174,7 +174,7 @@ export function Header({ actions, logoAddon, onLogoClick, showBackButton = false
   return (
     <>
       {/* Mobile/Tablet Header (lg:hidden) */}
-      <header className="lg:hidden sticky top-0 z-50 w-full border-b border-primary/10 bg-background/60 backdrop-blur-md supports-[backdrop-filter]:bg-background/40">
+      <header className="lg:hidden sticky top-0 z-50 w-full border-b border-primary/10 bg-background/60  supports-[backdrop-filter]:bg-background/40">
         <div className="container max-w-7xl mx-auto flex h-16 items-center justify-between px-4 relative">
           {/* Back Button */}
           {showBackButton && pathname !== "/" && (
@@ -264,7 +264,7 @@ export function Header({ actions, logoAddon, onLogoClick, showBackButton = false
 
       {/* Desktop Sidebar (lg:flex) */}
       <aside className={cn(
-        "hidden lg:flex lg:flex-col lg:fixed lg:left-0 lg:top-0 lg:h-screen lg:border-r lg:border-primary/10 lg:bg-card/45 lg:backdrop-blur-md lg:z-30 lg:justify-between lg:overflow-y-auto transition-all duration-300",
+        "hidden lg:flex lg:flex-col lg:fixed lg:left-0 lg:top-0 lg:h-screen lg:border-r lg:border-primary/10 lg:bg-muted/40 lg: lg:z-30 lg:justify-between lg:overflow-y-auto transition-all duration-300",
         isCollapsed ? "lg:w-20 lg:p-3" : "lg:w-64 lg:p-4.5"
       )}>
         {/* Top Part */}

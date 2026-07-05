@@ -61,7 +61,7 @@ const LeafletMap = ({ lat, lon }: { lat: number; lon: number }) => {
 
       const redDotIcon = L.divIcon({
         className: "custom-red-dot",
-        html: `<div class="w-4.5 h-4.5 bg-rose-500 rounded-full border-2 border-white shadow-lg animate-pulse" style="box-shadow: 0 0 12px rgba(244, 63, 94, 0.9); width: 18px; height: 18px;"></div>`,
+        html: `<div class="w-4.5 h-4.5 bg-rose-500 rounded-full border-2 border-white  animate-pulse" style="box-shadow: 0 0 12px rgba(244, 63, 94, 0.9); width: 18px; height: 18px;"></div>`,
         iconSize: [18, 18],
         iconAnchor: [9, 9],
       });
@@ -84,7 +84,7 @@ const LeafletMap = ({ lat, lon }: { lat: number; lon: number }) => {
   return (
     <div className="w-full h-full relative">
       {!leafletLoaded && (
-        <div className="absolute inset-0 flex items-center justify-center bg-card/60 backdrop-blur-sm z-10">
+        <div className="absolute inset-0 flex items-center justify-center bg-muted/40  z-10">
           <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
         </div>
       )}
@@ -309,7 +309,7 @@ export const ThreatCharts = ({ vendorData, detections, totalVendors }: ThreatCha
   return (
     <div className="grid gap-6 md:grid-cols-3 animate-fade-in">
       {/* Geolocation Card */}
-      <Card className="p-6 border border-primary/10 bg-card/45 backdrop-blur-md shadow-md shadow-primary/5 flex flex-col min-h-[340px]">
+      <Card className="p-6 border border-primary/10 bg-muted/40  shadow-md shadow-primary/5 flex flex-col min-h-[340px]">
         <h3 className="text-sm font-bold tracking-wider uppercase text-muted-foreground mb-4">Geolocation</h3>
         {geoDetails.hasCoordinates ? (
           <div className="flex-1 flex flex-col gap-4">
@@ -350,7 +350,7 @@ export const ThreatCharts = ({ vendorData, detections, totalVendors }: ThreatCha
       </Card>
 
       {/* Geographic & Network Data Card */}
-      <Card className="p-6 border border-primary/10 bg-card/45 backdrop-blur-md shadow-md shadow-primary/5 flex flex-col">
+      <Card className="p-6 border border-primary/10 bg-muted/40  shadow-md shadow-primary/5 flex flex-col">
         <h3 className="text-sm font-bold tracking-wider uppercase text-muted-foreground mb-4">Geographic & Network Data</h3>
         <div className="flex-1 flex flex-col text-sm justify-center">
           {hasNetworkData ? (
@@ -390,7 +390,7 @@ export const ThreatCharts = ({ vendorData, detections, totalVendors }: ThreatCha
       </Card>
 
       {/* Vendor Threat Scores Card */}
-      <Card className="p-6 border border-primary/10 bg-card/45 backdrop-blur-md shadow-md shadow-primary/5 flex flex-col justify-between h-full">
+      <Card className="p-6 border border-primary/10 bg-muted/40  shadow-md shadow-primary/5 flex flex-col justify-between h-full">
         <div className="flex-1 flex flex-col justify-between">
           <div>
             <h3 className="text-sm font-bold tracking-wider uppercase text-muted-foreground mb-4">{t('vendorThreatScores')}</h3>

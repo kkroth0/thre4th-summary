@@ -680,7 +680,7 @@ export const ThreatCorrelationGraph = ({
   };
 
   return (
-    <Card className="border-white/[0.04] bg-[#0B0E1A]/80 backdrop-blur-xl shadow-lg rounded-2xl overflow-hidden animate-fade-in">
+    <Card className="border-white/[0.04] bg-[#0B0E1A]/80   rounded-xl overflow-hidden animate-fade-in">
       <div className="flex items-center justify-between px-5 py-3 border-b border-white/[0.04]">
         <div className="flex items-center gap-3">
           <h3 className="text-sm font-bold text-foreground">{language === "pt" ? "Correlação de Ameaças" : "Threat Correlation"}</h3>
@@ -696,7 +696,7 @@ export const ThreatCorrelationGraph = ({
         <div className="lg:col-span-8 flex items-center justify-center p-2 border-b lg:border-b-0 lg:border-r border-white/[0.04] bg-black/20 relative select-none">
           
           {/* Zoom controls */}
-          <div className="absolute top-2 right-2 flex gap-0.5 bg-white/[0.03] backdrop-blur-md p-0.5 border border-white/[0.06] rounded-lg z-10">
+          <div className="absolute top-2 right-2 flex gap-0.5 bg-white/[0.03]  p-0.5 border border-white/[0.06] rounded-lg z-10">
             <Button variant="ghost" size="icon" className="h-6 w-6 rounded-md hover:bg-white/[0.06] text-muted-foreground/50" onClick={handleZoomIn}><ZoomIn className="h-3 w-3" /></Button>
             <Button variant="ghost" size="icon" className="h-6 w-6 rounded-md hover:bg-white/[0.06] text-muted-foreground/50" onClick={handleZoomOut}><ZoomOut className="h-3 w-3" /></Button>
             <Button variant="ghost" size="icon" className="h-6 w-6 rounded-md hover:bg-white/[0.06] text-muted-foreground/50" onClick={handleZoomReset}><Maximize2 className="h-3 w-3" /></Button>
@@ -816,7 +816,7 @@ export const ThreatCorrelationGraph = ({
           </svg>
 
           {/* Compact inline legend */}
-          <div className="absolute bottom-2 left-2 flex items-center gap-2 bg-black/40 backdrop-blur-md px-2.5 py-1.5 border border-white/[0.04] rounded-lg z-10">
+          <div className="absolute bottom-2 left-2 flex items-center gap-2 bg-black/40  px-2.5 py-1.5 border border-white/[0.04] rounded-lg z-10">
             {[
               { color: "bg-primary", label: "Target" },
               { color: "bg-blue-500", label: "Category" },
@@ -951,7 +951,7 @@ export const ThreatCorrelationGraph = ({
               {/* Shared Fact Nodes (IP/Country/ISP/Port) */}
               {["country", "isp", "asn", "port", "verdict"].includes(displayNode.type) && (
                 <div className="space-y-4 text-xs leading-relaxed">
-                  <div className="bg-primary/5 border border-primary/10 rounded-2xl p-4 space-y-2">
+                  <div className="bg-primary/5 border border-primary/10 rounded-xl p-4 space-y-2">
                     <div className="text-[11px] font-bold text-foreground flex items-center gap-1.5">
                       <Shield className="h-4 w-4 text-primary" />
                       {language === "pt" ? "Correlação de Dados Confirmada" : "Data Correlation Confirmed"}
