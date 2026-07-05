@@ -50,6 +50,7 @@ const Actors = () => {
 
   const [selected, setSelected] = useState<ActorDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -85,29 +86,35 @@ const Actors = () => {
   const openActor = async (id: string) => {
     setDetailLoading(true);
     setSelected(null);
+    setDetailError(false);
     try {
       const r = await fetch(`/api/actors/${encodeURIComponent(id)}`);
-      if (r.ok) setSelected(await r.json());
+      if (!r.ok) throw new Error(String(r.status));
+      setSelected(await r.json());
+    } catch {
+      setDetailError(true);
     } finally {
       setDetailLoading(false);
     }
   };
 
   // ---- Detail view ---------------------------------------------------------
-  if (detailLoading || selected) {
+  if (detailLoading || detailError || selected) {
     return (
       <PageLayout width="max-w-3xl">
         <Button
           variant="ghost"
           size="sm"
           className="mb-6 -ml-2 text-muted-foreground"
-          onClick={() => { setSelected(null); setDetailLoading(false); }}
+          onClick={() => { setSelected(null); setDetailLoading(false); setDetailError(false); }}
         >
           <ArrowLeft className="h-4 w-4 mr-1.5" /> {pt ? "Voltar" : "Back"}
         </Button>
 
-        {detailLoading || !selected ? (
+        {detailLoading ? (
           <div className="py-20 text-center"><Loader2 className="h-5 w-5 animate-spin mx-auto text-muted-foreground" /></div>
+        ) : detailError || !selected ? (
+          <p className="py-20 text-center text-sm text-muted-foreground">{pt ? "Não foi possível carregar este ator." : "Could not load this actor."}</p>
         ) : (
           <>
             <PageHeader
