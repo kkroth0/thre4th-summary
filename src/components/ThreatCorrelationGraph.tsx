@@ -951,7 +951,7 @@ export const ThreatCorrelationGraph = ({
               {/* Shared Fact Nodes (IP/Country/ISP/Port) */}
               {["country", "isp", "asn", "port", "verdict"].includes(displayNode.type) && (
                 <div className="space-y-4 text-xs leading-relaxed">
-                  <div className="bg-primary/5 border border-primary/10 rounded-xl p-4 space-y-2">
+                  <div className="bg-primary/5 border border-border/50 rounded-xl p-4 space-y-2">
                     <div className="text-[11px] font-bold text-foreground flex items-center gap-1.5">
                       <Shield className="h-4 w-4 text-primary" />
                       {language === "pt" ? "Correlação de Dados Confirmada" : "Data Correlation Confirmed"}

@@ -411,7 +411,7 @@ const Newsletter = () => {
               <Badge
                 key={index}
                 variant="outline"
-                className="mx-1 font-mono text-[11px] font-bold bg-primary/10 text-primary border-primary/20 hover:bg-primary/20 cursor-pointer transition-colors scale-95"
+                className="mx-1 font-mono text-[11px] font-bold bg-primary/10 text-primary border-border/50 hover:bg-primary/20 cursor-pointer transition-colors scale-95"
                 onClick={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
@@ -769,7 +769,7 @@ const Newsletter = () => {
                 <SelectTrigger className="h-9 w-full sm:w-[130px] rounded-md text-xs font-semibold">
                   <SelectValue placeholder={language === "pt" ? "Mês" : "Month"} />
                 </SelectTrigger>
-                <SelectContent className="max-h-60 border-primary/10 bg-popover/95  rounded-xl">
+                <SelectContent className="max-h-60 border-border/50 bg-popover/95  rounded-xl">
                   {(language === "pt" ? monthNamesPt : monthNames).map((name, idx) => (
                     <SelectItem key={idx} value={idx.toString()} className="text-xs rounded-lg">
                       {name}
@@ -782,7 +782,7 @@ const Newsletter = () => {
                 <SelectTrigger className="h-9 w-full sm:w-[95px] rounded-md text-xs font-semibold">
                   <SelectValue placeholder={language === "pt" ? "Ano" : "Year"} />
                 </SelectTrigger>
-                <SelectContent className="border-primary/10 bg-popover/95  rounded-xl">
+                <SelectContent className="border-border/50 bg-popover/95  rounded-xl">
                   {["2024", "2025", "2026", "2027"].map(year => (
                     <SelectItem key={year} value={year} className="text-xs rounded-lg">
                       {year}
@@ -801,7 +801,7 @@ const Newsletter = () => {
                 placeholder={t("searchAdvisories") || "Search advisories..."}
                 value={searchNews}
                 onChange={(e) => setSearchNews(e.target.value)}
-                className="pl-9 bg-card border-primary/10"
+                className="pl-9 bg-card border-border/50"
               />
             </div>
             
@@ -908,7 +908,7 @@ const Newsletter = () => {
                 variant="outline"
                 size="sm"
                 onClick={() => selectAllVisibleNews(filteredAdvisories)}
-                className="h-9 text-xs gap-1.5 border-primary/20 hover:bg-primary/5 shrink-0"
+                className="h-9 text-xs gap-1.5 border-border/50 hover:bg-primary/5 shrink-0"
               >
                 <Filter className="h-3.5 w-3.5" />
                 {filteredAdvisories.every(item => selectedNews[item.title])
@@ -920,7 +920,7 @@ const Newsletter = () => {
                 size="icon"
                 disabled={loadingNews || isRefreshingNews}
                 onClick={() => loadNews()}
-                className="h-9 w-9 border-primary/20 hover:bg-primary/5 shrink-0"
+                className="h-9 w-9 border-border/50 hover:bg-primary/5 shrink-0"
                 title={language === "pt" ? "Atualizar feeds" : "Refresh feeds"}
               >
                 <RefreshCw className={`h-4 w-4 ${(loadingNews || isRefreshingNews) ? "animate-spin" : ""}`} />
@@ -1097,7 +1097,7 @@ const Newsletter = () => {
                         className={`rounded-lg border border-l-[3px] bg-card transition-colors flex items-start gap-3 ${accent} ${
                           featured ? "p-5 shadow-sm ring-1 ring-primary/10" : "p-3"
                         } ${
-                          selectedNews[item.title] ? "border-primary/50 bg-primary/5" : "hover:border-primary/30"
+                          selectedNews[item.title] ? "border-border/50 bg-primary/5" : "hover:border-border/50"
                         }`}
                       >
                         <Checkbox
@@ -1309,7 +1309,7 @@ const Newsletter = () => {
                                     {!hp || (!hp.loading && !hp.data && !hp.error) ? (
                                       <button
                                         onClick={() => void getHuntPack(item)}
-                                        className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-primary/30 text-primary hover:bg-primary/10 transition-colors"
+                                        className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-border/50 text-primary hover:bg-primary/10 transition-colors"
                                       >
                                         <Crosshair className="h-3.5 w-3.5" />
                                         {language === "pt" ? "Gerar Hunt Pack" : "Generate Hunt Pack"}
@@ -1344,7 +1344,7 @@ const Newsletter = () => {
                                         toast.success(label);
                                       };
                                       return (
-                                        <div className="mt-1 space-y-3 rounded-lg border border-primary/20 bg-primary/[0.03] p-3">
+                                        <div className="mt-1 space-y-3 rounded-lg border border-border/50 bg-primary/[0.03] p-3">
                                           <div className="flex items-center gap-1.5 text-[11px] font-bold text-primary tracking-wide">
                                             <Crosshair className="h-3.5 w-3.5" />
                                             {language === "pt" ? "PACOTE DE THREAT HUNTING" : "THREAT HUNTING PACK"}
@@ -1364,7 +1364,7 @@ const Newsletter = () => {
                                                     href={`https://attack.mitre.org/techniques/${t.replace(".", "/")}/`}
                                                     target="_blank"
                                                     rel="noopener noreferrer"
-                                                    className="font-mono text-[11px] px-1.5 py-0.5 rounded border border-primary/20 text-primary hover:bg-primary/10"
+                                                    className="font-mono text-[11px] px-1.5 py-0.5 rounded border border-border/50 text-primary hover:bg-primary/10"
                                                   >
                                                     {t}
                                                   </a>
@@ -1473,7 +1473,7 @@ const Newsletter = () => {
                                   <div className="flex flex-wrap items-center gap-1.5">
                                     <span>📎 {language === "pt" ? "Referências:" : "References:"}</span>
                                     {mCves.map((cve) => (
-                                      <a key={cve} href={`https://nvd.nist.gov/vuln/detail/${cve}`} target="_blank" rel="noopener noreferrer" className="font-mono font-semibold px-1.5 py-0.5 rounded border border-primary/20 text-primary hover:bg-primary/10">{cve}</a>
+                                      <a key={cve} href={`https://nvd.nist.gov/vuln/detail/${cve}`} target="_blank" rel="noopener noreferrer" className="font-mono font-semibold px-1.5 py-0.5 rounded border border-border/50 text-primary hover:bg-primary/10">{cve}</a>
                                     ))}
                                   </div>
                                 ) : null}

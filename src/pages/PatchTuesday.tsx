@@ -208,7 +208,7 @@ const PatchTuesday = () => {
             <div className="flex-1 p-4 md:p-8">
                 <div className="max-w-6xl mx-auto space-y-6">
                     {/* Title + month selector */}
-                    <div className="flex flex-col lg:flex-row justify-between items-start lg:items-end gap-4 bg-muted/40 p-6 rounded-xl border border-primary/10 ">
+                    <div className="flex flex-col lg:flex-row justify-between items-start lg:items-end gap-4 bg-muted/40 p-6 rounded-xl border border-border/50 ">
                         <div className="space-y-1.5">
                             <div className="flex items-center gap-2">
                                 <h1 className="text-2xl font-bold flex items-center gap-2.5">
@@ -217,7 +217,7 @@ const PatchTuesday = () => {
                                     </span>
                                     {isPt ? "Resumo do Patch Tuesday" : "Patch Tuesday Summary"}
                                 </h1>
-                                <Badge variant="secondary" className="bg-primary/10 text-primary border-primary/20">
+                                <Badge variant="secondary" className="bg-primary/10 text-primary border-border/50">
                                     MSRC
                                 </Badge>
                             </div>
@@ -230,7 +230,7 @@ const PatchTuesday = () => {
 
                         <div className="flex items-center gap-2 w-full lg:w-auto">
                             <Select value={selectedId} onValueChange={setSelectedId} disabled={loadingMonths || !months.length}>
-                                <SelectTrigger className="w-full lg:w-[260px] h-10 rounded-xl bg-background border-primary/15">
+                                <SelectTrigger className="w-full lg:w-[260px] h-10 rounded-xl bg-background border-border/50">
                                     <SelectValue placeholder={loadingMonths ? (isPt ? "Carregando meses..." : "Loading months...") : isPt ? "Selecione o mês" : "Select month"} />
                                 </SelectTrigger>
                                 <SelectContent className="max-h-[320px]">
@@ -245,7 +245,7 @@ const PatchTuesday = () => {
                     </div>
 
                     {/* Export bar */}
-                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-muted/40 border border-primary/10 p-4 rounded-xl">
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-muted/40 border border-border/50 p-4 rounded-xl">
                         <div className="flex items-center gap-2 text-xs text-muted-foreground">
                             <Download className="h-4 w-4 text-primary" />
                             <span className="font-semibold text-foreground">
@@ -325,7 +325,7 @@ const PatchTuesday = () => {
                                     return (
                                         <div
                                             key={k.label}
-                                            className="p-4 rounded-xl border border-primary/10 bg-muted/40 flex flex-col gap-1.5"
+                                            className="p-4 rounded-xl border border-border/50 bg-muted/40 flex flex-col gap-1.5"
                                         >
                                             <div className="flex items-center justify-between">
                                                 <span className="text-[10px] font-bold text-muted-foreground/60 uppercase tracking-wider">
@@ -356,8 +356,8 @@ const PatchTuesday = () => {
                             </div>
 
                             {/* CVE Explorer */}
-                            <div className="rounded-xl border border-primary/10 bg-muted/40 overflow-hidden">
-                                <div className="px-5 py-3.5 border-b border-primary/10 flex flex-wrap items-center gap-2">
+                            <div className="rounded-xl border border-border/50 bg-muted/40 overflow-hidden">
+                                <div className="px-5 py-3.5 border-b border-border/50 flex flex-wrap items-center gap-2">
                                     <ShieldAlert className="h-4 w-4 text-primary" />
                                     <h2 className="text-sm font-bold">{isPt ? "Explorador de CVEs" : "CVE Explorer"}</h2>
                                     <span className="text-[11px] text-muted-foreground">
@@ -368,7 +368,7 @@ const PatchTuesday = () => {
                                 </div>
 
                                 {/* Filter bar */}
-                                <div className="px-4 py-3 border-b border-primary/10 bg-muted/40 flex flex-wrap items-center gap-2">
+                                <div className="px-4 py-3 border-b border-border/50 bg-muted/40 flex flex-wrap items-center gap-2">
                                     <div className="relative flex-1 min-w-[180px]">
                                         <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground/60" />
                                         <Input
@@ -376,12 +376,12 @@ const PatchTuesday = () => {
                                             placeholder={isPt ? "Buscar CVE ou título..." : "Search CVE or title..."}
                                             value={search}
                                             onChange={(e) => setSearch(e.target.value)}
-                                            className="pl-9 h-9 text-xs rounded-xl bg-background border-primary/15"
+                                            className="pl-9 h-9 text-xs rounded-xl bg-background border-border/50"
                                         />
                                     </div>
 
                                     <Select value={fSeverity} onValueChange={setFSeverity}>
-                                        <SelectTrigger className="w-[140px] h-9 text-xs rounded-xl bg-background border-primary/15">
+                                        <SelectTrigger className="w-[140px] h-9 text-xs rounded-xl bg-background border-border/50">
                                             <SelectValue placeholder={isPt ? "Severidade" : "Severity"} />
                                         </SelectTrigger>
                                         <SelectContent>
@@ -395,7 +395,7 @@ const PatchTuesday = () => {
                                     </Select>
 
                                     <Select value={fCvss} onValueChange={setFCvss}>
-                                        <SelectTrigger className="w-[130px] h-9 text-xs rounded-xl bg-background border-primary/15">
+                                        <SelectTrigger className="w-[130px] h-9 text-xs rounded-xl bg-background border-border/50">
                                             <SelectValue placeholder="CVSS" />
                                         </SelectTrigger>
                                         <SelectContent>
@@ -407,7 +407,7 @@ const PatchTuesday = () => {
                                     </Select>
 
                                     <Select value={fImpact} onValueChange={setFImpact}>
-                                        <SelectTrigger className="w-[170px] h-9 text-xs rounded-xl bg-background border-primary/15">
+                                        <SelectTrigger className="w-[170px] h-9 text-xs rounded-xl bg-background border-border/50">
                                             <SelectValue placeholder={isPt ? "Impacto" : "Impact"} />
                                         </SelectTrigger>
                                         <SelectContent>
@@ -421,7 +421,7 @@ const PatchTuesday = () => {
                                     </Select>
 
                                     <Select value={fStatus} onValueChange={setFStatus}>
-                                        <SelectTrigger className="w-[160px] h-9 text-xs rounded-xl bg-background border-primary/15">
+                                        <SelectTrigger className="w-[160px] h-9 text-xs rounded-xl bg-background border-border/50">
                                             <SelectValue placeholder="Status" />
                                         </SelectTrigger>
                                         <SelectContent>
@@ -450,7 +450,7 @@ const PatchTuesday = () => {
                                 <div className="overflow-x-auto">
                                     <table className="w-full text-xs">
                                         <thead>
-                                            <tr className="text-left text-muted-foreground/70 border-b border-primary/5">
+                                            <tr className="text-left text-muted-foreground/70 border-b border-border/50">
                                                 <th className="px-4 py-2.5 font-semibold">CVE</th>
                                                 <th className="px-4 py-2.5 font-semibold">{isPt ? "Severidade" : "Severity"}</th>
                                                 <th className="px-4 py-2.5 font-semibold">CVSS</th>
@@ -463,7 +463,7 @@ const PatchTuesday = () => {
                                         </thead>
                                         <tbody>
                                             {pageRows.map((v) => (
-                                                <tr key={v.cve} className="border-b border-primary/5 last:border-0 hover:bg-muted/20">
+                                                <tr key={v.cve} className="border-b border-border/50 last:border-0 hover:bg-muted/20">
                                                     <td className="px-4 py-2.5 font-mono font-semibold whitespace-nowrap">
                                                         <a
                                                             href={`https://msrc.microsoft.com/update-guide/vulnerability/${v.cve}`}
@@ -508,7 +508,7 @@ const PatchTuesday = () => {
                                                                 target="_blank"
                                                                 rel="noreferrer"
                                                                 title={isPt ? "Microsoft Security Update Guide" : "Microsoft Security Update Guide"}
-                                                                className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded border border-primary/20 text-primary hover:bg-primary/10 transition-colors whitespace-nowrap"
+                                                                className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded border border-border/50 text-primary hover:bg-primary/10 transition-colors whitespace-nowrap"
                                                             >
                                                                 MSRC <ExternalLink className="h-2.5 w-2.5" />
                                                             </a>
@@ -538,7 +538,7 @@ const PatchTuesday = () => {
                                 </div>
 
                                 {/* Pagination */}
-                                <div className="px-5 py-2.5 border-t border-primary/10 flex items-center justify-between gap-3 text-[11px] text-muted-foreground">
+                                <div className="px-5 py-2.5 border-t border-border/50 flex items-center justify-between gap-3 text-[11px] text-muted-foreground">
                                     <span>
                                         {filtered.length > 0
                                             ? isPt
@@ -554,7 +554,7 @@ const PatchTuesday = () => {
                                             size="icon"
                                             disabled={pageClamped <= 1}
                                             onClick={() => setPage((p) => Math.max(1, p - 1))}
-                                            className="h-7 w-7 rounded-lg border-primary/15"
+                                            className="h-7 w-7 rounded-lg border-border/50"
                                         >
                                             <ChevronLeft className="h-4 w-4" />
                                         </Button>
@@ -566,7 +566,7 @@ const PatchTuesday = () => {
                                             size="icon"
                                             disabled={pageClamped >= totalPages}
                                             onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                                            className="h-7 w-7 rounded-lg border-primary/15"
+                                            className="h-7 w-7 rounded-lg border-border/50"
                                         >
                                             <ChevronRight className="h-4 w-4" />
                                         </Button>
@@ -599,7 +599,7 @@ interface DistroPanelProps {
 }
 
 const DistroPanel = ({ title, rows, max, barClass }: DistroPanelProps) => (
-    <div className="rounded-xl border border-primary/10 bg-muted/40 p-5">
+    <div className="rounded-xl border border-border/50 bg-muted/40 p-5">
         <h2 className="text-sm font-bold mb-4">{title}</h2>
         <div className="space-y-2.5">
             {rows.map((r) => (

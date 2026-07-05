@@ -234,7 +234,7 @@ const SearchForm = ({
       <form onSubmit={onSubmit} className="w-full">
         <div className="space-y-3">
           {/* Search bar */}
-          <div className="relative flex items-center bg-[#0B0E1C]/90  border border-white/[0.06] hover:border-primary/25 focus-within:border-primary/40 transition-all duration-500 shadow-[0_8px_40px_-12px_rgba(0,0,0,0.6)] focus-within:shadow-[0_8px_50px_-8px_rgba(30,96,255,0.15)] max-w-2xl mx-auto w-full rounded-full p-1.5 pl-5 flex-row items-center gap-2">
+          <div className="relative flex items-center bg-[#0B0E1C]/90  border border-white/[0.06] hover:border-border/50 focus-within:border-border/50 transition-all duration-500 shadow-[0_8px_40px_-12px_rgba(0,0,0,0.6)] focus-within:shadow-[0_8px_50px_-8px_rgba(30,96,255,0.15)] max-w-2xl mx-auto w-full rounded-full p-1.5 pl-5 flex-row items-center gap-2">
 
             {/* Search icon */}
             <div className="flex items-center shrink-0">
@@ -264,7 +264,7 @@ const SearchForm = ({
             <div className="flex items-center gap-1.5 shrink-0 pr-0.5">
               {/* IOC count badge */}
               {extractedIocs.length > 1 && (
-                <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-primary/10 border border-primary/15 text-[10px] font-bold text-primary font-mono tracking-wide">
+                <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-primary/10 border border-border/50 text-[10px] font-bold text-primary font-mono tracking-wide">
                   <div className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
                   {extractedIocs.length} IOCs
                 </div>
@@ -1476,7 +1476,7 @@ const Index = () => {
         <Header onLogoClick={handleReset} />
 
         {/* Top inline navbar inside the content area (Desktop only) */}
-        <div className="relative z-10 flex justify-between items-center w-full max-w-7xl mx-auto py-6 px-4 md:px-8 border-b border-primary/5 hidden md:flex">
+        <div className="relative z-10 flex justify-between items-center w-full max-w-7xl mx-auto py-6 px-4 md:px-8 border-b border-border/50 hidden md:flex">
           {/* Brand/Logo */}
           <div className="flex items-center gap-2.5">
             <div className="h-7 w-7 rounded bg-primary flex items-center justify-center font-black text-primary-foreground text-[11px] shadow-md shadow-primary/30 select-none">
@@ -1570,7 +1570,7 @@ const Index = () => {
                   <button
                     key={ip}
                     onClick={() => setQuery(prev => prev ? `${prev}\n${ip}` : ip)}
-                    className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-semibold border border-primary/10 bg-muted/20 hover:bg-primary/5 hover:border-primary/30 text-muted-foreground hover:text-foreground hover:scale-[1.03] active:scale-[0.97] transition-all cursor-pointer shadow-sm"
+                    className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-semibold border border-border/50 bg-muted/20 hover:bg-primary/5 hover:border-border/50 text-muted-foreground hover:text-foreground hover:scale-[1.03] active:scale-[0.97] transition-all cursor-pointer shadow-sm"
                   >
                     <span>{flag}</span>
                     <span>{ip}</span>
@@ -1603,7 +1603,7 @@ const Index = () => {
                         key={entry}
                         onClick={() => setQuery(entry)}
                         title={label}
-                        className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-semibold border border-primary/10 bg-muted/20 hover:bg-primary/5 hover:border-primary/30 text-muted-foreground hover:text-foreground hover:scale-[1.03] active:scale-[0.97] transition-all cursor-pointer shadow-sm"
+                        className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-semibold border border-border/50 bg-muted/20 hover:bg-primary/5 hover:border-border/50 text-muted-foreground hover:text-foreground hover:scale-[1.03] active:scale-[0.97] transition-all cursor-pointer shadow-sm"
                       >
                         <Clock className="h-3 w-3 opacity-60" />
                         <span className="font-mono">{short}</span>
@@ -1641,8 +1641,8 @@ const Index = () => {
                 ].map((feat, index) => {
                   const Icon = feat.icon;
                   return (
-                    <div key={index} className="flex flex-col items-center gap-2 p-4 rounded-xl border border-white/[0.04] bg-white/[0.015] hover:bg-white/[0.03] hover:border-primary/15 transition-all duration-300">
-                      <div className="h-8 w-8 rounded-lg bg-primary/8 border border-primary/15 flex items-center justify-center text-primary">
+                    <div key={index} className="flex flex-col items-center gap-2 p-4 rounded-xl border border-white/[0.04] bg-white/[0.015] hover:bg-white/[0.03] hover:border-border/50 transition-all duration-300">
+                      <div className="h-8 w-8 rounded-lg bg-primary/8 border border-border/50 flex items-center justify-center text-primary">
                         <Icon className="h-4 w-4" />
                       </div>
                       <div>
@@ -1666,7 +1666,7 @@ const Index = () => {
     <div className={`min-h-screen bg-background flex flex-col transition-all duration-300 ${isCollapsed ? "lg:pl-20" : "lg:pl-64"}`}>
       <Header onLogoClick={handleReset} />
       {/* Sticky Top Search Bar */}
-      <div className="sticky top-16 lg:top-0 z-20 w-full border-b border-primary/5 bg-background/55  px-4 md:px-8 py-3.5 animate-fade-in">
+      <div className="sticky top-16 lg:top-0 z-20 w-full border-b border-border/50 bg-background/55  px-4 md:px-8 py-3.5 animate-fade-in">
         <div className="max-w-7xl mx-auto">
           <SearchForm
             query={query}
@@ -1711,7 +1711,7 @@ const Index = () => {
                       <Button
                         variant="outline"
                         size="sm"
-                        className="h-9 px-4 rounded-full border-primary/20 hover:bg-primary/10 shadow-sm flex items-center gap-2"
+                        className="h-9 px-4 rounded-full border-border/50 hover:bg-primary/10 shadow-sm flex items-center gap-2"
                         onClick={saveCurrentScans}
                         disabled={savingScans}
                         title={language === "pt" ? "Salvar scan no histórico" : "Save scan to history"}
@@ -1724,7 +1724,7 @@ const Index = () => {
                   <Button
                     variant="outline"
                     size="sm"
-                    className="h-9 px-4 rounded-full border-primary/20 hover:bg-primary/10 shadow-sm flex items-center gap-2"
+                    className="h-9 px-4 rounded-full border-border/50 hover:bg-primary/10 shadow-sm flex items-center gap-2"
                     onClick={copyAllIocs}
                     title={language === "pt" ? "Copiar todos os IOCs (defanged)" : "Copy all IOCs (defanged)"}
                   >
@@ -1737,7 +1737,7 @@ const Index = () => {
                       <Button
                         variant="outline"
                         size="sm"
-                        className="h-9 px-4 rounded-full border-primary/20 hover:bg-primary/10 shadow-sm flex items-center gap-2"
+                        className="h-9 px-4 rounded-full border-border/50 hover:bg-primary/10 shadow-sm flex items-center gap-2"
                         disabled={isExportingPDF}
                         title={isExportingPDF ? "Building Report..." : (language === "pt" ? "Exportar" : "Export")}
                       >

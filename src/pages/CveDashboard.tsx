@@ -417,7 +417,7 @@ const CveDashboard = () => {
               <Button
                 variant="outline"
                 size="icon"
-                className="h-8 w-8 border-primary/20 hover:bg-primary/5 shrink-0"
+                className="h-8 w-8 border-border/50 hover:bg-primary/5 shrink-0"
                 disabled={loadingCves || isRefreshingCves}
                 onClick={() => loadCves()}
                 title={tr({ pt: "Atualizar dados", en: "Refresh data", es: "Actualizar datos", fr: "Actualiser les données" })}
@@ -565,7 +565,7 @@ const CveDashboard = () => {
                               <strong className="text-primary">{vendor.count}</strong> exploits ({pct}%)
                             </span>
                           </div>
-                          <div className="h-2 w-full bg-muted/40 rounded-full overflow-hidden border border-primary/5 flex">
+                          <div className="h-2 w-full bg-muted/40 rounded-full overflow-hidden border border-border/50 flex">
                             <div 
                               style={{ width: `${widthPct}%` }}
                               className="bg-primary/80 hover:bg-primary transition-all duration-300 rounded-full"
@@ -592,7 +592,7 @@ const CveDashboard = () => {
           </div>
 
           {/* Filters Bar */}
-          <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 bg-muted/40  p-5 rounded-xl border border-primary/10 ">
+          <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 bg-muted/40  p-5 rounded-xl border border-border/50 ">
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 flex-1">
               {/* Vendor Select */}
               <div className="flex flex-col gap-1.5">
@@ -600,10 +600,10 @@ const CveDashboard = () => {
                   {tr({ pt: "Fabricante", en: "Vendor", es: "Proveedor", fr: "Fournisseur" })}
                 </span>
                 <Select value={selectedVendor} onValueChange={setSelectedVendor}>
-                  <SelectTrigger className="h-10.5 bg-background/40 border-primary/15 rounded-xl text-xs font-semibold focus:ring-primary/20 hover:bg-background/60 transition-all">
+                  <SelectTrigger className="h-10.5 bg-background/40 border-border/50 rounded-xl text-xs font-semibold focus:ring-primary/20 hover:bg-background/60 transition-all">
                     <SelectValue placeholder={tr({ pt: "Todos Fabricantes", en: "All Vendors", es: "Todos los Proveedores", fr: "Tous les Fournisseurs" })} />
                   </SelectTrigger>
-                  <SelectContent className="max-h-80 border-primary/10 bg-popover/95  rounded-xl">
+                  <SelectContent className="max-h-80 border-border/50 bg-popover/95  rounded-xl">
                     <SelectItem value="all" className="text-xs font-semibold rounded-lg">
                       {tr({ pt: "Todos Fabricantes", en: "All Vendors", es: "Todos los Proveedores", fr: "Tous les Fournisseurs" })}
                     </SelectItem>
@@ -622,10 +622,10 @@ const CveDashboard = () => {
                   {tr({ pt: "Software / Produto", en: "Software / Product", es: "Software / Producto", fr: "Logiciel / Produit" })}
                 </span>
                 <Select value={selectedSoftware} onValueChange={setSelectedSoftware}>
-                  <SelectTrigger className="h-10.5 bg-background/40 border-primary/15 rounded-xl text-xs font-semibold focus:ring-primary/20 hover:bg-background/60 transition-all">
+                  <SelectTrigger className="h-10.5 bg-background/40 border-border/50 rounded-xl text-xs font-semibold focus:ring-primary/20 hover:bg-background/60 transition-all">
                     <SelectValue placeholder={tr({ pt: "Todos Softwares", en: "All Softwares", es: "Todos los Software", fr: "Tous les Logiciels" })} />
                   </SelectTrigger>
-                  <SelectContent className="max-h-80 border-primary/10 bg-popover/95  rounded-xl">
+                  <SelectContent className="max-h-80 border-border/50 bg-popover/95  rounded-xl">
                     <SelectItem value="all" className="text-xs font-semibold rounded-lg">
                       {tr({ pt: "Todos Softwares", en: "All Softwares", es: "Todos los Software", fr: "Tous les Logiciels" })}
                     </SelectItem>
@@ -644,10 +644,10 @@ const CveDashboard = () => {
                   {tr({ pt: "Severidade", en: "Severity", es: "Severidad", fr: "Gravité" })}
                 </span>
                 <Select value={selectedSeverity} onValueChange={setSelectedSeverity}>
-                  <SelectTrigger className="h-10.5 bg-background/40 border-primary/15 rounded-xl text-xs font-semibold focus:ring-primary/20 hover:bg-background/60 transition-all">
+                  <SelectTrigger className="h-10.5 bg-background/40 border-border/50 rounded-xl text-xs font-semibold focus:ring-primary/20 hover:bg-background/60 transition-all">
                     <SelectValue placeholder={tr({ pt: "Todas Severidades", en: "All Severities", es: "Todas las Severidades", fr: "Toutes les Gravités" })} />
                   </SelectTrigger>
-                  <SelectContent className="border-primary/10 bg-popover/95  rounded-xl">
+                  <SelectContent className="border-border/50 bg-popover/95  rounded-xl">
                     <SelectItem value="all" className="text-xs font-semibold rounded-lg">
                       {tr({ pt: "Todas Severidades", en: "All Severities", es: "Todas las Severidades", fr: "Toutes les Gravités" })}
                     </SelectItem>
@@ -724,7 +724,7 @@ const CveDashboard = () => {
                           <Button
                             size="sm"
                             variant="outline"
-                            className="h-7 px-2.5 rounded text-xs gap-1 border-primary/20 hover:bg-primary/5"
+                            className="h-7 px-2.5 rounded text-xs gap-1 border-border/50 hover:bg-primary/5"
                             onClick={() => handlePivotSearch(cve.cveID)}
                             title={t("pivotSearchTooltip") || "Pivot search on dashboard"}
                           >
@@ -773,10 +773,10 @@ const CveDashboard = () => {
                   {filteredRecentCves.map((cve) => {
                     const sev = getCvssSeverity(cve.cvss);
                     return (
-                      <Card key={cve.id} className="border shadow-sm bg-card hover:shadow-md transition-all border-primary/10 hover:border-primary/20">
-                        <CardHeader className="pb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-primary/5">
+                      <Card key={cve.id} className="border shadow-sm bg-card hover:shadow-md transition-all border-border/50 hover:border-border/50">
+                        <CardHeader className="pb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border/50">
                           <div className="flex flex-wrap items-center gap-2.5">
-                            <Badge variant="outline" className="font-mono text-sm border-primary/30 text-primary bg-primary/5 font-bold">
+                            <Badge variant="outline" className="font-mono text-sm border-border/50 text-primary bg-primary/5 font-bold">
                               {cve.id}
                             </Badge>
                             <Badge variant="outline" className={`${sev.color} font-bold`}>
@@ -798,7 +798,7 @@ const CveDashboard = () => {
                             <Button
                               size="sm"
                               variant="outline"
-                              className="h-7 px-2.5 rounded text-xs gap-1 border-primary/20 hover:bg-primary/5"
+                              className="h-7 px-2.5 rounded text-xs gap-1 border-border/50 hover:bg-primary/5"
                               onClick={() => handlePivotSearch(cve.id)}
                               title={t("pivotSearchTooltip") || "Pivot search on dashboard"}
                             >
@@ -842,7 +842,7 @@ const CveDashboard = () => {
                                       href={url}
                                       target="_blank"
                                       rel="noopener noreferrer"
-                                      className="inline-flex items-center gap-1 text-[11px] font-medium text-primary hover:underline bg-primary/5 hover:bg-primary/10 border border-primary/10 px-2 py-0.5 rounded transition-all"
+                                      className="inline-flex items-center gap-1 text-[11px] font-medium text-primary hover:underline bg-primary/5 hover:bg-primary/10 border border-border/50 px-2 py-0.5 rounded transition-all"
                                     >
                                       {label}
                                       <ExternalLink className="h-2.5 w-2.5" />

@@ -51,7 +51,7 @@ export function ScanHistory({ onPick }: { onPick: (query: string) => void }) {
     return (
         <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
-                <Button variant="outline" size="sm" className="h-9 px-4 rounded-full border-primary/20 hover:bg-primary/10 shadow-sm flex items-center gap-2">
+                <Button variant="outline" size="sm" className="h-9 px-4 rounded-full border-border/50 hover:bg-primary/10 shadow-sm flex items-center gap-2">
                     <History className="h-4 w-4" />
                     <span>{tr({ pt: "Histórico", en: "History", es: "Historial", fr: "Historique" })}</span>
                 </Button>

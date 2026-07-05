@@ -425,7 +425,7 @@ export const VendorContent = ({ vendor, onPivot }: VendorContentProps) => {
                     <div><p className="text-xs text-muted-foreground">Services</p><p className="text-2xl font-bold">{data["Service Count"] || 0}</p></div>
                     <div><p className="text-xs text-muted-foreground">Open Ports</p><p className="text-2xl font-bold">{ports.length}</p></div>
                 </div>
-                {labels.length > 0 && (<div><p className="text-sm text-muted-foreground mb-2">Censys Labels</p><div className="flex flex-wrap gap-1">{labels.map((l, idx) => (<Badge key={idx} variant="outline" className="text-[10px] uppercase tracking-wide border-primary/30 text-primary">{l}</Badge>))}</div></div>)}
+                {labels.length > 0 && (<div><p className="text-sm text-muted-foreground mb-2">Censys Labels</p><div className="flex flex-wrap gap-1">{labels.map((l, idx) => (<Badge key={idx} variant="outline" className="text-[10px] uppercase tracking-wide border-border/50 text-primary">{l}</Badge>))}</div></div>)}
                 {ports.length > 0 && (<div><p className="text-sm text-muted-foreground mb-2">Ports</p><div className="flex flex-wrap gap-1">{ports.map((p, idx) => (<Badge key={idx} variant="secondary" className="text-xs">{p}</Badge>))}</div></div>)}
                 {vulnList.length > 0 && (
                     <div>
@@ -450,7 +450,7 @@ export const VendorContent = ({ vendor, onPivot }: VendorContentProps) => {
                                         <Badge variant="outline" className="font-mono">{s.port}{s.transport ? `/${s.transport}` : ""}</Badge>
                                         {s.protocol && <span className="text-muted-foreground">{s.protocol}</span>}
                                         {s.http_status && <Badge variant="secondary" className="text-[10px]">HTTP {s.http_status}</Badge>}
-                                        {Array.isArray(s.labels) && s.labels.map((l: string, i: number) => (<Badge key={i} variant="outline" className="text-[9px] uppercase border-primary/30 text-primary">{l}</Badge>))}
+                                        {Array.isArray(s.labels) && s.labels.map((l: string, i: number) => (<Badge key={i} variant="outline" className="text-[9px] uppercase border-border/50 text-primary">{l}</Badge>))}
                                         {Array.isArray(s.vulns) && s.vulns.length > 0 && <Badge variant="destructive" className="text-[10px]">{s.vulns.length} CVE</Badge>}
                                     </div>
                                     {s.software && <p className="text-muted-foreground">Software: <span className="font-medium text-foreground">{[s.software, s.version].filter(Boolean).join(" ")}</span></p>}

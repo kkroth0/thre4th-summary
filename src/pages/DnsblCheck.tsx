@@ -294,7 +294,7 @@ const DnsblCheck = () => {
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                                 
                                 {/* A: Circular Progress Ring */}
-                                <Card className="border-primary/10 bg-muted/40  shadow-sm relative overflow-hidden flex flex-col justify-between">
+                                <Card className="border-border/50 bg-muted/40  shadow-sm relative overflow-hidden flex flex-col justify-between">
                                     <CardHeader className="pb-2">
                                         <CardTitle className="text-sm font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
                                             <RotateCw className={`h-4 w-4 text-primary ${isScanning ? 'animate-spin' : ''}`} />
@@ -366,7 +366,7 @@ const DnsblCheck = () => {
                                 </Card>
 
                                 {/* B: Performance Latency Distribution */}
-                                <Card className="border-primary/10 bg-muted/40  shadow-sm flex flex-col justify-between">
+                                <Card className="border-border/50 bg-muted/40  shadow-sm flex flex-col justify-between">
                                     <CardHeader className="pb-2">
                                         <CardTitle className="text-sm font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
                                             <Clock className="h-4 w-4 text-primary" />
@@ -388,7 +388,7 @@ const DnsblCheck = () => {
                                                 <span>{totalChecked} / {results.length}</span>
                                             </div>
                                             
-                                            <div className="h-3.5 w-full bg-muted/40 rounded-full overflow-hidden flex shadow-inner border border-primary/5">
+                                            <div className="h-3.5 w-full bg-muted/40 rounded-full overflow-hidden flex shadow-inner border border-border/50">
                                                 {totalChecked > 0 ? (
                                                     <>
                                                         <div 
@@ -445,7 +445,7 @@ const DnsblCheck = () => {
                                 </Card>
 
                                 {/* C: Summary & Report Actions */}
-                                <Card className="border-primary/10 bg-muted/40  shadow-sm flex flex-col justify-between">
+                                <Card className="border-border/50 bg-muted/40  shadow-sm flex flex-col justify-between">
                                     <CardHeader className="pb-2">
                                         <CardTitle className="text-sm font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
                                             <BarChart2 className="h-4 w-4 text-primary" />
@@ -454,25 +454,25 @@ const DnsblCheck = () => {
                                     </CardHeader>
                                     <CardContent className="space-y-4 py-4 flex-1 flex flex-col justify-between">
                                         <div className="grid grid-cols-2 gap-3">
-                                            <div className="p-2.5 rounded-lg border border-primary/5 bg-background/30 text-center">
+                                            <div className="p-2.5 rounded-lg border border-border/50 bg-background/30 text-center">
                                                 <div className={`text-xl font-bold font-mono ${listedCount > 0 ? 'text-destructive' : 'text-foreground'}`}>
                                                     {listedCount}
                                                 </div>
                                                 <div className="text-[9px] font-semibold text-muted-foreground uppercase tracking-wider">{t('listed')}</div>
                                             </div>
-                                            <div className="p-2.5 rounded-lg border border-primary/5 bg-background/30 text-center">
+                                            <div className="p-2.5 rounded-lg border border-border/50 bg-background/30 text-center">
                                                 <div className="text-xl font-bold font-mono text-green-500">
                                                     {cleanCount}
                                                 </div>
                                                 <div className="text-[9px] font-semibold text-muted-foreground uppercase tracking-wider">{t('clean')}</div>
                                             </div>
-                                            <div className="p-2.5 rounded-lg border border-primary/5 bg-background/30 text-center">
+                                            <div className="p-2.5 rounded-lg border border-border/50 bg-background/30 text-center">
                                                 <div className="text-xl font-bold font-mono text-primary">
                                                     {totalChecked}
                                                 </div>
                                                 <div className="text-[9px] font-semibold text-muted-foreground uppercase tracking-wider">{t('checked')}</div>
                                             </div>
-                                            <div className="p-2.5 rounded-lg border border-primary/5 bg-background/30 text-center">
+                                            <div className="p-2.5 rounded-lg border border-border/50 bg-background/30 text-center">
                                                 <div className="text-xl font-bold font-mono text-muted-foreground">
                                                     {pendingCount}
                                                 </div>
@@ -482,7 +482,7 @@ const DnsblCheck = () => {
 
                                         <Button 
                                             variant="outline" 
-                                            className="w-full gap-2 border-primary/20 hover:bg-primary/5 transition-all text-xs font-semibold py-5" 
+                                            className="w-full gap-2 border-border/50 hover:bg-primary/5 transition-all text-xs font-semibold py-5" 
                                             onClick={handleShare}
                                             disabled={isScanning}
                                         >
@@ -495,7 +495,7 @@ const DnsblCheck = () => {
                             </div>
 
                             {/* Filters and Blocklists Grid Toolbar */}
-                            <Card className="border-primary/10 bg-muted/40  shadow-md p-4">
+                            <Card className="border-border/50 bg-muted/40  shadow-md p-4">
                                 <div className="flex flex-col sm:flex-row gap-4 items-center justify-between">
                                     
                                     {/* Search input for blocklist name */}
@@ -505,7 +505,7 @@ const DnsblCheck = () => {
                                             placeholder={language === 'pt' ? "Filtrar por provedor..." : "Filter by provider..."}
                                             value={searchFilter}
                                             onChange={(e) => setSearchFilter(e.target.value)}
-                                            className="pl-9 bg-background/50 border-primary/5 h-9 text-xs"
+                                            className="pl-9 bg-background/50 border-border/50 h-9 text-xs"
                                         />
                                         {searchFilter && (
                                             <button 
@@ -573,7 +573,7 @@ const DnsblCheck = () => {
 
                             {/* Providers Grid */}
                             {filteredResults.length === 0 ? (
-                                <div className="p-12 border border-dashed border-primary/10 rounded-xl text-center bg-muted/40 ">
+                                <div className="p-12 border border-dashed border-border/50 rounded-xl text-center bg-muted/40 ">
                                     <Info className="h-10 w-10 text-muted-foreground/50 mx-auto mb-3" />
                                     <p className="text-muted-foreground font-medium">
                                         {language === 'pt' ? "Nenhum provedor encontrado para a filtragem atual." : "No providers found matching current filters."}
@@ -589,10 +589,10 @@ const DnsblCheck = () => {
                                                 onClick={() => toggleExpand(result.provider)}
                                                 className={`transition-all duration-300 cursor-pointer overflow-hidden border select-none ${
                                                     result.loading 
-                                                        ? 'border-primary/15 bg-muted/40 animate-pulse shadow-sm shadow-primary/2' 
+                                                        ? 'border-border/50 bg-muted/40 animate-pulse shadow-sm shadow-primary/2' 
                                                         : result.listed 
                                                             ? 'border-destructive/40 bg-destructive/5 shadow-md shadow-destructive/5 hover:border-destructive/70 scale-[1.01]' 
-                                                            : 'border-border/60 hover:border-primary/30 hover:bg-accent/10 shadow-sm'
+                                                            : 'border-border/60 hover:border-border/50 hover:bg-accent/10 shadow-sm'
                                                 }`}
                                             >
                                                 <CardHeader className="p-4 pb-2">

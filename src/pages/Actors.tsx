@@ -246,7 +246,7 @@ const Actors = () => {
                 <div className="flex items-center gap-1.5 shrink-0">
                   {a.country && <Badge variant="outline" className="text-[10px] font-normal hidden sm:inline-flex">{a.country}</Badge>}
                   {a.technique_count > 0 && (
-                    <Badge variant="secondary" className="text-[10px] bg-primary/10 text-primary border-primary/20">
+                    <Badge variant="secondary" className="text-[10px] bg-primary/10 text-primary border-border/50">
                       {a.technique_count} TTP{a.technique_count > 1 ? "s" : ""}
                     </Badge>
                   )}

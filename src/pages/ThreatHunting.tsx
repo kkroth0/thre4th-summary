@@ -424,7 +424,7 @@ const Callout = ({
   icon: React.ElementType; title: string; tone: "primary" | "amber" | "slate"; children: React.ReactNode;
 }) => {
   const tones = {
-    primary: "border-primary/25 bg-primary/[0.05] text-primary",
+    primary: "border-border/50 bg-primary/[0.05] text-primary",
     amber: "border-amber-500/25 bg-amber-500/[0.05] text-amber-600 dark:text-amber-400",
     slate: "border-border/60 bg-muted/30 text-foreground/70",
   };
@@ -587,11 +587,11 @@ export default function ThreatHunting() {
     <PageLayout width="max-w-7xl">
       <div className="space-y-8">
         {/* Hero */}
-        <div className="relative overflow-hidden rounded-xl border border-primary/15 bg-gradient-to-br from-primary/[0.07] via-primary/[0.02] to-transparent p-6 md:p-7">
+        <div className="relative overflow-hidden rounded-xl border border-border/50 bg-gradient-to-br from-primary/[0.07] via-primary/[0.02] to-transparent p-6 md:p-7">
           <div className="absolute -right-8 -top-8 h-32 w-32 rounded-full bg-primary/10 blur-3xl" aria-hidden />
           <div className="relative space-y-3">
             <div className="flex items-center gap-3">
-              <div className="h-11 w-11 rounded-xl bg-primary/15 border border-primary/25 flex items-center justify-center text-primary shrink-0">
+              <div className="h-11 w-11 rounded-xl bg-primary/15 border border-border/50 flex items-center justify-center text-primary shrink-0">
                 <Crosshair className="h-5 w-5" />
               </div>
               <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-foreground">{t.title}</h1>
@@ -633,7 +633,7 @@ export default function ThreatHunting() {
                   onChange={(e) => setUrlInput(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && huntUrl()}
                   placeholder={t.urlPlaceholder}
-                  className="w-full h-11 pl-9 pr-3 rounded-xl bg-background border border-border/60 text-[13px] text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/30"
+                  className="w-full h-11 pl-9 pr-3 rounded-xl bg-background border border-border/60 text-[13px] text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-border/50 focus:ring-1 focus:ring-primary/30"
                 />
               </div>
               <Button onClick={huntUrl} disabled={!urlInput.trim()} className="w-full h-10 gap-2">
@@ -660,7 +660,7 @@ export default function ThreatHunting() {
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                   placeholder={t.searchPlaceholder}
-                  className="w-full h-9 pl-9 pr-3 rounded-xl bg-background border border-border/50 text-[13px] text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/40"
+                  className="w-full h-9 pl-9 pr-3 rounded-xl bg-background border border-border/50 text-[13px] text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-border/50"
                 />
               </div>
 
@@ -686,7 +686,7 @@ export default function ThreatHunting() {
                         onClick={() => select(a)}
                         className={`group w-full text-left rounded-xl border p-3 transition-all ${
                           isActive
-                            ? "border-primary/50 bg-primary/[0.07] shadow-sm"
+                            ? "border-border/50 bg-primary/[0.07] shadow-sm"
                             : "border-border/40 bg-background/40 hover:bg-muted/30 hover:border-border/70"
                         }`}
                       >
@@ -717,7 +717,7 @@ export default function ThreatHunting() {
           <div className="lg:col-span-7">
             {!selected ? (
               <div className="h-full min-h-[340px] rounded-xl border border-dashed border-border/50 bg-muted/40 flex flex-col items-center justify-center text-center gap-4 p-8">
-                <div className="h-14 w-14 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary/70">
+                <div className="h-14 w-14 rounded-xl bg-primary/10 border border-border/50 flex items-center justify-center text-primary/70">
                   <Target className="h-7 w-7" />
                 </div>
                 <p className="text-sm text-muted-foreground/80 max-w-xs leading-relaxed">{t.pickPrompt}</p>
@@ -820,7 +820,7 @@ export default function ThreatHunting() {
                                 href={`https://attack.mitre.org/techniques/${tech.replace(".", "/")}/`}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="inline-flex items-center gap-1 font-mono text-[11px] px-2 py-1 rounded-md border border-primary/20 bg-primary/[0.06] text-primary hover:bg-primary/15 transition-colors"
+                                className="inline-flex items-center gap-1 font-mono text-[11px] px-2 py-1 rounded-md border border-border/50 bg-primary/[0.06] text-primary hover:bg-primary/15 transition-colors"
                               >
                                 {tech}
                                 <ArrowRight className="h-2.5 w-2.5 opacity-50" />

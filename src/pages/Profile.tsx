@@ -86,7 +86,7 @@ const Profile = () => {
       {/* Admin (só admin): allow-list, publicações, integrações num só lugar */}
       {auth.isAdmin && (
         <Link to="/admin" className="block mb-5 group">
-          <Card className="transition-colors group-hover:border-primary/30">
+          <Card className="transition-colors group-hover:border-border/50">
             <CardContent className="p-5 flex items-center gap-4">
               <span className="h-11 w-11 rounded-xl bg-primary/10 ring-1 ring-inset ring-primary/20 flex items-center justify-center shrink-0">
                 <ShieldCheck className="h-5 w-5 text-primary" />
@@ -105,7 +105,7 @@ const Profile = () => {
 
       {/* Chaves de API -> Settings */}
       <Link to="/settings" className="block mb-5 group">
-        <Card className="transition-colors group-hover:border-primary/30">
+        <Card className="transition-colors group-hover:border-border/50">
           <CardContent className="p-5 flex items-center gap-4">
             <span className="h-11 w-11 rounded-xl bg-primary/10 ring-1 ring-inset ring-primary/20 flex items-center justify-center shrink-0">
               <KeyRound className="h-5 w-5 text-primary" />

@@ -38,7 +38,7 @@ const Login = () => {
       </div>
 
       {/* Painel hero (esquerda) */}
-      <div className="relative hidden lg:flex flex-col justify-between overflow-hidden bg-gradient-to-br from-primary/12 via-primary/5 to-background p-12 border-r border-primary/10">
+      <div className="relative hidden lg:flex flex-col justify-between overflow-hidden bg-gradient-to-br from-primary/12 via-primary/5 to-background p-12 border-r border-border/50">
         <div className="absolute inset-0 bg-[radial-gradient(60%_60%_at_30%_20%,hsl(var(--primary)/0.10),transparent)]" />
         <Link to="/" className="relative flex items-center gap-2.5 w-fit">
           <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center font-black text-primary-foreground text-sm shadow-sm shadow-primary/30">T</div>

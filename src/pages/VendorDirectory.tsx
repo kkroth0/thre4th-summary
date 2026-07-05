@@ -135,11 +135,11 @@ const VendorDirectory = () => {
         <PageLayout width="max-w-6xl">
                 <div className="space-y-6">
                     {/* Header bar and stats summary */}
-                    <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-muted/40 p-6 rounded-xl border border-primary/10 ">
+                    <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-muted/40 p-6 rounded-xl border border-border/50 ">
                         <div>
                             <h1 className="text-2xl font-bold flex items-center gap-2">
                                 {t('vendors') || 'API Integrations'}
-                                <Badge variant="secondary" className="bg-primary/10 text-primary border-primary/20">
+                                <Badge variant="secondary" className="bg-primary/10 text-primary border-border/50">
                                     {vendorsList.length} integrated
                                 </Badge>
                             </h1>
@@ -154,7 +154,7 @@ const VendorDirectory = () => {
                     </div>
 
                     {/* Filter controls row */}
-                    <div className="flex flex-col md:flex-row items-center gap-3 bg-muted/40 border border-primary/10 p-3 rounded-xl">
+                    <div className="flex flex-col md:flex-row items-center gap-3 bg-muted/40 border border-border/50 p-3 rounded-xl">
                         <div className="relative w-full md:w-80">
                             <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground/60" />
                             <Input
@@ -162,7 +162,7 @@ const VendorDirectory = () => {
                                 placeholder="Search vendors..."
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
-                                className="pl-9 h-9 text-xs rounded-full bg-background border-primary/10 focus-visible:ring-primary/30"
+                                className="pl-9 h-9 text-xs rounded-full bg-background border-border/50 focus-visible:ring-primary/30"
                             />
                         </div>
 
@@ -196,7 +196,7 @@ const VendorDirectory = () => {
                                 return (
                                     <div
                                         key={name}
-                                        className="p-4 rounded-xl border border-primary/10 bg-muted/40 hover:bg-muted/40 transition-all hover:scale-[1.01] hover:border-primary/20 flex flex-col justify-between h-[160px] relative shadow-sm hover:shadow-md"
+                                        className="p-4 rounded-xl border border-border/50 bg-muted/40 hover:bg-muted/40 transition-all hover:scale-[1.01] hover:border-border/50 flex flex-col justify-between h-[160px] relative shadow-sm hover:shadow-md"
                                     >
                                         <div className="space-y-2">
                                             <div className="flex items-center justify-between gap-2">
@@ -253,7 +253,7 @@ const VendorDirectory = () => {
                                                 <Badge
                                                     key={type}
                                                     variant="secondary"
-                                                    className="text-[9px] uppercase font-bold py-0 px-1.5 bg-primary/5 text-primary border border-primary/10 scale-95 origin-left"
+                                                    className="text-[9px] uppercase font-bold py-0 px-1.5 bg-primary/5 text-primary border border-border/50 scale-95 origin-left"
                                                 >
                                                     {type}
                                                 </Badge>
@@ -263,7 +263,7 @@ const VendorDirectory = () => {
                                 );
                             })
                         ) : (
-                            <div className="col-span-full h-32 flex flex-col items-center justify-center text-muted-foreground bg-muted/40 rounded-xl border border-dashed border-primary/10">
+                            <div className="col-span-full h-32 flex flex-col items-center justify-center text-muted-foreground bg-muted/40 rounded-xl border border-dashed border-border/50">
                                 <Shield className="h-6 w-6 text-muted-foreground/40 mb-2" />
                                 <p className="text-xs">No intelligence sources matching filters found.</p>
                             </div>

@@ -76,15 +76,15 @@ export const ThreatSummary = ({ query, overallScore, threatLevel, totalVendors, 
   };
 
   return (
-    <Card className="border border-primary/15 bg-muted/40  shadow-md shadow-primary/5">
-      <CardHeader className="py-2.5 px-5 border-b border-primary/5">
+    <Card className="border border-border/50 bg-muted/40  shadow-md shadow-primary/5">
+      <CardHeader className="py-2.5 px-5 border-b border-border/50">
         <CardTitle className="flex items-center justify-between text-xs font-bold tracking-wider uppercase text-muted-foreground/80">
           <span>{t('threatSummary')}</span>
           <div className="flex items-center gap-1.5">
             <Button
               variant="outline"
               size="sm"
-              className="h-7 px-3 text-xs gap-1.5 rounded-full border-primary/15 hover:bg-primary/5 transition-all duration-300"
+              className="h-7 px-3 text-xs gap-1.5 rounded-full border-border/50 hover:bg-primary/5 transition-all duration-300"
               onClick={handleCopy}
             >
               <Copy className="h-3 w-3" />
@@ -134,7 +134,7 @@ export const ThreatSummary = ({ query, overallScore, threatLevel, totalVendors, 
 
               if (hostname) {
                 return (
-                  <p className="text-xs text-muted-foreground break-all pl-2 border-l-2 border-primary/30 mt-1" title={hostname}>
+                  <p className="text-xs text-muted-foreground break-all pl-2 border-l-2 border-border/50 mt-1" title={hostname}>
                     {hostname}
                   </p>
                 );

@@ -87,7 +87,7 @@ const Advisories = () => {
                     <div className="space-y-4">
                         {posts.map((p) => (
                             <Link key={p.id} to={`/advisories/${p.slug}`} className="block group">
-                                <Card className="transition-colors group-hover:border-primary/30">
+                                <Card className="transition-colors group-hover:border-border/50">
                                     <CardContent className="p-5">
                                         <div className="flex items-center gap-2 flex-wrap mb-1.5">
                                             {isAdmin && !p.published && (
