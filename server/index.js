@@ -3099,6 +3099,51 @@ app.get('/api/patch-tuesday/:id', async (req, res) => {
     }
 });
 
+// Threat actors catalog (MITRE ATT&CK Groups ∪ MISP galaxy) — built offline by
+// server/scripts/build-actors.mjs into server/data/actors.json. Public.
+let ACTORS_CACHE = null;
+const loadActors = () => {
+    if (ACTORS_CACHE) return ACTORS_CACHE;
+    try {
+        const raw = JSON.parse(fs.readFileSync(path.join(__dirname, 'data', 'actors.json'), 'utf8'));
+        ACTORS_CACHE = Array.isArray(raw.actors) ? raw.actors : [];
+    } catch (err) {
+        console.error('Failed to load actors.json (run build-actors.mjs):', err.message);
+        ACTORS_CACHE = [];
+    }
+    return ACTORS_CACHE;
+};
+
+// List (slim) + filter facets. Client fetches once and searches/filters in-memory.
+app.get('/api/actors', (req, res) => {
+    const all = loadActors();
+    const q = String(req.query.q || '').trim().toLowerCase();
+    const country = String(req.query.country || '').trim().toLowerCase();
+    let items = all;
+    if (q) items = items.filter(a =>
+        a.name.toLowerCase().includes(q) ||
+        (a.aliases || []).some(x => (x || '').toLowerCase().includes(q)));
+    if (country) items = items.filter(a => (a.country || '').toLowerCase() === country);
+    res.set('Cache-Control', 'public, max-age=21600');
+    res.json({
+        total: items.length,
+        countries: [...new Set(all.map(a => a.country).filter(Boolean))].sort(),
+        actors: items.map(a => ({
+            id: a.id, name: a.name, aliases: a.aliases || [], country: a.country || '',
+            motivation: a.motivation || '', source: a.source,
+            technique_count: (a.techniques || []).length,
+        })),
+    });
+});
+
+// Full detail for one actor.
+app.get('/api/actors/:id', (req, res) => {
+    const actor = loadActors().find(a => a.id === req.params.id);
+    if (!actor) return res.status(404).json({ error: 'actor not found' });
+    res.set('Cache-Control', 'public, max-age=21600');
+    res.json(actor);
+});
+
 // DNS Record Lookup
 app.post('/api/dns/lookup', scanLimiter, async (req, res) => {
     const { query } = req.body;
