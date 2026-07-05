@@ -18,7 +18,7 @@ import {
     X,
     ExternalLink,
 } from "lucide-react";
-import { Header } from "@/components/Header";
+import { PageLayout } from "@/components/PageLayout";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -31,7 +31,6 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { useSidebar } from "@/contexts/SidebarContext";
 import { cn } from "@/lib/utils";
 import {
     fetchPatchTuesdayMonths,
@@ -57,7 +56,6 @@ type ExportKind = "pdf" | "pptx" | "xlsx";
 
 const PatchTuesday = () => {
     const { language } = useLanguage();
-    const { isCollapsed } = useSidebar();
     const { toast } = useToast();
     const isPt = language === "pt";
 
@@ -206,13 +204,7 @@ const PatchTuesday = () => {
     ];
 
     return (
-        <div
-            className={cn(
-                "min-h-screen bg-background flex flex-col transition-all duration-300",
-                isCollapsed ? "lg:pl-20" : "lg:pl-64"
-            )}
-        >
-            <Header showBackButton />
+        <PageLayout bare>
             <div className="flex-1 p-4 md:p-8">
                 <div className="max-w-6xl mx-auto space-y-6">
                     {/* Title + month selector */}
@@ -595,7 +587,7 @@ const PatchTuesday = () => {
                     )}
                 </div>
             </div>
-        </div>
+        </PageLayout>
     );
 };
 

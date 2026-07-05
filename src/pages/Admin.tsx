@@ -4,20 +4,17 @@ import { ShieldCheck, Loader2, CheckCircle2, XCircle, Plug, Megaphone, Plus, Pen
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import { Header } from "@/components/Header";
-import { Footer } from "@/components/Footer";
+import { PageLayout } from "@/components/PageLayout";
 import AllowlistManager from "@/components/AllowlistManager";
 import FeedSourcesManager from "@/components/FeedSourcesManager";
 import { PostEditor } from "@/components/PostEditor";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { useSidebar } from "@/contexts/SidebarContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { fetchIntegrationStatus, fetchPosts, type IntegrationStatus, type PostCard } from "@/services/threatApi";
 import { toast } from "sonner";
 
 const Admin = () => {
   const { language } = useLanguage();
-  const { isCollapsed } = useSidebar();
   const { auth, loading } = useAuth();
   const pt = language === "pt";
 
@@ -38,11 +35,7 @@ const Admin = () => {
   }, [auth.isAdmin]);
 
   const shell = (children: React.ReactNode) => (
-    <div className={`min-h-screen bg-background flex flex-col transition-all duration-300 ${isCollapsed ? "lg:pl-20" : "lg:pl-64"}`}>
-      <Header showBackButton />
-      <main className="flex-1 container mx-auto px-4 py-8 max-w-3xl w-full">{children}</main>
-      <Footer />
-    </div>
+    <PageLayout width="max-w-3xl">{children}</PageLayout>
   );
 
   if (loading) {

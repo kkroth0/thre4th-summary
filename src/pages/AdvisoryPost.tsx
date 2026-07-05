@@ -5,12 +5,10 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import { Header } from "@/components/Header";
-import { Footer } from "@/components/Footer";
+import { PageLayout } from "@/components/PageLayout";
 import { Markdown } from "@/components/Markdown";
 import { PostEditor } from "@/components/PostEditor";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { useSidebar } from "@/contexts/SidebarContext";
 import { fetchPost, type Post } from "@/services/threatApi";
 
 const LOCALE: Record<string, string> = { pt: "pt-BR", en: "en-US", es: "es-ES", fr: "fr-FR" };
@@ -21,7 +19,6 @@ const AdvisoryPost = () => {
     const { slug } = useParams<{ slug: string }>();
     const navigate = useNavigate();
     const { language, tr } = useLanguage();
-    const { isCollapsed } = useSidebar();
 
     const [post, setPost] = useState<Post | null>(null);
     const [isAdmin, setIsAdmin] = useState(false);
@@ -45,11 +42,7 @@ const AdvisoryPost = () => {
     useEffect(() => { if (slug) load(slug); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [slug]);
 
     const shell = (children: React.ReactNode) => (
-        <div className={`min-h-screen bg-background flex flex-col transition-all duration-300 ${isCollapsed ? "lg:pl-20" : "lg:pl-64"}`}>
-            <Header showBackButton />
-            <main className="flex-1 container mx-auto px-4 py-8 max-w-3xl w-full">{children}</main>
-            <Footer />
-        </div>
+        <PageLayout width="max-w-3xl">{children}</PageLayout>
     );
 
     if (loading) {

@@ -10,10 +10,8 @@ import {
   AlertDialogFooter, AlertDialogTitle, AlertDialogDescription, AlertDialogAction,
   AlertDialogCancel,
 } from "@/components/ui/alert-dialog";
-import { Header } from "@/components/Header";
-import { Footer } from "@/components/Footer";
+import { PageLayout } from "@/components/PageLayout";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { useSidebar } from "@/contexts/SidebarContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { fetchApiKeys, saveApiKey, deleteApiKey, type ApiKeysState } from "@/services/threatApi";
 import { toast } from "sonner";
@@ -140,7 +138,6 @@ const KeyRow = ({ p, configured, onChanged }: { p: Provider; configured: boolean
 
 const Settings = () => {
   const { language } = useLanguage();
-  const { isCollapsed } = useSidebar();
   const { auth, loading: authLoading, refresh } = useAuth();
   const pt = language === "pt";
 
@@ -157,11 +154,7 @@ const Settings = () => {
   const onChanged = () => { load(); refresh(); };
 
   const shell = (children: React.ReactNode) => (
-    <div className={`min-h-screen bg-background flex flex-col transition-all duration-300 ${isCollapsed ? "lg:pl-20" : "lg:pl-64"}`}>
-      <Header showBackButton />
-      <main className="flex-1 container mx-auto px-4 py-8 max-w-3xl w-full">{children}</main>
-      <Footer />
-    </div>
+    <PageLayout width="max-w-3xl">{children}</PageLayout>
   );
 
   if (authLoading) {

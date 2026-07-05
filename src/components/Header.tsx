@@ -1,5 +1,5 @@
 import { Link, useLocation } from "react-router-dom";
-import { BookOpen, Shield, Mail, Activity, Terminal, ArrowLeft, ShieldAlert, MailWarning, ChevronLeft, ChevronRight, Globe, CalendarCheck, Crosshair, FileText, LogIn, Settings as SettingsIcon, Megaphone, ShieldCheck } from "lucide-react";
+import { BookOpen, Shield, Mail, Activity, Terminal, ArrowLeft, ShieldAlert, MailWarning, ChevronLeft, ChevronRight, Globe, CalendarCheck, Crosshair, FileText, LogIn, Settings as SettingsIcon, Megaphone, ShieldCheck, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -97,12 +97,12 @@ export function Header({ actions, logoAddon, onLogoClick, showBackButton = false
     { path: "/advisories", label: "Advisories", icon: Megaphone },
     { path: "/vendors", label: t("vendors") || "Vendors", icon: BookOpen },
     { path: "/dnsbl", label: t("dnsblCheck") || "DNSBL Check", icon: ShieldAlert },
-    { path: "/dns-visualizer", label: t("dnsVisualizer") || "DNS Visualizer", icon: Globe },
     { path: "/phishing-analyzer", label: tr({ pt: "Análise de Phishing", en: "Phishing Analyzer", es: "Análisis de Phishing", fr: "Analyse de Phishing" }), icon: MailWarning },
     { path: "/threat-hunting", label: "Threat Hunting", icon: Crosshair, premium: true },
     { path: "/threat-brief", label: "Threat Brief", icon: FileText, premium: true },
     { path: "/newsletter", label: tr({ pt: "Coletor de Intel", en: "Intel Collector", es: "Colector de Intel", fr: "Collecteur d'Intel" }), icon: Mail, premium: true },
     { path: "/cves", label: tr({ pt: "Painel de CVEs", en: "CVE Dashboard", es: "Panel de CVEs", fr: "Tableau de bord CVE" }), icon: Shield },
+    { path: "/atores", label: tr({ pt: "Atores", en: "Threat Actors", es: "Actores", fr: "Acteurs" }), icon: Users },
     { path: "/patch-tuesday", label: "Patch Tuesday", icon: CalendarCheck },
     { path: "/features", label: tr({ pt: "Funcionalidades", en: "Features", es: "Funciones", fr: "Fonctionnalités" }), icon: Terminal },
   ];
@@ -294,10 +294,10 @@ export function Header({ actions, logoAddon, onLogoClick, showBackButton = false
             </div>
 
             {renderCategory(language === 'pt' ? 'Investigar' : 'Investigate',
-              ["/vendors", "/dnsbl", "/dns-visualizer", "/phishing-analyzer", "/threat-hunting"])}
+              ["/vendors", "/dnsbl", "/phishing-analyzer", "/threat-hunting"])}
 
             {renderCategory(language === 'pt' ? 'Inteligência' : 'Intelligence',
-              ["/advisories", "/newsletter", "/cves", "/patch-tuesday"])}
+              ["/advisories", "/newsletter", "/cves", "/atores", "/patch-tuesday"])}
 
             {renderCategory(language === 'pt' ? 'Relatórios' : 'Reports',
               ["/threat-brief"])}

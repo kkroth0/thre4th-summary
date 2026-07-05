@@ -6,10 +6,8 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Footer } from "@/components/Footer";
+import { PageLayout } from "@/components/PageLayout";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { useSidebar } from "@/contexts/SidebarContext";
-import { Header } from "@/components/Header";
 import { toast } from "sonner";
 import {
   Select,
@@ -43,7 +41,6 @@ interface ExploitedCve {
 }
 
 const CveDashboard = () => {
-  const { isCollapsed } = useSidebar();
   const { t, language, tr } = useLanguage();
   
   // CVE Dashboard States
@@ -393,11 +390,8 @@ const CveDashboard = () => {
   }, [exploitedCves]);
 
   return (
-    <div className={`min-h-screen bg-background flex flex-col transition-all duration-300 ${isCollapsed ? "lg:pl-20" : "lg:pl-64"}`}>
-      <Header showBackButton />
-
-      <div className="flex-1 p-4 md:p-8">
-        <div className="max-w-7xl mx-auto space-y-6">
+    <PageLayout width="max-w-7xl">
+        <div className="space-y-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b pb-4">
             <div>
               <h1 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
@@ -868,9 +862,7 @@ const CveDashboard = () => {
           </Tabs>
 
         </div>
-      </div>
-      <Footer />
-    </div>
+    </PageLayout>
   );
 };
 

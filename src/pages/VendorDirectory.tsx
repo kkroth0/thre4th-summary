@@ -5,9 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { VENDOR_IOC_SUPPORT } from "@/services/threatApi";
 import { Badge } from "@/components/ui/badge";
-import { Header } from "@/components/Header";
+import { PageLayout } from "@/components/PageLayout";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { useSidebar } from "@/contexts/SidebarContext";
 
 const VENDOR_INFO: Record<string, { description: string; docLink: string; domain: string }> = {
     "VirusTotal": {
@@ -98,7 +97,6 @@ const VENDOR_INFO: Record<string, { description: string; docLink: string; domain
 };
 
 const VendorDirectory = () => {
-    const { isCollapsed } = useSidebar();
     const { t } = useLanguage();
     const [searchQuery, setSearchQuery] = useState("");
     const [selectedType, setSelectedType] = useState<string>("ALL");
@@ -134,10 +132,8 @@ const VendorDirectory = () => {
     const totalCount = Object.keys(apiStatuses).length;
 
     return (
-        <div className={`min-h-screen bg-background flex flex-col transition-all duration-300 ${isCollapsed ? "lg:pl-20" : "lg:pl-64"}`}>
-            <Header showBackButton />
-            <div className="flex-1 p-4 md:p-8">
-                <div className="max-w-6xl mx-auto space-y-6">
+        <PageLayout width="max-w-6xl">
+                <div className="space-y-6">
                     {/* Header bar and stats summary */}
                     <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-card/20 p-6 rounded-3xl border border-primary/10 backdrop-blur-md">
                         <div>
@@ -274,8 +270,7 @@ const VendorDirectory = () => {
                         )}
                     </div>
                 </div>
-            </div>
-        </div>
+        </PageLayout>
     );
 };
 

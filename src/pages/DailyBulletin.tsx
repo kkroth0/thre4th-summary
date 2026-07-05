@@ -11,13 +11,12 @@ import {
   AlertDialogFooter, AlertDialogTitle, AlertDialogDescription, AlertDialogAction,
   AlertDialogCancel,
 } from "@/components/ui/alert-dialog";
-import { Footer } from "@/components/Footer";
-import { Header } from "@/components/Header";
+import { PageLayout } from "@/components/PageLayout";
+import { PageHeader } from "@/components/PageHeader";
 import { BoletimView } from "@/components/BoletimView";
 import { PostEditor } from "@/components/PostEditor";
 import { boletimToDraft } from "@/services/boletimMarkdown";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { useSidebar } from "@/contexts/SidebarContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import {
@@ -64,7 +63,6 @@ const SEV_DOT: Record<string, string> = {
 
 const DailyBulletin: React.FC = () => {
   const { language } = useLanguage();
-  const { isCollapsed } = useSidebar();
   const pt = language === "pt";
 
   const [suggestions, setSuggestions] = useState<DailySuggestion[]>([]);
@@ -177,18 +175,13 @@ const DailyBulletin: React.FC = () => {
   const selectedJob = jobs.find((j) => j.id === expandedId && j.status === "done" && j.json);
 
   return (
-    <div className={`min-h-screen bg-background flex flex-col transition-all duration-300 ${isCollapsed ? "lg:pl-20" : "lg:pl-64"}`}>
-      <Header showBackButton />
-      <main className="flex-1 container mx-auto px-4 py-12 max-w-3xl">
-        {/* Title */}
-        <header className="mb-10">
-          <h1 className="text-3xl font-semibold tracking-tight">Threat Brief</h1>
-          <p className="text-muted-foreground mt-2 leading-relaxed">
-            {pt
-              ? "Cole o link de um relatório ou notícia de segurança. Ele é resumido sozinho e você baixa o JSON pronto pro seu slide."
-              : "Paste a link to a security report or news post. It gets summarized on its own and you download the JSON for your slide."}
-          </p>
-        </header>
+    <PageLayout width="max-w-3xl">
+        <PageHeader
+          title="Threat Brief"
+          subtitle={pt
+            ? "Cole o link de um relatório ou notícia de segurança. Ele é resumido sozinho e você baixa o JSON pronto pro seu slide."
+            : "Paste a link to a security report or news post. It gets summarized on its own and you download the JSON for your slide."}
+        />
 
         {/* Generator — one calm input row, no card chrome */}
         <section className="mb-12">
@@ -374,9 +367,7 @@ const DailyBulletin: React.FC = () => {
             <p className="py-10 text-center text-sm text-muted-foreground">{pt ? "Nenhuma sugestão no momento." : "No suggestions right now."}</p>
           )}
         </section>
-      </main>
-      <Footer />
-    </div>
+    </PageLayout>
   );
 };
 

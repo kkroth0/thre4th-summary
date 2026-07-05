@@ -7,10 +7,8 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Footer } from "@/components/Footer";
+import { PageLayout } from "@/components/PageLayout";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { useSidebar } from "@/contexts/SidebarContext";
-import { Header } from "@/components/Header";
 import FeedSourcesManager from "@/components/FeedSourcesManager";
 import { toast } from "sonner";
 import {
@@ -204,7 +202,6 @@ const translateText = async (text: string): Promise<string> => {
 };
 
 const Newsletter = () => {
-  const { isCollapsed } = useSidebar();
   const { t, language } = useLanguage();
   
   // Newsletter States
@@ -702,11 +699,8 @@ const Newsletter = () => {
   }, [isDigestOpen]);
 
   return (
-    <div className={`min-h-screen bg-background flex flex-col transition-all duration-300 ${isCollapsed ? "lg:pl-20" : "lg:pl-64"}`}>
-      <Header showBackButton />
-
-      <div className="flex-1 p-4 md:p-8">
-        <div className="max-w-7xl mx-auto space-y-6">
+    <PageLayout width="max-w-7xl">
+        <div className="space-y-6">
 
           {/* Page Title Row */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b pb-4">
@@ -1497,9 +1491,7 @@ const Newsletter = () => {
           </div>
 
         </div>
-      </div>
-      <Footer />
-    </div>
+    </PageLayout>
   );
 };
 

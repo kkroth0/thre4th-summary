@@ -17,10 +17,10 @@ const VendorDirectory = lazy(() => import("./pages/VendorDirectory"));
 const DnsblCheck = lazy(() => import("./pages/DnsblCheck"));
 const Newsletter = lazy(() => import("./pages/Newsletter"));
 const CveDashboard = lazy(() => import("./pages/CveDashboard"));
+const Actors = lazy(() => import("./pages/Actors"));
 const PhishingAnalyzer = lazy(() => import("./pages/PhishingAnalyzer"));
 const ThreatHunting = lazy(() => import("./pages/ThreatHunting"));
 const DailyBulletin = lazy(() => import("./pages/DailyBulletin"));
-const DnsVisualizer = lazy(() => import("./pages/DnsVisualizer"));
 const PatchTuesday = lazy(() => import("./pages/PatchTuesday"));
 const Features = lazy(() => import("./pages/Features"));
 const Advisories = lazy(() => import("./pages/Advisories"));
@@ -49,7 +49,8 @@ const App = () => (
                 {/* Public Routes (CTI & CVE Dashboard) */}
                 <Route path="/" element={<Index />} />
                 <Route path="/cves" element={<CveDashboard />} />
-                <Route path="/dns-visualizer" element={<DnsVisualizer />} />
+                <Route path="/atores" element={<Actors />} />
+                <Route path="/actors" element={<Navigate to="/atores" replace />} />
                 <Route path="/patch-tuesday" element={<PatchTuesday />} />
                 <Route path="/features" element={<Features />} />
                 <Route path="/advisories" element={<Advisories />} />

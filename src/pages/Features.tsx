@@ -4,10 +4,8 @@ import {
   Shield, Zap, Building, Cpu, UserCheck,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Footer } from "@/components/Footer";
-import { Header } from "@/components/Header";
+import { PageLayout } from "@/components/PageLayout";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { useSidebar } from "@/contexts/SidebarContext";
 
 const content = {
   en: {
@@ -140,7 +138,6 @@ const CARD = "bg-card hover:bg-muted/40 border rounded-lg p-5 transition-colors"
 const CHIP = "h-9 w-9 rounded-md bg-primary/10 text-primary flex items-center justify-center shrink-0";
 
 export default function Features() {
-  const { isCollapsed } = useSidebar();
   const { language } = useLanguage();
   const t = content[language as "en" | "pt"] || content.en;
 
@@ -167,15 +164,14 @@ export default function Features() {
   ];
 
   return (
-    <div className={`min-h-screen bg-background text-foreground flex flex-col transition-all duration-300 ${isCollapsed ? "lg:pl-20" : "lg:pl-64"}`}>
-      <Header />
+    <PageLayout width="max-w-7xl" showBackButton={false}>
 
       <style>{`
         @keyframes flow-dash { to { stroke-dashoffset: -20; } }
         .flow-line { animation: flow-dash 1.5s linear infinite; }
       `}</style>
 
-      <div className="flex-1 max-w-7xl mx-auto px-4 md:px-8 py-12 md:py-20 space-y-24 md:space-y-32 w-full">
+      <div className="space-y-24 md:space-y-32">
 
         {/* Section 1: Why */}
         <section className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-16 items-start">
@@ -299,7 +295,6 @@ export default function Features() {
         </section>
 
       </div>
-      <Footer />
-    </div>
+    </PageLayout>
   );
 }

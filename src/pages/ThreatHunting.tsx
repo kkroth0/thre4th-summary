@@ -6,10 +6,8 @@ import {
   ArrowRight, Sparkles,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Footer } from "@/components/Footer";
-import { Header } from "@/components/Header";
+import { PageLayout } from "@/components/PageLayout";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { useSidebar } from "@/contexts/SidebarContext";
 import { toast } from "sonner";
 
 // Mirrors the advisory shape returned by GET /api/newsletter (only the fields
@@ -473,7 +471,6 @@ const StatTile = ({ icon: Icon, value, label }: { icon: React.ElementType; value
 );
 
 export default function ThreatHunting() {
-  const { isCollapsed } = useSidebar();
   const { language } = useLanguage();
   const t = T[(language as "en" | "pt")] || T.en;
 
@@ -587,10 +584,8 @@ export default function ThreatHunting() {
   };
 
   return (
-    <div className={`min-h-screen bg-background flex flex-col transition-all duration-300 ${isCollapsed ? "lg:pl-20" : "lg:pl-64"}`}>
-      <Header showBackButton />
-
-      <div className="flex-1 max-w-7xl w-full mx-auto px-4 md:px-8 py-8 md:py-12 space-y-8">
+    <PageLayout width="max-w-7xl">
+      <div className="space-y-8">
         {/* Hero */}
         <div className="relative overflow-hidden rounded-2xl border border-primary/15 bg-gradient-to-br from-primary/[0.07] via-primary/[0.02] to-transparent p-6 md:p-7">
           <div className="absolute -right-8 -top-8 h-32 w-32 rounded-full bg-primary/10 blur-3xl" aria-hidden />
@@ -907,7 +902,6 @@ export default function ThreatHunting() {
           </div>
         </div>
       </div>
-      <Footer />
-    </div>
+    </PageLayout>
   );
 }

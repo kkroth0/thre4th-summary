@@ -1508,12 +1508,6 @@ const Index = () => {
               {t('dnsblCheck') || 'DNSBL Check'}
             </Link>
             <Link
-              to="/dns-visualizer"
-              className="text-xs font-semibold text-muted-foreground hover:text-foreground hover:underline underline-offset-4 transition-all duration-200"
-            >
-              {t('dnsVisualizer') || 'DNS Visualizer'}
-            </Link>
-            <Link
               to="/phishing-analyzer"
               className="text-xs font-semibold text-muted-foreground hover:text-foreground hover:underline underline-offset-4 transition-all duration-200"
             >
