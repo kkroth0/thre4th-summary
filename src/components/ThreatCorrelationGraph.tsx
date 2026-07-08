@@ -523,7 +523,7 @@ export const ThreatCorrelationGraph = ({
     point.x = e.clientX;
     point.y = e.clientY;
 
-    const zoomGroup = svg.getElementById("zoom-group");
+    const zoomGroup = svg.getElementById("zoom-group") as SVGGraphicsElement | null;
     const matrix = zoomGroup?.getScreenCTM()?.inverse();
     if (matrix) {
       const transformedPoint = point.matrixTransform(matrix);

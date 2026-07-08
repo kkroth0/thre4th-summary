@@ -1,34 +1,47 @@
 name: Deploy to Cloudflare Pages
 
-# Publica o front no Cloudflare Pages a cada push na main (substitui a integração
-# Git do Pages, que não estava republicando). Build determinístico aqui e upload
-# direto via wrangler. As Pages Functions em functions/ vão junto automaticamente.
-#
-# Requer (Settings -> Secrets and variables -> Actions):
-#   - secret  CLOUDFLARE_API_TOKEN      (permissão "Cloudflare Pages: Edit")
-#   - secret  CLOUDFLARE_ACCOUNT_ID
-#   - variable CLOUDFLARE_PAGES_PROJECT (nome do projeto Pages; o job só roda com ela setada)
 on:
-  push:
-    branches: [main]
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Git ref/SHA to deploy. Defaults to the workflow ref."
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  deployments: write
+
+concurrency:
+  group: deploy-cloudflare-pages
+  cancel-in-progress: false
 
 jobs:
   deploy:
+    name: Publish frontend and Pages Functions
     runs-on: ubuntu-latest
-    if: ${{ vars.CLOUDFLARE_PAGES_PROJECT != '' }}
-    permissions:
-      contents: read
-      deployments: write
+    environment: cloudflare-pages
+    if: ${{ (github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main')) && vars.CLOUDFLARE_PAGES_PROJECT != '' }}
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
+      - name: Checkout release commit
+        uses: actions/checkout@v4
         with:
-          node-version: 20
+          ref: ${{ inputs.ref || github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
           cache: npm
 
-      - run: npm ci
-      - run: npm run build
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate release
+        run: npm run ci
 
       - name: Publish to Cloudflare Pages
         uses: cloudflare/wrangler-action@v3

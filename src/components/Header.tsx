@@ -1,7 +1,8 @@
 import { Link, useLocation } from "react-router-dom";
-import { BookOpen, Shield, Mail, Activity, Terminal, ArrowLeft, ShieldAlert, MailWarning, ChevronLeft, ChevronRight, CalendarCheck, Crosshair, FileText, LogIn, Settings as SettingsIcon, Megaphone, ShieldCheck, Users } from "lucide-react";
+import { BookOpen, Shield, Mail, Activity, Terminal, ArrowLeft, ShieldAlert, MailWarning, ChevronLeft, ChevronRight, CalendarCheck, Crosshair, FileText, LogIn, Settings as SettingsIcon, Megaphone, ShieldCheck, Users, Menu } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Sheet, SheetClose, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { LanguageToggle } from "@/components/LanguageToggle";
 import { useLanguage } from "@/contexts/LanguageContext";
@@ -107,13 +108,15 @@ export function Header({ actions, logoAddon, onLogoClick, showBackButton = false
     { path: "/features", label: tr({ pt: "Funcionalidades", en: "Features", es: "Funciones", fr: "Fonctionnalités" }), icon: Terminal },
   ];
 
+  const isRouteActive = (path: string) => (path === "/" ? pathname === "/" : pathname === path || pathname.startsWith(`${path}/`));
+
   const renderNavItem = (item: typeof navItems[0], isActive: boolean) => {
     const Icon = item.icon;
     const buttonElement = (
       <Button
         variant="ghost"
         className={cn(
-          "w-full gap-3 h-10.5 rounded-xl text-[13px] font-semibold transition-all duration-200",
+          "w-full gap-3 h-10 rounded-xl text-[13px] font-semibold transition-all duration-200",
           isCollapsed ? "justify-center px-0 w-11 h-11 rounded-xl mx-auto" : "justify-start px-3.5",
           isActive
             ? "bg-primary/15 text-primary ring-1 ring-inset ring-primary/20 hover:bg-primary/20 hover:text-primary"
@@ -141,7 +144,7 @@ export function Header({ actions, logoAddon, onLogoClick, showBackButton = false
             <TooltipTrigger asChild>
               {buttonElement}
             </TooltipTrigger>
-            <TooltipContent side="right" className="font-semibold text-xs bg-popover border border-border/50 text-popover-foreground shadow-md  py-1.5 px-2.5">
+            <TooltipContent side="right" className="font-semibold text-xs bg-popover border border-border/50 text-popover-foreground shadow-md py-1.5 px-2.5">
               {item.label}
             </TooltipContent>
           </Tooltip>
@@ -165,16 +168,45 @@ export function Header({ actions, logoAddon, onLogoClick, showBackButton = false
           <div className="h-px bg-primary/10 my-3 mx-2" />
         )}
         <div className="flex flex-col gap-1">
-          {items.map((item) => renderNavItem(item, pathname === item.path))}
+          {items.map((item) => renderNavItem(item, isRouteActive(item.path)))}
         </div>
       </div>
+    );
+  };
+
+  const renderMobileNavItem = (item: typeof navItems[0]) => {
+    const Icon = item.icon;
+    const isActive = isRouteActive(item.path);
+
+    return (
+      <SheetClose asChild key={item.path}>
+        <Link to={item.path} className="block">
+          <Button
+            variant="ghost"
+            className={cn(
+              "w-full h-11 justify-start gap-3 rounded-xl px-3 text-[13px] font-semibold",
+              isActive
+                ? "bg-primary/15 text-primary ring-1 ring-inset ring-primary/20 hover:bg-primary/20 hover:text-primary"
+                : "text-muted-foreground hover:bg-muted/40 hover:text-foreground"
+            )}
+          >
+            <Icon className={cn("h-[18px] w-[18px] shrink-0", isActive ? "text-primary" : "text-muted-foreground")} />
+            <span className="flex-1 text-left">{item.label}</span>
+            {(item as { premium?: boolean }).premium && (
+              <span className="shrink-0 rounded-md bg-amber-500/15 px-1.5 py-0.5 text-[9px] font-bold tracking-wider text-amber-600 ring-1 ring-inset ring-amber-500/20 dark:text-amber-400">
+                PRO
+              </span>
+            )}
+          </Button>
+        </Link>
+      </SheetClose>
     );
   };
 
   return (
     <>
       {/* Mobile/Tablet Header (lg:hidden) */}
-      <header className="lg:hidden sticky top-0 z-50 w-full border-b border-border/50 bg-background/60  supports-[backdrop-filter]:bg-background/40">
+      <header className="lg:hidden sticky top-0 z-50 w-full border-b border-border/50 bg-background/60 supports-[backdrop-filter]:bg-background/40">
         <div className="container max-w-7xl mx-auto flex h-16 items-center justify-between px-4 relative">
           {/* Back Button */}
           {showBackButton && pathname !== "/" && (
@@ -187,14 +219,14 @@ export function Header({ actions, logoAddon, onLogoClick, showBackButton = false
           )}
 
           {/* Brand Logo Container */}
-          <div className="flex items-center pl-12">
+          <div className={cn("flex min-w-0 items-center", showBackButton && pathname !== "/" ? "pl-12" : "")}>
             <Link
               to="/"
               onClick={handleLogoClick}
-              className="flex items-center gap-2"
+              className="flex min-w-0 items-center gap-2"
             >
               <div className="h-6 w-6 rounded bg-primary flex items-center justify-center font-black text-primary-foreground text-[10px] shadow-sm shadow-primary/30 select-none shrink-0">T</div>
-              <span className="font-bold tracking-tight text-xl bg-gradient-to-r from-primary via-primary/80 to-primary/50 bg-clip-text text-transparent hover:opacity-95 transition-all">
+              <span className="truncate text-lg font-bold tracking-tight bg-gradient-to-r from-primary via-primary/80 to-primary/50 bg-clip-text text-transparent hover:opacity-95 transition-all">
                 {t("appName") || "ThreatSumm4ry"}
               </span>
             </Link>
@@ -203,32 +235,6 @@ export function Header({ actions, logoAddon, onLogoClick, showBackButton = false
 
           {/* Right Side Actions Container */}
           <div className="flex items-center gap-2">
-            {/* Mobile Quick Navigation Icons */}
-            <div className="flex lg:hidden items-center gap-0.5 mr-1 bg-muted/30 p-0.5 rounded-full border border-border/30">
-              {navItems.map((item) => {
-                const isActive = item.isHome ? pathname === "/" : pathname === item.path;
-                const Icon = item.icon;
-                return (
-                  <Link key={item.path} to={item.path}>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className={cn(
-                        "h-7 w-7 rounded-full p-0 transition-all",
-                        isActive
-                          ? "bg-background text-primary shadow-sm hover:bg-background"
-                          : "text-muted-foreground hover:text-foreground"
-                      )}
-                      title={item.label}
-                    >
-                      <Icon className="h-3.5 w-3.5" />
-                      <span className="sr-only">{item.label}</span>
-                    </Button>
-                  </Link>
-                );
-              })}
-            </div>
-
             {/* Custom actions passed from page */}
             {actions && <div className="flex items-center gap-1.5">{actions}</div>}
 
@@ -258,14 +264,49 @@ export function Header({ actions, logoAddon, onLogoClick, showBackButton = false
                 </Link>
               )
             )}
+
+            <Sheet>
+              <SheetTrigger asChild>
+                <Button variant="outline" size="icon" className="h-8 w-8 rounded-full border-border/50 px-0 shadow-sm">
+                  <Menu className="h-4 w-4" />
+                  <span className="sr-only">Open navigation</span>
+                </Button>
+              </SheetTrigger>
+              <SheetContent side="left" className="flex w-[86vw] max-w-sm flex-col overflow-y-auto p-4">
+                <SheetHeader className="mb-4 text-left">
+                  <SheetTitle className="flex items-center gap-2">
+                    <span className="grid h-7 w-7 place-items-center rounded bg-primary text-[11px] font-black text-primary-foreground">T</span>
+                    ThreatSumm4ry
+                  </SheetTitle>
+                </SheetHeader>
+
+                <nav className="flex flex-1 flex-col gap-5">
+                  <div className="flex flex-col gap-1">
+                    {navItems.filter((item) => item.isHome).map(renderMobileNavItem)}
+                  </div>
+
+                  <MobileSection label={language === "pt" ? "Investigar" : "Investigate"}>
+                    {navItems.filter((item) => ["/vendors", "/dnsbl", "/phishing-analyzer", "/threat-hunting"].includes(item.path)).map(renderMobileNavItem)}
+                  </MobileSection>
+
+                  <MobileSection label={language === "pt" ? "Inteligência" : "Intelligence"}>
+                    {navItems.filter((item) => ["/advisories", "/newsletter", "/cves", "/atores", "/patch-tuesday"].includes(item.path)).map(renderMobileNavItem)}
+                  </MobileSection>
+
+                  <MobileSection label={language === "pt" ? "Relatórios" : "Reports"}>
+                    {navItems.filter((item) => ["/threat-brief", "/features"].includes(item.path)).map(renderMobileNavItem)}
+                  </MobileSection>
+                </nav>
+              </SheetContent>
+            </Sheet>
           </div>
         </div>
       </header>
 
       {/* Desktop Sidebar (lg:flex) */}
       <aside className={cn(
-        "hidden lg:flex lg:flex-col lg:fixed lg:left-0 lg:top-0 lg:h-screen lg:border-r lg:border-border/50 lg:bg-muted/40 lg: lg:z-30 lg:justify-between lg:overflow-y-auto transition-all duration-300",
-        isCollapsed ? "lg:w-20 lg:p-3" : "lg:w-64 lg:p-4.5"
+        "hidden lg:fixed lg:left-0 lg:top-0 lg:z-30 lg:flex lg:h-screen lg:flex-col lg:justify-between lg:overflow-y-auto lg:border-r lg:border-border/50 lg:bg-muted/40 transition-all duration-300",
+        isCollapsed ? "lg:w-20 lg:p-3" : "lg:w-64 lg:p-4"
       )}>
         {/* Top Part */}
         <div className="flex flex-col gap-6">
@@ -290,7 +331,7 @@ export function Header({ actions, logoAddon, onLogoClick, showBackButton = false
           <div className="flex flex-col gap-5">
             {/* Home — sem header de categoria */}
             <div className="flex flex-col gap-1">
-              {navItems.filter((item) => item.isHome).map((item) => renderNavItem(item, pathname === "/"))}
+              {navItems.filter((item) => item.isHome).map((item) => renderNavItem(item, isRouteActive(item.path)))}
             </div>
 
             {renderCategory(language === 'pt' ? 'Investigar' : 'Investigate',
@@ -304,7 +345,7 @@ export function Header({ actions, logoAddon, onLogoClick, showBackButton = false
 
             {/* Features — discreto, sem categoria */}
             <div className="flex flex-col gap-1">
-              {navItems.filter((item) => item.path === "/features").map((item) => renderNavItem(item, pathname === item.path))}
+              {navItems.filter((item) => item.path === "/features").map((item) => renderNavItem(item, isRouteActive(item.path)))}
             </div>
           </div>
         </div>
@@ -387,7 +428,7 @@ export function Header({ actions, logoAddon, onLogoClick, showBackButton = false
               <LanguageToggle />
               {!isCollapsed && (
                 <span className="text-[10px] font-bold text-muted-foreground/50 uppercase tracking-wider">
-                  {t('lang') || "Lang"}
+                  LANG
                 </span>
               )}
             </div>
@@ -396,5 +437,14 @@ export function Header({ actions, logoAddon, onLogoClick, showBackButton = false
         </div>
       </aside>
     </>
+  );
+}
+
+function MobileSection({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="space-y-2">
+      <div className="px-3 text-[11px] font-bold uppercase tracking-wider text-muted-foreground/70">{label}</div>
+      <div className="flex flex-col gap-1">{children}</div>
+    </div>
   );
 }

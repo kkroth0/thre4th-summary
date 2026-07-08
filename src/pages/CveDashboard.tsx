@@ -835,7 +835,9 @@ const CveDashboard = () => {
                                   try {
                                     const hostname = new URL(url).hostname;
                                     label = hostname.replace("www.", "");
-                                  } catch (e) {}
+                                  } catch {
+                                    label = "Reference Link";
+                                  }
                                   return (
                                     <a
                                       key={idx}

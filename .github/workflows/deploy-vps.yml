@@ -1,0 +1,133 @@
+name: Deploy to VPS
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Git ref/SHA to deploy. Defaults to the workflow ref."
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-vps
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Publish backend bundle to VPS
+    runs-on: ubuntu-latest
+    environment: vps-production
+    if: ${{ (github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main')) && vars.VPS_HOST != '' && vars.VPS_USER != '' && vars.VPS_APP_DIR != '' && vars.VPS_SERVICE != '' }}
+    env:
+      RELEASE_SHA: ${{ inputs.ref || github.event.workflow_run.head_sha || github.sha }}
+      VPS_HOST: ${{ vars.VPS_HOST }}
+      VPS_USER: ${{ vars.VPS_USER }}
+      VPS_PORT: ${{ vars.VPS_PORT || '22' }}
+      VPS_APP_DIR: ${{ vars.VPS_APP_DIR }}
+      VPS_SERVICE: ${{ vars.VPS_SERVICE }}
+      VPS_HEALTHCHECK_URL: ${{ vars.VPS_HEALTHCHECK_URL }}
+      SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+      SSH_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+    steps:
+      - name: Checkout release commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_SHA }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate release
+        run: npm run ci
+
+      - name: Prepare SSH
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${SSH_PRIVATE_KEY}" ]; then
+            echo "::error::Missing secret VPS_SSH_PRIVATE_KEY"
+            exit 1
+          fi
+          if [ -z "${SSH_KNOWN_HOSTS}" ]; then
+            echo "::error::Missing secret VPS_KNOWN_HOSTS. Add the host key with: ssh-keyscan -p <port> <host>"
+            exit 1
+          fi
+
+          install -m 700 -d ~/.ssh
+          install -m 600 /dev/null ~/.ssh/id_ed25519
+          printf '%s\n' "${SSH_PRIVATE_KEY}" > ~/.ssh/id_ed25519
+          install -m 600 /dev/null ~/.ssh/known_hosts
+          printf '%s\n' "${SSH_KNOWN_HOSTS}" > ~/.ssh/known_hosts
+
+      - name: Upload release to VPS
+        shell: bash
+        run: |
+          set -euo pipefail
+          target="${VPS_USER}@${VPS_HOST}"
+          release_dir="${VPS_APP_DIR}/releases/${RELEASE_SHA}"
+
+          ssh -p "${VPS_PORT}" "${target}" "mkdir -p '${release_dir}' '${VPS_APP_DIR}/shared'"
+
+          rsync -azR --delete \
+            --exclude='.env' \
+            --exclude='node_modules/' \
+            --exclude='server/node_modules/' \
+            --exclude='server/.users.json' \
+            --exclude='server/.feed-jobs.json' \
+            --exclude='server/.feed-sources.json' \
+            -e "ssh -p ${VPS_PORT}" \
+            ./dist ./server ./src/config ./package.json ./package-lock.json ./nginx.conf ./Dockerfile \
+            "${target}:${release_dir}/"
+
+      - name: Activate release
+        shell: bash
+        run: |
+          set -euo pipefail
+          target="${VPS_USER}@${VPS_HOST}"
+
+          ssh -p "${VPS_PORT}" "${target}" \
+            "RELEASE_SHA='${RELEASE_SHA}' VPS_APP_DIR='${VPS_APP_DIR}' VPS_SERVICE='${VPS_SERVICE}' bash -s" <<'REMOTE'
+          set -euo pipefail
+
+          release="${VPS_APP_DIR}/releases/${RELEASE_SHA}"
+          shared_env="${VPS_APP_DIR}/shared/.env"
+
+          if [ ! -f "${shared_env}" ]; then
+            touch "${shared_env}"
+            chmod 600 "${shared_env}"
+          fi
+
+          ln -sfn ../../shared/.env "${release}/.env"
+
+          cd "${release}/server"
+          npm ci --omit=dev
+
+          ln -sfn "${release}" "${VPS_APP_DIR}/current.next"
+          mv -Tf "${VPS_APP_DIR}/current.next" "${VPS_APP_DIR}/current"
+
+          sudo systemctl restart "${VPS_SERVICE}"
+          sudo systemctl --no-pager --lines=30 status "${VPS_SERVICE}"
+
+          find "${VPS_APP_DIR}/releases" -mindepth 1 -maxdepth 1 -type d -printf '%T@ %p\n' \
+            | sort -nr \
+            | tail -n +6 \
+            | cut -d' ' -f2- \
+            | xargs -r rm -rf
+          REMOTE
+
+      - name: Healthcheck
+        if: ${{ vars.VPS_HEALTHCHECK_URL != '' }}
+        shell: bash
+        run: curl --fail --silent --show-error --retry 5 --retry-delay 3 "${VPS_HEALTHCHECK_URL}" >/dev/null

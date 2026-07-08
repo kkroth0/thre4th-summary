@@ -108,7 +108,7 @@ const DnsblCheck = () => {
                             return {
                                 ...r,
                                 listed: res.listed,
-                                status: res.status === 'Error' ? t('error') : (res.listed ? res.status : (res.status === 'Timeout' ? t('timeout') || 'Timeout' : t('clean'))),
+                                status: res.status === 'Error' ? t('error') : (res.listed ? res.status : (res.status === 'Timeout' ? 'Timeout' : t('clean'))),
                                 loading: false,
                                 addresses: res.addresses,
                                 error: res.error,
@@ -692,4 +692,3 @@ const DnsblCheck = () => {
 };
 
 export default DnsblCheck;
-

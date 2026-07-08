@@ -152,10 +152,10 @@ const SearchForm = ({
 
   const getExtractedIocs = () => {
     if (!query) return [];
-    const ips = query.match(ipRegex) || [];
-    const domains = query.match(domainRegex) || [];
-    const hashes = query.match(hashRegex) || [];
-    const cves = query.match(cveRegex) || [];
+    const ips: string[] = query.match(ipRegex) ?? [];
+    const domains: string[] = query.match(domainRegex) ?? [];
+    const hashes: string[] = query.match(hashRegex) ?? [];
+    const cves: string[] = query.match(cveRegex) ?? [];
 
     const cleanDomains = domains.filter(d => {
       const ext = d.split('.').pop()?.toLowerCase() || '';
@@ -188,10 +188,10 @@ const SearchForm = ({
         if (event.target?.result) {
           const text = event.target.result as string;
 
-          const ips = text.match(ipRegex) || [];
-          const domains = text.match(domainRegex) || [];
-          const hashes = text.match(hashRegex) || [];
-          const cves = text.match(cveRegex) || [];
+          const ips: string[] = text.match(ipRegex) ?? [];
+          const domains: string[] = text.match(domainRegex) ?? [];
+          const hashes: string[] = text.match(hashRegex) ?? [];
+          const cves: string[] = text.match(cveRegex) ?? [];
 
           const cleanDomains = domains.filter(d => {
             const ext = d.split('.').pop()?.toLowerCase() || '';
@@ -577,7 +577,7 @@ const Index = () => {
             setResults(prev => prev.map(r => r.query === q ? {
               ...r,
               threatLevel: "unknown" as const,
-              vendorData: r.vendorData.map(v => ({ ...v, loading: false, error: v.loading ? "Request failed" : v.error }))
+              vendorData: r.vendorData.map(v => ({ ...v, isLoading: false, error: v.isLoading ? "Request failed" : v.error }))
             } : r));
           }
         }));
@@ -644,13 +644,13 @@ const Index = () => {
           .replace(/[\u2010\u2011\u2012\u2013\u2014\u2015\u2212]/g, '-')
           .replace(/…/g, '...')
           .replace(/[•·]/g, '-')
-          .replace(/ /g, ' ')
-          .replace(/[​-‍﻿]/g, '');
+          .replace(/\u00a0/g, ' ')
+          .replace(/[\u200b-\u200d\ufeff]/g, '');
         // Keep printable ASCII + Latin-1 (accented PT/EU letters), drop the rest
         return s.replace(/[^\t\n\r\x20-\x7E¡-ÿ]/g, '');
       };
 
-      // ── Color Palette ──
+      // Color palette
       const COLORS = {
         headerBg: [18, 18, 18] as [number, number, number],
         accent: [30, 96, 255] as [number, number, number],   // cyber blue

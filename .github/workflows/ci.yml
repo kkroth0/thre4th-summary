@@ -1,19 +1,26 @@
 name: CI
 
-# Portão de build do site (frontend Vite/TS). O build precisa passar em todo push
-# e PR. O lint roda como informativo (continue-on-error) porque há dívida de lint
-# pré-existente — quando estiver zerada, troque para bloquear (remova a linha).
 on:
   push:
   pull_request:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  build:
+  frontend:
+    name: Frontend lint, typecheck and build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
           node-version: "20"
           cache: npm
@@ -21,9 +28,48 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Lint (informativo)
-        continue-on-error: true
+      - name: Lint
         run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
 
       - name: Build
         run: npm run build
+
+  backend:
+    name: Backend dependency and syntax check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+
+      - name: Install backend dependencies
+        run: npm --prefix server ci
+
+      - name: Syntax check
+        run: |
+          node --check server/index.js
+          node --check server/ctiIntel.js
+
+  hunt-service:
+    name: Hunt service Python compile check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Compile Python sources
+        run: python -m py_compile hunt-service/*.py

@@ -178,7 +178,7 @@ export const VendorContent = ({ vendor, onPivot }: VendorContentProps) => {
                             {!cidrResults && (
                                 <Button
                                     variant="outline"
-                                    size="xs"
+                                    size="sm"
                                     onClick={() => handleCheckCidr(data["CIDR/Network"])}
                                     disabled={cidrLoading}
                                     className="h-7 text-[10px] px-2 rounded hover:bg-primary hover:text-primary-foreground transition-all"

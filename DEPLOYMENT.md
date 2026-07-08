@@ -1,362 +1,156 @@
-# ThreatSumm4ry Deployment Guide
+# ThreatSumm4ry CI/CD and Deployment
 
-## 🚀 Deployment Options
+This repo is deployed as two surfaces:
 
-### Option 1: Vercel (Recommended - Free Tier)
+- Cloudflare Pages: static frontend from `dist/` plus Pages Functions from
+  `functions/`.
+- VPS: Node backend from `server/`, with runtime state and secrets kept outside
+  releases.
 
-**100% Open Source Supported**
+## Pipelines
 
-1. **Install Vercel CLI:**
-```bash
-npm install -g vercel
+### CI
+
+`.github/workflows/ci.yml` runs on every push and pull request:
+
+- frontend: `npm ci`, lint, typecheck and Vite build
+- backend: `npm --prefix server ci` and Node syntax checks
+- hunt-service: Python source compile check
+
+### Security Scans
+
+`.github/workflows/vulnerability-scan.yml` runs on `main`, PRs and weekly:
+
+- `npm audit` for root and `server/`
+- OSV dependency scan
+- Gitleaks secret detection
+- Trivy filesystem/config scan with SARIF upload
+
+CodeQL runs separately in `.github/workflows/codeql.yml`.
+
+### Cloudflare Pages
+
+`.github/workflows/deploy-pages.yml` runs after CI succeeds on `main`, or
+manually with `workflow_dispatch`.
+
+Required GitHub Actions variables:
+
+```txt
+CLOUDFLARE_PAGES_PROJECT
 ```
 
-2. **Deploy:**
-```bash
-npm run build
-vercel --prod
+Required GitHub Actions secrets:
+
+```txt
+CLOUDFLARE_ACCOUNT_ID
+CLOUDFLARE_API_TOKEN
 ```
 
-3. **Add Environment Variables in Vercel Dashboard:**
-   - Go to Project Settings → Environment Variables
-   - Add all `VITE_*_API_KEY` variables
+Required Cloudflare Pages environment variable:
 
-**Pros:**
-- ✅ Free tier available
-- ✅ Automatic HTTPS
-- ✅ Global CDN
-- ✅ Easy rollbacks
-- ✅ Preview deployments for PRs
-
----
-
-### Option 2: Netlify (Free Tier)
-
-1. **Install Netlify CLI:**
-```bash
-npm install -g netlify-cli
+```txt
+API_ORIGIN=https://origin.example.com
 ```
 
-2. **Deploy:**
-```bash
-npm run build
-netlify deploy --prod --dir=dist
+`API_ORIGIN` is used by `functions/api/[[path]].js` to proxy `/api/*` to the
+VPS without exposing API keys to the browser.
+
+### VPS
+
+`.github/workflows/deploy-vps.yml` runs after CI succeeds on `main`, or manually
+with `workflow_dispatch`.
+
+Required GitHub Actions variables:
+
+```txt
+VPS_HOST=example.com
+VPS_USER=deploy
+VPS_PORT=22
+VPS_APP_DIR=/opt/threatsumm4ry
+VPS_SERVICE=threatsumm4ry.service
+VPS_HEALTHCHECK_URL=https://origin.example.com/api/vendors/status
 ```
 
-3. **Or connect GitHub repo:**
-   - Push to GitHub
-   - Import project in Netlify dashboard
-   - Set build command: `npm run build`
-   - Set publish directory: `dist`
+Required GitHub Actions secrets:
 
-**Pros:**
-- ✅ Free tier available
-- ✅ Continuous deployment from Git
-- ✅ Form handling
-- ✅ Functions support
-
----
-
-### Option 3: Cloudflare Pages (Free)
-
-1. **Connect GitHub:**
-   - Sign up at pages.cloudflare.com
-   - Connect your GitHub repository
-   - Build command: `npm run build`
-   - Output directory: `dist`
-
-2. **Add Environment Variables:**
-   - Settings → Environment Variables
-
-**Pros:**
-- ✅ Unlimited bandwidth
-- ✅ Global CDN
-- ✅ DDoS protection
-- ✅ Web analytics
-
----
-
-### Option 4: Self-Hosted (Docker + Nginx)
-
-**Fully Open Source Stack**
-
-**Dockerfile:**
-```dockerfile
-FROM node:18-alpine AS builder
-WORKDIR /app
-COPY package*.json ./
-RUN npm ci
-COPY . .
-RUN npm run build
-
-FROM nginx:alpine
-COPY --from=builder /app/dist /usr/share/nginx/html
-COPY nginx.conf /etc/nginx/nginx.conf
-EXPOSE 80
-CMD ["nginx", "-g", "daemon off;"]
+```txt
+VPS_SSH_PRIVATE_KEY
+VPS_KNOWN_HOSTS
 ```
 
-**nginx.conf:**
-```nginx
-server {
-    listen 80;
-    server_name _;
-    root /usr/share/nginx/html;
-    index index.html;
-
-    # Security headers
-    add_header X-Frame-Options "SAMEORIGIN" always;
-    add_header X-Content-Type-Options "nosniff" always;
-    add_header X-XSS-Protection "1; mode=block" always;
-    add_header Referrer-Policy "no-referrer-when-downgrade" always;
-    
-    # CSP (Content Security Policy)
-    add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://*.virustotal.com https://*.abuseipdb.com https://*.otx.alienvault.com;" always;
-
-    location / {
-        try_files $uri $uri/ /index.html;
-    }
-
-    # Caching
-    location /assets/ {
-        expires 1y;
-        add_header Cache-Control "public, immutable";
-    }
-}
-```
-
-**Deploy:**
-```bash
-docker build -t threatsumm4ry .
-docker run -d -p 80:80 threatsumm4ry
-```
-
----
-
-### Option 5: GitHub Pages (100% Free)
-
-1. **Install gh-pages:**
-```bash
-npm install --save-dev gh-pages
-```
-
-2. **Add to package.json:**
-```json
-{
-  "scripts": {
-    "predeploy": "npm run build",
-    "deploy": "gh-pages -d dist"
-  },
-  "homepage": "https://yourusername.github.io/intel-vista-22"
-}
-```
-
-3. **Update vite.config.ts:**
-```typescript
-export default defineConfig({
-  base: '/intel-vista-22/',
-  // ... rest of config
-});
-```
-
-4. **Deploy:**
-```bash
-npm run deploy
-```
-
-**Limitation:** ⚠️ API keys will be visible in source - use backend proxy for production
-
----
-
-### Option 6: Render (Recommended for Backend + Frontend)
-
-**Best for full-stack deployment with API proxy**
-
-1. **Create a new Web Service on Render:**
-   - Connect your GitHub repository.
-   - **Runtime:** Node
-   - **Build Command:** `npm install && npm run build && cd server && npm install`
-   - **Start Command:** `node server/index.js`
-   - **Root Directory:** `.` (default)
-
-2. **Add Environment Variables:**
-   - Go to the "Environment" tab.
-   - Add all your API keys (without `VITE_` prefix if you updated them, or map them in `server/index.js`):
-     - `SESSION_SECRET` (generate using: `node -e "console.log(require('crypto').randomBytes(64).toString('hex'))"`)
-     - `VIRUSTOTAL_API_KEY`
-     - `ABUSEIPDB_API_KEY`
-     - ...and so on.
-   - Add `NODE_ENV=production`
-
-3. **Deploy:**
-   - Render will build the frontend, install backend dependencies, and start the Express server.
-   - The Express server is configured to serve the static frontend files from `dist`.
-
-> [!IMPORTANT]
-> **Build Troubleshooting:**
-> If you encounter `sh: 1: vite: not found` during deployment, it's because `vite` is in `devDependencies` and Render skips them in production mode.
-> We have moved `vite` and other build tools to `dependencies` in `package.json` to fix this. Ensure your `package.json` reflects this change.
-
-**Pros:**
-- ✅ Free tier available
-- ✅ Hosted backend for secure API calls
-- ✅ Single service for both frontend and backend
-- ✅ Automatic HTTPS
-
----
-
-## 🔐 Secure Deployment with Backend Proxy
-
-### Docker Compose Setup (Recommended for Production)
-
-**docker-compose.yml:**
-```yaml
-version: '3.8'
-
-services:
-  frontend:
-    build: .
-    ports:
-      - "80:80"
-    depends_on:
-      - backend
-    environment:
-      - VITE_API_BASE_URL=http://backend:3001
-
-  backend:
-    build: ./server
-    ports:
-      - "3001:3001"
-    environment:
-      - VIRUSTOTAL_API_KEY=${VIRUSTOTAL_API_KEY}
-      - ABUSEIPDB_API_KEY=${ABUSEIPDB_API_KEY}
-      - SHODAN_API_KEY=${SHODAN_API_KEY}
-      # ... other keys
-    env_file:
-      - .env
-```
-
-**Deploy:**
-```bash
-docker-compose up -d
-```
-
----
-
-## 🛡️ Production Security Checklist
-
-### Before Deployment:
-
-- [ ] Remove or rename `.env.example` to `.env.local`
-- [ ] Add `.env` and `.env.*` to `.gitignore`
-- [ ] Build production bundle: `npm run build`
-- [ ] Test production build locally: `npm run preview`
-- [ ] Review environment variables in hosting platform
-- [ ] Enable HTTPS (automatic with Vercel/Netlify/Cloudflare)
-- [ ] Configure CSP headers
-- [ ] Set up rate limiting (if using backend proxy)
-- [ ] Test API key restrictions (referrer/IP whitelist)
-
-### Post-Deployment:
-
-- [ ] Verify HTTPS is working
-- [ ] Test all vendor integrations
-- [ ] Monitor API usage/quotas
-- [ ] Set up uptime monitoring (UptimeRobot - free)
-- [ ] Configure error tracking (Sentry - free tier)
-- [ ] Enable CDN caching
-- [ ] Test from different locations (CloudFlare Workers if using CF)
-
----
-
-## 📊 Free Monitoring Tools (Open Source Alternative)
-
-### Uptime Monitoring:
-- **UptimeRobot**: https://uptimerobot.com (Free - 50 monitors)
-- **Upptime** (self-hosted): https://github.com/upptime/upptime
-
-### Analytics:
-- **Plausible** (self-hosted): https://plausible.io
-- **Umami** (self-hosted): https://umami.is
-- **Matomo** (self-hosted): https://matomo.org
-
-### Error Tracking:
-- **Sentry** (free tier): https://sentry.io
-- **GlitchTip** (self-hosted): https://glitchtip.com
-
----
-
-## 🎯 Recommended Setup for Different Scales
-
-### **Small/Personal Project:**
-- Cloudflare Pages or Netlify (Free)
-- Client-side API calls (current setup)
-- Monitor API quotas manually
-
-### **Medium/Business:**
-- Vercel/Netlify + Backend Proxy
-- PostgreSQL for caching results
-- Rate limiting + API key rotation
-
-### **Large/Enterprise:**
-- Self-hosted Docker + Kubernetes
-- Redis cache layer
-- Load balancer (Nginx/Traefik)
-- Dedicated backend API servers
-
----
-
-## ⚡ Quick Deploy Commands
+Generate `VPS_KNOWN_HOSTS` from a trusted machine:
 
 ```bash
-# Build for production
-npm run build
-
-# Test production build locally
-npm run preview
-
-# Deploy to Vercel
-vercel --prod
-
-# Deploy to Netlify
-netlify deploy --prod --dir=dist
-
-# Deploy with Docker
-docker build -t threatsumm4ry .
-docker run -d -p 8080:80 threatsumm4ry
-
-# Deploy to GitHub Pages
-npm run deploy
+ssh-keyscan -p 22 example.com
 ```
 
----
+The deploy workflow creates release directories like:
 
-## 🔧 Environment Variable Setup
-
-Create `.env` file (NEVER commit this):
-
-```env
-# Session Security
-SESSION_SECRET=your_generated_64_character_hex_string
-
-# Threat Intelligence API Keys
-VITE_VIRUSTOTAL_API_KEY=your_key_here
-VITE_ABUSEIPDB_API_KEY=your_key_here
-VITE_ALIENVAULT_API_KEY=your_key_here
-VITE_SHODAN_API_KEY=your_key_here
-# ... add all 13 API keys
+```txt
+/opt/threatsumm4ry/releases/<git-sha>
+/opt/threatsumm4ry/current -> /opt/threatsumm4ry/releases/<git-sha>
+/opt/threatsumm4ry/shared/.env
 ```
 
-For hosting platforms, add these in their dashboard under Environment Variables.
+It syncs `dist/`, `server/`, `src/config/`, root package metadata and nginx/Docker
+support files. It never syncs `.env`, `node_modules` or backend runtime stores.
 
----
+## First VPS Setup
 
-## 🎉 Post-Deployment
+Create a deploy user and app directory:
 
-Your ThreatSumm4ry application will be live at:
-- Vercel: `https://threatsumm4ry.vercel.app`
-- Netlify: `https://threatsumm4ry.netlify.app`
-- Cloudflare: `https://threatsumm4ry.pages.dev`
-- Self-hosted: `https://yourdomain.com`
+```bash
+sudo useradd --create-home --shell /bin/bash deploy
+sudo mkdir -p /opt/threatsumm4ry/shared /opt/threatsumm4ry/releases
+sudo chown -R deploy:deploy /opt/threatsumm4ry
+```
 
-Remember to update CORS settings on API vendors to allow your domain! 🚀
+Create `/opt/threatsumm4ry/shared/.env` from
+[server/.env.example](./server/.env.example):
+
+```bash
+sudo -u deploy cp /path/to/server/.env.example /opt/threatsumm4ry/shared/.env
+sudo chmod 600 /opt/threatsumm4ry/shared/.env
+```
+
+Install Node.js 20 on the VPS and create a systemd service:
+
+```ini
+[Unit]
+Description=ThreatSumm4ry backend
+After=network.target
+
+[Service]
+Type=simple
+User=deploy
+WorkingDirectory=/opt/threatsumm4ry/current/server
+Environment=NODE_ENV=production
+ExecStart=/usr/bin/node index.js
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Enable it:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable threatsumm4ry.service
+```
+
+Allow the deploy user to restart only this service:
+
+```sudoers
+deploy ALL=(root) NOPASSWD: /usr/bin/systemctl restart threatsumm4ry.service, /usr/bin/systemctl --no-pager --lines=30 status threatsumm4ry.service
+```
+
+## Branch and Environment Policy
+
+- Pull requests run CI and security checks but cannot access deployment secrets.
+- Pushes to `main` deploy only after CI success.
+- Use GitHub Environments (`cloudflare-pages`, `vps-production`) with required
+  reviewers if you want manual approval before production publishing.
+- Rotate `VPS_SSH_PRIVATE_KEY`, `CLOUDFLARE_API_TOKEN`, `SESSION_SECRET` and
+  `SECRETS_ENCRYPTION_KEY` if a secret is ever exposed.

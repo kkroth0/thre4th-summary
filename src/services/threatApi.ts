@@ -790,7 +790,7 @@ const buildVendorMap = (query: string): Record<string, () => Promise<VendorData>
 const resolveVendorsToQuery = (
     vendorMap: Record<string, () => Promise<VendorData>>,
     selectedVendors: string[] | undefined,
-    iocType: string,
+    iocType: ReturnType<typeof detectIOCType>,
 ): string[] =>
     (selectedVendors || Object.keys(vendorMap))
         .filter(vendor => {

@@ -1,81 +1,61 @@
-# ThreatSumm4ry 🛡️
+# ThreatSumm4ry
 
-> **Comprehensive Threat Intelligence Dashboard** - Aggregate security analysis from 23+ threat intelligence vendors in one unified interface.
+Threat intelligence workspace for IOC enrichment, CVE tracking, advisory feeds,
+DNSBL checks, phishing analysis and guided threat hunting.
 
-## 🛠️ Installation
+## Stack
+
+- React 18 + Vite + TypeScript
+- Tailwind CSS + shadcn/ui
+- Express backend proxy in `server/`
+- Cloudflare Pages Functions in `functions/`
+- Optional FastAPI hunt microservice in `hunt-service/`
+
+## Local Development
 
 ```bash
-# Clone the repository
-git clone <YOUR_GIT_URL>
-cd intel-vista-22
-
-# Install dependencies
-npm install
-
-# Copy environment example
-cp .env.example .env
-
-# Add your API keys to .env (optional)
-# Edit .env and add your keys
+npm ci
+cp server/.env.example .env
+npm run server
 ```
 
-## 🔑 Environment Variables
+In another terminal:
 
-Create a `.env` file in the root directory:
-
-```env
-# Free APIs (No keys needed - leave empty)
-# IP Geolocation, WHOIS, AlienVault OTX, URLhaus, ThreatFox, 
-# MalwareBazaar, PhishStats, Ransomware.live, CIRCL, PhishTank, 
-# Pulsedive, ThreatCrowd
-
-# Premium APIs (Add your keys)
-VITE_VIRUSTOTAL_API_KEY=your_key_here
-VITE_ABUSEIPDB_API_KEY=your_key_here
-VITE_SHODAN_API_KEY=your_key_here
-
-VITE_HYBRID_ANALYSIS_API_KEY=your_key_here
-VITE_CRIMINALIP_API_KEY=your_key_here
-VITE_METADEFENDER_API_KEY=your_key_here
-```
-
-## 📦 Tech Stack
-
-- **Frontend Framework:** React 18
-- **Build Tool:** Vite 5
-- **Language:** TypeScript
-- **Styling:** Tailwind CSS
-- **UI Components:** shadcn/ui
-- **State Management:** TanStack Query (React Query)
-- **Icons:** Lucide React
-
-## 🚢 Deployment
-
-See [DEPLOYMENT.md](./DEPLOYMENT.md) for detailed deployment instructions.
-
-### Quick Deploy Options:
-
-**Vercel (Recommended):**
 ```bash
-npm install -g vercel
+npm run dev
+```
+
+Vite runs on `http://localhost:8080` and proxies `/api` to
+`http://localhost:3001` by default.
+
+## Quality Gates
+
+```bash
+npm run lint
+npm run typecheck
 npm run build
-vercel --prod
+npm run ci
+npm run ci:server
+npm run ci:hunt
 ```
 
-**Netlify:**
-```bash
-npm install -g netlify-cli
-netlify deploy --prod --dir=dist
+## Deployment Model
+
+- Cloudflare Pages publishes `dist/` and `functions/`.
+- The VPS runs `server/index.js` behind Cloudflare Tunnel or another HTTPS
+  reverse proxy.
+- Cloudflare Pages should expose `API_ORIGIN`, pointing to the VPS origin.
+
+See [DEPLOYMENT.md](./DEPLOYMENT.md) for the CI/CD secrets, VPS systemd layout
+and first-deploy checklist.
+
+## Runtime Secrets
+
+Never commit `.env`. The backend reads the root `.env` file when started from
+`server/`, and the GitHub Actions VPS deployment keeps it on the server at:
+
+```txt
+$VPS_APP_DIR/shared/.env
 ```
 
-**Docker:**
-```bash
-docker build -t threatsumm4ry .
-docker run -d -p 8080:80 threatsumm4ry
-```
-## 📚 Documentation
-
-- [DEPLOYMENT.md](./DEPLOYMENT.md) - Comprehensive deployment guide
-- [API_RESOURCES.md](./API_RESOURCES.md) - API vendor documentation
-- [.env.example](./.env.example) - Environment variable template
-
+Start from [server/.env.example](./server/.env.example).
