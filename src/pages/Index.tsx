@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { getFieldCategory } from "@/components/VendorDataTable";
-import { Shield, AlertTriangle, Bug, FileSearch, Globe, Link as LinkIcon, Radar, Database, Eye, Search, BookOpen, Layers, LayoutGrid, CheckCircle2, Mail, ArrowRight, Upload, Copy, Check, Clock, Download, FileJson, FileCode, ChevronDown, Bookmark } from "lucide-react";
+import { Shield, AlertTriangle, Bug, FileSearch, Globe, Link as LinkIcon, Radar, Database, Eye, Search, LayoutGrid, Mail, ArrowRight, Upload, Copy, Check, Clock, Download, FileJson, FileCode, ChevronDown, Bookmark, MapPinned, RadioTower } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -17,8 +17,8 @@ import { VendorContent } from "@/components/VendorContent";
 import { VendorFilter } from "@/components/VendorFilter";
 import { Footer } from "@/components/Footer";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { useSidebar } from "@/contexts/SidebarContext";
 import { Header } from "@/components/Header";
+import { useSidebar } from "@/contexts/SidebarContext";
 
 import { ThreatCharts } from "@/components/ThreatCharts";
 import { IocTimeline } from "@/components/IocTimeline";
@@ -35,6 +35,7 @@ import { ScanHistory } from "@/components/ScanHistory";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { ThreatIntelligenceResult } from "@/types/threat-intelligence";
+import { cn } from "@/lib/utils";
 // jsPDF + autoTable are loaded lazily inside exportGlobalPDF (see below) so the
 // ~400KB PDF toolchain is only fetched when a user actually exports a report.
 
@@ -121,6 +122,32 @@ const TypingTitle = ({ language }: { language: string }) => {
   );
 };
 
+const MAX_ANALYZER_TARGETS = 6;
+const IOC_FILE_EXTENSIONS = ["exe", "dll", "sys", "zip", "rar", "tar", "gz", "png", "jpg", "jpeg", "gif", "css", "js", "html", "htm", "txt", "log", "json", "xml", "pdf", "doc", "docx", "xls", "xlsx"];
+const IPV4_GLOBAL_REGEX = /\b(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\b/g;
+const DOMAIN_GLOBAL_REGEX = /\b([a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}\b/g;
+const HASH_GLOBAL_REGEX = /\b[a-fA-F0-9]{64}\b|\b[a-fA-F0-9]{40}\b|\b[a-fA-F0-9]{32}\b/g;
+const CVE_GLOBAL_REGEX = /\bCVE-\d{4}-\d{4,7}\b/gi;
+const URL_GLOBAL_REGEX = /https?:\/\/[^\s"'<>]+/gi;
+
+const cleanUrlIoc = (url: string) => url.replace(/[),.;\]]+$/g, "");
+
+const extractIocsFromText = (text: string) => {
+  if (!text) return [];
+
+  const urls = (text.match(URL_GLOBAL_REGEX) ?? []).map(cleanUrlIoc);
+  const textWithoutUrls = text.replace(URL_GLOBAL_REGEX, " ");
+  const ips = text.match(IPV4_GLOBAL_REGEX) ?? [];
+  const hashes = text.match(HASH_GLOBAL_REGEX) ?? [];
+  const cves = (text.match(CVE_GLOBAL_REGEX) ?? []).map((c) => c.toUpperCase());
+  const domains = (textWithoutUrls.match(DOMAIN_GLOBAL_REGEX) ?? []).filter((domain) => {
+    const ext = domain.split(".").pop()?.toLowerCase() || "";
+    return !IOC_FILE_EXTENSIONS.includes(ext);
+  });
+
+  return Array.from(new Set([...ips, ...urls, ...domains, ...hashes, ...cves]));
+};
+
 interface SearchFormProps {
   query: string;
   setQuery: (query: string) => void;
@@ -145,29 +172,8 @@ const SearchForm = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  const ipRegex = /\b(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\b/g;
-  const domainRegex = /\b([a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}\b/g;
-  const hashRegex = /\b[a-fA-F0-9]{64}\b|\b[a-fA-F0-9]{40}\b|\b[a-fA-F0-9]{32}\b/g;
-  const cveRegex = /\bCVE-\d{4}-\d{4,7}\b/gi;
-
   const getExtractedIocs = () => {
-    if (!query) return [];
-    const ips: string[] = query.match(ipRegex) ?? [];
-    const domains: string[] = query.match(domainRegex) ?? [];
-    const hashes: string[] = query.match(hashRegex) ?? [];
-    const cves: string[] = query.match(cveRegex) ?? [];
-
-    const cleanDomains = domains.filter(d => {
-      const ext = d.split('.').pop()?.toLowerCase() || '';
-      return !["exe", "dll", "sys", "zip", "rar", "tar", "gz", "png", "jpg", "jpeg", "gif", "css", "js", "html", "htm", "txt", "log", "json", "xml", "pdf", "doc", "docx", "xls", "xlsx"].includes(ext);
-    });
-
-    return Array.from(new Set([
-      ...ips,
-      ...cleanDomains,
-      ...hashes,
-      ...cves.map(c => c.toUpperCase())
-    ]));
+    return extractIocsFromText(query);
   };
 
   const extractedIocs = getExtractedIocs();
@@ -187,31 +193,15 @@ const SearchForm = ({
       reader.onload = (event) => {
         if (event.target?.result) {
           const text = event.target.result as string;
-
-          const ips: string[] = text.match(ipRegex) ?? [];
-          const domains: string[] = text.match(domainRegex) ?? [];
-          const hashes: string[] = text.match(hashRegex) ?? [];
-          const cves: string[] = text.match(cveRegex) ?? [];
-
-          const cleanDomains = domains.filter(d => {
-            const ext = d.split('.').pop()?.toLowerCase() || '';
-            return !["exe", "dll", "sys", "zip", "rar", "tar", "gz", "png", "jpg", "jpeg", "gif", "css", "js", "html", "htm", "txt", "log", "json", "xml", "pdf", "doc", "docx", "xls", "xlsx"].includes(ext);
-          });
-
-          const allIocs = Array.from(new Set([
-            ...ips,
-            ...cleanDomains,
-            ...hashes,
-            ...cves.map(c => c.toUpperCase())
-          ]));
+          const allIocs = extractIocsFromText(text);
 
           if (allIocs.length > 0) {
             setQuery(allIocs.join("\n"));
             toast({
               title: language === "pt" ? "IOCs Extraídos" : "IOCs Extracted",
               description: language === "pt"
-                ? `Extraídos ${allIocs.length} alvos únicos de ameaça do arquivo ${file.name}.`
-                : `Extracted ${allIocs.length} unique threat targets from ${file.name}.`,
+                ? `Extraídos ${allIocs.length} alvos únicos de ${file.name}. A análise roda ${MAX_ANALYZER_TARGETS} por vez.`
+                : `Extracted ${allIocs.length} unique targets from ${file.name}. Analysis runs ${MAX_ANALYZER_TARGETS} at a time.`,
             });
           } else {
             toast({
@@ -234,24 +224,25 @@ const SearchForm = ({
       <form onSubmit={onSubmit} className="w-full">
         <div className="space-y-3">
           {/* Search bar */}
-          <div className="relative flex items-center bg-[#0B0E1C]/90  border border-white/[0.06] hover:border-border/50 focus-within:border-border/50 transition-all duration-500 shadow-[0_8px_40px_-12px_rgba(0,0,0,0.6)] focus-within:shadow-[0_8px_50px_-8px_rgba(30,96,255,0.15)] max-w-2xl mx-auto w-full rounded-full p-1.5 pl-5 flex-row items-center gap-2">
+          <div className="soc-panel relative mx-auto flex w-full max-w-2xl flex-row items-center gap-2 rounded-full p-1.5 pl-5 transition-all duration-500 hover:border-primary/30 focus-within:border-primary/45 focus-within:shadow-[0_18px_70px_-34px_hsl(var(--primary))]">
 
             {/* Search icon */}
             <div className="flex items-center shrink-0">
-              <Search className="h-4 w-4 text-slate-500" />
+              <Search className="h-4 w-4 text-primary/75" />
             </div>
 
             {/* Unified textarea input */}
             <textarea
               ref={textareaRef}
               placeholder={language === "pt"
-                ? "IP, domínio, hash, CVE — cole um ou vários..."
-                : "IP, domain, hash, CVE — paste one or many..."
+                ? "IP, dominio, URL, hash ou CVE..."
+                : "IP, domain, URL, hash or CVE..."
               }
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               rows={1}
-              className="bg-transparent border-0 focus:outline-none focus-visible:ring-0 text-[13px] text-slate-200 placeholder:text-slate-500/70 flex-1 min-w-0 resize-none [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden leading-relaxed h-10 py-2.5 pl-2.5"
+              wrap="off"
+              className="h-10 min-w-0 flex-1 resize-none overflow-hidden whitespace-nowrap border-0 bg-transparent py-2.5 pl-2.5 text-[13px] leading-relaxed text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus-visible:ring-0 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && !e.shiftKey) {
                   e.preventDefault();
@@ -264,9 +255,9 @@ const SearchForm = ({
             <div className="flex items-center gap-1.5 shrink-0 pr-0.5">
               {/* IOC count badge */}
               {extractedIocs.length > 1 && (
-                <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-primary/10 border border-border/50 text-[10px] font-bold text-primary font-mono tracking-wide">
+                <div className="flex items-center gap-1.5 rounded-full border border-primary/25 bg-primary/10 px-2.5 py-1 font-mono text-[10px] font-bold tracking-wide text-primary">
                   <div className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
-                  {extractedIocs.length} IOCs
+                  {Math.min(extractedIocs.length, MAX_ANALYZER_TARGETS)}/{extractedIocs.length > MAX_ANALYZER_TARGETS ? extractedIocs.length : MAX_ANALYZER_TARGETS} IOCs
                 </div>
               )}
 
@@ -281,7 +272,7 @@ const SearchForm = ({
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
-                className="h-9 w-9 rounded-full flex items-center justify-center shrink-0 text-slate-500 hover:text-slate-300 hover:bg-white/[0.04] transition-all duration-200"
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-all duration-200 hover:bg-primary/10 hover:text-primary"
                 title={language === "pt" ? "Enviar arquivo de log" : "Upload log file"}
               >
                 <Upload className="h-4 w-4" />
@@ -292,7 +283,7 @@ const SearchForm = ({
                 type="submit"
                 disabled={isLoading || !query.trim()}
                 size="icon"
-                className="h-9 w-9 rounded-full bg-primary hover:bg-blue-600 transition-all duration-200 flex items-center justify-center shrink-0 border-0  shadow-primary/20 hover:shadow-blue-600/30 disabled:opacity-30 disabled:shadow-none"
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-0 bg-primary text-primary-foreground shadow-lg shadow-primary/20 transition-all duration-200 hover:bg-primary/90 hover:shadow-primary/30 disabled:opacity-30 disabled:shadow-none"
                 title={language === "pt" ? "Analisar" : "Analyze"}
               >
                 {isLoading ? (
@@ -307,14 +298,14 @@ const SearchForm = ({
           {/* Parsed IOCs preview — only when many targets */}
           {extractedIocs.length > 1 && (
             <div className="flex flex-wrap items-center justify-center gap-1.5 max-w-2xl mx-auto animate-fade-in">
-              {extractedIocs.slice(0, 6).map(ioc => (
-                <span key={ioc} className="inline-flex items-center px-2 py-0.5 rounded-md bg-white/[0.03] border border-white/[0.06] text-[10px] font-mono text-slate-400 tracking-wide">
+              {extractedIocs.slice(0, MAX_ANALYZER_TARGETS).map(ioc => (
+                <span key={ioc} className="inline-flex items-center rounded-md border border-primary/15 bg-primary/5 px-2 py-0.5 font-mono text-[10px] tracking-wide text-muted-foreground">
                   {ioc}
                 </span>
               ))}
-              {extractedIocs.length > 6 && (
+              {extractedIocs.length > MAX_ANALYZER_TARGETS && (
                 <span className="text-[10px] text-slate-500 font-medium">
-                  +{extractedIocs.length - 6} more
+                  +{extractedIocs.length - MAX_ANALYZER_TARGETS} {language === "pt" ? "fora deste lote" : "outside this batch"}
                 </span>
               )}
             </div>
@@ -334,11 +325,68 @@ const ALL_VENDORS = [
   "OpenPhish", "Team Cymru", "Censys"
 ];
 
+const HeroOpsPanel = ({ language }: { language: string }) => {
+  const rows = [
+    ["input", "14.103.115.208"],
+    ["vendors", "VirusTotal, AbuseIPDB, Shodan"],
+    ["verdict", language === "pt" ? "malicioso / score 82" : "malicious / score 82"],
+    ["export", "PDF, JSON, STIX"],
+  ];
+
+  return (
+    <div className="soc-panel relative overflow-hidden rounded-xl text-left">
+      <div className="flex items-center justify-between border-b border-border px-4 py-3">
+        <div className="flex items-center gap-2">
+          <span className="h-2.5 w-2.5 rounded-full bg-red-500" />
+          <span className="h-2.5 w-2.5 rounded-full bg-yellow-500" />
+          <span className="h-2.5 w-2.5 rounded-full bg-green-500" />
+        </div>
+        <span className="font-mono text-[11px] text-muted-foreground">threatsumm4ry/tools</span>
+      </div>
+
+      <div className="space-y-6 p-5">
+        <div>
+          <p className="text-sm font-semibold text-foreground">
+            {language === "pt" ? "Preview da análise" : "Analysis preview"}
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {language === "pt"
+              ? "Uma interface única para consultar, correlacionar e exportar."
+              : "One interface to query, correlate and export."}
+          </p>
+        </div>
+
+        <div className="rounded-lg border border-border bg-background/70 font-mono text-xs">
+          {rows.map(([key, value]) => (
+            <div key={key} className="grid grid-cols-[86px_1fr] gap-3 border-b border-border px-3 py-3 last:border-b-0">
+              <span className="text-muted-foreground">{key}</span>
+              <span className="truncate text-foreground">{value}</span>
+            </div>
+          ))}
+        </div>
+
+        <div className="grid grid-cols-3 gap-3">
+          {[
+            ["21", language === "pt" ? "fontes" : "sources"],
+            ["4", "IOC types"],
+            ["5", language === "pt" ? "exports" : "exports"],
+          ].map(([value, label]) => (
+            <div key={label} className="rounded-lg border border-border bg-secondary/30 p-3">
+              <div className="font-mono text-xl font-semibold text-foreground">{value}</div>
+              <div className="mt-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">{label}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const Index = () => {
-  const { isCollapsed } = useSidebar();
   const { auth } = useAuth();
   const [savingScans, setSavingScans] = useState(false);
   const [query, setQuery] = useState("");
+  const [toolSearch, setToolSearch] = useState("");
   const [selectedVendors, setSelectedVendors] = useState<string[]>(ALL_VENDORS);
 
   // Changed data to results array to support multi-IP
@@ -348,11 +396,150 @@ const Index = () => {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isExportingPDF, setIsExportingPDF] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [view, setView] = useState<"graph" | "cards">("graph");
+  const [view, setView] = useState<"graph" | "cards">("cards");
   const [searchHistory, setSearchHistory] = useState<string[]>([]);
   const [copiedIocs, setCopiedIocs] = useState(false);
   const { toast } = useToast();
   const { t, language } = useLanguage();
+  const location = useLocation();
+  const { isCollapsed } = useSidebar();
+  const isAnalyzerRoute = location.pathname === "/analyzer";
+  const contactUrl = "https://www.linkedin.com/in/matheuslima-andrade/";
+
+  const toolCards = [
+    {
+      title: "ThreatSumm4ry Search",
+      description: language === "pt" ? "Busque IP, dominio, URL, hash ou CVE e consolide 21 fontes em um veredito unico." : "Search IPs, domains, URLs, hashes or CVEs and consolidate 21 sources into one verdict.",
+      href: "/analyzer",
+      icon: Search,
+      tags: [language === "pt" ? "BUSCA" : "SEARCH", language === "pt" ? "21 FONTES" : "21 SOURCES", "EXPORT"],
+      group: "analysis",
+      featured: true,
+    },
+    {
+      title: "Phishing Analyzer",
+      description: language === "pt" ? "Analise headers, URLs, anexos e IOCs de mensagens submetidas." : "Analyze headers, URLs, attachments and IOCs from submitted messages.",
+      href: "/phishing-analyzer",
+      icon: Mail,
+      tags: ["SPF", "DKIM", "DMARC"],
+      group: "analysis",
+      featured: true,
+    },
+    {
+      title: "DNSBL",
+      description: language === "pt" ? "Consulta paralela em blocklists por IP, dominio ou range." : "Parallel blocklist checks by IP, domain or range.",
+      href: "/dnsbl",
+      icon: Globe,
+      tags: ["BULK", "EXPORT"],
+      group: "analysis",
+    },
+    {
+      title: language === "pt" ? "Gerador de Relatorios" : "Report Generator",
+      description: language === "pt" ? "Cole uma URL, PDF ou relatorio de vendor e receba uma analise de CTI/Hunting." : "Paste a URL, PDF or vendor report and receive CTI/Hunting analysis.",
+      href: "/relatorios",
+      icon: FileSearch,
+      tags: ["URL", "PDF", "AI"],
+      group: "analysis",
+      featured: true,
+    },
+    {
+      title: "CVEs",
+      description: language === "pt" ? "Catalogo priorizado por EPSS, KEV e exploit publico." : "Catalog prioritized by EPSS, KEV and public exploit signals.",
+      href: "/cves",
+      icon: Shield,
+      tags: ["NVD", "CISA-KEV", "EPSS"],
+      group: "intel",
+      featured: true,
+    },
+    {
+      title: language === "pt" ? "Atores" : "Threat Actors",
+      description: language === "pt" ? "Fichas de threat actors: aliases, TTPs e alvos por setor." : "Threat actor profiles: aliases, TTPs and sector targeting.",
+      href: "/atores",
+      icon: Eye,
+      tags: ["MITRE", "OSINT"],
+      group: "intel",
+    },
+    {
+      title: "Advisories",
+      description: language === "pt" ? "Boletim diario com veredito, KPIs, destaques criticos e ransomware do dia." : "Daily brief with verdict, KPIs, critical highlights and ransomware of the day.",
+      href: "/advisories",
+      icon: Mail,
+      tags: ["DAILY", "KEV", "EPSS"],
+      group: "intel",
+    },
+    {
+      title: "Latam Threats",
+      description: language === "pt" ? "Radar de ransomware e IOCs recentes com foco em America Latina." : "Recent ransomware and IOC radar focused on Latin America.",
+      href: "/latam-threats",
+      icon: RadioTower,
+      tags: ["LATAM", "ThreatFox", "Ransomware.live"],
+      group: "intel",
+    },
+    {
+      title: language === "pt" ? "Mapa de Ameacas" : "Threat Map",
+      description: language === "pt" ? "Mapa global de vitimas de ransomware por pais nos ultimos 90 dias." : "Global ransomware victim map by country over the last 90 days.",
+      href: "/threat-map",
+      icon: MapPinned,
+      tags: ["MAP", "Ransomware.live"],
+      group: "intel",
+    },
+    {
+      title: "Patch Tuesday",
+      description: language === "pt" ? "Timeline mensal Microsoft com severidade, exploitability e produto afetado." : "Monthly Microsoft timeline with severity, exploitability and affected products.",
+      href: "/patch-tuesday",
+      icon: Bug,
+      tags: ["MSRC", language === "pt" ? "MENSAL" : "MONTHLY"],
+      group: "intel",
+    },
+    {
+      title: "Threat Hunting",
+      description: language === "pt" ? "Hipoteses e queries prontas por tecnica ATT&CK para SIEM/EDR." : "Ready hypotheses and queries by ATT&CK technique for SIEM/EDR.",
+      href: "/threat-hunting",
+      icon: Radar,
+      tags: ["SIGMA", "KQL", "SPL"],
+      group: "hunting",
+    },
+    {
+      title: language === "pt" ? "Relatorio diario" : "Daily Report",
+      description: language === "pt" ? "Resumo diario objetivo: TL;DR, campanhas ativas e acoes recomendadas." : "Focused daily report: TL;DR, active campaigns and recommended actions.",
+      href: "/relatorios",
+      icon: FileSearch,
+      tags: [language === "pt" ? "DIARIO" : "DAILY", "06:00"],
+      group: "reports",
+      featured: true,
+    },
+    {
+      title: "Newsletter",
+      description: language === "pt" ? "Recorte semanal curado por analistas. Sem clickbait, sem vendor pitch." : "Weekly analyst-curated digest. No clickbait, no vendor pitch.",
+      href: "/newsletter",
+      icon: Database,
+      tags: [language === "pt" ? "SEMANAL" : "WEEKLY", "SEX 07:00"],
+      group: "reports",
+    },
+  ];
+
+  const toolGroups = [
+    { key: "analysis", title: language === "pt" ? "Analise" : "Analysis", description: language === "pt" ? "Investigar artefatos e mensagens" : "Investigate artifacts and messages" },
+    { key: "intel", title: "Intel", description: language === "pt" ? "Vulnerabilidades, atores e advisories" : "Vulnerabilities, actors and advisories" },
+    { key: "hunting", title: "Hunting", description: language === "pt" ? "Hipoteses e queries prontas" : "Ready hypotheses and queries" },
+    { key: "reports", title: language === "pt" ? "Relatorios" : "Reports", description: language === "pt" ? "Resumos objetivos e newsletter" : "Focused reports and newsletter" },
+  ];
+
+  const normalizedToolSearch = toolSearch.trim().toLowerCase();
+  const visibleToolCards = normalizedToolSearch
+    ? toolCards.filter((tool) =>
+        [
+          tool.title,
+          tool.description,
+          tool.group,
+          ...tool.tags,
+        ].join(" ").toLowerCase().includes(normalizedToolSearch)
+    )
+    : toolCards;
+  const shellClassName = cn(
+    "soc-shell relative flex min-h-screen flex-col overflow-hidden transition-[padding] duration-200",
+    isCollapsed ? "lg:pl-[72px]" : "lg:pl-[264px]"
+  );
 
 
   // Load saved preferences
@@ -370,6 +557,15 @@ const Index = () => {
       }
     }
   }, []);
+
+  useEffect(() => {
+    if (!location.hash) return;
+    const id = location.hash.replace("#", "");
+    const timer = window.setTimeout(() => {
+      document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 80);
+    return () => window.clearTimeout(timer);
+  }, [location.hash]);
 
   // Load recent search history
   useEffect(() => {
@@ -478,8 +674,10 @@ const Index = () => {
       return;
     }
 
-    // Extract all potential tokens by splitting on whitespace, quotes, commas, brackets, etc.
-    const ipPattern = /^(\d{1,3}\.){3}\d{1,3}$/;
+    // Extract IOCs by regex first. This handles pasted feeds with flags/emojis
+    // attached to IPs, e.g. `118.122.147.49🇮🇳`.
+    const extractedQueries = extractIocsFromText(rawQuery);
+    const ipPattern = /^(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.(?:25[0-5]|2[0-4]\d|[01]?\d\d?)$/;
     const domainPattern = /^([a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$/;
     const hashPattern = /^[a-fA-F0-9]{32}$|^[a-fA-F0-9]{40}$|^[a-fA-F0-9]{64}$/;
     const urlPattern = /^(http|https):\/\/[^ "]+$/;
@@ -489,7 +687,7 @@ const Index = () => {
     const uniqueTokens = Array.from(new Set(tokens));
 
     // Filter to only valid IOCs
-    let queries = uniqueTokens.filter(q =>
+    let queries = extractedQueries.length > 0 ? extractedQueries : uniqueTokens.filter(q =>
       ipPattern.test(q) || domainPattern.test(q) || hashPattern.test(q) || urlPattern.test(q) || cvePattern.test(q)
     );
 
@@ -498,17 +696,19 @@ const Index = () => {
       queries = uniqueTokens;
     }
 
-    if (queries.length > 35) {
+    if (queries.length > MAX_ANALYZER_TARGETS) {
+      const totalTargets = queries.length;
+      queries = queries.slice(0, MAX_ANALYZER_TARGETS);
       toast({
-        title: "Too many targets",
-        description: "Please enter a maximum of 35 targets.",
-        variant: "destructive",
+        title: language === "pt" ? "Lote limitado" : "Batch limited",
+        description: language === "pt"
+          ? `Detectei ${totalTargets} IOCs. Vou analisar os ${MAX_ANALYZER_TARGETS} primeiros neste lote.`
+          : `Detected ${totalTargets} IOCs. Analyzing the first ${MAX_ANALYZER_TARGETS} in this batch.`,
       });
-      return;
     }
 
     // Validation
-    const ipRegex = /^(\d{1,3}\.){3}\d{1,3}$/;
+    const ipRegex = /^(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.(?:25[0-5]|2[0-4]\d|[01]?\d\d?)$/;
     const domainRegex = /^([a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$/;
     const hashRegex = /^[a-fA-F0-9]{32}$|^[a-fA-F0-9]{40}$|^[a-fA-F0-9]{64}$/;
     const urlRegex = /^(http|https):\/\/[^ "]+$/;
@@ -1467,206 +1667,385 @@ const Index = () => {
     }
   };
 
-  if (results.length === 0 && !isAnalyzing) {
-    return (
-      <div className={`min-h-screen bg-background flex flex-col transition-all duration-300 relative overflow-hidden ${isCollapsed ? "lg:pl-20" : "lg:pl-64"}`}>
-        {/* Glowing background gradient mesh */}
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-blue-950/15 via-background to-background pointer-events-none z-0" />
-
-        <Header onLogoClick={handleReset} />
-
-        {/* Top inline navbar inside the content area (Desktop only) */}
-        <div className="relative z-10 flex justify-between items-center w-full max-w-7xl mx-auto py-6 px-4 md:px-8 border-b border-border/50 hidden md:flex">
-          {/* Brand/Logo */}
-          <div className="flex items-center gap-2.5">
-            <div className="h-7 w-7 rounded bg-primary flex items-center justify-center font-black text-primary-foreground text-[11px] shadow-md shadow-primary/30 select-none">
-              T
-            </div>
-            <span className="font-extrabold tracking-tight text-base text-slate-100 font-sans">
-              {t('appName')}
-            </span>
-          </div>
-
-          {/* Center Links */}
-          <div className="flex items-center gap-5 flex-wrap justify-center">
-            <Link
-              to="/features"
-              className="text-xs font-semibold text-muted-foreground hover:text-foreground hover:underline underline-offset-4 transition-all duration-200"
-            >
-              {t('features') || 'Features'}
-            </Link>
-            <Link
-              to="/vendors"
-              className="text-xs font-semibold text-muted-foreground hover:text-foreground hover:underline underline-offset-4 transition-all duration-200"
-            >
-              {t('vendors') || 'Vendors'}
-            </Link>
-            <Link
-              to="/dnsbl"
-              className="text-xs font-semibold text-muted-foreground hover:text-foreground hover:underline underline-offset-4 transition-all duration-200"
-            >
-              {t('dnsblCheck') || 'DNSBL Check'}
-            </Link>
-            <Link
-              to="/phishing-analyzer"
-              className="text-xs font-semibold text-muted-foreground hover:text-foreground hover:underline underline-offset-4 transition-all duration-200"
-            >
-              {language === "pt" ? "Análise de Phishing" : "Phishing Analyzer"}
-            </Link>
-            <Link
-              to="/newsletter"
-              className="text-xs font-semibold text-muted-foreground hover:text-foreground hover:underline underline-offset-4 transition-all duration-200"
-            >
-              {language === "pt" ? "Coletor de Intel" : "Intel Collector"}
-            </Link>
-            <Link
-              to="/cves"
-              className="text-xs font-semibold text-muted-foreground hover:text-foreground hover:underline underline-offset-4 transition-all duration-200"
-            >
-              {language === "pt" ? "Painel de CVEs" : "CVE Dashboard"}
-            </Link>
+  const renderToolCard = (tool: typeof toolCards[number], variant: "featured" | "compact" = "compact") => {
+    const Icon = tool.icon;
+    const isSearchTool = tool.href === "/analyzer";
+    const content = (
+      <div
+        className={cn(
+          "group relative flex h-full flex-col overflow-hidden rounded-lg border bg-card text-left transition-all hover:border-foreground/25 hover:shadow-sm",
+          variant === "featured" ? "min-h-[210px] p-7" : "min-h-[168px] p-6",
+          isSearchTool
+            ? "border-primary/40 bg-primary/[0.035] shadow-[0_18px_70px_-48px_hsl(var(--primary))]"
+            : "border-border"
+        )}
+      >
+        {isSearchTool && (
+          <div className="absolute inset-x-0 top-0 h-1 bg-primary" />
+        )}
+        <div className="flex items-start justify-between gap-4">
+          <span className={cn(
+            "flex h-10 w-10 shrink-0 items-center justify-center rounded-md border bg-background text-foreground",
+            isSearchTool ? "border-primary/30 text-primary" : "border-border"
+          )}>
+            <Icon className="h-5 w-5" />
+          </span>
+          <div className="flex items-center gap-2">
+            {isSearchTool && (
+              <span className="rounded-full border border-primary/25 bg-primary/10 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-primary">
+                {language === "pt" ? "principal" : "main"}
+              </span>
+            )}
+            <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-foreground" />
           </div>
         </div>
+        <div className={cn("flex-1", variant === "featured" ? "mt-8" : "mt-6")}>
+          <h3 className="text-lg font-bold tracking-tight text-foreground">{tool.title}</h3>
+          <p className="mt-3 text-sm leading-6 text-muted-foreground">{tool.description}</p>
+        </div>
+        <div className="mt-6 flex flex-wrap gap-2">
+          {tool.tags.map((tag) => (
+            <span key={tag} className="rounded-full border border-border bg-background px-2.5 py-1 font-mono text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+              {tag}
+            </span>
+          ))}
+        </div>
+      </div>
+    );
 
-        <div className="relative z-10 flex-1 flex flex-col items-center justify-center p-4 min-h-[50vh]">
-          <div className="max-w-2xl w-full space-y-8 text-center">
-            <div className="flex flex-col items-center">
-              {/* Hero Title & Description */}
-              <div className="space-y-4">
-                <h1 className="text-4xl md:text-6xl font-extrabold tracking-tight bg-gradient-to-r from-foreground via-foreground/90 to-foreground/50 bg-clip-text text-transparent leading-[1.1] md:leading-[1.1]">
-                  <TypingTitle language={language} />
-                </h1>
-                <p className="text-sm md:text-base text-muted-foreground/80 max-w-xl mx-auto leading-relaxed">
-                  {t('heroDescription') || 'Paste an IP, domain, or hash. ThreatSumm4ry aggregates intelligence from 21 vendors and returns a unified verdict in under two seconds.'}
-                </p>
-              </div>
+    return tool.href.startsWith("#") ? (
+      <a key={tool.title} href={tool.href} className="block h-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+        {content}
+      </a>
+    ) : (
+      <Link key={tool.title} to={tool.href} className="block h-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+        {content}
+      </Link>
+    );
+  };
+
+  if (results.length === 0 && !isAnalyzing && !isAnalyzerRoute) {
+    return (
+      <div className="min-h-screen bg-background text-foreground">
+        <header className="sticky top-0 z-50 border-b border-border bg-background/95 backdrop-blur">
+          <div className="mx-auto flex min-h-20 max-w-6xl flex-col gap-3 px-4 py-3 md:min-h-24 md:flex-row md:items-center md:justify-between md:px-8">
+            <div className="flex items-center justify-between gap-4">
+              <Link to="/" onClick={handleReset} className="flex min-w-0 items-center gap-3">
+                <span className="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-foreground text-[11px] font-black text-background">t4</span>
+                <span className="truncate text-lg font-black tracking-tight">threatsumm4ry</span>
+              </Link>
+              <Button size="sm" asChild className="h-9 px-3 md:hidden">
+                <Link to="/cadastro">{language === "pt" ? "Cadastrar" : "Sign up"}</Link>
+              </Button>
             </div>
 
-            {/* Main Capsule Search Bar */}
-            <div className="p-1 sm:p-2 animate-fade-in w-full">
-              <SearchForm
-                query={query}
-                setQuery={setQuery}
-                onSubmit={handleSearch}
-                isLoading={isAnalyzing}
-                selectedVendors={selectedVendors}
-                onVendorsChange={setSelectedVendors}
-              />
+            <nav className="scrollbar-none flex items-center gap-1 overflow-x-auto rounded-full border border-border bg-secondary/40 p-1 md:mx-4">
+              {[
+                { href: "#sobre", label: language === "pt" ? "Sobre" : "About" },
+                { href: "#tools", label: language === "pt" ? "Ferramentas" : "Tools" },
+                { href: "#newsletter", label: "Newsletter" },
+                { href: contactUrl, label: language === "pt" ? "Contato" : "Contact", external: true },
+              ].map((item) => (
+                item.href.startsWith("#") ? (
+                  <a
+                    key={item.href}
+                    href={item.href}
+                    className="whitespace-nowrap rounded-full px-3 py-1.5 text-sm font-bold text-muted-foreground transition-colors hover:bg-background hover:text-foreground"
+                  >
+                      {item.label}
+                    </a>
+                ) : item.external ? (
+                  <a
+                    key={item.href}
+                    href={item.href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="whitespace-nowrap rounded-full px-3 py-1.5 text-sm font-bold text-muted-foreground transition-colors hover:bg-background hover:text-foreground"
+                  >
+                    {item.label}
+                  </a>
+                ) : (
+                  <Link
+                    key={item.href}
+                    to={item.href}
+                    className="whitespace-nowrap rounded-full px-3 py-1.5 text-sm font-bold text-muted-foreground transition-colors hover:bg-background hover:text-foreground"
+                  >
+                    {item.label}
+                  </Link>
+                )
+              ))}
+            </nav>
+
+            <div className="hidden items-center gap-2 md:flex">
+              <Button variant="ghost" asChild className="h-9 px-3 text-sm font-bold text-muted-foreground hover:text-foreground">
+                <Link to="/login">{language === "pt" ? "Entrar" : "Sign in"}</Link>
+              </Button>
+              <Button variant="outline" asChild className="h-9 px-3 text-sm font-bold">
+                <Link to="/cadastro">{language === "pt" ? "Cadastrar" : "Sign up"}</Link>
+              </Button>
             </div>
 
-            {/* Try these Examples */}
-            <div id="examples" className="animate-fade-in space-y-3 scroll-mt-6">
-              <p className="text-[10px] font-bold text-muted-foreground/50 uppercase tracking-widest">
-                {language === "pt" ? "Experimente estes exemplos" : "Try these examples"}
+            <div className="grid grid-cols-2 gap-2 md:hidden">
+              <Button variant="outline" asChild className="h-9 text-sm font-bold">
+                <Link to="/login">{language === "pt" ? "Entrar" : "Sign in"}</Link>
+              </Button>
+              <Button asChild className="h-9 text-sm font-bold">
+                <Link to="/cadastro">{language === "pt" ? "Cadastrar" : "Sign up"}</Link>
+              </Button>
+            </div>
+          </div>
+        </header>
+
+        <main>
+          <section id="testar" className="mx-auto max-w-6xl scroll-mt-32 px-4 pb-16 pt-24 text-center md:px-8 md:pb-24 md:pt-32">
+            <div className="border-b border-border pb-16 md:pb-24">
+              <span className="inline-flex items-center rounded-full border border-border bg-background px-5 py-2 text-sm font-bold text-muted-foreground">
+                {language === "pt" ? "coletanea de tools para SOC · CTI · threat hunting" : "tool collection for SOC · CTI · threat hunting"}
+              </span>
+              <h1 className="mx-auto mt-8 max-w-5xl text-4xl font-black tracking-tight text-foreground md:text-6xl">
+                {language === "pt" ? (
+                  <>
+                    As ferramentas de seguranca que voce <span className="text-primary">realmente</span> abre no dia a dia.
+                  </>
+                ) : (
+                  <>
+                    Security tools you <span className="text-primary">actually</span> open every day.
+                  </>
+                )}
+              </h1>
+              <p className="mx-auto mt-7 max-w-5xl text-base font-semibold leading-8 text-muted-foreground md:text-xl">
+                {language === "pt"
+                  ? "Um so lugar para analisar phishing, consultar CVEs, checar DNSBL, acompanhar Patch Tuesday e gerar relatorios de CTI a partir de qualquer URL ou PDF. Direto, sem vendor pitch."
+                  : "One place to analyze phishing, query CVEs, check DNSBL, follow Patch Tuesday and generate CTI reports from any URL or PDF. Direct, no vendor pitch."}
               </p>
-              <div className="flex flex-wrap justify-center gap-2.5">
-                {[
-                  { ip: "14.103.115.208", flag: "🇨🇳" },
-                  { ip: "51.210.208.8", flag: "🇫🇷" },
-                  { ip: "103.65.237.234", flag: "🇮🇩" },
-                  { ip: "1.1.1.1", flag: "☁️" },
-                  { ip: "8.8.8.8", flag: "🔒" },
-                ].map(({ ip, flag }) => (
+
+              <div className="soc-panel relative mx-auto mt-12 w-full max-w-4xl overflow-hidden rounded-xl border-primary/35 bg-card p-4 text-left shadow-[0_24px_80px_-56px_hsl(var(--primary))]">
+                <div className="absolute inset-x-0 top-0 h-1 bg-primary" />
+                <div className="mb-4 flex flex-col gap-3 px-1 pt-1 text-center md:flex-row md:items-center md:justify-between md:text-left">
+                  <div>
+                    <span className="inline-flex items-center rounded-full border border-primary/25 bg-primary/10 px-3 py-1 text-[11px] font-black uppercase tracking-wide text-primary">
+                      {language === "pt" ? "Ferramenta principal" : "Main tool"}
+                    </span>
+                    <h2 className="mt-3 text-xl font-black tracking-tight text-foreground">
+                      ThreatSumm4ry Search
+                    </h2>
+                    <p className="mt-1 text-sm font-semibold text-muted-foreground">
+                      {language === "pt"
+                        ? "Cole IP, dominio, URL, hash ou CVE e veja a analise multi-fonte na hora."
+                        : "Paste an IP, domain, URL, hash or CVE and see the multi-source analysis right away."}
+                    </p>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 text-center">
+                    {[
+                      ["21", language === "pt" ? "fontes" : "sources"],
+                      ["5", "exports"],
+                      [String(MAX_ANALYZER_TARGETS), language === "pt" ? "por lote" : "per batch"],
+                    ].map(([value, label]) => (
+                      <div key={label} className="rounded-md border border-border bg-background px-3 py-2">
+                        <div className="font-mono text-sm font-black text-foreground">{value}</div>
+                        <div className="mt-0.5 text-[10px] font-bold uppercase tracking-wide text-muted-foreground">{label}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <SearchForm
+                  query={query}
+                  setQuery={setQuery}
+                  onSubmit={handleSearch}
+                  isLoading={isAnalyzing}
+                  selectedVendors={selectedVendors}
+                  onVendorsChange={setSelectedVendors}
+                />
+              </div>
+
+              <div className="mt-6 flex flex-wrap justify-center gap-2.5">
+                {["14.103.115.208", "51.210.208.8", "103.65.237.234", "1.1.1.1", "8.8.8.8"].map((ip) => (
                   <button
                     key={ip}
                     onClick={() => setQuery(prev => prev ? `${prev}\n${ip}` : ip)}
-                    className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-semibold border border-border/50 bg-muted/20 hover:bg-primary/5 hover:border-border/50 text-muted-foreground hover:text-foreground hover:scale-[1.03] active:scale-[0.97] transition-all cursor-pointer shadow-sm"
+                    className="rounded-full border border-border bg-background px-3 py-1.5 font-mono text-xs font-medium text-muted-foreground transition-colors hover:border-foreground/40 hover:text-foreground"
                   >
-                    <span>{flag}</span>
-                    <span>{ip}</span>
+                    {ip}
                   </button>
                 ))}
               </div>
-            </div>
 
-            {/* Recent searches */}
-            {searchHistory.length > 0 && (
-              <div className="animate-fade-in space-y-3">
-                <div className="flex items-center justify-center gap-2">
-                  <p className="text-[10px] font-bold text-muted-foreground/50 uppercase tracking-widest">
-                    {language === "pt" ? "Buscas recentes" : "Recent searches"}
-                  </p>
-                  <button
-                    onClick={clearSearchHistory}
-                    className="text-[10px] font-semibold text-muted-foreground/40 hover:text-destructive transition-colors"
-                    title={language === "pt" ? "Limpar histórico" : "Clear history"}
-                  >
-                    {language === "pt" ? "limpar" : "clear"}
-                  </button>
-                </div>
-                <div className="flex flex-wrap justify-center gap-2.5">
-                  {searchHistory.map((entry) => {
+              {searchHistory.length > 0 && (
+                <div className="mt-5 flex flex-wrap items-center justify-center gap-2.5">
+                  {searchHistory.slice(0, 4).map((entry) => {
                     const label = entry.replace(/\s+/g, " ").trim();
-                    const short = label.length > 32 ? `${label.slice(0, 32)}…` : label;
+                    const short = label.length > 30 ? `${label.slice(0, 30)}...` : label;
                     return (
                       <button
                         key={entry}
                         onClick={() => setQuery(entry)}
                         title={label}
-                        className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-semibold border border-border/50 bg-muted/20 hover:bg-primary/5 hover:border-border/50 text-muted-foreground hover:text-foreground hover:scale-[1.03] active:scale-[0.97] transition-all cursor-pointer shadow-sm"
+                        className="inline-flex items-center gap-2 rounded-full border border-border bg-secondary/60 px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
                       >
-                        <Clock className="h-3 w-3 opacity-60" />
+                        <Clock className="h-3 w-3" />
                         <span className="font-mono">{short}</span>
                       </button>
                     );
                   })}
+                  <button
+                    onClick={clearSearchHistory}
+                    className="text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+                  >
+                    {language === "pt" ? "limpar" : "clear"}
+                  </button>
                 </div>
-              </div>
-            )}
+              )}
+            </div>
+          </section>
 
-            {/* Capabilities */}
-            <div id="features" className="pt-10 border-t border-white/[0.04] mt-10 max-w-3xl mx-auto scroll-mt-6">
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-center">
+          <section id="sobre" className="mx-auto max-w-6xl scroll-mt-32 px-4 pb-16 md:px-8">
+            <div className="grid gap-8 border-b border-border pb-16 md:grid-cols-[0.9fr_1.1fr] md:items-start">
+              <div>
+                <p className="text-xs font-black uppercase tracking-wide text-primary">
+                  {language === "pt" ? "Sobre" : "About"}
+                </p>
+                <h2 className="mt-3 text-3xl font-black tracking-tight text-foreground md:text-4xl">
+                  {language === "pt" ? "Uma bancada operacional para analistas." : "An operational workbench for analysts."}
+                </h2>
+                <p className="mt-5 text-base font-medium leading-8 text-muted-foreground">
+                  {language === "pt"
+                    ? "ThreatSumm4ry junta as tarefas repetidas de SOC e CTI em um lugar: triagem de phishing, vulnerabilidades, DNSBL, atores, advisories, hunting e relatorios acionaveis."
+                    : "ThreatSumm4ry brings repetitive SOC and CTI tasks into one place: phishing triage, vulnerabilities, DNSBL, actors, advisories, hunting and actionable reports."}
+                </p>
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-3">
                 {[
                   {
                     icon: Shield,
-                    title: language === "pt" ? "21 Fontes" : "21 Sources",
-                    desc: language === "pt" ? "Veredito unificado" : "Unified verdict"
-                  },
-                  {
-                    icon: Radar,
-                    title: language === "pt" ? "Correlação" : "Correlation",
-                    desc: language === "pt" ? "Grafo interativo" : "Interactive graph"
+                    title: language === "pt" ? "Triagem rapida" : "Fast triage",
+                    text: language === "pt" ? "Abra a tool certa sem procurar em dez abas." : "Open the right tool without hunting across tabs.",
                   },
                   {
                     icon: Database,
-                    title: language === "pt" ? "Multi-formato" : "Multi-format",
-                    desc: language === "pt" ? "IP, hash, CVE" : "IP, hash, CVE"
+                    title: language === "pt" ? "Contexto unico" : "Unified context",
+                    text: language === "pt" ? "CVEs, advisories e fontes organizadas por finalidade." : "CVEs, advisories and sources organized by purpose.",
                   },
                   {
-                    icon: FileSearch,
-                    title: language === "pt" ? "PDF / SOC" : "PDF / SOC",
-                    desc: language === "pt" ? "Relatórios prontos" : "Export ready"
-                  }
-                ].map((feat, index) => {
-                  const Icon = feat.icon;
+                    icon: Radar,
+                    title: "Hunting ready",
+                    text: language === "pt" ? "Relatorios e queries para sair do resumo para acao." : "Reports and queries to move from summary to action.",
+                  },
+                ].map((item) => {
+                  const Icon = item.icon;
                   return (
-                    <div key={index} className="flex flex-col items-center gap-2 p-4 rounded-xl border border-white/[0.04] bg-white/[0.015] hover:bg-white/[0.03] hover:border-border/50 transition-all duration-300">
-                      <div className="h-8 w-8 rounded-lg bg-primary/8 border border-border/50 flex items-center justify-center text-primary">
-                        <Icon className="h-4 w-4" />
-                      </div>
-                      <div>
-                        <h3 className="font-bold text-[11px] text-foreground">{feat.title}</h3>
-                        <p className="text-[10px] text-muted-foreground/50 mt-0.5">{feat.desc}</p>
-                      </div>
+                    <div key={item.title} className="rounded-lg border border-border bg-card p-5">
+                      <span className="flex h-10 w-10 items-center justify-center rounded-md border border-border bg-background">
+                        <Icon className="h-5 w-5" />
+                      </span>
+                      <h3 className="mt-5 text-base font-black text-foreground">{item.title}</h3>
+                      <p className="mt-2 text-sm font-medium leading-6 text-muted-foreground">{item.text}</p>
                     </div>
                   );
                 })}
               </div>
             </div>
-          </div>
-        </div>
+          </section>
 
-        <Footer />
+          <section id="tools" className="mx-auto max-w-6xl scroll-mt-28 px-4 pb-20 md:px-8">
+            <div className="border-t border-border pt-14">
+              <div className="flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
+                <div>
+                  <h2 className="text-3xl font-black tracking-tight text-foreground">{language === "pt" ? "Todas as tools" : "All tools"}</h2>
+                  <p className="mt-2 text-sm font-medium text-muted-foreground">
+                    {language === "pt" ? "Organizadas por finalidade - clique para abrir." : "Organized by purpose - click to open."}
+                  </p>
+                </div>
+                <div className="flex h-11 w-full items-center gap-2 rounded-lg border border-border bg-card px-3 md:max-w-sm">
+                  <Search className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  <input
+                    value={toolSearch}
+                    onChange={(event) => setToolSearch(event.target.value)}
+                    placeholder={language === "pt" ? "Filtrar tools..." : "Filter tools..."}
+                    className="min-w-0 flex-1 bg-transparent text-sm font-semibold outline-none placeholder:text-muted-foreground"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-10 space-y-12">
+              {toolGroups.map((group) => {
+                const tools = visibleToolCards.filter((tool) => tool.group === group.key);
+                if (!tools.length) return null;
+
+                return (
+                  <section key={group.key}>
+                    <div className="mb-5 flex items-end justify-between gap-4 border-b border-border pb-5">
+                      <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:gap-4">
+                        <h3 className="text-xl font-black tracking-tight text-foreground">{group.title}</h3>
+                        <p className="text-sm font-medium text-muted-foreground">{group.description}</p>
+                      </div>
+                      <span className="font-mono text-sm text-muted-foreground">{String(tools.length).padStart(2, "0")}</span>
+                    </div>
+                    <div className="grid gap-4 md:grid-cols-2">
+                      {tools.map((tool) => renderToolCard(tool))}
+                    </div>
+                  </section>
+                );
+              })}
+            </div>
+            {visibleToolCards.length === 0 && (
+              <div className="mt-10 rounded-lg border border-border bg-card p-8 text-center text-sm font-medium text-muted-foreground">
+                {language === "pt" ? "Nenhuma tool encontrada para essa busca." : "No tools found for that search."}
+              </div>
+            )}
+          </section>
+
+          <section id="newsletter" className="mx-auto max-w-6xl scroll-mt-28 px-4 pb-20 md:px-8">
+            <div className="flex flex-col gap-6 rounded-lg border border-border bg-card p-8 md:flex-row md:items-center md:justify-between">
+              <div>
+                <p className="text-xs font-black uppercase tracking-wide text-primary">Newsletter</p>
+                <h2 className="mt-3 text-2xl font-black tracking-tight text-foreground">
+                  {language === "pt" ? "Recorte semanal, direto ao ponto." : "Weekly digest, straight to the point."}
+                </h2>
+                <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                  {language === "pt" ? "Sexta, 07:00 BRT. So o que mudou de fato na semana - sem clickbait e sem vendor pitch." : "Friday, 07:00 BRT. Only what actually changed during the week - no clickbait, no vendor pitch."}
+                </p>
+              </div>
+              <div className="flex w-full max-w-md flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
+                <span className="rounded-md border border-border bg-background px-3 py-2 text-xs font-bold uppercase tracking-wide text-muted-foreground">
+                  {language === "pt" ? "Premium via allow-list" : "Premium via allow-list"}
+                </span>
+                <Button asChild className="h-11 shrink-0">
+                  <Link to="/newsletter">{language === "pt" ? "Abrir newsletter" : "Open newsletter"}</Link>
+                </Button>
+              </div>
+            </div>
+          </section>
+
+        </main>
+
+        <footer className="mx-auto flex max-w-6xl flex-col gap-4 border-t border-border px-4 py-8 text-sm font-semibold text-muted-foreground md:flex-row md:items-center md:justify-between md:px-8">
+          <div className="flex items-center gap-3">
+            <span className="grid h-7 w-7 place-items-center rounded-md bg-foreground text-[10px] font-black text-background">t4</span>
+            <span>{language === "pt" ? "threatsumm4ry · coletanea de tools · 2026" : "threatsumm4ry · tool collection · 2026"}</span>
+          </div>
+          <div className="flex items-center gap-5">
+            <a href="#sobre" className="transition-colors hover:text-foreground">{language === "pt" ? "Sobre" : "About"}</a>
+            <a href={contactUrl} target="_blank" rel="noopener noreferrer" className="transition-colors hover:text-foreground">
+              {language === "pt" ? "Contato" : "Contact"}
+            </a>
+          </div>
+        </footer>
       </div>
     );
   }
 
   return (
-    <div className={`min-h-screen bg-background flex flex-col transition-all duration-300 ${isCollapsed ? "lg:pl-20" : "lg:pl-64"}`}>
-      <Header onLogoClick={handleReset} />
-      {/* Sticky Top Search Bar */}
-      <div className="sticky top-16 lg:top-0 z-20 w-full border-b border-border/50 bg-background/55  px-4 md:px-8 py-3.5 animate-fade-in">
+    <div className={shellClassName}>
+      <Header onLogoClick={handleReset} showBackButton={false} />
+      {/* Persistent search bar: fixed so the primary tool remains available while reviewing results. */}
+      <div
+        className={cn(
+          "fixed left-0 right-0 top-14 z-30 border-b border-border bg-background/95 px-4 py-3.5 backdrop-blur animate-fade-in md:px-8 lg:top-0",
+          isCollapsed ? "lg:left-[72px]" : "lg:left-[264px]"
+        )}
+      >
         <div className="max-w-7xl mx-auto">
           <SearchForm
             query={query}
@@ -1680,7 +2059,7 @@ const Index = () => {
         </div>
       </div>
 
-      <div className="flex-1 p-4 md:p-8">
+      <div className="relative z-10 flex-1 px-4 pb-4 pt-28 md:px-8 md:pb-8 md:pt-32 lg:pt-28">
         <div className="max-w-7xl mx-auto space-y-6">
 
           {error && (
@@ -1689,10 +2068,57 @@ const Index = () => {
             </div>
           )}
 
+          {!isAnalyzing && results.length === 0 && (
+            <section className="mx-auto max-w-5xl py-14 md:py-20">
+              <div className="soc-panel relative overflow-hidden rounded-xl border-primary/35 p-7 md:p-9">
+                <div className="absolute inset-x-0 top-0 h-1 bg-primary" />
+                <div className="flex flex-col gap-8 md:flex-row md:items-start md:justify-between">
+                  <div className="max-w-2xl">
+                    <span className="inline-flex items-center rounded-full border border-primary/25 bg-primary/10 px-3 py-1 text-[11px] font-black uppercase tracking-wide text-primary">
+                      {language === "pt" ? "Ferramenta principal" : "Main tool"}
+                    </span>
+                    <h1 className="mt-4 text-3xl font-black tracking-tight text-foreground md:text-5xl">
+                      ThreatSumm4ry Search
+                    </h1>
+                    <p className="mt-4 text-base font-semibold leading-8 text-muted-foreground md:text-lg">
+                      {language === "pt"
+                        ? "Use a barra acima para consultar IPs, dominios, URLs, hashes ou CVEs. A busca consolida reputacao, DNS, WHOIS, vendors e contexto operacional em um unico resultado."
+                        : "Use the bar above to query IPs, domains, URLs, hashes or CVEs. Search consolidates reputation, DNS, WHOIS, vendors and operational context into one result."}
+                    </p>
+                  </div>
+                  <div className="grid min-w-0 grid-cols-3 gap-2 md:w-72">
+                    {[
+                      ["21", language === "pt" ? "fontes" : "sources"],
+                      ["4", "IOC"],
+                      ["PDF", "export"],
+                    ].map(([value, label]) => (
+                      <div key={label} className="rounded-lg border border-border bg-background p-3 text-center">
+                        <div className="font-mono text-lg font-black text-foreground">{value}</div>
+                        <div className="mt-1 text-[10px] font-bold uppercase tracking-wide text-muted-foreground">{label}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="mt-8 flex flex-wrap gap-2">
+                  {["14.103.115.208", "CVE-2024-3094", "example.com", "8.8.8.8"].map((sample) => (
+                    <button
+                      key={sample}
+                      onClick={() => setQuery(sample)}
+                      className="rounded-full border border-border bg-background px-3 py-1.5 font-mono text-xs font-semibold text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary"
+                    >
+                      {sample}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </section>
+          )}
+
           {results.length > 0 && (
             <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
-                <TabsList className="w-full sm:w-auto justify-start overflow-x-auto h-auto p-1 flex-wrap">
+              <div className="mb-4 flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+                <TabsList className="soc-panel h-auto w-full flex-wrap justify-start overflow-x-auto rounded-lg p-1 sm:w-auto">
                   <TabsTrigger value="overview" className="gap-2">
                     <LayoutGrid className="h-4 w-4" /> Overview
                   </TabsTrigger>
@@ -1711,7 +2137,7 @@ const Index = () => {
                       <Button
                         variant="outline"
                         size="sm"
-                        className="h-9 px-4 rounded-full border-border/50 hover:bg-primary/10 shadow-sm flex items-center gap-2"
+                        className="flex h-9 items-center gap-2 rounded-full border-primary/20 bg-background/45 px-4 shadow-sm hover:bg-primary/10"
                         onClick={saveCurrentScans}
                         disabled={savingScans}
                         title={language === "pt" ? "Salvar scan no histórico" : "Save scan to history"}
@@ -1724,7 +2150,7 @@ const Index = () => {
                   <Button
                     variant="outline"
                     size="sm"
-                    className="h-9 px-4 rounded-full border-border/50 hover:bg-primary/10 shadow-sm flex items-center gap-2"
+                    className="flex h-9 items-center gap-2 rounded-full border-primary/20 bg-background/45 px-4 shadow-sm hover:bg-primary/10"
                     onClick={copyAllIocs}
                     title={language === "pt" ? "Copiar todos os IOCs (defanged)" : "Copy all IOCs (defanged)"}
                   >
@@ -1737,7 +2163,7 @@ const Index = () => {
                       <Button
                         variant="outline"
                         size="sm"
-                        className="h-9 px-4 rounded-full border-border/50 hover:bg-primary/10 shadow-sm flex items-center gap-2"
+                        className="flex h-9 items-center gap-2 rounded-full border-primary/20 bg-background/45 px-4 shadow-sm hover:bg-primary/10"
                         disabled={isExportingPDF}
                         title={isExportingPDF ? "Building Report..." : (language === "pt" ? "Exportar" : "Export")}
                       >
@@ -1795,16 +2221,15 @@ const Index = () => {
                       reportingVendors={data.reportingVendors}
                     />
 
-                    <ThreatCharts
-                      vendorData={data.vendorData}
-                      detections={data.detections}
-                      totalVendors={data.totalVendors}
-                    />
-
                     <IocTimeline vendorData={data.vendorData} />
 
                     <div className="flex items-center justify-between mb-4 animate-fade-in">
-                      <h2 className="text-2xl font-bold">{t('vendorResults')}</h2>
+                      <div>
+                        <h2 className="text-2xl font-black tracking-tight">{t('vendorResults')}</h2>
+                        <p className="mt-1 text-sm font-medium text-muted-foreground">
+                          {language === "pt" ? "Cards das bases consultadas, priorizados por relevancia operacional." : "Source cards, prioritized by operational relevance."}
+                        </p>
+                      </div>
                       <ViewToggle view={view} onViewChange={setView} />
                     </div>
 
@@ -1850,9 +2275,15 @@ const Index = () => {
                             >
                               <VendorContent vendor={vendor} onPivot={onPivot} />
                             </VendorCard>
-                          ))}
+                        ))}
                       </div>
                     )}
+
+                    <ThreatCharts
+                      vendorData={data.vendorData}
+                      detections={data.detections}
+                      totalVendors={data.totalVendors}
+                    />
                   </div>
                 </TabsContent>
               ))}

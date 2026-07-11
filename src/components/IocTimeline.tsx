@@ -1,6 +1,7 @@
-import { useMemo } from "react";
-import { Clock, Flag, Activity, FileWarning, History, CircleDot } from "lucide-react";
+import { useMemo, useState } from "react";
+import { Clock, Flag, Activity, FileWarning, History, CircleDot, ChevronDown } from "lucide-react";
 import { VendorData, TimelineEvent } from "@/types/threat-intelligence";
+import { useLanguage } from "@/contexts/LanguageContext";
 import { cn } from "@/lib/utils";
 
 // Correlated detection timeline: merges the dated observations every feed
@@ -38,6 +39,9 @@ interface Props {
 }
 
 export const IocTimeline = ({ vendorData }: Props) => {
+  const { language } = useLanguage();
+  const pt = language === "pt";
+  const [open, setOpen] = useState(false);
   const events = useMemo(() => {
     const all = vendorData.flatMap((v) => v.timeline ?? []);
     // De-duplicate identical (vendor,label,minute) events, then sort newest first.
@@ -51,6 +55,19 @@ export const IocTimeline = ({ vendorData }: Props) => {
     return deduped.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   }, [vendorData]);
 
+  const days = useMemo(() => {
+    const map = new Map<string, TimelineEvent[]>();
+    events.forEach((event) => {
+      const key = event.date.slice(0, 10);
+      map.set(key, [...(map.get(key) || []), event]);
+    });
+    return Array.from(map.entries()).map(([day, dayEvents]) => ({
+      day,
+      events: dayEvents,
+      vendors: Array.from(new Set(dayEvents.map((event) => event.vendor))),
+    }));
+  }, [events]);
+
   if (events.length === 0) return null;
 
   const earliest = events[events.length - 1];
@@ -58,39 +75,77 @@ export const IocTimeline = ({ vendorData }: Props) => {
   const feedCount = new Set(events.map((e) => e.vendor)).size;
 
   return (
-    <div className="rounded-xl border border-border/60 bg-muted/40 p-5 animate-fade-in">
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
-        <div className="flex items-center gap-2">
-          <Clock className="h-5 w-5 text-primary" />
-          <h3 className="text-lg font-bold">Detection Timeline</h3>
-        </div>
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
-          <span><span className="text-emerald-500 font-semibold">First observed</span> {fmt(earliest.date)}</span>
-          <span><span className="text-blue-500 font-semibold">Last activity</span> {fmt(latest.date)}</span>
-          <span>{events.length} events · {feedCount} feeds</span>
-        </div>
-      </div>
-
-      <ol className="relative border-l border-border/60 ml-2 space-y-4">
-        {events.map((e, i) => {
-          const style = KIND_STYLE[e.kind];
-          const Icon = style.icon;
-          return (
-            <li key={`${e.vendor}-${e.label}-${i}`} className="ml-5">
-              <span className={cn("absolute -left-[11px] flex h-5 w-5 items-center justify-center rounded-full border", style.color)}>
-                <Icon className="h-2.5 w-2.5" />
+    <section className="overflow-hidden rounded-lg border border-border bg-card animate-fade-in">
+      <button
+        type="button"
+        onClick={() => setOpen((value) => !value)}
+        className={cn(
+          "w-full border-border bg-secondary/30 px-5 py-4 text-left transition-colors hover:bg-secondary/50",
+          open && "border-b"
+        )}
+        aria-expanded={open}
+      >
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <Clock className="h-5 w-5 text-primary" />
+            <h3 className="text-lg font-black tracking-tight">
+              {pt ? "Timeline do IOC nas bases" : "IOC source timeline"}
+            </h3>
+            <ChevronDown className={cn("h-4 w-4 text-muted-foreground transition-transform", open && "rotate-180")} />
+          </div>
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            {[
+              [pt ? "Primeiro" : "First", fmt(earliest.date)],
+              [pt ? "Ultimo" : "Latest", fmt(latest.date)],
+              [pt ? "Bases" : "Sources", String(feedCount)],
+              [pt ? "Eventos" : "Events", String(events.length)],
+            ].map(([label, value]) => (
+              <span key={label} className="inline-flex max-w-[220px] items-center gap-1.5 rounded-full border border-border bg-background px-2.5 py-1">
+                <span className="font-bold uppercase tracking-wide text-muted-foreground">{label}</span>
+                <span className="truncate font-mono font-black text-foreground" title={value}>{value}</span>
               </span>
-              <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                <span className="text-sm font-semibold text-foreground">{e.vendor}</span>
-                <span className="text-xs text-muted-foreground">{e.label}</span>
-                <span className="ml-auto text-[11px] font-mono text-muted-foreground/80" title={fmt(e.date)}>
-                  {fmt(e.date)} · {relativeTime(e.date)}
-                </span>
-              </div>
-            </li>
-          );
-        })}
-      </ol>
-    </div>
+            ))}
+          </div>
+        </div>
+      </button>
+
+      {open && (
+        <div className="p-5">
+          <ol className="relative ml-2 space-y-5 border-l border-border">
+            {days.map((bucket) => (
+              <li key={bucket.day} className="ml-6">
+                <span className="absolute -left-[7px] mt-1 h-3 w-3 rounded-full border border-primary bg-background" />
+                <div className="mb-3 flex flex-wrap items-center gap-2">
+                  <span className="font-mono text-sm font-black text-foreground">
+                    {new Date(`${bucket.day}T00:00:00Z`).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "2-digit" })}
+                  </span>
+                  <span className="text-xs font-medium text-muted-foreground">
+                    {bucket.vendors.length} {pt ? "base(s)" : "source(s)"} · {bucket.events.length} {pt ? "evento(s)" : "event(s)"}
+                  </span>
+                </div>
+                <div className="grid gap-2">
+                  {bucket.events.map((e, i) => {
+                    const style = KIND_STYLE[e.kind];
+                    const Icon = style.icon;
+                    return (
+                      <div key={`${e.vendor}-${e.label}-${i}`} className="flex flex-wrap items-center gap-2 rounded-md border border-border bg-background px-3 py-2">
+                        <span className={cn("flex h-7 w-7 items-center justify-center rounded-md border", style.color)}>
+                          <Icon className="h-3.5 w-3.5" />
+                        </span>
+                        <span className="font-semibold text-foreground">{e.vendor}</span>
+                        <span className="min-w-0 flex-1 truncate text-sm text-muted-foreground">{e.label}</span>
+                        <span className="font-mono text-[11px] text-muted-foreground" title={fmt(e.date)}>
+                          {fmt(e.date)} · {relativeTime(e.date)}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </li>
+            ))}
+          </ol>
+        </div>
+      )}
+    </section>
   );
 };

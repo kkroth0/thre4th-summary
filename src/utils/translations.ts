@@ -115,7 +115,7 @@ export const translations = {
         latestCves: "Latest CVEs",
         exploitedCves: "Exploited CVEs (CISA KEV)",
         generateWeeklyDigest: "Generate Digest",
-        subscribeAlerts: "Subscribe to Alerts",
+        subscribeAlerts: "Follow Alerts",
         emailPlaceholder: "Enter your email address...",
         subscribeSuccess: "Subscription successful!",
         subscribeSuccessDesc: "You will now receive weekly CTI digests.",

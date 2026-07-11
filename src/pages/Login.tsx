@@ -1,6 +1,6 @@
 import { useEffect } from "react";
-import { Navigate, Link } from "react-router-dom";
-import { Github, ShieldCheck, KeyRound, ArrowLeft, Loader2, FileText, Mail, Crosshair } from "lucide-react";
+import { Navigate, Link, useLocation } from "react-router-dom";
+import { Github, ShieldCheck, KeyRound, ArrowLeft, Loader2, FileText, Crosshair, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { LanguageToggle } from "@/components/LanguageToggle";
@@ -10,23 +10,25 @@ import { toast } from "sonner";
 
 const Login = () => {
   const { language } = useLanguage();
-  const { auth, loading, loginUrl } = useAuth();
+  const { auth, loading, loginUrl, signupUrl } = useAuth();
+  const location = useLocation();
   const pt = language === "pt";
+  const signupMode = location.pathname === "/cadastro" || location.pathname === "/signup";
+  const authUrl = signupMode ? signupUrl : loginUrl;
 
-  // Feedback caso o callback do OAuth mande pra cá com erro (?auth=negado|erro).
+  // Feedback caso o callback do OAuth mande pra cá com erro (?auth=erro).
   useEffect(() => {
     const p = new URLSearchParams(window.location.search).get("auth");
-    if (p === "negado") toast.error(pt ? "Conta não está na lista autorizada" : "Account is not on the allow-list");
-    else if (p === "erro") toast.error(pt ? "Falha no login. Tente de novo." : "Sign-in failed. Please try again.");
+    if (p === "erro") toast.error(pt ? "Falha no login. Tente de novo." : "Sign-in failed. Please try again.");
     if (p) window.history.replaceState({}, "", window.location.pathname);
   }, [pt]);
 
   if (!loading && auth.authenticated) return <Navigate to="/profile" replace />;
 
   const perks = [
-    { icon: FileText, label: pt ? "Um resumo a partir de qualquer link" : "A summary from any link" },
-    { icon: Mail, label: pt ? "Um feed dos avisos que importam" : "A feed of the alerts that matter" },
-    { icon: Crosshair, label: pt ? "Ajuda pra investigar ameaças" : "Help digging into threats" },
+    { icon: Search, label: pt ? "Busca de IOCs em fontes de reputacao, DNS, WHOIS e vendors." : "IOC search across reputation, DNS, WHOIS and vendor sources." },
+    { icon: FileText, label: pt ? "Analises de phishing, DNSBL, CVEs, atores e advisories." : "Phishing, DNSBL, CVE, actor and advisory analysis." },
+    { icon: Crosshair, label: pt ? "Um fluxo mais rapido para triagem, contexto e resposta." : "A faster workflow for triage, context and response." },
   ];
 
   return (
@@ -47,12 +49,12 @@ const Login = () => {
 
         <div className="relative max-w-md">
           <h1 className="text-4xl font-bold leading-tight tracking-tight">
-            {pt ? "Cole um link e entenda o que importa." : "Paste a link and see what matters."}
+            {pt ? "Entre no console ThreatSumm4ry." : "Access the ThreatSumm4ry console."}
           </h1>
           <p className="mt-4 text-muted-foreground text-lg">
             {pt
-              ? "Entre para usar as ferramentas abaixo."
-              : "Sign in to use the tools below."}
+              ? "Busque indicadores, investigue sinais e transforme achados em inteligencia operacional."
+              : "Search indicators, investigate signals and turn findings into operational intelligence."}
           </p>
           <ul className="mt-8 space-y-3">
             {perks.map((p) => (
@@ -84,27 +86,45 @@ const Login = () => {
             <div className="mx-auto mb-4 h-14 w-14 rounded-xl bg-primary/10 ring-1 ring-inset ring-primary/20 flex items-center justify-center">
               <ShieldCheck className="h-7 w-7 text-primary" />
             </div>
-            <h2 className="text-2xl font-bold">{pt ? "Entrar" : "Sign in"}</h2>
+            <h2 className="text-2xl font-bold">{signupMode ? (pt ? "Cadastro" : "Sign up") : (pt ? "Entrar" : "Sign in")}</h2>
             <p className="text-muted-foreground mt-1.5 text-sm">
-              {pt ? "Só quem está na lista consegue entrar." : "Only people on the list can sign in."}
+              {pt
+                ? "Use sua conta GitHub para continuar com seguranca."
+                : "Use your GitHub account to continue securely."}
             </p>
           </div>
 
           <Button asChild size="lg" className="w-full h-12 text-[15px]">
-            <a href={loginUrl}>
+            <a href={authUrl}>
               {loading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Github className="h-5 w-5 mr-2" />}
-              {pt ? "Entrar com GitHub" : "Continue with GitHub"}
+              {signupMode
+                ? (pt ? "Cadastrar com GitHub" : "Sign up with GitHub")
+                : (pt ? "Entrar com GitHub" : "Continue with GitHub")}
             </a>
           </Button>
+
+          <div className="mt-4 text-center text-sm text-muted-foreground">
+            {signupMode ? (
+              <>
+                {pt ? "Já tem conta?" : "Already have an account?"}{" "}
+                <Link to="/login" className="font-semibold text-foreground hover:text-primary">{pt ? "Entrar" : "Sign in"}</Link>
+              </>
+            ) : (
+              <>
+                {pt ? "Ainda não tem conta?" : "No account yet?"}{" "}
+                <Link to="/cadastro" className="font-semibold text-foreground hover:text-primary">{pt ? "Cadastrar" : "Sign up"}</Link>
+              </>
+            )}
+          </div>
 
           <div className="mt-6 space-y-2.5 text-sm text-muted-foreground border-t border-border/60 pt-5">
             <div className="flex items-start gap-2.5">
               <ShieldCheck className="h-4 w-4 mt-0.5 text-primary shrink-0" />
-              <span>{pt ? "Só contas liberadas entram." : "Only approved accounts can get in."}</span>
+              <span>{pt ? "Sessao protegida por GitHub OAuth." : "Session protected by GitHub OAuth."}</span>
             </div>
             <div className="flex items-start gap-2.5">
               <KeyRound className="h-4 w-4 mt-0.5 text-primary shrink-0" />
-              <span>{pt ? "Você usa suas próprias chaves de API. Elas ficam guardadas cifradas." : "You use your own API keys. They're stored encrypted."}</span>
+              <span>{pt ? "Preferencias e chaves de API ficam no seu perfil." : "Preferences and API keys stay in your profile."}</span>
             </div>
           </div>
 

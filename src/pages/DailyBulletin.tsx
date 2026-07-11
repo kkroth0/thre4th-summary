@@ -31,7 +31,7 @@ const slug = (s: string) => (s || "boletim").normalize("NFKD").replace(/[^\w\s-]
 // o JOB_TTL_MS do servidor (25 min) pra não expirar antes dele numa fila cheia.
 const CLIENT_TIMEOUT_MS = 25 * 60 * 1000;
 
-// Histórico dos boletins gerados, persistido no navegador (sobrevive a sair da
+// Histórico dos relatórios gerados, persistido no navegador (sobrevive a sair da
 // página / recarregar) — assim você não regenera nem gasta API ao voltar.
 const STORAGE_KEY = "ts-bulletins-v1";
 const MAX_HISTORY = 40;
@@ -139,7 +139,7 @@ const DailyBulletin: React.FC = () => {
 
   const generate = async (url: string, type: DeckType, title: string) => {
     if (!auth?.authenticated) { toast.error(pt ? "Entre com o GitHub para gerar" : "Sign in with GitHub to generate"); return; }
-    if (!auth?.hasKey) { toast.error(pt ? "Adicione sua chave Groq antes de gerar" : "Add your Groq key before generating"); return; }
+    if (!auth?.hasKey) { toast.error(pt ? "Adicione sua chave OpenRouter antes de gerar" : "Add your OpenRouter key before generating"); return; }
     if (!/^https?:\/\//i.test(url)) { toast.error(pt ? "URL inválida" : "Invalid URL"); return; }
     try {
       const { id } = await generateBoletim(url, type, title);
@@ -164,20 +164,20 @@ const DailyBulletin: React.FC = () => {
     URL.revokeObjectURL(url);
   };
 
-  // Apaga o histórico de boletins (estado + localStorage, via efeito de persistência).
+  // Apaga o histórico de relatórios (estado + localStorage, via efeito de persistência).
   const clearHistory = () => {
     setJobs([]);
     setExpandedId(null);
     toast.success(pt ? "Histórico apagado" : "History cleared");
   };
 
-  // Brief currently opened for the large render on the right pane.
+  // Report currently opened for the large render on the right pane.
   const selectedJob = jobs.find((j) => j.id === expandedId && j.status === "done" && j.json);
 
   return (
     <PageLayout width="max-w-3xl">
         <PageHeader
-          title="Threat Brief"
+          title={pt ? "Gerador de Relatorios" : "Report Generator"}
           subtitle={pt
             ? "Cole o link de um relatório ou notícia de segurança. Ele é resumido sozinho e você baixa o JSON pronto pro seu slide."
             : "Paste a link to a security report or news post. It gets summarized on its own and you download the JSON for your slide."}
@@ -210,7 +210,7 @@ const DailyBulletin: React.FC = () => {
               </div>
               <div className="flex items-center gap-1.5 px-1 text-xs text-muted-foreground">
                 <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
-                <span className="truncate">{auth.login} · {pt ? "chave Groq ativa" : "Groq key active"}</span>
+                <span className="truncate">{auth.login} · {pt ? "chave OpenRouter ativa" : "OpenRouter key active"}</span>
                 <Link to="/settings" className="ml-auto shrink-0 hover:text-foreground">{pt ? "Gerenciar" : "Manage"}</Link>
               </div>
             </div>
@@ -218,8 +218,8 @@ const DailyBulletin: React.FC = () => {
             <div className="flex items-center gap-4 rounded-xl bg-muted/40 p-5">
               <KeyRound className="h-5 w-5 text-muted-foreground shrink-0" />
               <div className="flex-1 min-w-0">
-                <div className="text-sm font-medium">{pt ? "Adicione sua chave Groq" : "Add your Groq key"}</div>
-                <div className="text-xs text-muted-foreground">{pt ? "Necessária (BYOK) para gerar boletins." : "Required (BYOK) to generate briefs."}</div>
+                <div className="text-sm font-medium">{pt ? "Adicione sua chave OpenRouter" : "Add your OpenRouter key"}</div>
+                <div className="text-xs text-muted-foreground">{pt ? "Necessária (BYOK) para gerar relatórios." : "Required (BYOK) to generate reports."}</div>
               </div>
               <Button asChild variant="outline" size="sm" className="shrink-0">
                 <Link to="/settings">{pt ? "Configurações" : "Settings"} <ArrowRight className="h-4 w-4 ml-1.5" /></Link>
@@ -228,11 +228,11 @@ const DailyBulletin: React.FC = () => {
           )}
         </section>
 
-        {/* Your briefs — hairline list, no boxes */}
+        {/* Your reports — hairline list, no boxes */}
         <section className="mb-12">
           <div className="flex items-center justify-between mb-1.5">
             <h2 className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-              {pt ? "Seus boletins" : "Your briefs"}{jobs.length > 0 ? ` · ${jobs.length}` : ""}
+              {pt ? "Seus relatorios" : "Your reports"}{jobs.length > 0 ? ` · ${jobs.length}` : ""}
             </h2>
             {jobs.length > 0 && (
               <AlertDialog>
@@ -243,11 +243,11 @@ const DailyBulletin: React.FC = () => {
                 </AlertDialogTrigger>
                 <AlertDialogContent>
                   <AlertDialogHeader>
-                    <AlertDialogTitle>{pt ? "Limpar histórico de boletins?" : "Clear brief history?"}</AlertDialogTitle>
+                    <AlertDialogTitle>{pt ? "Limpar histórico de relatorios?" : "Clear report history?"}</AlertDialogTitle>
                     <AlertDialogDescription>
                       {pt
-                        ? "Isso apaga todos os boletins desta lista (incluindo os JSON gerados) deste navegador. Não dá pra desfazer."
-                        : "This removes all briefs from this list (including the generated JSON) on this browser. This can't be undone."}
+                        ? "Isso apaga todos os relatórios desta lista (incluindo os JSON gerados) deste navegador. Não dá pra desfazer."
+                        : "This removes all reports from this list (including the generated JSON) on this browser. This can't be undone."}
                     </AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter>
@@ -261,7 +261,7 @@ const DailyBulletin: React.FC = () => {
 
           {jobs.length === 0 ? (
             <p className="py-10 text-center text-sm text-muted-foreground">
-              {pt ? "Nenhum boletim ainda. Cole uma URL ou gere a partir de uma sugestão." : "No briefs yet. Paste a URL or generate from a suggestion."}
+              {pt ? "Nenhum relatorio ainda. Cole uma URL ou gere a partir de uma sugestão." : "No reports yet. Paste a URL or generate from a suggestion."}
             </p>
           ) : (
             <div className="divide-y divide-border/60">

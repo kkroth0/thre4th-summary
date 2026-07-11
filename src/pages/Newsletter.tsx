@@ -93,7 +93,7 @@ const relTime = (d: string | number | Date, lang = "pt"): string => {
 
 interface EnrichData {
   available: boolean;
-  source?: string; // groq | translate | rss
+  source?: string; // openrouter | translate | rss
   scraped?: boolean;
   title?: string;
   executiveSummary?: string;
@@ -107,7 +107,7 @@ interface EnrichData {
   cves?: string[];
 }
 
-// Guided Threat Hunting pack, produced by the Python hunt-service (Groq +
+// Guided Threat Hunting pack, produced by the Python hunt-service (OpenRouter +
 // Pydantic) and proxied through /api/newsletter/hunt-pack. Every IOC arrives
 // already defanged from the service.
 interface HuntIoc {

@@ -1046,8 +1046,122 @@ export const fetchJob = async (id: string): Promise<BoletimJob> => {
     return r.json();
 };
 
-// ── Auth GitHub + BYOK (chave Groq por usuário) ──────────────────────────────
-export interface AuthState { authenticated: boolean; login?: string; hasKey?: boolean; isAdmin?: boolean; }
+export interface RansomwareVictim {
+    name: string;
+    website?: string;
+    group: string;
+    country: string;
+    countryName: string;
+    sector: string;
+    published?: string | null;
+    discovered?: string | null;
+    description?: string;
+    screenshot?: string;
+    source: string;
+}
+
+export interface ThreatFoxRecentIoc {
+    id?: string;
+    value: string;
+    type: string;
+    malware: string;
+    confidence: number;
+    firstSeen?: string | null;
+    lastSeen?: string | null;
+    tags: string[];
+    reporter?: string;
+    reference?: string;
+    source: string;
+}
+
+export interface CountItem {
+    name: string;
+    count: number;
+    countryName?: string;
+}
+
+export interface DailyBrief {
+    generatedAt: string;
+    title: string;
+    verdict: "hot" | "watch" | "calm";
+    summary: {
+        totalAdvisories: number;
+        critical: number;
+        kev: number;
+        cves: number;
+        ransomwareVictims: number;
+        latamVictims: number;
+    };
+    highlights: Array<{
+        title: string;
+        titlePt?: string;
+        link: string;
+        source: string;
+        pubDate: string;
+        score: number;
+        severity: string;
+        cves: string[];
+        kev: boolean;
+        reasons: string[];
+    }>;
+    ransomware: {
+        victims: RansomwareVictim[];
+        groups: CountItem[];
+        latam: RansomwareVictim[];
+    };
+    sources: string[];
+}
+
+export interface LatamThreats {
+    generatedAt: string;
+    sources: string[];
+    victims: RansomwareVictim[];
+    groups: CountItem[];
+    sectors: CountItem[];
+    countries: CountItem[];
+    threatFox: {
+        count: number;
+        malware: CountItem[];
+        iocs: ThreatFoxRecentIoc[];
+    };
+}
+
+export interface ThreatMapData {
+    generatedAt: string;
+    windowDays: number;
+    source: string;
+    victims: RansomwareVictim[];
+    countries: CountItem[];
+    groups: CountItem[];
+    topCountry: CountItem | null;
+    activeGroups: number;
+}
+
+const intelError = async (r: Response): Promise<never> => {
+    const e = await r.json().catch(() => ({}));
+    throw new Error((e as { error?: string }).error || `Intel API error: ${r.status}`);
+};
+
+export const fetchDailyBrief = async (): Promise<DailyBrief> => {
+    const r = await fetch('/api/intel/daily-brief');
+    if (!r.ok) return intelError(r);
+    return r.json();
+};
+
+export const fetchLatamThreats = async (): Promise<LatamThreats> => {
+    const r = await fetch('/api/intel/latam-threats');
+    if (!r.ok) return intelError(r);
+    return r.json();
+};
+
+export const fetchThreatMap = async (days = 90): Promise<ThreatMapData> => {
+    const r = await fetch(`/api/intel/threat-map?days=${days}`);
+    if (!r.ok) return intelError(r);
+    return r.json();
+};
+
+// ── Auth GitHub + BYOK (chave OpenRouter por usuário) ────────────────────────
+export interface AuthState { authenticated: boolean; login?: string; hasKey?: boolean; isAdmin?: boolean; isPremium?: boolean; }
 
 // Estado de login (cookie de sessão é httpOnly — o front só sabe via /me).
 export const fetchAuth = async (): Promise<AuthState> => {
@@ -1059,6 +1173,7 @@ export const fetchAuth = async (): Promise<AuthState> => {
 };
 
 export const loginUrl = '/api/auth/github/login';
+export const signupUrl = '/api/auth/github/login?signup=1';
 
 // ─── Catálogo de feeds RSS monitorados pelo coletor ────────────────────────
 export interface FeedHealth { ok: boolean; count: number; error: string | null; at: string; }
@@ -1240,7 +1355,7 @@ export const deletePost = async (id: string): Promise<void> => {
     if (!r.ok) return postError(r);
 };
 
-// Salva a chave Groq do usuário (cifrada no servidor). Devolve { hasKey }.
+// Alias legado: salva a chave OpenRouter do usuário (cifrada no servidor). Devolve { hasKey }.
 export const saveGroqKey = async (key: string): Promise<{ hasKey: boolean }> => {
     const r = await fetch('/api/user/groq-key', {
         method: 'PUT',

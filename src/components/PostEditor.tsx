@@ -22,7 +22,7 @@ export function PostEditor({
     post, initial, trigger, onSaved, onDeleted,
 }: {
     post?: Post | PostCard;
-    // Seed para o modo de criação (ex.: rascunho vindo de um Threat Brief).
+    // Seed para o modo de criação (ex.: rascunho vindo do gerador de relatórios).
     // Ignorado quando `post` está presente (modo edição).
     initial?: { title?: string; summary?: string; body?: string; tags?: string[] };
     trigger: React.ReactNode;

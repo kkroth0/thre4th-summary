@@ -1,8 +1,8 @@
 import type { BoletimReport, PostInput } from "@/services/threatApi";
 
-// Converte um BoletimReport (saída do gerador de Threat Brief) num rascunho de
+// Converte um BoletimReport (saida do Gerador de Relatorios) num rascunho de
 // Advisory em Markdown: título, resumo, corpo e tags. Usado pelo botão "Salvar
-// como rascunho de Advisory" na página do Threat Brief. Só monta seções que têm
+// como rascunho de Advisory" na pagina de relatorios. Só monta seções que têm
 // conteúdo, então boletins parciais não geram tabelas vazias.
 
 const esc = (s: unknown) => String(s ?? "").replace(/\|/g, "\\|").replace(/\n+/g, " ").trim();

@@ -22,7 +22,7 @@ interface Advisory {
   cves?: string[];
 }
 
-// Guided Threat Hunting pack produced by the Python hunt-service (Groq +
+// Guided Threat Hunting pack produced by the Python hunt-service (OpenRouter +
 // Pydantic), proxied through /api/newsletter/hunt-pack. IOCs arrive defanged.
 interface HuntIoc {
   type: "ip" | "domain" | "url" | "hash";
@@ -120,7 +120,7 @@ const T = {
   pt: {
     title: "Threat Hunting",
     subtitle:
-      "Transforme um advisory ao vivo — ou qualquer URL de relatório que você colar — em um Pacote de Threat Hunting validado: ator de ameaça, TTPs do MITRE ATT&CK, IOCs defanged, hipótese de caça, um processo de caça passo a passo em KQL do Microsoft Sentinel e KQL + Sigma prontos para uso. Exporte como um PPTX com marca. Movido pelo microserviço scrape → Groq → Pydantic.",
+      "Transforme um advisory ao vivo — ou qualquer URL de relatório que você colar — em um Pacote de Threat Hunting validado: ator de ameaça, TTPs do MITRE ATT&CK, IOCs defanged, hipótese de caça, um processo de caça passo a passo em KQL do Microsoft Sentinel e KQL + Sigma prontos para uso. Exporte como um PPTX com marca. Movido pelo microserviço scrape → OpenRouter/DeepSeek → Pydantic.",
     pickTitle: "1. Escolha um advisory",
     pickHint: "A caça roda sobre o feed de advisories ao vivo, ou qualquer URL de relatório que você colar.",
     searchPlaceholder: "Buscar advisories…",

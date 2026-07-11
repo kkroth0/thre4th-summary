@@ -34,5 +34,7 @@ hunt-service-env.txt
 server/.feed-jobs.json
 # Auth/BYOK · store de usuários (contém chaves Groq CIFRADAS — nunca commitar)
 server/.users.json
+# Allow-list dinâmica · logins adicionados pelo admin na UI
+server/.allowlist.json
 # Catálogo de feeds RSS · overrides do dono (desativados + custom)
 server/.feed-sources.json

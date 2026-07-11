@@ -1,6 +1,6 @@
 """LLM analysis + structured validation for the Threat Hunting pipeline.
 
-Sends the scraped report to Groq (Llama 3.3 70B, temperature 0, JSON mode) and
+Sends the scraped report to OpenRouter/DeepSeek (temperature 0, JSON mode) and
 coerces the answer into a strict Pydantic schema. If validation fails, the
 validation error is fed back to the model for a corrected retry. Every IOC is
 defanged before it leaves this module.
@@ -17,7 +17,8 @@ from pydantic import BaseModel, ValidationError, field_validator, model_validato
 
 logger = logging.getLogger("hunt.analyzer")
 
-GROQ_MODELS = ["llama-3.3-70b-versatile", "llama-3.1-8b-instant", "gemma2-9b-it"]
+OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
+OPENROUTER_MODEL = os.environ.get("OPENROUTER_MODEL", "deepseek/deepseek-chat-v3.1")
 MAX_RETRIES = 2
 
 _IPV4 = re.compile(r"^(25[0-5]|2[0-4]\d|[01]?\d?\d)(\.(25[0-5]|2[0-4]\d|[01]?\d?\d)){3}$")
@@ -152,14 +153,21 @@ def _system_prompt(lang: str) -> str:
 
 
 class Analyzer:
-    """Wraps the Groq client and the validate-or-retry loop."""
+    """Wraps the OpenRouter client and the validate-or-retry loop."""
 
     def __init__(self) -> None:
-        api_key = os.environ.get("GROQ_API_KEY")
+        api_key = os.environ.get("OPENROUTER_API_KEY")
         # Imported lazily so the schema + FastAPI app load even without the SDK.
         if api_key:
-            from groq import AsyncGroq
-            self._client = AsyncGroq(api_key=api_key)
+            from openai import AsyncOpenAI
+            self._client = AsyncOpenAI(
+                api_key=api_key,
+                base_url=OPENROUTER_BASE_URL,
+                default_headers={
+                    "HTTP-Referer": os.environ.get("APP_BASE_URL", "https://threatsumm4ry.app"),
+                    "X-OpenRouter-Title": "ThreatSumm4ry Hunt Service",
+                },
+            )
         else:
             self._client = None
 
@@ -168,26 +176,25 @@ class Analyzer:
         return self._client is not None
 
     async def _complete(self, messages: list[dict]) -> dict | None:
-        """Call Groq with the model fallback chain; return parsed JSON or None."""
-        for model in GROQ_MODELS:
-            try:
-                resp = await self._client.chat.completions.create(
-                    model=model,
-                    temperature=0,
-                    response_format={"type": "json_object"},
-                    messages=messages,
-                    timeout=30,
-                )
-                content = resp.choices[0].message.content
-                if content:
-                    return json.loads(content)
-            except Exception as exc:  # noqa: BLE001 - try next model
-                logger.warning("Groq model %s failed: %s", model, exc)
+        """Call OpenRouter; return parsed JSON or None."""
+        try:
+            resp = await self._client.chat.completions.create(
+                model=OPENROUTER_MODEL,
+                temperature=0,
+                response_format={"type": "json_object"},
+                messages=messages,
+                timeout=45,
+            )
+            content = resp.choices[0].message.content
+            if content:
+                return json.loads(content)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("OpenRouter model %s failed: %s", OPENROUTER_MODEL, exc)
         return None
 
     async def analyze(self, title: str, content: str, lang: str) -> HuntPack:
         if not self.available:
-            raise RuntimeError("GROQ_API_KEY not configured")
+            raise RuntimeError("OPENROUTER_API_KEY not configured")
 
         messages = [
             {"role": "system", "content": _system_prompt(lang)},

@@ -13,7 +13,7 @@ import {
     type AllowlistEntry,
 } from "@/services/threatApi";
 
-// Painel de admin: quem pode logar no Threat Brief. Entradas "env" vêm da
+// Painel de admin: quem tem acesso premium. Entradas "env" vêm da
 // GITHUB_ALLOWED_LOGINS do servidor e são somente-leitura aqui; as "dynamic"
 // são adicionadas/removidas em runtime e persistidas em disco no servidor.
 export default function AllowlistManager() {
@@ -83,10 +83,10 @@ export default function AllowlistManager() {
                         </div>
                         <div className="text-sm text-muted-foreground">
                             {pt
-                                ? "Quem pode entrar no Threat Brief. Adicione pelo login do GitHub."
-                                : "Who can access the Threat Brief. Add by GitHub login."}
+                                ? "Quem pode acessar recursos premium. Logins adicionados aqui persistem até você remover."
+                                : "Who can access premium features. Logins added here persist until you remove them."}
                             {org && (
-                                <> {pt ? "Membros de" : "Members of"} <span className="font-medium">@{org}</span> {pt ? "também entram." : "are also allowed."}</>
+                                <> {pt ? "Membros de" : "Members of"} <span className="font-medium">@{org}</span> {pt ? "também têm premium." : "also get premium."}</>
                             )}
                         </div>
                     </div>
@@ -112,7 +112,7 @@ export default function AllowlistManager() {
                         </div>
                     ) : !entries.length ? (
                         <div className="flex items-center gap-2 text-sm text-muted-foreground py-4 justify-center">
-                            <Lock className="h-4 w-4" /> {pt ? "Ninguém na allow-list." : "Allow-list is empty."}
+                            <Lock className="h-4 w-4" /> {pt ? "Ninguém com premium dinâmico." : "Dynamic premium list is empty."}
                         </div>
                     ) : (
                         entries.map((e) => (

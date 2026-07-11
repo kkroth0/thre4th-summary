@@ -18,7 +18,7 @@ dotenv.config({ path: '../.env' });
 
 // Global safety net: cap every outbound request at 10s so a slow/hung upstream
 // provider can't tie up a connection indefinitely. Handlers that need a
-// different budget (feed refresh, Groq, etc.) still set their own `timeout`,
+// different budget (feed refresh, OpenRouter, etc.) still set their own `timeout`,
 // which overrides this default.
 axios.defaults.timeout = 10000;
 
@@ -765,6 +765,150 @@ app.post('/api/ransomwarelive', scanLimiter, async (req, res) => {
     }
 });
 
+const LATAM_COUNTRIES = new Set([
+    'AR', 'BO', 'BR', 'CL', 'CO', 'CR', 'CU', 'DO', 'EC', 'GT', 'HN', 'MX',
+    'NI', 'PA', 'PE', 'PR', 'PY', 'SV', 'UY', 'VE', 'BZ', 'GY', 'SR', 'GF',
+]);
+
+const COUNTRY_NAMES = {
+    AR: 'Argentina', BO: 'Bolivia', BR: 'Brazil', CL: 'Chile', CO: 'Colombia',
+    CR: 'Costa Rica', CU: 'Cuba', DO: 'Dominican Republic', EC: 'Ecuador',
+    GT: 'Guatemala', HN: 'Honduras', MX: 'Mexico', NI: 'Nicaragua', PA: 'Panama',
+    PE: 'Peru', PR: 'Puerto Rico', PY: 'Paraguay', SV: 'El Salvador', UY: 'Uruguay',
+    VE: 'Venezuela', US: 'United States of America', ES: 'Spain', IT: 'Italy',
+    PL: 'Poland', DE: 'Germany', FR: 'France', GB: 'United Kingdom', CA: 'Canada',
+};
+
+const asArray = (v) => Array.isArray(v) ? v : (Array.isArray(v?.data) ? v.data : []);
+const countBy = (items, fn) => {
+    const map = new Map();
+    for (const item of items) {
+        const key = fn(item);
+        if (!key) continue;
+        map.set(key, (map.get(key) || 0) + 1);
+    }
+    return [...map.entries()].sort((a, b) => b[1] - a[1]).map(([name, count]) => ({ name, count }));
+};
+
+function normalizeVictim(v) {
+    const country = String(v.country || v.country_code || '').trim().toUpperCase();
+    const name = String(v.post_title || v.victim || v.name || v.website || 'Unknown victim').trim();
+    return {
+        name,
+        website: v.website || '',
+        group: String(v.group_name || v.group || 'unknown').trim(),
+        country,
+        countryName: COUNTRY_NAMES[country] || country || 'Unknown',
+        sector: String(v.activity || v.sector || 'Not Found').trim(),
+        published: v.published || v.discovered || v.date || null,
+        discovered: v.discovered || v.published || v.date || null,
+        description: v.description && v.description !== 'N/A' ? String(v.description).slice(0, 500) : '',
+        screenshot: v.screenshot || '',
+        source: 'ransomware.live',
+    };
+}
+
+async function getRecentRansomwareVictims() {
+    const now = Date.now();
+    if (memoryCache.ransomwareVictims.data && memoryCache.ransomwareVictims.expiresAt > now) {
+        return memoryCache.ransomwareVictims.data;
+    }
+    const resp = await axios.get('https://api.ransomware.live/recentvictims', {
+        timeout: 10000,
+        maxRedirects: 3,
+    });
+    const victims = asArray(resp.data).map(normalizeVictim)
+        .sort((a, b) => new Date(b.discovered || 0) - new Date(a.discovered || 0));
+    memoryCache.ransomwareVictims.data = victims;
+    memoryCache.ransomwareVictims.expiresAt = now + memoryCache.ransomwareVictims.ttl;
+    return victims;
+}
+
+async function getRecentThreatFoxIocs(days = 7) {
+    const now = Date.now();
+    const safeDays = Math.max(1, Math.min(7, Number(days) || 7));
+    if (memoryCache.threatFoxRecent.data && memoryCache.threatFoxRecent.expiresAt > now) {
+        return memoryCache.threatFoxRecent.data;
+    }
+    const headers = { 'Content-Type': 'application/json' };
+    const abKey = abuseChKey();
+    if (abKey) headers['Auth-Key'] = abKey;
+    const resp = await axios.post('https://threatfox-api.abuse.ch/api/v1/', {
+        query: 'get_iocs',
+        days: safeDays,
+    }, { headers, timeout: 12000 });
+    const iocs = asArray(resp.data).map((ioc) => ({
+        id: ioc.id || ioc.ioc_id || '',
+        value: ioc.ioc || ioc.value || '',
+        type: ioc.ioc_type || ioc.threat_type || '',
+        malware: ioc.malware_printable || ioc.malware || 'unknown',
+        confidence: Number(ioc.confidence_level || 0),
+        firstSeen: ioc.first_seen || null,
+        lastSeen: ioc.last_seen || null,
+        tags: Array.isArray(ioc.tags) ? ioc.tags : [],
+        reporter: ioc.reporter || '',
+        reference: ioc.reference || '',
+        source: 'ThreatFox',
+    })).filter((ioc) => ioc.value);
+    memoryCache.threatFoxRecent.data = iocs;
+    memoryCache.threatFoxRecent.expiresAt = now + memoryCache.threatFoxRecent.ttl;
+    return iocs;
+}
+
+app.get('/api/intel/threat-map', async (req, res) => {
+    try {
+        const days = Math.max(1, Math.min(180, Number(req.query.days) || 90));
+        const since = Date.now() - days * 24 * 60 * 60 * 1000;
+        const victims = (await getRecentRansomwareVictims())
+            .filter((v) => !v.discovered || new Date(v.discovered).getTime() >= since);
+        const countries = countBy(victims, (v) => v.country)
+            .map((c) => ({ ...c, countryName: COUNTRY_NAMES[c.name] || c.name }));
+        const groups = countBy(victims, (v) => v.group).slice(0, 12);
+        res.json({
+            generatedAt: new Date().toISOString(),
+            windowDays: days,
+            source: 'ransomware.live',
+            victims: victims.slice(0, 80),
+            countries,
+            groups,
+            topCountry: countries[0] || null,
+            activeGroups: groups.length,
+        });
+    } catch (error) {
+        const { status, message } = sanitizeError(error);
+        res.status(status).json({ error: message });
+    }
+});
+
+app.get('/api/intel/latam-threats', async (req, res) => {
+    try {
+        const [victims, iocs] = await Promise.all([
+            getRecentRansomwareVictims(),
+            getRecentThreatFoxIocs(7).catch((err) => {
+                console.warn(`ThreatFox recent IOC fetch failed: ${err.message}`);
+                return [];
+            }),
+        ]);
+        const latamVictims = victims.filter((v) => LATAM_COUNTRIES.has(v.country));
+        res.json({
+            generatedAt: new Date().toISOString(),
+            sources: ['ransomware.live', 'ThreatFox'],
+            victims: latamVictims.slice(0, 80),
+            groups: countBy(latamVictims, (v) => v.group).slice(0, 12),
+            sectors: countBy(latamVictims, (v) => v.sector).slice(0, 12),
+            countries: countBy(latamVictims, (v) => v.country).map((c) => ({ ...c, countryName: COUNTRY_NAMES[c.name] || c.name })),
+            threatFox: {
+                count: iocs.length,
+                malware: countBy(iocs, (i) => i.malware).slice(0, 10),
+                iocs: iocs.slice(0, 30),
+            },
+        });
+    } catch (error) {
+        const { status, message } = sanitizeError(error);
+        res.status(status).json({ error: message });
+    }
+});
+
 // WHOIS
 app.post('/api/whois', scanLimiter, async (req, res) => {
     const { query } = req.body;
@@ -1346,6 +1490,16 @@ const memoryCache = {
     patchTuesday: {
         store: new Map(),
         ttl: 24 * 60 * 60 * 1000 // 24 hours
+    },
+    ransomwareVictims: {
+        data: null,
+        expiresAt: 0,
+        ttl: 15 * 60 * 1000 // 15 minutes
+    },
+    threatFoxRecent: {
+        data: null,
+        expiresAt: 0,
+        ttl: 30 * 60 * 1000 // 30 minutes
     }
 };
 
@@ -1530,7 +1684,7 @@ async function refreshNewsletterFeed() {
 // CTI News feed endpoint.
 // Optional query params: minScore (0-100), severity (Critical|High|Medium|Low),
 // category (substring of a category label), layer (1-4), sort (relevance|date).
-app.get('/api/newsletter', async (req, res) => {
+app.get('/api/newsletter', requirePremium, async (req, res) => {
     try {
         if (!memoryCache.newsletter.data) {
             // Cold start fallback
@@ -1566,7 +1720,7 @@ app.get('/api/newsletter', async (req, res) => {
 // servidos como *sugestões* para a curadoria do boletim diário — o analista
 // escolhe quais viram boletim. Read-only; reaproveita o cache da newsletter.
 //   GET /api/feed/daily-suggestions?hours=36&limit=10&minScore=0
-app.get('/api/feed/daily-suggestions', async (req, res) => {
+app.get('/api/feed/daily-suggestions', requirePremium, async (req, res) => {
     try {
         if (!memoryCache.newsletter.data) await refreshNewsletterFeed();
         const all = memoryCache.newsletter.data || [];
@@ -1605,6 +1759,72 @@ app.get('/api/feed/daily-suggestions', async (req, res) => {
             windowHours: hours,
             count: suggestions.length,
             suggestions,
+        });
+    } catch (error) {
+        const { status, message } = sanitizeError(error);
+        res.status(status).json({ error: message });
+    }
+});
+
+app.get('/api/intel/daily-brief', async (req, res) => {
+    try {
+        if (!memoryCache.newsletter.data) await refreshNewsletterFeed();
+        const feed = memoryCache.newsletter.data || [];
+        const now = Date.now();
+        const dayMs = 24 * 60 * 60 * 1000;
+        const recent = feed.filter((item) => {
+            const t = new Date(item.pubDate || item.date || 0).getTime();
+            return Number.isFinite(t) && now - t <= 36 * 60 * 60 * 1000;
+        });
+        const highSignal = recent.filter((item) => (item.score || 0) >= 65 || item.kev);
+        const kev = recent.filter((item) => item.kev);
+        const cves = [...new Set(recent.flatMap((item) => item.cves || []))];
+        const critical = recent.filter((item) => String(item.severity || '').toLowerCase() === 'critical');
+        const victims = (await getRecentRansomwareVictims().catch(() => []))
+            .filter((v) => !v.discovered || now - new Date(v.discovered).getTime() <= dayMs)
+            .slice(0, 12);
+        const latamVictims = victims.filter((v) => LATAM_COUNTRIES.has(v.country));
+        const verdict = kev.length || highSignal.length >= 6 || victims.length >= 8 ? 'hot'
+            : highSignal.length || victims.length ? 'watch'
+            : 'calm';
+        const top = [...recent]
+            .sort((a, b) => (b.kev ? 25 : 0) + (b.score || 0) - ((a.kev ? 25 : 0) + (a.score || 0)))
+            .slice(0, 10);
+
+        res.json({
+            generatedAt: new Date().toISOString(),
+            title: verdict === 'hot'
+                ? 'Dia quente: priorize exploração ativa, ransomware e advisories críticos'
+                : verdict === 'watch'
+                    ? 'Dia de atenção: sinais relevantes em advisories e ransomware'
+                    : 'Dia calmo: monitore CVEs novas e mantenha correções planejadas',
+            verdict,
+            summary: {
+                totalAdvisories: recent.length,
+                critical: critical.length,
+                kev: kev.length,
+                cves: cves.length,
+                ransomwareVictims: victims.length,
+                latamVictims: latamVictims.length,
+            },
+            highlights: top.map((item) => ({
+                title: item.title,
+                titlePt: item.titlePt,
+                link: item.link,
+                source: item.source,
+                pubDate: item.pubDate,
+                score: item.score || 0,
+                severity: item.severity || 'Low',
+                cves: item.cves || [],
+                kev: !!item.kev,
+                reasons: item.reasons || [],
+            })),
+            ransomware: {
+                victims,
+                groups: countBy(victims, (v) => v.group).slice(0, 8),
+                latam: latamVictims,
+            },
+            sources: ['RSS advisories', 'CISA KEV', 'FIRST EPSS', 'ransomware.live'],
         });
     } catch (error) {
         const { status, message } = sanitizeError(error);
@@ -1681,7 +1901,7 @@ app.delete('/api/feeds', requireAdmin, (req, res) => {
     res.json({ feeds: feedListForClient() });
 });
 
-// ─── Gestão da allow-list (quem pode logar no Threat Brief) ────────────────
+// ─── Gestão da allow-list premium ──────────────────────────────────────────
 // Só admin. Entradas vindas do env (GITHUB_ALLOWED_LOGINS) aparecem marcadas
 // como "env" e não são removíveis pela UI — para tirá-las, mexe na env e
 // reinicia. O resto vem do store dinâmico em disco e é editável aqui.
@@ -1707,27 +1927,27 @@ app.get('/api/admin/allowlist', requireAdmin, (req, res) => {
     res.json({ allowlist: allowlistForClient(), org: ALLOWED_ORG || null });
 });
 
-// Adiciona um login à allow-list dinâmica. Body: { login }.
+// Adiciona um login à allow-list premium dinâmica. Body: { login }.
 app.post('/api/admin/allowlist', requireAdmin, (req, res) => {
     const login = String((req.body || {}).login || '').trim().toLowerCase();
     if (!VALID_GH_LOGIN.test(login)) return res.status(400).json({ error: 'login GitHub inválido' });
     if (ALLOWED_LOGINS.includes(login) || dynamicAllowlist.includes(login)) {
-        return res.status(409).json({ error: 'usuário já está na allow-list' });
+        return res.status(409).json({ error: 'usuário já está na lista premium' });
     }
     dynamicAllowlist.push(login);
     saveAllowlist();
     res.status(201).json({ allowlist: allowlistForClient() });
 });
 
-// Remove um login da allow-list dinâmica (os do env só saem pela env). ?login=…
+// Remove um login da allow-list premium dinâmica (os do env só saem pela env).
 app.delete('/api/admin/allowlist', requireAdmin, (req, res) => {
     const login = String(req.query.login || (req.body || {}).login || '').trim().toLowerCase();
     if (ALLOWED_LOGINS.includes(login)) {
-        return res.status(400).json({ error: 'login definido por env só pode ser removido na env do servidor' });
+        return res.status(400).json({ error: 'premium definido por env só pode ser removido na env do servidor' });
     }
     const before = dynamicAllowlist.length;
     dynamicAllowlist = dynamicAllowlist.filter((l) => l !== login);
-    if (dynamicAllowlist.length === before) return res.status(404).json({ error: 'usuário não está na allow-list' });
+    if (dynamicAllowlist.length === before) return res.status(404).json({ error: 'usuário não está na lista premium' });
     saveAllowlist();
     res.json({ allowlist: allowlistForClient() });
 });
@@ -1953,13 +2173,13 @@ function requireFeedSecret(req, res) {
     return true;
 }
 
-// ─── Auth GitHub + BYOK (chave Groq por usuário, cifrada em repouso) ────────
+// ─── Auth GitHub + BYOK (chave OpenRouter por usuário, cifrada em repouso) ───
 // Login via GitHub OAuth (fluxo escrito à mão, sem passport). A sessão é um
 // cookie httpOnly assinado por HMAC — mesma origem que o app (Pages serve o app
-// e faz proxy de /api pelo túnel), então não há CORS com credenciais. Só quem
-// está na allow-list entra. Cada usuário traz a própria chave Groq (BYOK): ela é
-// cifrada (AES-256-GCM) e guardada em .users.json; nunca vai pro store de jobs
-// (que é persistido em disco), nunca ao /job público, nunca ao log.
+// e faz proxy de /api pelo túnel), então não há CORS com credenciais. Login é
+// aberto; a allow-list controla apenas recursos premium. Cada usuário traz a
+// própria chave OpenRouter (BYOK): ela é cifrada (AES-256-GCM) e guardada em
+// .users.json; nunca vai pro store de jobs, nunca ao worker público, nunca ao log.
 
 // Chave-mestra p/ cifrar segredos dos usuários. Aceita 64-hex, base64 de 32B, ou
 // deriva de uma passphrase via sha256. Sem ela, guardar chave fica desabilitado.
@@ -2017,22 +2237,20 @@ function getCookie(req, name) {
     return null;
 }
 
-// Store de usuários (flat JSON, como os jobs). groqKeyEnc = chave Groq cifrada.
+// Store de usuários (flat JSON, como os jobs). openRouterKeyEnc = chave LLM cifrada.
 const USERS_STORE_PATH = path.join(__dirname, '.users.json');
 function loadUsers() { try { return JSON.parse(fs.readFileSync(USERS_STORE_PATH, 'utf8')); } catch { return {}; } }
 function saveUsers() { try { fs.writeFileSync(USERS_STORE_PATH, JSON.stringify(usersStore, null, 2)); } catch (e) { console.error('users store write failed:', e.message); } }
-let usersStore = loadUsers();   // { githubId: { login, groqKeyEnc, createdAt, updatedAt } }
+let usersStore = loadUsers();   // { githubId: { login, openRouterKeyEnc, createdAt, updatedAt } }
 
-// Allow-list: por login e/ou por org. Sem nenhum dos dois configurado => nega
-// todos (fail-safe: não abrir o site por engano se a env não subiu).
+// Premium allow-list: por login e/ou por org. Login no app é aberto; esta lista
+// decide quem acessa recursos premium (relatórios, newsletter e hunting).
 const ALLOWED_LOGINS = (process.env.GITHUB_ALLOWED_LOGINS || '').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
 const ALLOWED_ORG = (process.env.GITHUB_ALLOWED_ORG || '').trim();
 
 // Allow-list dinâmica: logins que o admin adiciona em runtime pela UI, persistidos
 // em disco (como .users.json). Somam-se aos GITHUB_ALLOWED_LOGINS (o env é o seed
-// fixo, não removível pela UI) e à org. O fail-safe do env continua valendo: sem
-// env nem org configurados, a lista dinâmica sozinha ainda deixa entrar quem foi
-// adicionado — então cuide para não esvaziar tudo sem querer.
+// fixo, não removível pela UI) e à org.
 const ALLOWLIST_STORE_PATH = path.join(__dirname, '.allowlist.json');
 function loadAllowlist() {
     try {
@@ -2046,18 +2264,26 @@ function saveAllowlist() {
 }
 let dynamicAllowlist = loadAllowlist();
 
-async function isAllowed(login, accessToken) {
+function hasPremiumAccessSync(login) {
+    const l = (login || '').toLowerCase();
+    return ALLOWED_LOGINS.includes(l) || dynamicAllowlist.includes(l);
+}
+
+async function resolvePremiumAccess(login, accessToken) {
     const l = login.toLowerCase();
-    if (ALLOWED_LOGINS.includes(l)) return true;
-    if (dynamicAllowlist.includes(l)) return true;
+    if (hasPremiumAccessSync(l)) return { allowed: true, viaOrg: false };
     if (ALLOWED_ORG) {
         const r = await axios.get(`https://api.github.com/orgs/${ALLOWED_ORG}/members/${login}`, {
             headers: { Authorization: `Bearer ${accessToken}`, 'User-Agent': 'threatsumm4ry', Accept: 'application/vnd.github+json' },
             validateStatus: () => true, timeout: 10000,
         }).catch(() => ({ status: 0 }));
-        if (r.status === 204) return true;
+        if (r.status === 204) return { allowed: true, viaOrg: true };
     }
-    return false;
+    return { allowed: false, viaOrg: false };
+}
+
+function sessionHasPremium(p) {
+    return hasPremiumAccessSync(p?.login) || Boolean(ALLOWED_ORG && p?.premiumViaOrg);
 }
 
 function requireAuth(req, res, next) {
@@ -2067,12 +2293,23 @@ function requireAuth(req, res, next) {
     next();
 }
 
-// Admins podem editar o catálogo de feeds. Por padrão, cai na allow-list de
-// logins (o dono já entra sem config extra); GITHUB_ADMIN_LOGINS restringe mais.
+function requirePremium(req, res, next) {
+    const p = verifySession(getCookie(req, 'ts_session'));
+    if (!p) return res.status(401).json({ error: 'não autenticado', needAuth: true });
+    if (!sessionHasPremium(p)) {
+        return res.status(403).json({ error: 'recurso premium: solicite liberação de acesso', needPremium: true });
+    }
+    req.user = p;
+    next();
+}
+
+// Admins podem editar allow-list premium, publicações e catálogo de feeds. Com
+// login aberto, admin nunca deve cair para "qualquer usuário": use
+// GITHUB_ADMIN_LOGINS ou, como fallback local, GITHUB_ALLOWED_LOGINS.
 const ADMIN_LOGINS = (process.env.GITHUB_ADMIN_LOGINS || process.env.GITHUB_ALLOWED_LOGINS || '')
     .split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
 function isAdmin(login) {
-    return !ADMIN_LOGINS.length || ADMIN_LOGINS.includes((login || '').toLowerCase());
+    return ADMIN_LOGINS.includes((login || '').toLowerCase());
 }
 function requireAdmin(req, res, next) {
     const p = verifySession(getCookie(req, 'ts_session'));
@@ -2093,16 +2330,18 @@ app.get('/api/auth/github/login', (req, res) => {
     if (!GH_CLIENT_ID) return res.status(500).json({ error: 'auth não configurado' });
     const state = crypto.randomBytes(16).toString('hex');
     res.cookie('ts_oauth_state', state, { httpOnly: true, secure: COOKIE_SECURE, sameSite: 'lax', path: '/', maxAge: 600000 });
+    const wantsSignup = ['1', 'true', 'yes'].includes(String(req.query.signup || '').toLowerCase());
     const u = new URL('https://github.com/login/oauth/authorize');
     u.searchParams.set('client_id', GH_CLIENT_ID);
     u.searchParams.set('redirect_uri', REDIRECT_URI);
     u.searchParams.set('scope', OAUTH_SCOPE);
     u.searchParams.set('state', state);
-    u.searchParams.set('allow_signup', 'false');
+    u.searchParams.set('allow_signup', wantsSignup ? 'true' : 'false');
     res.redirect(u.toString());
 });
 
-// Callback: valida state, troca code->token, confere allow-list, cria sessão.
+// Callback: valida state, troca code->token e cria sessão. Premium é calculado
+// separadamente e usado só nos recursos pagos/fechados.
 app.get('/api/auth/github/callback', async (req, res) => {
     // Sucesso cai no /profile (mostra identidade + chave); falha volta pro /login.
     const back = (q) => res.redirect(`${APP_BASE_URL}${q === 'ok' ? '/profile' : '/login'}?auth=${q}`);
@@ -2123,12 +2362,12 @@ app.get('/api/auth/github/callback', async (req, res) => {
         const login = gh.data?.login;
         const id = String(gh.data?.id || '');
         if (!login || !id) return back('erro');
-        if (!(await isAllowed(login, accessToken))) return back('negado');
-        const u = usersStore[id] || (usersStore[id] = { login, groqKeyEnc: null, createdAt: new Date().toISOString() });
+        const premium = await resolvePremiumAccess(login, accessToken);
+        const u = usersStore[id] || (usersStore[id] = { login, openRouterKeyEnc: null, createdAt: new Date().toISOString() });
         u.login = login;
         u.updatedAt = new Date().toISOString();
         saveUsers();
-        setSessionCookie(res, signSession({ sub: id, login, exp: Math.floor(Date.now() / 1000) + SESSION_TTL_S }));
+        setSessionCookie(res, signSession({ sub: id, login, premiumViaOrg: premium.viaOrg, exp: Math.floor(Date.now() / 1000) + SESSION_TTL_S }));
         return back('ok');
     } catch (e) {
         console.error('oauth callback:', e.message);
@@ -2143,7 +2382,13 @@ app.get('/api/auth/me', (req, res) => {
     const p = verifySession(getCookie(req, 'ts_session'));
     if (!p) return res.json({ authenticated: false });
     const u = usersStore[p.sub];
-    res.json({ authenticated: true, login: p.login, hasKey: !!(u && u.groqKeyEnc), isAdmin: isAdmin(p.login) });
+    res.json({
+        authenticated: true,
+        login: p.login,
+        hasKey: !!(u && (u.openRouterKeyEnc || u.groqKeyEnc)),
+        isAdmin: isAdmin(p.login),
+        isPremium: sessionHasPremium(p),
+    });
 });
 
 app.post('/api/auth/logout', (req, res) => {
@@ -2151,36 +2396,38 @@ app.post('/api/auth/logout', (req, res) => {
     res.json({ ok: true });
 });
 
-// BYOK: grava/apaga a chave Groq do usuário (cifrada). Nunca devolve a chave.
+// BYOK: grava/apaga a chave OpenRouter do usuário (cifrada). Nunca devolve a chave.
+// Mantém /groq-key como alias legado para não quebrar clientes antigos.
 const validGroqKey = (k) => typeof k === 'string' && /^gsk_[A-Za-z0-9_-]{20,}$/.test(k);
+const validOpenRouterKey = (k) => typeof k === 'string' && k.length >= 20 && k.length <= 400;
 app.put('/api/user/groq-key', requireAuth, (req, res) => {
     if (!ENC_KEY) return res.status(500).json({ error: 'armazenamento de chave não configurado no servidor' });
     const key = (req.body?.key || '').toString().trim();
-    if (!validGroqKey(key)) return res.status(400).json({ error: 'chave Groq inválida (esperado formato gsk_...)' });
-    const u = usersStore[req.user.sub] || (usersStore[req.user.sub] = { login: req.user.login, groqKeyEnc: null, createdAt: new Date().toISOString() });
-    u.groqKeyEnc = encryptSecret(key);
+    if (!validOpenRouterKey(key)) return res.status(400).json({ error: 'chave OpenRouter inválida' });
+    const u = usersStore[req.user.sub] || (usersStore[req.user.sub] = { login: req.user.login, openRouterKeyEnc: null, createdAt: new Date().toISOString() });
+    u.openRouterKeyEnc = encryptSecret(key);
     u.updatedAt = new Date().toISOString();
     saveUsers();
     res.json({ hasKey: true });
 });
 app.delete('/api/user/groq-key', requireAuth, (req, res) => {
     const u = usersStore[req.user.sub];
-    if (u) { u.groqKeyEnc = null; u.updatedAt = new Date().toISOString(); saveUsers(); }
+    if (u) { u.openRouterKeyEnc = null; u.updatedAt = new Date().toISOString(); saveUsers(); }
     res.json({ hasKey: false });
 });
 
-// ─── BYOK genérico: chaves de API por provider, cifradas (apiKeysEnc). O 'groq'
-// é roteado pro groqKeyEnc (que o gerador já usa). Nunca devolve valores — só
+// ─── BYOK genérico: chaves de API por provider, cifradas (apiKeysEnc). O 'openrouter'
+// é roteado pro openRouterKeyEnc (que o gerador já usa). Nunca devolve valores — só
 // quais providers estão configurados. Wiring por-vendor nos lookups fica pra depois.
 const BYOK_PROVIDERS = new Set([
-    'groq', 'virustotal', 'abuseipdb', 'shodan', 'alienvault', 'pulsedive',
+    'openrouter', 'groq', 'virustotal', 'abuseipdb', 'shodan', 'alienvault', 'pulsedive',
     'hybridanalysis', 'metadefender', 'criminalip', 'censys',
     'urlhaus', 'threatfox', 'phishtank', 'whois', 'dnsdumpster',
 ]);
 function userKeysStatus(u) {
-    const out = { groq: !!(u && u.groqKeyEnc) };
+    const out = { openrouter: !!(u && (u.openRouterKeyEnc || u.groqKeyEnc)), groq: !!(u && u.groqKeyEnc) };
     const m = (u && u.apiKeysEnc) || {};
-    for (const p of BYOK_PROVIDERS) if (p !== 'groq') out[p] = !!m[p];
+    for (const p of BYOK_PROVIDERS) if (p !== 'groq' && p !== 'openrouter') out[p] = !!m[p];
     return out;
 }
 app.get('/api/user/keys', requireAuth, (req, res) => {
@@ -2193,8 +2440,10 @@ app.put('/api/user/keys/:provider', requireAuth, (req, res) => {
     const key = (req.body?.key || '').toString().trim();
     if (!key || key.length < 8 || key.length > 400) return res.status(400).json({ error: 'chave inválida' });
     if (provider === 'groq' && !validGroqKey(key)) return res.status(400).json({ error: 'chave Groq inválida (esperado gsk_...)' });
-    const u = usersStore[req.user.sub] || (usersStore[req.user.sub] = { login: req.user.login, groqKeyEnc: null, createdAt: new Date().toISOString() });
-    if (provider === 'groq') u.groqKeyEnc = encryptSecret(key);
+    if (provider === 'openrouter' && !validOpenRouterKey(key)) return res.status(400).json({ error: 'chave OpenRouter inválida' });
+    const u = usersStore[req.user.sub] || (usersStore[req.user.sub] = { login: req.user.login, openRouterKeyEnc: null, createdAt: new Date().toISOString() });
+    if (provider === 'openrouter') u.openRouterKeyEnc = encryptSecret(key);
+    else if (provider === 'groq') u.groqKeyEnc = encryptSecret(key);
     else (u.apiKeysEnc || (u.apiKeysEnc = {}))[provider] = encryptSecret(key);
     u.updatedAt = new Date().toISOString();
     saveUsers();
@@ -2205,7 +2454,8 @@ app.delete('/api/user/keys/:provider', requireAuth, (req, res) => {
     if (!BYOK_PROVIDERS.has(provider)) return res.status(400).json({ error: 'provider desconhecido' });
     const u = usersStore[req.user.sub];
     if (u) {
-        if (provider === 'groq') u.groqKeyEnc = null;
+        if (provider === 'openrouter') u.openRouterKeyEnc = null;
+        else if (provider === 'groq') u.groqKeyEnc = null;
         else if (u.apiKeysEnc) delete u.apiKeysEnc[provider];
         u.updatedAt = new Date().toISOString();
         saveUsers();
@@ -2215,7 +2465,7 @@ app.delete('/api/user/keys/:provider', requireAuth, (req, res) => {
 
 // ─── Boletim · jobs de geração por URL (1 URL = 1 boletim) ─────────────────
 // O front escolhe UMA url e pede a geração (POST generate); um worker na VPS
-// (saída-só, porta fechada) faz poll dos pendentes (GET jobs/pending, 🔒), roda
+// (saida-so, porta fechada) faz poll dos pendentes (GET jobs/pending), roda
 // o motor pesado, e devolve o JSON (POST job/result, 🔒). O front faz poll do
 // job (GET job) e baixa o JSON quando pronto; o PPT é preenchido localmente.
 const JOBS_STORE_PATH = path.join(__dirname, '.feed-jobs.json');
@@ -2223,10 +2473,10 @@ function loadJobs() { try { return JSON.parse(fs.readFileSync(JOBS_STORE_PATH, '
 function saveJobs() { try { fs.writeFileSync(JOBS_STORE_PATH, JSON.stringify(jobsStore, null, 2)); } catch (e) { console.error('jobs store write failed:', e.message); } }
 let jobsStore = loadJobs();   // { id: { id,url,type,title,status,json,error,createdAt,updatedAt } }
 
-// Chave Groq (BYOK) por job — só em RAM. Nunca persiste: se persistisse iria pro
+// Chave OpenRouter/LLM (BYOK) por job — só em RAM. Nunca persiste: se persistisse iria pro
 // disco em claro no .feed-jobs.json. É entregue ao worker só via /jobs/pending
 // (rota com segredo) e descartada assim que o job sai de 'pending'.
-const jobSecrets = new Map();   // jobId -> chave Groq (texto claro, efêmera)
+const jobSecrets = new Map();   // jobId -> chave OpenRouter/LLM (texto claro, efêmera)
 function dropSecret(id) { jobSecrets.delete(id); }
 
 function pruneJobs(max = 100) {
@@ -2261,9 +2511,9 @@ function expireStaleJobs() {
     if (changed) saveJobs();
 }
 
-// Front pede a geração de UMA url. Requer login + chave Groq própria (BYOK).
+// Front pede a geração de UMA url. Requer login + chave OpenRouter própria (BYOK).
 //   POST /api/feed/generate  { url, type, title? }
-app.post('/api/feed/generate', requireAuth, scanLimiter, async (req, res) => {
+app.post('/api/feed/generate', requirePremium, scanLimiter, async (req, res) => {
     try {
         const url = (req.body?.url || '').toString();
         const type = req.body?.type === 'campaign' ? 'campaign' : 'vuln';
@@ -2272,9 +2522,10 @@ app.post('/api/feed/generate', requireAuth, scanLimiter, async (req, res) => {
         // BYOK obrigatório: sem a chave do usuário não há como gerar. Decifra aqui
         // e guarda só em RAM (jobSecrets) — o worker pega via /jobs/pending.
         const u = usersStore[req.user.sub];
-        if (!u || !u.groqKeyEnc) return res.status(400).json({ error: 'adicione sua chave Groq nas configurações antes de gerar', needKey: true });
+        const encKey = u?.openRouterKeyEnc || u?.groqKeyEnc;
+        if (!encKey) return res.status(400).json({ error: 'adicione sua chave OpenRouter nas configurações antes de gerar', needKey: true });
         let userKey;
-        try { userKey = decryptSecret(u.groqKeyEnc); }
+        try { userKey = decryptSecret(encKey); }
         catch { return res.status(500).json({ error: 'falha ao ler sua chave; reinsira-a nas configurações' }); }
         // Sempre valida (sem atalho de "confiar em URL do feed") — o guard SSRF
         // bloqueia IP privado/loopback/metadata. O worker na VPS revalida também.
@@ -2292,7 +2543,7 @@ app.post('/api/feed/generate', requireAuth, scanLimiter, async (req, res) => {
         }
         const id = crypto.randomUUID();
         const now = new Date().toISOString();
-        jobsStore[id] = { id, url, type, title, status: 'pending', json: null, error: null, createdAt: now, updatedAt: now };
+        jobsStore[id] = { id, ownerSub: req.user.sub, url, type, title, status: 'pending', json: null, error: null, createdAt: now, updatedAt: now };
         jobSecrets.set(id, userKey);
         pruneJobs();
         saveJobs();
@@ -2303,11 +2554,12 @@ app.post('/api/feed/generate', requireAuth, scanLimiter, async (req, res) => {
     }
 });
 
-// Front faz poll do job. Público.   GET /api/feed/job?id=...
-app.get('/api/feed/job', (req, res) => {
+// Front faz poll do job. Premium.   GET /api/feed/job?id=...
+app.get('/api/feed/job', requirePremium, (req, res) => {
     expireStaleJobs();
     const job = jobsStore[(req.query.id || '').toString()];
     if (!job) return res.status(404).json({ error: 'job não encontrado' });
+    if (job.ownerSub && job.ownerSub !== req.user.sub) return res.status(403).json({ error: 'job pertence a outro usuário' });
     // Posição na fila = quantos jobs pending foram criados antes deste (0 = já
     // sendo processado / próximo). Deixa o front mostrar "N na sua frente".
     let queuePosition = 0;
@@ -2328,7 +2580,16 @@ app.get('/api/feed/jobs/pending', (req, res) => {
     // worker (não dá pra gerar sem chave) e expiram sozinhos pelo TTL.
     const pending = Object.values(jobsStore)
         .filter((j) => j.status === 'pending' && jobSecrets.has(j.id))
-        .map((j) => ({ id: j.id, url: j.url, type: j.type, title: j.title, groqKey: jobSecrets.get(j.id) }));
+        .map((j) => ({
+            id: j.id,
+            url: j.url,
+            type: j.type,
+            title: j.title,
+            openRouterKey: jobSecrets.get(j.id),
+            llmKey: jobSecrets.get(j.id),
+            llmProvider: 'openrouter',
+            model: process.env.OPENROUTER_MODEL || 'deepseek/deepseek-chat-v3.1',
+        }));
     res.json({ pending });
 });
 
@@ -2346,9 +2607,9 @@ app.post('/api/feed/job/result', (req, res) => {
     res.json({ id: job.id, status: job.status });
 });
 
-// ─── Groq-powered on-demand advisory analysis ─────────────────────────────
-const GROQ_BASE_URL = 'https://api.groq.com/openai/v1';
-const GROQ_MODELS = ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'gemma2-9b-it'];
+// ─── OpenRouter-powered on-demand advisory analysis ───────────────────────
+const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1';
+const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL || 'deepseek/deepseek-chat-v3.1';
 
 const newsIntelPrompt = (lang) => (
     'You are a senior Cyber Threat Intelligence analyst. ' +
@@ -2361,7 +2622,7 @@ const newsIntelPrompt = (lang) => (
 );
 
 // Free Google Translate endpoint (no key). Returns translated text, or the
-// original on any failure. Used as the no-Groq fallback so advisories are at
+// original on any failure. Used as the no-LLM fallback so advisories are at
 // least readable in the user's language.
 async function googleTranslate(text, targetLang) {
     const input = (text || '').slice(0, 1800);
@@ -2451,37 +2712,40 @@ function extractMitigation(text, exclude = '') {
     return hits.join(' ');
 }
 
-// Call Groq chat completions with a small model fallback chain; returns parsed JSON or null.
-async function groqAnalyze(title, content, lang) {
-    if (!process.env.GROQ_API_KEY) return null;
+// Call OpenRouter chat completions; returns parsed JSON or null.
+async function openRouterAnalyze(title, content, lang) {
+    if (!process.env.OPENROUTER_API_KEY) return null;
     const userPrompt = `Title: ${title}\nOriginal content: ${(content || '').slice(0, 12000)}`;
-    for (const model of GROQ_MODELS) {
-        try {
-            const resp = await axios.post(`${GROQ_BASE_URL}/chat/completions`, {
-                model,
-                temperature: 0.1,
-                response_format: { type: 'json_object' },
-                messages: [
-                    { role: 'system', content: newsIntelPrompt(lang) },
-                    { role: 'user', content: userPrompt },
-                ],
-            }, {
-                headers: { Authorization: `Bearer ${process.env.GROQ_API_KEY}`, 'Content-Type': 'application/json' },
-                timeout: 20000,
-            });
-            const text = resp.data?.choices?.[0]?.message?.content;
-            if (text) return JSON.parse(text);
-        } catch (err) {
-            console.warn(`Groq model ${model} failed: ${err.message}. Trying next...`);
-        }
+    try {
+        const resp = await axios.post(`${OPENROUTER_BASE_URL}/chat/completions`, {
+            model: OPENROUTER_MODEL,
+            temperature: 0.1,
+            response_format: { type: 'json_object' },
+            messages: [
+                { role: 'system', content: newsIntelPrompt(lang) },
+                { role: 'user', content: userPrompt },
+            ],
+        }, {
+            headers: {
+                Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
+                'Content-Type': 'application/json',
+                'HTTP-Referer': process.env.APP_BASE_URL || 'https://threatsumm4ry.app',
+                'X-OpenRouter-Title': 'ThreatSumm4ry',
+            },
+            timeout: 30000,
+        });
+        const text = resp.data?.choices?.[0]?.message?.content;
+        if (text) return JSON.parse(text);
+    } catch (err) {
+        console.warn(`OpenRouter model ${OPENROUTER_MODEL} failed: ${err.message}`);
     }
     return null;
 }
 
 // On-demand actionable analysis for a single advisory (looked up in the live feed
 // by URL to prevent arbitrary LLM abuse). Returns Executive Summary + Impact/
-// Mitigation. Degrades gracefully to the RSS description when Groq is unavailable.
-app.post('/api/newsletter/enrich', scanLimiter, async (req, res) => {
+// Mitigation. Degrades gracefully to the RSS description when OpenRouter is unavailable.
+app.post('/api/newsletter/enrich', requirePremium, scanLimiter, async (req, res) => {
     try {
         const url = (req.body?.url || '').toString();
         const lang = req.body?.lang === 'en' ? 'en' : 'pt';
@@ -2509,7 +2773,7 @@ app.post('/api/newsletter/enrich', scanLimiter, async (req, res) => {
             assets: intel.assets, cves: intel.cves,
         }, lang);
 
-        const ai = await groqAnalyze(item.title, content, lang);
+        const ai = await openRouterAnalyze(item.title, content, lang);
 
         // Deterministic IOC sweep over the FULL article (richer than the
         // title+summary set computed at collection). High-precision: hashes +
@@ -2521,7 +2785,7 @@ app.post('/api/newsletter/enrich', scanLimiter, async (req, res) => {
             // Single executive-summary paragraph only (prompt no longer asks for
             // impact/mitigation, to save output tokens).
             payload = {
-                available: true, source: 'groq', scraped: !!fullText,
+                available: true, source: 'openrouter', scraped: !!fullText,
                 title: ai.title || item.title,
                 executiveSummary: String(ai.summary).trim(),
                 impactMitigation: '',
@@ -2627,11 +2891,11 @@ const assertSafePublicUrl = async (raw) => {
 };
 
 // Guided Threat Hunting: proxy to the Python hunt-service which scrapes the
-// report (Scrapling), runs Groq + Pydantic validation/retry, and returns a
+// report (Scrapling), runs OpenRouter + Pydantic validation/retry, and returns a
 // defanged structured Hunt Pack. Advisories from the live feed are trusted by
 // their allowlisted URL; any other pasted URL must pass the SSRF guard above so
 // this can't be used to scan internal infrastructure.
-app.post('/api/newsletter/hunt-pack', scanLimiter, async (req, res) => {
+app.post('/api/newsletter/hunt-pack', requirePremium, scanLimiter, async (req, res) => {
     try {
         const url = (req.body?.url || '').toString();
         const lang = req.body?.lang === 'en' ? 'en' : 'pt';
@@ -2685,6 +2949,48 @@ app.post('/api/newsletter/hunt-pack', scanLimiter, async (req, res) => {
 });
 
 // Latest CVEs from CIRCL
+// NIST NVD 2.0 — recently published CVEs (last 10 days). Sending NVD_API_KEY
+// raises the rate limit (50 req/30s vs 5); the endpoint also works keyless but
+// throttles harder. Mapped to the same shape the CIRCL/fallback paths return.
+async function fetchRecentNvdCves() {
+    const end = new Date();
+    const start = new Date(end.getTime() - 10 * 24 * 60 * 60 * 1000);
+    const iso = (d) => d.toISOString().slice(0, 23); // ISO-8601, no trailing Z
+    const headers = {};
+    const nvdKey = (process.env.NVD_API_KEY || '').trim();
+    if (nvdKey) headers.apiKey = nvdKey;
+
+    const resp = await axios.get('https://services.nvd.nist.gov/rest/json/cves/2.0', {
+        params: { pubStartDate: iso(start), pubEndDate: iso(end), resultsPerPage: 100 },
+        headers,
+        timeout: 15000,
+    });
+
+    const vulns = Array.isArray(resp.data?.vulnerabilities) ? resp.data.vulnerabilities : [];
+    return vulns
+        .map((entry) => entry.cve)
+        .filter((cve) => cve && typeof cve.id === 'string' && cve.id.startsWith('CVE-'))
+        .map((cve) => {
+            const metrics = cve.metrics || {};
+            const metric = (metrics.cvssMetricV31 || metrics.cvssMetricV30
+                || metrics.cvssMetricV40 || metrics.cvssMetricV2 || [])[0];
+            const cvssData = metric?.cvssData || {};
+            const refs = (cve.references || []).map((r) => r.url).filter(Boolean);
+            return {
+                id: cve.id,
+                cvss: typeof cvssData.baseScore === 'number' ? cvssData.baseScore : null,
+                summary: (cve.descriptions || []).find((d) => d.lang === 'en')?.value || 'No description available.',
+                Published: cve.published,
+                Modified: cve.lastModified || cve.published,
+                source: 'NIST NVD (National Vulnerability Database)',
+                vectorString: cvssData.vectorString || 'N/A',
+                mitigation: 'Patch update recommended. Review vendor security advisories and apply the latest available software packages.',
+                references: refs.length ? refs.slice(0, 6) : [`https://nvd.nist.gov/vuln/detail/${cve.id}`],
+            };
+        })
+        .sort((a, b) => new Date(b.Published || 0) - new Date(a.Published || 0));
+}
+
 app.get('/api/cves/recent', async (req, res) => {
     const now = Date.now();
     if (memoryCache.recentCves.data && memoryCache.recentCves.expiresAt > now) {
@@ -2763,6 +3069,20 @@ app.get('/api/cves/recent', async (req, res) => {
             ]
         }
     ];
+
+    // Primary source: NIST NVD (authenticated via NVD_API_KEY). Falls through to
+    // CIRCL and then the static fallbacks below if it errors or returns too few.
+    try {
+        const nvd = await fetchRecentNvdCves();
+        if (nvd.length >= 5) {
+            const result = nvd.slice(0, 50);
+            memoryCache.recentCves.data = result;
+            memoryCache.recentCves.expiresAt = now + memoryCache.recentCves.ttl;
+            return res.json(result);
+        }
+    } catch (error) {
+        console.warn('NVD recent CVE fetch failed, falling back to CIRCL:', error.message);
+    }
 
     try {
         const response = await axios.get('https://cve.circl.lu/api/last', { timeout: 8000 });

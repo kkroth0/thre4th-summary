@@ -1,4 +1,4 @@
-# Threat Hunting microservice — Scrapling (stealth browser) + Groq + Pydantic.
+# Threat Hunting microservice — Scrapling (stealth browser) + OpenRouter + Pydantic.
 # Sized for Hugging Face Spaces (Docker SDK): listens on 7860.
 FROM python:3.12-slim
 

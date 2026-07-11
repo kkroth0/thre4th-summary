@@ -1,8 +1,8 @@
-import { Github, Twitter, Instagram, Linkedin } from "lucide-react";
+import { Github, Twitter, Linkedin } from "lucide-react";
 
 export function Footer() {
     return (
-        <footer className="border-t bg-background mt-auto">
+        <footer className="relative z-10 mt-auto border-t border-primary/10 bg-background/80 backdrop-blur-xl">
             <div className="container mx-auto px-4 py-6">
                 <div className="flex flex-col md:flex-row items-center justify-between gap-4">
                     <div className="text-sm text-muted-foreground">
@@ -33,7 +33,7 @@ export function Footer() {
                             target="_blank"
                             rel="noopener noreferrer"
                             className="text-muted-foreground hover:text-foreground transition-colors"
-                            aria-label="Instagram"
+                            aria-label="LinkedIn"
                         >
                             <Linkedin className="h-5 w-5" />
                         </a>

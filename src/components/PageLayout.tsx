@@ -2,6 +2,7 @@ import { ReactNode } from "react";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { useSidebar } from "@/contexts/SidebarContext";
+import { cn } from "@/lib/utils";
 
 interface PageLayoutProps {
   children: ReactNode;
@@ -25,31 +26,32 @@ interface PageLayoutProps {
 }
 
 /**
- * Standard page shell, extracted from the ThreatBrief (DailyBulletin) design:
- * a calm, centered column with generous vertical rhythm, sidebar-aware left
- * padding, and the shared Header/Footer. All pages render inside this so the
- * chrome, spacing and background stay consistent site-wide.
+ * Standard page shell: Vercel-like top navigation, centered content, shared
+ * Footer, and the subtle background treatment used across internal tools.
  */
 export function PageLayout({
   children,
   width = "max-w-3xl",
-  showBackButton = true,
+  showBackButton = false,
   headerActions,
   className = "",
   bare = false,
 }: PageLayoutProps) {
   const { isCollapsed } = useSidebar();
+
   return (
     <div
-      className={`min-h-screen bg-background flex flex-col transition-all duration-300 ${
-        isCollapsed ? "lg:pl-20" : "lg:pl-64"
-      }`}
+      className={cn(
+        "soc-shell relative min-h-screen bg-background flex flex-col transition-[padding] duration-200",
+        isCollapsed ? "lg:pl-[72px]" : "lg:pl-[264px]"
+      )}
     >
+      <div className="soc-grid pointer-events-none absolute inset-0 z-0" />
       <Header showBackButton={showBackButton} actions={headerActions} />
       {bare ? (
-        children
+        <div className="relative z-10 flex-1">{children}</div>
       ) : (
-        <main className={`flex-1 container mx-auto px-4 py-12 ${width} ${className}`}>
+        <main className={`relative z-10 flex-1 container mx-auto px-4 py-12 ${width} ${className}`}>
           {children}
         </main>
       )}

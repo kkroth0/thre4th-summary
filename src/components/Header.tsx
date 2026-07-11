@@ -1,14 +1,38 @@
 import { Link, useLocation } from "react-router-dom";
-import { BookOpen, Shield, Mail, Activity, Terminal, ArrowLeft, ShieldAlert, MailWarning, ChevronLeft, ChevronRight, CalendarCheck, Crosshair, FileText, LogIn, Settings as SettingsIcon, Megaphone, ShieldCheck, Users, Menu } from "lucide-react";
+import {
+  ArrowLeft,
+  BookOpen,
+  CalendarCheck,
+  ChevronLeft,
+  ChevronRight,
+  Crosshair,
+  Database,
+  FileSearch,
+  Github,
+  LogIn,
+  Mail,
+  MapPinned,
+  Menu,
+  Megaphone,
+  RadioTower,
+  Search,
+  Settings as SettingsIcon,
+  Shield,
+  ShieldAlert,
+  ShieldCheck,
+  User,
+  Users,
+  Wrench,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Sheet, SheetClose, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { LanguageToggle } from "@/components/LanguageToggle";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useSidebar } from "@/contexts/SidebarContext";
 import { useAuth } from "@/contexts/AuthContext";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
 interface HeaderProps {
@@ -18,284 +42,395 @@ interface HeaderProps {
   showBackButton?: boolean;
 }
 
+type NavItem = {
+  path: string;
+  label: string;
+  description?: string;
+  icon: React.ElementType;
+  premium?: boolean;
+};
+
+type NavGroup = {
+  label: string;
+  items: NavItem[];
+};
+
 export function Header({ actions, logoAddon, onLogoClick, showBackButton = false }: HeaderProps) {
   const { t, language, tr } = useLanguage();
   const { isCollapsed, toggleSidebar } = useSidebar();
   const { auth, loading: authLoading } = useAuth();
-  const location = useLocation();
-  const pathname = location.pathname;
+  const { pathname } = useLocation();
 
-  // Bloco de usuário (sidebar): avatar -> /profile, ou botão "Entrar" -> /login.
-  const renderUser = () => {
-    if (authLoading) {
-      return <div className={cn("h-11 rounded-xl bg-muted/30 animate-pulse", isCollapsed ? "w-11 mx-auto" : "w-full")} />;
-    }
-    if (auth.authenticated) {
-      const chip = (
-        <Button
-          variant="ghost"
-          className={cn(
-            "w-full transition-all duration-200",
-            isCollapsed ? "justify-center px-0 w-11 h-11 rounded-xl mx-auto" : "justify-start px-2.5 gap-2.5 h-12 rounded-xl",
-            pathname === "/profile"
-              ? "bg-primary/15 ring-1 ring-inset ring-primary/20 hover:bg-primary/20"
-              : "hover:bg-muted/20"
-          )}
-        >
-          <Avatar className="h-7 w-7 ring-1 ring-primary/20 shrink-0">
-            <AvatarImage src={`https://github.com/${auth.login}.png?size=64`} alt={auth.login} />
-            <AvatarFallback className="text-xs font-semibold bg-primary/10 text-primary">{auth.login?.[0]?.toUpperCase() ?? "?"}</AvatarFallback>
-          </Avatar>
-          {!isCollapsed && (
-            <div className="flex flex-col items-start leading-tight min-w-0">
-              <span className="text-[13px] font-semibold truncate max-w-[150px]">{auth.login}</span>
-              <span className="text-[10px] text-muted-foreground">{tr({ pt: "Ver perfil", en: "View profile", es: "Ver perfil", fr: "Voir le profil" })}</span>
-            </div>
-          )}
-        </Button>
-      );
-      return (
-        <Link to="/profile" className="w-full block">
-          {isCollapsed ? (
-            <Tooltip delayDuration={150}>
-              <TooltipTrigger asChild>{chip}</TooltipTrigger>
-              <TooltipContent side="right" className="font-semibold text-xs">{auth.login}</TooltipContent>
-            </Tooltip>
-          ) : chip}
-        </Link>
-      );
-    }
-    const signInBtn = (
-      <Button
-        variant="outline"
-        className={cn("gap-2 rounded-xl font-semibold", isCollapsed ? "px-0 w-11 h-11 mx-auto" : "w-full h-10 text-[13px]")}
-      >
-        <LogIn className="h-4 w-4" />
-        {!isCollapsed && <span>{tr({ pt: "Entrar", en: "Sign in", es: "Iniciar sesión", fr: "Se connecter" })}</span>}
-      </Button>
-    );
-    return (
-      <Link to="/login" className="w-full block">
-        {isCollapsed ? (
-          <Tooltip delayDuration={150}>
-            <TooltipTrigger asChild>{signInBtn}</TooltipTrigger>
-            <TooltipContent side="right" className="font-semibold text-xs">{tr({ pt: "Entrar", en: "Sign in", es: "Iniciar sesión", fr: "Se connecter" })}</TooltipContent>
-          </Tooltip>
-        ) : signInBtn}
-      </Link>
-    );
+  const pt = language === "pt";
+
+  const homeItem: NavItem = {
+    path: "/analyzer",
+    label: pt ? "Busca ThreatSumm4ry" : "ThreatSumm4ry Search",
+    description: pt ? "IOC, dominio, URL, hash ou CVE em 21 fontes." : "IOC, domain, URL, hash or CVE across 21 sources.",
+    icon: Search,
   };
 
-  const handleLogoClick = (e: React.MouseEvent) => {
-    if (onLogoClick) {
-      e.preventDefault();
-      onLogoClick();
-    }
-  };
-
-  const navItems = [
-    { path: "/", label: t("appName") || "ThreatSumm4ry", icon: Activity, isHome: true },
-    { path: "/advisories", label: "Advisories", icon: Megaphone },
-    { path: "/vendors", label: t("vendors") || "Vendors", icon: BookOpen },
-    { path: "/dnsbl", label: t("dnsblCheck") || "DNSBL Check", icon: ShieldAlert },
-    { path: "/phishing-analyzer", label: tr({ pt: "Análise de Phishing", en: "Phishing Analyzer", es: "Análisis de Phishing", fr: "Analyse de Phishing" }), icon: MailWarning },
-    { path: "/threat-hunting", label: "Threat Hunting", icon: Crosshair, premium: true },
-    { path: "/threat-brief", label: "Threat Brief", icon: FileText, premium: true },
-    { path: "/newsletter", label: tr({ pt: "Coletor de Intel", en: "Intel Collector", es: "Colector de Intel", fr: "Collecteur d'Intel" }), icon: Mail, premium: true },
-    { path: "/cves", label: tr({ pt: "Painel de CVEs", en: "CVE Dashboard", es: "Panel de CVEs", fr: "Tableau de bord CVE" }), icon: Shield },
-    { path: "/atores", label: tr({ pt: "Atores", en: "Threat Actors", es: "Actores", fr: "Acteurs" }), icon: Users },
-    { path: "/patch-tuesday", label: "Patch Tuesday", icon: CalendarCheck },
-    { path: "/features", label: tr({ pt: "Funcionalidades", en: "Features", es: "Funciones", fr: "Fonctionnalités" }), icon: Terminal },
+  const navGroups: NavGroup[] = [
+    {
+      label: pt ? "Analise" : "Analysis",
+      items: [
+        {
+          path: "/phishing-analyzer",
+          label: tr({ pt: "Phishing Analyzer", en: "Phishing Analyzer", es: "Análisis de Phishing", fr: "Analyse de Phishing" }),
+          description: pt ? "Headers, URLs, anexos e IOCs." : "Headers, URLs, attachments and IOCs.",
+          icon: Mail,
+        },
+        {
+          path: "/dnsbl",
+          label: "DNSBL",
+          description: pt ? "Blocklists por IP, dominio ou range." : "Blocklists by IP, domain or range.",
+          icon: ShieldAlert,
+        },
+        {
+          path: "/relatorios",
+          label: pt ? "Gerador de Relatorios" : "Report Generator",
+          description: pt ? "URL, PDF ou relatorio em uma analise CTI." : "URL, PDF or report into CTI analysis.",
+          icon: FileSearch,
+          premium: true,
+        },
+      ],
+    },
+    {
+      label: "Intel",
+      items: [
+        {
+          path: "/cves",
+          label: tr({ pt: "CVEs", en: "CVEs", es: "CVEs", fr: "CVE" }),
+          description: pt ? "EPSS, KEV e exploit publico." : "EPSS, KEV and public exploit context.",
+          icon: Shield,
+        },
+        {
+          path: "/atores",
+          label: tr({ pt: "Atores", en: "Threat Actors", es: "Actores", fr: "Acteurs" }),
+          description: pt ? "Aliases, TTPs e setores alvo." : "Aliases, TTPs and target sectors.",
+          icon: Users,
+        },
+        {
+          path: "/advisories",
+          label: "Advisories",
+          description: pt ? "Boletim diario, KPIs e avisos normalizados." : "Daily brief, KPIs and normalized advisories.",
+          icon: Megaphone,
+        },
+        {
+          path: "/latam-threats",
+          label: "Latam Threats",
+          description: pt ? "Ransomware e IOCs recentes na America Latina." : "Recent ransomware and IOCs across Latin America.",
+          icon: RadioTower,
+        },
+        {
+          path: "/threat-map",
+          label: pt ? "Mapa de Ameacas" : "Threat Map",
+          description: pt ? "Vitimas de ransomware por pais." : "Ransomware victims by country.",
+          icon: MapPinned,
+        },
+        {
+          path: "/patch-tuesday",
+          label: "Patch Tuesday",
+          description: pt ? "Timeline mensal Microsoft." : "Monthly Microsoft timeline.",
+          icon: CalendarCheck,
+        },
+      ],
+    },
+    {
+      label: "Hunting",
+      items: [
+        {
+          path: "/threat-hunting",
+          label: "Threat Hunting",
+          description: pt ? "Hipoteses e queries por tecnica." : "Hypotheses and queries by technique.",
+          icon: Crosshair,
+          premium: true,
+        },
+      ],
+    },
+    {
+      label: pt ? "Relatorios" : "Reports",
+      items: [
+        {
+          path: "/newsletter",
+          label: "Newsletter",
+          description: pt ? "Recorte semanal curado." : "Curated weekly digest.",
+          icon: Database,
+          premium: true,
+        },
+        {
+          path: "/features",
+          label: tr({ pt: "Funcionalidades", en: "Features", es: "Funciones", fr: "Fonctionnalités" }),
+          description: pt ? "Mapa de capabilities." : "Capability map.",
+          icon: Wrench,
+        },
+        {
+          path: "/vendors",
+          label: pt ? "Fontes" : "Sources",
+          description: pt ? "Fontes, integracoes e cobertura." : "Sources, integrations and coverage.",
+          icon: BookOpen,
+        },
+      ],
+    },
   ];
 
-  const isRouteActive = (path: string) => (path === "/" ? pathname === "/" : pathname === path || pathname.startsWith(`${path}/`));
+  const isRouteActive = (path: string) => {
+    const cleanPath = path.split("#")[0] || "/";
+    return cleanPath === "/" ? pathname === "/" : pathname === cleanPath || pathname.startsWith(`${cleanPath}/`);
+  };
 
-  const renderNavItem = (item: typeof navItems[0], isActive: boolean) => {
+  const handleLogoClick = () => {
+    onLogoClick?.();
+  };
+
+  const renderDesktopItem = (item: NavItem) => {
     const Icon = item.icon;
-    const buttonElement = (
-      <Button
-        variant="ghost"
+    const active = isRouteActive(item.path);
+    const link = (
+      <Link
+        key={item.path}
+        to={item.path}
         className={cn(
-          "w-full gap-3 h-10 rounded-xl text-[13px] font-semibold transition-all duration-200",
-          isCollapsed ? "justify-center px-0 w-11 h-11 rounded-xl mx-auto" : "justify-start px-3.5",
-          isActive
-            ? "bg-primary/15 text-primary ring-1 ring-inset ring-primary/20 hover:bg-primary/20 hover:text-primary"
-            : "text-muted-foreground/80 hover:text-foreground hover:bg-muted/20"
+          "group relative flex items-center rounded-md text-[13px] font-medium transition-colors",
+          isCollapsed ? "h-10 w-10 justify-center px-0" : "h-9 gap-2.5 px-2.5",
+          active
+            ? "bg-primary/10 text-foreground"
+            : "text-muted-foreground hover:bg-secondary hover:text-foreground"
         )}
       >
-        <Icon strokeWidth={isActive ? 2.25 : 1.9} className={cn("h-[18px] w-[18px] shrink-0", isActive ? "text-primary" : "text-muted-foreground")} />
-        {!isCollapsed && <span className="flex-1 text-left truncate">{item.label}</span>}
-        {!isCollapsed && (item as { premium?: boolean }).premium && (
-          <span className="ml-auto shrink-0 text-[9px] font-bold tracking-wider px-1.5 py-0.5 rounded-md bg-amber-500/15 text-amber-600 dark:text-amber-400 ring-1 ring-inset ring-amber-500/20">PRO</span>
+        {active && (
+          <span className={cn("absolute rounded-full bg-primary", isCollapsed ? "left-0 top-2 h-6 w-0.5" : "left-0 top-2 h-5 w-0.5")} />
         )}
-      </Button>
-    );
-
-    return (
-      <Link key={item.path} to={item.path} className="w-full relative block">
-        {isActive && (
-          <div className={cn(
-            "absolute bg-primary rounded-r-full transition-all duration-300",
-            isCollapsed ? "left-0 top-2 bottom-2 w-1" : "left-0 top-1.5 bottom-1.5 w-1"
-          )} />
-        )}
-        {isCollapsed ? (
-          <Tooltip delayDuration={150}>
-            <TooltipTrigger asChild>
-              {buttonElement}
-            </TooltipTrigger>
-            <TooltipContent side="right" className="font-semibold text-xs bg-popover border border-border/50 text-popover-foreground shadow-md py-1.5 px-2.5">
-              {item.label}
-            </TooltipContent>
-          </Tooltip>
-        ) : (
-          buttonElement
-        )}
-      </Link>
-    );
-  };
-
-  const renderCategory = (label: string, paths: string[]) => {
-    const items = navItems.filter((i) => paths.includes(i.path));
-    if (!items.length) return null;
-    return (
-      <div>
-        {!isCollapsed ? (
-          <div className="px-3 mb-2 text-[11px] font-bold text-muted-foreground/70 uppercase tracking-wider">
-            {label}
-          </div>
-        ) : (
-          <div className="h-px bg-primary/10 my-3 mx-2" />
-        )}
-        <div className="flex flex-col gap-1">
-          {items.map((item) => renderNavItem(item, isRouteActive(item.path)))}
-        </div>
-      </div>
-    );
-  };
-
-  const renderMobileNavItem = (item: typeof navItems[0]) => {
-    const Icon = item.icon;
-    const isActive = isRouteActive(item.path);
-
-    return (
-      <SheetClose asChild key={item.path}>
-        <Link to={item.path} className="block">
-          <Button
-            variant="ghost"
-            className={cn(
-              "w-full h-11 justify-start gap-3 rounded-xl px-3 text-[13px] font-semibold",
-              isActive
-                ? "bg-primary/15 text-primary ring-1 ring-inset ring-primary/20 hover:bg-primary/20 hover:text-primary"
-                : "text-muted-foreground hover:bg-muted/40 hover:text-foreground"
-            )}
-          >
-            <Icon className={cn("h-[18px] w-[18px] shrink-0", isActive ? "text-primary" : "text-muted-foreground")} />
-            <span className="flex-1 text-left">{item.label}</span>
-            {(item as { premium?: boolean }).premium && (
-              <span className="shrink-0 rounded-md bg-amber-500/15 px-1.5 py-0.5 text-[9px] font-bold tracking-wider text-amber-600 ring-1 ring-inset ring-amber-500/20 dark:text-amber-400">
+        <Icon className={cn("h-4 w-4 shrink-0", active ? "text-primary" : "text-muted-foreground group-hover:text-foreground")} />
+        {!isCollapsed && (
+          <>
+            <span className="min-w-0 flex-1 truncate">{item.label}</span>
+            {item.premium && (
+              <span className="rounded border border-border bg-background px-1.5 py-0.5 text-[9px] font-bold leading-none text-muted-foreground">
                 PRO
               </span>
             )}
-          </Button>
+          </>
+        )}
+      </Link>
+    );
+
+    if (!isCollapsed) return link;
+
+    return (
+      <Tooltip key={item.path} delayDuration={100}>
+        <TooltipTrigger asChild>{link}</TooltipTrigger>
+        <TooltipContent side="right" className="max-w-64">
+          <div className="font-medium">{item.label}</div>
+          {item.description && <div className="mt-1 text-xs text-muted-foreground">{item.description}</div>}
+        </TooltipContent>
+      </Tooltip>
+    );
+  };
+
+  const renderDesktopGroup = (group: NavGroup) => (
+    <div key={group.label} className="space-y-1.5">
+      {isCollapsed ? (
+        <div className="mx-auto my-2 h-px w-8 bg-border" />
+      ) : (
+        <div className="px-2.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+          {group.label}
+        </div>
+      )}
+      <div className="space-y-1">{group.items.map(renderDesktopItem)}</div>
+    </div>
+  );
+
+  const renderMobileItem = (item: NavItem) => {
+    const Icon = item.icon;
+    const active = isRouteActive(item.path);
+
+    return (
+      <SheetClose asChild key={item.path}>
+        <Link
+          to={item.path}
+          className={cn(
+            "flex items-start gap-3 rounded-lg border border-transparent px-2.5 py-2.5 transition-colors hover:border-border hover:bg-secondary/70",
+            active && "border-border bg-secondary"
+          )}
+        >
+          <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border bg-background text-foreground">
+            <Icon className={cn("h-4 w-4", active && "text-primary")} />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="flex items-center gap-2 text-sm font-semibold text-foreground">
+              {item.label}
+              {item.premium && (
+                <span className="rounded border border-border bg-background px-1.5 py-0.5 text-[9px] font-bold text-muted-foreground">
+                  PRO
+                </span>
+              )}
+            </span>
+            {item.description && <span className="mt-0.5 block text-xs text-muted-foreground">{item.description}</span>}
+          </span>
         </Link>
       </SheetClose>
     );
   };
 
+  const renderMobileGroup = (group: NavGroup) => (
+    <div key={group.label} className="space-y-2">
+      <div className="px-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{group.label}</div>
+      <div className="grid gap-1">{group.items.map(renderMobileItem)}</div>
+    </div>
+  );
+
+  const renderDesktopAccount = () => {
+    if (authLoading) {
+      return <div className={cn("h-10 animate-pulse rounded-md bg-secondary", isCollapsed ? "w-10" : "w-full")} />;
+    }
+
+    if (!auth.authenticated) {
+      const signIn = (
+        <Link
+          to="/login"
+          className={cn(
+            "flex h-10 items-center rounded-md border border-border bg-background text-sm font-medium transition-colors hover:bg-secondary",
+            isCollapsed ? "w-10 justify-center" : "w-full gap-2 px-3"
+          )}
+        >
+          <LogIn className="h-4 w-4" />
+          {!isCollapsed && <span>{pt ? "Entrar" : "Sign in"}</span>}
+        </Link>
+      );
+
+      if (!isCollapsed) return signIn;
+
+      return (
+        <Tooltip delayDuration={100}>
+          <TooltipTrigger asChild>{signIn}</TooltipTrigger>
+          <TooltipContent side="right">{pt ? "Entrar" : "Sign in"}</TooltipContent>
+        </Tooltip>
+      );
+    }
+
+    const profile = (
+      <Link
+        to="/profile"
+        className={cn(
+          "flex items-center rounded-md text-sm transition-colors hover:bg-secondary",
+          isCollapsed ? "h-10 w-10 justify-center" : "h-11 w-full gap-2.5 px-2"
+        )}
+      >
+        <Avatar className="h-7 w-7 border border-border">
+          <AvatarImage src={`https://github.com/${auth.login}.png?size=64`} alt={auth.login} />
+          <AvatarFallback className="text-[10px] font-semibold">{auth.login?.[0]?.toUpperCase() ?? "?"}</AvatarFallback>
+        </Avatar>
+        {!isCollapsed && (
+          <span className="min-w-0">
+            <span className="block max-w-40 truncate font-semibold text-foreground">{auth.login}</span>
+            <span className="block text-xs text-muted-foreground">{pt ? "Perfil" : "Profile"}</span>
+          </span>
+        )}
+      </Link>
+    );
+
+    if (!isCollapsed) return profile;
+
+    return (
+      <Tooltip delayDuration={100}>
+        <TooltipTrigger asChild>{profile}</TooltipTrigger>
+        <TooltipContent side="right">{auth.login}</TooltipContent>
+      </Tooltip>
+    );
+  };
+
   return (
     <>
-      {/* Mobile/Tablet Header (lg:hidden) */}
-      <header className="lg:hidden sticky top-0 z-50 w-full border-b border-border/50 bg-background/60 supports-[backdrop-filter]:bg-background/40">
-        <div className="container max-w-7xl mx-auto flex h-16 items-center justify-between px-4 relative">
-          {/* Back Button */}
-          {showBackButton && pathname !== "/" && (
-            <Link to="/" className="absolute left-4 top-1/2 -translate-y-1/2 z-20">
-              <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full hover:bg-muted">
-                <ArrowLeft className="h-4 w-4" />
-                <span className="sr-only">{t('back') || "Back"}</span>
+      <header className="sticky top-0 z-50 border-b border-border bg-background/95 backdrop-blur lg:hidden">
+        <div className="flex h-14 items-center justify-between px-4">
+          <div className="flex min-w-0 items-center gap-2.5">
+            {showBackButton && pathname !== "/" && (
+              <Button variant="ghost" size="icon" asChild className="h-8 w-8 rounded-md">
+                <Link to="/">
+                  <ArrowLeft className="h-4 w-4" />
+                  <span className="sr-only">{t("back") || "Back"}</span>
+                </Link>
               </Button>
-            </Link>
-          )}
-
-          {/* Brand Logo Container */}
-          <div className={cn("flex min-w-0 items-center", showBackButton && pathname !== "/" ? "pl-12" : "")}>
-            <Link
-              to="/"
-              onClick={handleLogoClick}
-              className="flex min-w-0 items-center gap-2"
-            >
-              <div className="h-6 w-6 rounded bg-primary flex items-center justify-center font-black text-primary-foreground text-[10px] shadow-sm shadow-primary/30 select-none shrink-0">T</div>
-              <span className="truncate text-lg font-bold tracking-tight bg-gradient-to-r from-primary via-primary/80 to-primary/50 bg-clip-text text-transparent hover:opacity-95 transition-all">
-                {t("appName") || "ThreatSumm4ry"}
+            )}
+            <Link to="/" onClick={handleLogoClick} className="flex min-w-0 items-center gap-2">
+              <span className="grid h-7 w-7 place-items-center rounded-md border border-border bg-foreground text-[11px] font-black text-background">
+                t4
               </span>
+              <span className="truncate text-sm font-bold tracking-tight text-foreground">threatsumm4ry</span>
             </Link>
             {logoAddon}
           </div>
 
-          {/* Right Side Actions Container */}
           <div className="flex items-center gap-2">
-            {/* Custom actions passed from page */}
-            {actions && <div className="flex items-center gap-1.5">{actions}</div>}
-
-            {/* Divider if actions exist */}
-            {actions && <div className="hidden sm:block w-px h-4 bg-border/60 mx-1" />}
-
-            {/* Global Language and Theme Toggles */}
-            <div className="flex items-center gap-1">
-              <LanguageToggle />
-              <ThemeToggle />
-            </div>
-
-            {/* User / auth (mobile) */}
-            {!authLoading && (
-              auth.authenticated ? (
-                <Link to="/profile" className="shrink-0 ml-0.5">
-                  <Avatar className="h-7 w-7 ring-1 ring-primary/20">
-                    <AvatarImage src={`https://github.com/${auth.login}.png?size=48`} alt={auth.login} />
-                    <AvatarFallback className="text-[10px] font-semibold bg-primary/10 text-primary">{auth.login?.[0]?.toUpperCase() ?? "?"}</AvatarFallback>
-                  </Avatar>
-                </Link>
-              ) : (
-                <Link to="/login" className="shrink-0 ml-0.5">
-                  <Button variant="ghost" size="icon" className="h-7 w-7 rounded-full text-muted-foreground hover:text-foreground">
-                    <LogIn className="h-4 w-4" />
-                  </Button>
-                </Link>
-              )
-            )}
-
+            <Button variant="ghost" size="sm" asChild className="hidden h-8 px-2 text-xs sm:inline-flex">
+              <Link to={auth.authenticated ? "/relatorios" : "/cadastro"}>
+                {auth.authenticated ? (pt ? "Gerar relatorio" : "Create report") : (pt ? "Cadastrar" : "Sign up")}
+              </Link>
+            </Button>
             <Sheet>
               <SheetTrigger asChild>
-                <Button variant="outline" size="icon" className="h-8 w-8 rounded-full border-border/50 px-0 shadow-sm">
+                <Button variant="outline" size="icon" className="h-8 w-8 rounded-md px-0">
                   <Menu className="h-4 w-4" />
                   <span className="sr-only">Open navigation</span>
                 </Button>
               </SheetTrigger>
-              <SheetContent side="left" className="flex w-[86vw] max-w-sm flex-col overflow-y-auto p-4">
-                <SheetHeader className="mb-4 text-left">
+              <SheetContent side="left" className="flex w-[92vw] max-w-sm flex-col overflow-y-auto border-border bg-background p-4">
+                <SheetHeader className="mb-5 text-left">
                   <SheetTitle className="flex items-center gap-2">
-                    <span className="grid h-7 w-7 place-items-center rounded bg-primary text-[11px] font-black text-primary-foreground">T</span>
-                    ThreatSumm4ry
+                    <span className="grid h-7 w-7 place-items-center rounded-md border border-border bg-foreground text-[11px] font-black text-background">
+                      t4
+                    </span>
+                    threatsumm4ry
                   </SheetTitle>
                 </SheetHeader>
 
                 <nav className="flex flex-1 flex-col gap-5">
-                  <div className="flex flex-col gap-1">
-                    {navItems.filter((item) => item.isHome).map(renderMobileNavItem)}
+                  {renderMobileItem(homeItem)}
+                  {navGroups.map(renderMobileGroup)}
+
+                  <div className="mt-auto border-t border-border pt-4">
+                    <div className="mb-3 flex items-center gap-2">
+                      <LanguageToggle />
+                      <ThemeToggle />
+                    </div>
+                    <div className="grid gap-2">
+                      {auth.authenticated ? (
+                        <>
+                          <SheetClose asChild>
+                            <Button variant="outline" asChild className="justify-start">
+                              <Link to="/profile"><User className="h-4 w-4" /> {pt ? "Perfil" : "Profile"}</Link>
+                            </Button>
+                          </SheetClose>
+                          <SheetClose asChild>
+                            <Button variant="outline" asChild className="justify-start">
+                              <Link to="/settings"><SettingsIcon className="h-4 w-4" /> {pt ? "Configuracoes" : "Settings"}</Link>
+                            </Button>
+                          </SheetClose>
+                          {auth.isAdmin && (
+                            <SheetClose asChild>
+                              <Button variant="outline" asChild className="justify-start">
+                                <Link to="/admin"><ShieldCheck className="h-4 w-4" /> Admin</Link>
+                              </Button>
+                            </SheetClose>
+                          )}
+                        </>
+                      ) : (
+                        <>
+                          <SheetClose asChild>
+                            <Button variant="outline" asChild className="justify-start">
+                              <Link to="/login"><LogIn className="h-4 w-4" /> {pt ? "Entrar" : "Sign in"}</Link>
+                            </Button>
+                          </SheetClose>
+                          <SheetClose asChild>
+                            <Button asChild className="justify-start">
+                              <Link to="/cadastro"><Github className="h-4 w-4" /> {pt ? "Cadastrar" : "Sign up"}</Link>
+                            </Button>
+                          </SheetClose>
+                        </>
+                      )}
+                    </div>
                   </div>
-
-                  <MobileSection label={language === "pt" ? "Investigar" : "Investigate"}>
-                    {navItems.filter((item) => ["/vendors", "/dnsbl", "/phishing-analyzer", "/threat-hunting"].includes(item.path)).map(renderMobileNavItem)}
-                  </MobileSection>
-
-                  <MobileSection label={language === "pt" ? "Inteligência" : "Intelligence"}>
-                    {navItems.filter((item) => ["/advisories", "/newsletter", "/cves", "/atores", "/patch-tuesday"].includes(item.path)).map(renderMobileNavItem)}
-                  </MobileSection>
-
-                  <MobileSection label={language === "pt" ? "Relatórios" : "Reports"}>
-                    {navItems.filter((item) => ["/threat-brief", "/features"].includes(item.path)).map(renderMobileNavItem)}
-                  </MobileSection>
                 </nav>
               </SheetContent>
             </Sheet>
@@ -303,148 +438,90 @@ export function Header({ actions, logoAddon, onLogoClick, showBackButton = false
         </div>
       </header>
 
-      {/* Desktop Sidebar (lg:flex) */}
-      <aside className={cn(
-        "hidden lg:fixed lg:left-0 lg:top-0 lg:z-30 lg:flex lg:h-screen lg:flex-col lg:justify-between lg:overflow-y-auto lg:border-r lg:border-border/50 lg:bg-muted/40 transition-all duration-300",
-        isCollapsed ? "lg:w-20 lg:p-3" : "lg:w-64 lg:p-4"
-      )}>
-        {/* Top Part */}
-        <div className="flex flex-col gap-6">
-          {/* Brand Logo Container */}
-          <div className={cn("flex items-center gap-2 relative py-2", isCollapsed ? "justify-center" : "pl-2")}>
-            <Link
-              to="/"
-              onClick={handleLogoClick}
-              className="flex items-center gap-2.5"
-            >
-              <div className="h-6 w-6 rounded bg-primary flex items-center justify-center font-black text-primary-foreground text-[10px] shadow-sm shadow-primary/30 select-none shrink-0">T</div>
-              {!isCollapsed && (
-                <span className="font-bold tracking-tight text-[17px] bg-gradient-to-r from-primary via-primary/80 to-primary/50 bg-clip-text text-transparent hover:opacity-95 transition-all">
-                  {t("appName") || "ThreatSumm4ry"}
+      <aside
+        className={cn(
+          "fixed inset-y-0 left-0 z-40 hidden border-r border-border bg-sidebar text-sidebar-foreground transition-[width] duration-200 lg:flex lg:flex-col",
+          isCollapsed ? "w-[72px]" : "w-[264px]"
+        )}
+      >
+        <div className="flex h-full min-h-0 flex-col">
+          <div className={cn("border-b border-border p-3", isCollapsed ? "px-3" : "px-4")}>
+            <div className={cn("flex h-9 items-center", isCollapsed ? "justify-center" : "justify-between gap-2")}>
+              <Link to="/" onClick={handleLogoClick} className="flex min-w-0 items-center gap-2">
+                <span className="grid h-8 w-8 shrink-0 place-items-center rounded-md border border-border bg-foreground text-[11px] font-black text-background">
+                  t4
                 </span>
-              )}
-            </Link>
-            {!isCollapsed && logoAddon}
+                {!isCollapsed && (
+                  <span className="min-w-0">
+                    <span className="block truncate text-sm font-bold tracking-tight text-foreground">threatsumm4ry</span>
+                    <span className="block truncate text-[11px] text-muted-foreground">SOC & CTI console</span>
+                  </span>
+                )}
+              </Link>
+              {!isCollapsed && logoAddon}
+            </div>
           </div>
 
-          {/* Navigation Links Grouped by Categories */}
-          <div className="flex flex-col gap-5">
-            {/* Home — sem header de categoria */}
-            <div className="flex flex-col gap-1">
-              {navItems.filter((item) => item.isHome).map((item) => renderNavItem(item, isRouteActive(item.path)))}
-            </div>
-
-            {renderCategory(language === 'pt' ? 'Investigar' : 'Investigate',
-              ["/vendors", "/dnsbl", "/phishing-analyzer", "/threat-hunting"])}
-
-            {renderCategory(language === 'pt' ? 'Inteligência' : 'Intelligence',
-              ["/advisories", "/newsletter", "/cves", "/atores", "/patch-tuesday"])}
-
-            {renderCategory(language === 'pt' ? 'Relatórios' : 'Reports',
-              ["/threat-brief"])}
-
-            {/* Features — discreto, sem categoria */}
-            <div className="flex flex-col gap-1">
-              {navItems.filter((item) => item.path === "/features").map((item) => renderNavItem(item, isRouteActive(item.path)))}
-            </div>
+          <div className="min-h-0 flex-1 overflow-y-auto px-3 py-4">
+            <nav className="space-y-4">
+              {renderDesktopItem(homeItem)}
+              {navGroups.map(renderDesktopGroup)}
+            </nav>
           </div>
-        </div>
 
-        {/* Bottom Part */}
-        <div className="flex flex-col gap-4 border-t border-border/50 pt-4">
-          {/* User / auth */}
-          {renderUser()}
+          <div className={cn("border-t border-border p-3", isCollapsed ? "space-y-2" : "space-y-3")}>
+            {actions && !isCollapsed && <div className="grid gap-2">{actions}</div>}
 
-          {/* Admin (admin only) */}
-          {!authLoading && auth.authenticated && auth.isAdmin && (
-            <Link to="/admin" className="w-full block -mt-2">
-              {isCollapsed ? (
-                <Tooltip delayDuration={150}>
-                  <TooltipTrigger asChild>
-                    <Button variant="ghost" className={cn("w-11 h-11 rounded-xl mx-auto justify-center px-0", pathname === "/admin" ? "bg-primary/15 text-primary ring-1 ring-inset ring-primary/20" : "text-muted-foreground/80 hover:text-foreground hover:bg-muted/20")}>
-                      <ShieldCheck className="h-[18px] w-[18px]" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent side="right" className="font-semibold text-xs">Admin</TooltipContent>
-                </Tooltip>
-              ) : (
-                <Button variant="ghost" className={cn("w-full h-10 rounded-xl justify-start px-3.5 gap-3 text-[13px] font-semibold", pathname === "/admin" ? "bg-primary/15 text-primary ring-1 ring-inset ring-primary/20" : "text-muted-foreground/80 hover:text-foreground hover:bg-muted/20")}>
-                  <ShieldCheck className="h-[18px] w-[18px]" /> Admin
-                </Button>
-              )}
-            </Link>
-          )}
-
-          {/* Settings (signed-in only) */}
-          {!authLoading && auth.authenticated && (
-            <Link to="/settings" className="w-full block -mt-2">
-              {isCollapsed ? (
-                <Tooltip delayDuration={150}>
-                  <TooltipTrigger asChild>
-                    <Button variant="ghost" className={cn("w-11 h-11 rounded-xl mx-auto justify-center px-0", pathname === "/settings" ? "bg-primary/15 text-primary ring-1 ring-inset ring-primary/20" : "text-muted-foreground/80 hover:text-foreground hover:bg-muted/20")}>
-                      <SettingsIcon className="h-[18px] w-[18px]" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent side="right" className="font-semibold text-xs">{tr({ pt: "Configurações", en: "Settings", es: "Configuración", fr: "Paramètres" })}</TooltipContent>
-                </Tooltip>
-              ) : (
-                <Button variant="ghost" className={cn("w-full h-10 rounded-xl justify-start px-3.5 gap-3 text-[13px] font-semibold", pathname === "/settings" ? "bg-primary/15 text-primary ring-1 ring-inset ring-primary/20" : "text-muted-foreground/80 hover:text-foreground hover:bg-muted/20")}>
-                  <SettingsIcon className="h-[18px] w-[18px]" /> {tr({ pt: "Configurações", en: "Settings", es: "Configuración", fr: "Paramètres" })}
-                </Button>
-              )}
-            </Link>
-          )}
-
-          {/* Collapse Trigger Button */}
-          <Button
-            variant="ghost"
-            onClick={toggleSidebar}
-            className={cn(
-              "w-full h-10 rounded-xl text-muted-foreground/80 hover:text-foreground hover:bg-muted/20 flex items-center gap-3 transition-all duration-200",
-              isCollapsed ? "justify-center px-0 w-11 h-11 rounded-xl mx-auto" : "px-3.5 justify-start"
+            {!isCollapsed && auth.authenticated && (
+              <Button asChild className="h-9 w-full justify-start rounded-md">
+                <Link to="/relatorios">
+                  <FileSearch className="h-4 w-4" />
+                  {pt ? "Gerar relatorio" : "Create report"}
+                </Link>
+              </Button>
             )}
-            title={isCollapsed ? tr({ pt: "Expandir", en: "Expand", es: "Expandir", fr: "Développer" }) : tr({ pt: "Colapsar", en: "Collapse", es: "Contraer", fr: "Réduire" })}
-          >
-            {isCollapsed ? (
-              <ChevronRight className="h-5 w-5 text-muted-foreground" />
-            ) : (
-              <>
-                <ChevronLeft className="h-5 w-5 text-muted-foreground" />
-                <span className="text-xs font-semibold">{tr({ pt: "Recolher Menu", en: "Collapse Sidebar", es: "Contraer Menú", fr: "Réduire le Menu" })}</span>
-              </>
+
+            {renderDesktopAccount()}
+
+            {!isCollapsed && !authLoading && !auth.authenticated && (
+              <Button asChild className="h-9 w-full justify-start rounded-md">
+                <Link to="/cadastro">
+                  <Github className="h-4 w-4" />
+                  {pt ? "Cadastrar" : "Sign up"}
+                </Link>
+              </Button>
             )}
-          </Button>
 
-          {/* Custom actions passed from page */}
-          {actions && (
-            <div className="w-full">
-              {actions}
-            </div>
-          )}
+            {!authLoading && auth.authenticated && (
+              <div className={cn("grid gap-1", isCollapsed ? "justify-items-center" : "")}>
+                {auth.isAdmin && renderDesktopItem({ path: "/admin", label: "Admin", icon: ShieldCheck })}
+                {renderDesktopItem({
+                  path: "/settings",
+                  label: tr({ pt: "Configuracoes", en: "Settings", es: "Configuración", fr: "Paramètres" }),
+                  icon: SettingsIcon,
+                })}
+              </div>
+            )}
 
-          {/* Theme & Language Toggles */}
-          <div className={cn("flex items-center justify-between gap-2", isCollapsed ? "flex-col justify-center px-0 gap-3" : "px-1")}>
-            <div className={cn("flex items-center gap-2", isCollapsed && "flex-col")}>
-              <LanguageToggle />
-              {!isCollapsed && (
-                <span className="text-[10px] font-bold text-muted-foreground/50 uppercase tracking-wider">
-                  LANG
-                </span>
-              )}
+            <div className={cn("flex items-center gap-2", isCollapsed ? "flex-col" : "justify-between")}>
+              <div className={cn("flex items-center gap-2", isCollapsed && "flex-col")}>
+                <LanguageToggle />
+                <ThemeToggle />
+              </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={toggleSidebar}
+                className="h-8 w-8 rounded-md text-muted-foreground hover:text-foreground"
+                title={isCollapsed ? (pt ? "Expandir menu" : "Expand sidebar") : (pt ? "Recolher menu" : "Collapse sidebar")}
+              >
+                {isCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
+                <span className="sr-only">{pt ? "Alternar menu" : "Toggle sidebar"}</span>
+              </Button>
             </div>
-            <ThemeToggle />
           </div>
         </div>
       </aside>
     </>
-  );
-}
-
-function MobileSection({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="space-y-2">
-      <div className="px-3 text-[11px] font-bold uppercase tracking-wider text-muted-foreground/70">{label}</div>
-      <div className="flex flex-col gap-1">{children}</div>
-    </div>
   );
 }

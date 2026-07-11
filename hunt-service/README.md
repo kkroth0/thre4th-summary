@@ -11,7 +11,7 @@ pinned: false
 # ThreatSumm4ry — Hunt Service
 
 Python microservice that turns a security-report URL into a validated **Threat
-Hunting Pack**: scrape → Groq (Llama 3.3 70B) → Pydantic validation/retry → defanged
+Hunting Pack**: scrape → OpenRouter/DeepSeek → Pydantic validation/retry → defanged
 structured output (threat actor, MITRE TTPs, IOCs, hunting hypothesis, Sentinel
 KQL + Sigma, CISO/SOC briefs).
 
@@ -21,14 +21,14 @@ and enforces the advisory allowlist. This service additionally requires the
 
 ## Files
 - `scraper.py` — Scrapling ingestion (lightweight fetch, stealth-browser fallback).
-- `analyzer.py` — Groq call + Pydantic schema + validate-or-retry + defang.
+- `analyzer.py` — OpenRouter call + Pydantic schema + validate-or-retry + defang.
 - `main.py` — FastAPI app: `POST /hunt-pack`, `GET /health`.
 
 ## Run locally
 ```bash
 pip install -r requirements.txt
 scrapling install            # downloads the stealth browser
-cp .env.example .env         # set GROQ_API_KEY and HUNT_SERVICE_SECRET
+cp .env.example .env         # set OPENROUTER_API_KEY and HUNT_SERVICE_SECRET
 uvicorn main:app --port 7860
 curl -s localhost:7860/health
 curl -s -X POST localhost:7860/hunt-pack \
@@ -39,7 +39,7 @@ curl -s -X POST localhost:7860/hunt-pack \
 ## Deploy — Hugging Face Spaces (Docker, free, browser-capable)
 1. Create a new **Space** → SDK **Docker** (16 GB RAM tier handles the browser).
 2. Push this `hunt-service/` directory as the Space repo (the `Dockerfile` listens on 7860).
-3. In the Space **Settings → Secrets**, set `GROQ_API_KEY` and `HUNT_SERVICE_SECRET`.
+3. In the Space **Settings → Secrets**, set `OPENROUTER_API_KEY`, `OPENROUTER_MODEL` and `HUNT_SERVICE_SECRET`.
 4. The public URL becomes the Node backend's `HUNT_SERVICE_URL`.
 
 Note: free Spaces sleep after inactivity — the first request after idle is slow

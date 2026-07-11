@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
-import { fetchAuth, logout as apiLogout, loginUrl, type AuthState } from "@/services/threatApi";
+import { fetchAuth, logout as apiLogout, loginUrl, signupUrl, type AuthState } from "@/services/threatApi";
 import { identify } from "@/lib/analytics";
 
 interface AuthContextType {
@@ -7,12 +7,14 @@ interface AuthContextType {
   auth: AuthState;
   /** true até a primeira resposta de /api/auth/me. */
   loading: boolean;
-  /** Re-busca /api/auth/me (ex.: depois de salvar a chave Groq). */
+  /** Re-busca /api/auth/me (ex.: depois de salvar a chave OpenRouter). */
   refresh: () => Promise<void>;
   /** Logout + refresh. */
   signOut: () => Promise<void>;
   /** URL de início do OAuth do GitHub. */
   loginUrl: string;
+  /** URL de início do OAuth do GitHub permitindo cadastro no GitHub. */
+  signupUrl: string;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -43,7 +45,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [refresh]);
 
   return (
-    <AuthContext.Provider value={{ auth, loading, refresh, signOut, loginUrl }}>
+    <AuthContext.Provider value={{ auth, loading, refresh, signOut, loginUrl, signupUrl }}>
       {children}
     </AuthContext.Provider>
   );

@@ -26,6 +26,8 @@ const Features = lazy(() => import("./pages/Features"));
 const Advisories = lazy(() => import("./pages/Advisories"));
 const AdvisoryPost = lazy(() => import("./pages/AdvisoryPost"));
 const Admin = lazy(() => import("./pages/Admin"));
+const LatamThreats = lazy(() => import("./pages/LatamThreats"));
+const ThreatMap = lazy(() => import("./pages/ThreatMap"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
 const queryClient = new QueryClient();
@@ -48,6 +50,7 @@ const App = () => (
               <Routes>
                 {/* Public Routes (CTI & CVE Dashboard) */}
                 <Route path="/" element={<Index />} />
+                <Route path="/analyzer" element={<Index />} />
                 <Route path="/cves" element={<CveDashboard />} />
                 <Route path="/atores" element={<Actors />} />
                 <Route path="/actors" element={<Navigate to="/atores" replace />} />
@@ -55,20 +58,26 @@ const App = () => (
                 <Route path="/features" element={<Features />} />
                 <Route path="/advisories" element={<Advisories />} />
                 <Route path="/advisories/:slug" element={<AdvisoryPost />} />
+                <Route path="/latam-threats" element={<LatamThreats />} />
+                <Route path="/threat-map" element={<ThreatMap />} />
 
                 {/* Tool Routes */}
                 <Route path="/vendors" element={<VendorDirectory />} />
                 <Route path="/dnsbl" element={<DnsblCheck />} />
                 <Route path="/phishing-analyzer" element={<PhishingAnalyzer />} />
 
-                {/* Premium Routes (require sign-in) */}
-                <Route path="/threat-brief" element={<PremiumRoute feature="threat-brief"><DailyBulletin /></PremiumRoute>} />
+                {/* Premium Routes (require premium allow-list) */}
+                <Route path="/relatorios" element={<PremiumRoute feature="threat-brief"><DailyBulletin /></PremiumRoute>} />
+                <Route path="/reports" element={<Navigate to="/relatorios" replace />} />
+                <Route path="/threat-brief" element={<Navigate to="/relatorios" replace />} />
                 <Route path="/newsletter" element={<PremiumRoute feature="advisory-feed"><Newsletter /></PremiumRoute>} />
                 <Route path="/threat-hunting" element={<PremiumRoute feature="threat-hunting"><ThreatHunting /></PremiumRoute>} />
-                <Route path="/daily-bulletin" element={<Navigate to="/threat-brief" replace />} />
+                <Route path="/daily-bulletin" element={<Navigate to="/relatorios" replace />} />
 
                 {/* Auth */}
                 <Route path="/login" element={<Login />} />
+                <Route path="/cadastro" element={<Login />} />
+                <Route path="/signup" element={<Navigate to="/cadastro" replace />} />
                 <Route path="/profile" element={<Profile />} />
                 <Route path="/settings" element={<Settings />} />
                 <Route path="/admin" element={<Admin />} />

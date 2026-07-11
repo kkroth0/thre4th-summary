@@ -25,7 +25,6 @@ const Profile = () => {
   useEffect(() => {
     const p = new URLSearchParams(window.location.search).get("auth");
     if (p === "ok") toast.success(pt ? "Login efetuado" : "Signed in");
-    else if (p === "negado") toast.error(pt ? "Conta não autorizada" : "Account not allow-listed");
     else if (p === "erro") toast.error(pt ? "Falha no login" : "Sign-in failed");
     if (p) window.history.replaceState({}, "", window.location.pathname);
   }, [pt]);
@@ -68,7 +67,10 @@ const Profile = () => {
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-lg font-semibold truncate">{auth.login}</span>
-              <Badge variant="secondary" className="gap-1"><CheckCircle2 className="h-3 w-3 text-emerald-500" /> {pt ? "Autorizado" : "Allow-listed"}</Badge>
+              <Badge variant="secondary" className="gap-1">
+                <CheckCircle2 className="h-3 w-3 text-emerald-500" />
+                {auth.isPremium ? "Premium" : (pt ? "Conta free" : "Free account")}
+              </Badge>
             </div>
             <a
               href={`https://github.com/${auth.login}`} target="_blank" rel="noreferrer"
@@ -83,7 +85,25 @@ const Profile = () => {
         </CardContent>
       </Card>
 
-      {/* Admin (só admin): allow-list, publicações, integrações num só lugar */}
+      {!auth.isPremium && (
+        <Card className="mb-5 border-primary/20 bg-primary/5">
+          <CardContent className="p-5 flex items-center gap-4">
+            <span className="h-11 w-11 rounded-xl bg-primary/10 ring-1 ring-inset ring-primary/20 flex items-center justify-center shrink-0">
+              <ShieldCheck className="h-5 w-5 text-primary" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <div className="font-medium">{pt ? "Ferramentas gratuitas liberadas" : "Free tools enabled"}</div>
+              <div className="text-sm text-muted-foreground">
+                {pt
+                  ? "Relatórios, newsletter e threat hunting precisam de acesso premium."
+                  : "Reports, newsletter and threat hunting require premium access."}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Admin (só admin): allow-list premium, publicações, integrações num só lugar */}
       {auth.isAdmin && (
         <Link to="/admin" className="block mb-5 group">
           <Card className="transition-colors group-hover:border-border/50">
@@ -94,7 +114,7 @@ const Profile = () => {
               <div className="min-w-0 flex-1">
                 <div className="font-medium">{pt ? "Painel de administração" : "Admin panel"}</div>
                 <div className="text-sm text-muted-foreground">
-                  {pt ? "Allow-list, publicações e status das integrações." : "Allow-list, posts and integration status."}
+                  {pt ? "Premium allow-list, publicações e status das integrações." : "Premium allow-list, posts and integration status."}
                 </div>
               </div>
               <ArrowRight className="h-4 w-4 text-muted-foreground shrink-0" />
@@ -113,14 +133,14 @@ const Profile = () => {
             <div className="min-w-0 flex-1">
               <div className="font-medium flex items-center gap-2">
                 {pt ? "Chaves de API (BYOK)" : "API keys (BYOK)"}
-                {auth.hasKey && <Badge variant="secondary" className="gap-1"><CheckCircle2 className="h-3 w-3 text-emerald-500" /> Groq</Badge>}
+                {auth.hasKey && <Badge variant="secondary" className="gap-1"><CheckCircle2 className="h-3 w-3 text-emerald-500" /> OpenRouter</Badge>}
               </div>
               <div className="text-sm text-muted-foreground">
                 {keyCount === null
                   ? (pt ? "Gerencie suas chaves de API." : "Manage your API keys.")
                   : keyCount > 0
                     ? (pt ? `${keyCount} chave(s) configurada(s).` : `${keyCount} key(s) configured.`)
-                    : (pt ? "Nenhuma chave ainda — adicione a sua chave Groq para gerar." : "No keys yet — add your Groq key to generate.")}
+                    : (pt ? "Nenhuma chave ainda — adicione a sua chave OpenRouter para gerar." : "No keys yet — add your OpenRouter key to generate.")}
               </div>
             </div>
             <SettingsIcon className="h-4 w-4 text-muted-foreground shrink-0" />
@@ -128,22 +148,24 @@ const Profile = () => {
         </Card>
       </Link>
 
-      {/* Atalho pro gerador */}
+      {/* Atalho pro gerador premium */}
       <Card className="bg-muted/20 border-dashed">
         <CardContent className="p-4 flex items-center justify-between gap-3">
           <div className="flex items-center gap-3 min-w-0">
             <FileText className="h-5 w-5 text-primary shrink-0" />
             <div className="min-w-0">
-              <div className="font-medium">Threat Brief</div>
+              <div className="font-medium">{pt ? "Gerador de Relatorios" : "Report Generator"}</div>
               <div className="text-sm text-muted-foreground truncate">
-                {auth.hasKey
-                  ? (pt ? "Tudo pronto — cole uma URL e gere seu boletim." : "All set — paste a URL and generate your bulletin.")
-                  : (pt ? "Adicione sua chave Groq nas configurações para começar." : "Add your Groq key in settings to get started.")}
+                {!auth.isPremium
+                  ? (pt ? "Recurso premium — peça liberação para acessar." : "Premium feature — request access to use it.")
+                  : auth.hasKey
+                  ? (pt ? "Tudo pronto — cole uma URL e gere seu relatorio." : "All set — paste a URL and generate your report.")
+                  : (pt ? "Adicione sua chave OpenRouter nas configurações para começar." : "Add your OpenRouter key in settings to get started.")}
               </div>
             </div>
           </div>
-          <Button asChild variant={auth.hasKey ? "default" : "outline"} className="shrink-0">
-            <Link to="/threat-brief">{pt ? "Abrir" : "Open"} <ArrowRight className="h-4 w-4 ml-1.5" /></Link>
+          <Button asChild variant={auth.isPremium && auth.hasKey ? "default" : "outline"} className="shrink-0">
+            <Link to="/relatorios">{auth.isPremium ? (pt ? "Gerar" : "Create") : "Premium"} <ArrowRight className="h-4 w-4 ml-1.5" /></Link>
           </Button>
         </CardContent>
       </Card>

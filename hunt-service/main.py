@@ -1,6 +1,6 @@
 """FastAPI entrypoint for the Threat Hunting microservice.
 
-Flow: scrape (Scrapling) -> analyze (Groq + Pydantic validate/retry) -> defanged
+Flow: scrape (Scrapling) -> analyze (OpenRouter + Pydantic validate/retry) -> defanged
 structured Hunt Pack. Intended to sit behind the Node backend, which proxies to
 it and enforces the advisory allowlist; this service additionally requires a
 shared secret so it can't be called by arbitrary clients.

@@ -23,7 +23,7 @@ const CATALOG: Group[] = [
   {
     title: { pt: "IA / LLM", en: "AI / LLM" },
     items: [
-      { id: "groq", label: "Groq", url: "https://console.groq.com/keys", placeholder: "gsk_…", note: { pt: "Usada para gerar os Threat Briefs.", en: "Used to generate Threat Briefs." } },
+      { id: "openrouter", label: "OpenRouter", url: "https://openrouter.ai/settings/keys", placeholder: "sk-or-v1-...", note: { pt: "Usada para gerar relatórios com DeepSeek.", en: "Used to generate reports with DeepSeek." } },
     ],
   },
   {
@@ -150,7 +150,7 @@ const Settings = () => {
   }, []);
   useEffect(() => { if (auth.authenticated) load(); }, [auth.authenticated, load]);
 
-  // groq altera auth.hasKey (usado pelo Threat Brief) — mantém a sessão em sincronia.
+  // openrouter altera auth.hasKey (usado pelo gerador de relatórios) — mantém a sessão em sincronia.
   const onChanged = () => { load(); refresh(); };
 
   const shell = (children: React.ReactNode) => (
@@ -178,8 +178,8 @@ const Settings = () => {
       <div className="rounded-lg border border-border/60 bg-muted/20 px-4 py-3 mb-6 text-sm text-muted-foreground flex items-start gap-2.5">
         <ShieldCheck className="h-4 w-4 mt-0.5 text-primary shrink-0" />
         {pt
-          ? "As chaves são armazenadas cifradas (AES) e vinculadas só à sua conta. A chave Groq já é usada nos Threat Briefs; as demais serão usadas nos lookups em breve."
-          : "Keys are stored encrypted (AES) and tied only to your account. The Groq key already powers Threat Briefs; the others will be wired into lookups soon."}
+          ? "As chaves são armazenadas cifradas (AES) e vinculadas só à sua conta. A chave OpenRouter já é usada no gerador de relatórios; as demais serão usadas nos lookups em breve."
+          : "Keys are stored encrypted (AES) and tied only to your account. The OpenRouter key already powers the report generator; the others will be wired into lookups soon."}
       </div>
 
       {loading ? (
