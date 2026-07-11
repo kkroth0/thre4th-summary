@@ -1355,24 +1355,6 @@ export const deletePost = async (id: string): Promise<void> => {
     if (!r.ok) return postError(r);
 };
 
-// Alias legado: salva a chave OpenRouter do usuário (cifrada no servidor). Devolve { hasKey }.
-export const saveGroqKey = async (key: string): Promise<{ hasKey: boolean }> => {
-    const r = await fetch('/api/user/groq-key', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ key }),
-    });
-    if (!r.ok) {
-        const e = await r.json().catch(() => ({}));
-        throw new Error(e.error || `Key API error: ${r.status}`);
-    }
-    return r.json();
-};
-
-export const deleteGroqKey = async (): Promise<void> => {
-    await fetch('/api/user/groq-key', { method: 'DELETE' }).catch(() => {});
-};
-
 // BYOK genérico: quais providers têm chave configurada (booleans, nunca os valores).
 export type ApiKeysState = Record<string, boolean>;
 

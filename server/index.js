@@ -2385,7 +2385,7 @@ app.get('/api/auth/me', (req, res) => {
     res.json({
         authenticated: true,
         login: p.login,
-        hasKey: !!(u && (u.openRouterKeyEnc || u.groqKeyEnc)),
+        hasKey: !!(u && u.openRouterKeyEnc),
         isAdmin: isAdmin(p.login),
         isPremium: sessionHasPremium(p),
     });
@@ -2396,38 +2396,21 @@ app.post('/api/auth/logout', (req, res) => {
     res.json({ ok: true });
 });
 
-// BYOK: grava/apaga a chave OpenRouter do usuário (cifrada). Nunca devolve a chave.
-// Mantém /groq-key como alias legado para não quebrar clientes antigos.
-const validGroqKey = (k) => typeof k === 'string' && /^gsk_[A-Za-z0-9_-]{20,}$/.test(k);
+// BYOK: chave OpenRouter do usuário (cifrada). Grava/apaga via /api/user/keys/openrouter.
 const validOpenRouterKey = (k) => typeof k === 'string' && k.length >= 20 && k.length <= 400;
-app.put('/api/user/groq-key', requireAuth, (req, res) => {
-    if (!ENC_KEY) return res.status(500).json({ error: 'armazenamento de chave não configurado no servidor' });
-    const key = (req.body?.key || '').toString().trim();
-    if (!validOpenRouterKey(key)) return res.status(400).json({ error: 'chave OpenRouter inválida' });
-    const u = usersStore[req.user.sub] || (usersStore[req.user.sub] = { login: req.user.login, openRouterKeyEnc: null, createdAt: new Date().toISOString() });
-    u.openRouterKeyEnc = encryptSecret(key);
-    u.updatedAt = new Date().toISOString();
-    saveUsers();
-    res.json({ hasKey: true });
-});
-app.delete('/api/user/groq-key', requireAuth, (req, res) => {
-    const u = usersStore[req.user.sub];
-    if (u) { u.openRouterKeyEnc = null; u.updatedAt = new Date().toISOString(); saveUsers(); }
-    res.json({ hasKey: false });
-});
 
 // ─── BYOK genérico: chaves de API por provider, cifradas (apiKeysEnc). O 'openrouter'
 // é roteado pro openRouterKeyEnc (que o gerador já usa). Nunca devolve valores — só
 // quais providers estão configurados. Wiring por-vendor nos lookups fica pra depois.
 const BYOK_PROVIDERS = new Set([
-    'openrouter', 'groq', 'virustotal', 'abuseipdb', 'shodan', 'alienvault', 'pulsedive',
+    'openrouter', 'virustotal', 'abuseipdb', 'shodan', 'alienvault', 'pulsedive',
     'hybridanalysis', 'metadefender', 'criminalip', 'censys',
     'urlhaus', 'threatfox', 'phishtank', 'whois', 'dnsdumpster',
 ]);
 function userKeysStatus(u) {
-    const out = { openrouter: !!(u && (u.openRouterKeyEnc || u.groqKeyEnc)), groq: !!(u && u.groqKeyEnc) };
+    const out = { openrouter: !!(u && u.openRouterKeyEnc) };
     const m = (u && u.apiKeysEnc) || {};
-    for (const p of BYOK_PROVIDERS) if (p !== 'groq' && p !== 'openrouter') out[p] = !!m[p];
+    for (const p of BYOK_PROVIDERS) if (p !== 'openrouter') out[p] = !!m[p];
     return out;
 }
 app.get('/api/user/keys', requireAuth, (req, res) => {
@@ -2439,11 +2422,9 @@ app.put('/api/user/keys/:provider', requireAuth, (req, res) => {
     if (!BYOK_PROVIDERS.has(provider)) return res.status(400).json({ error: 'provider desconhecido' });
     const key = (req.body?.key || '').toString().trim();
     if (!key || key.length < 8 || key.length > 400) return res.status(400).json({ error: 'chave inválida' });
-    if (provider === 'groq' && !validGroqKey(key)) return res.status(400).json({ error: 'chave Groq inválida (esperado gsk_...)' });
     if (provider === 'openrouter' && !validOpenRouterKey(key)) return res.status(400).json({ error: 'chave OpenRouter inválida' });
     const u = usersStore[req.user.sub] || (usersStore[req.user.sub] = { login: req.user.login, openRouterKeyEnc: null, createdAt: new Date().toISOString() });
     if (provider === 'openrouter') u.openRouterKeyEnc = encryptSecret(key);
-    else if (provider === 'groq') u.groqKeyEnc = encryptSecret(key);
     else (u.apiKeysEnc || (u.apiKeysEnc = {}))[provider] = encryptSecret(key);
     u.updatedAt = new Date().toISOString();
     saveUsers();
@@ -2455,7 +2436,6 @@ app.delete('/api/user/keys/:provider', requireAuth, (req, res) => {
     const u = usersStore[req.user.sub];
     if (u) {
         if (provider === 'openrouter') u.openRouterKeyEnc = null;
-        else if (provider === 'groq') u.groqKeyEnc = null;
         else if (u.apiKeysEnc) delete u.apiKeysEnc[provider];
         u.updatedAt = new Date().toISOString();
         saveUsers();
@@ -2522,7 +2502,7 @@ app.post('/api/feed/generate', requirePremium, scanLimiter, async (req, res) => 
         // BYOK obrigatório: sem a chave do usuário não há como gerar. Decifra aqui
         // e guarda só em RAM (jobSecrets) — o worker pega via /jobs/pending.
         const u = usersStore[req.user.sub];
-        const encKey = u?.openRouterKeyEnc || u?.groqKeyEnc;
+        const encKey = u?.openRouterKeyEnc;
         if (!encKey) return res.status(400).json({ error: 'adicione sua chave OpenRouter nas configurações antes de gerar', needKey: true });
         let userKey;
         try { userKey = decryptSecret(encKey); }
