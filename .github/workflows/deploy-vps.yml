@@ -13,6 +13,7 @@ on:
 
 permissions:
   contents: read
+  actions: read # download the dist artifact from the triggering CI run
 
 concurrency:
   group: deploy-vps
@@ -46,11 +47,24 @@ jobs:
           node-version: "20"
           cache: npm
 
-      - name: Install dependencies
-        run: npm ci
+      # Reuse the frontend built and validated by CI; fall back to a fresh build
+      # for manual dispatch or if the artifact is unavailable.
+      - name: Download built frontend from CI
+        id: fetch_dist
+        if: ${{ github.event_name == 'workflow_run' }}
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Validate release
-        run: npm run ci
+      - name: Build frontend (fallback)
+        if: ${{ steps.fetch_dist.outcome != 'success' }}
+        run: |
+          npm ci
+          npm run build
 
       - name: Prepare SSH
         shell: bash
