@@ -85,60 +85,51 @@ jobs:
           install -m 600 /dev/null ~/.ssh/known_hosts
           printf '%s\n' "${SSH_KNOWN_HOSTS}" > ~/.ssh/known_hosts
 
-      - name: Upload release to VPS
+      # Flat layout: sync straight into the live app dir. `dist` is fully
+      # generated so it's mirrored with --delete; `server` is synced WITHOUT
+      # --delete and with excludes so runtime state (.env, node_modules and the
+      # JSON stores written by the app) is preserved across deploys.
+      - name: Sync bundle to VPS
         shell: bash
         run: |
           set -euo pipefail
           target="${VPS_USER}@${VPS_HOST}"
-          release_dir="${VPS_APP_DIR}/releases/${RELEASE_SHA}"
+          ssh -p "${VPS_PORT}" "${target}" "mkdir -p '${VPS_APP_DIR}/dist' '${VPS_APP_DIR}/server' '${VPS_APP_DIR}/src/config'"
 
-          ssh -p "${VPS_PORT}" "${target}" "mkdir -p '${release_dir}' '${VPS_APP_DIR}/shared'"
+          rsync -az --delete -e "ssh -p ${VPS_PORT}" \
+            ./dist/ "${target}:${VPS_APP_DIR}/dist/"
 
-          rsync -azR --delete \
-            --exclude='.env' \
+          rsync -az -e "ssh -p ${VPS_PORT}" \
             --exclude='node_modules/' \
-            --exclude='server/node_modules/' \
-            --exclude='server/.users.json' \
-            --exclude='server/.feed-jobs.json' \
-            --exclude='server/.feed-sources.json' \
-            -e "ssh -p ${VPS_PORT}" \
-            ./dist ./server ./src/config ./package.json ./package-lock.json ./nginx.conf ./Dockerfile \
-            "${target}:${release_dir}/"
+            --exclude='.env' \
+            --exclude='.env.*' \
+            --exclude='.users.json' \
+            --exclude='.posts.json' \
+            --exclude='.scans.json' \
+            --exclude='.allowlist.json' \
+            --exclude='.feed-jobs.json' \
+            --exclude='.feed-sources.json' \
+            --exclude='*.bak.*' \
+            ./server/ "${target}:${VPS_APP_DIR}/server/"
 
-      - name: Activate release
+          rsync -az --delete -e "ssh -p ${VPS_PORT}" \
+            ./src/config/ "${target}:${VPS_APP_DIR}/src/config/"
+
+      - name: Install deps and restart service
         shell: bash
         run: |
           set -euo pipefail
           target="${VPS_USER}@${VPS_HOST}"
 
           ssh -p "${VPS_PORT}" "${target}" \
-            "RELEASE_SHA='${RELEASE_SHA}' VPS_APP_DIR='${VPS_APP_DIR}' VPS_SERVICE='${VPS_SERVICE}' bash -s" <<'REMOTE'
+            "VPS_APP_DIR='${VPS_APP_DIR}' VPS_SERVICE='${VPS_SERVICE}' bash -s" <<'REMOTE'
           set -euo pipefail
-
-          release="${VPS_APP_DIR}/releases/${RELEASE_SHA}"
-          shared_env="${VPS_APP_DIR}/shared/.env"
-
-          if [ ! -f "${shared_env}" ]; then
-            touch "${shared_env}"
-            chmod 600 "${shared_env}"
-          fi
-
-          ln -sfn ../../shared/.env "${release}/.env"
-
-          cd "${release}/server"
+          cd "${VPS_APP_DIR}/server"
           npm ci --omit=dev
-
-          ln -sfn "${release}" "${VPS_APP_DIR}/current.next"
-          mv -Tf "${VPS_APP_DIR}/current.next" "${VPS_APP_DIR}/current"
-
           sudo systemctl restart "${VPS_SERVICE}"
-          sudo systemctl --no-pager --lines=30 status "${VPS_SERVICE}"
-
-          find "${VPS_APP_DIR}/releases" -mindepth 1 -maxdepth 1 -type d -printf '%T@ %p\n' \
-            | sort -nr \
-            | tail -n +6 \
-            | cut -d' ' -f2- \
-            | xargs -r rm -rf
+          sleep 3
+          sudo systemctl --no-pager --lines=20 status "${VPS_SERVICE}"
+          curl -fsS --retry 5 --retry-delay 2 http://localhost:3001/ >/dev/null && echo "local healthcheck OK"
           REMOTE
 
       - name: Healthcheck
