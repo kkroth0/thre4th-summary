@@ -4,21 +4,10 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { PageLayout } from "@/components/PageLayout";
+import { ThreatWorldMap } from "@/components/ThreatWorldMap";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { fetchThreatMap, type ThreatMapData } from "@/services/threatApi";
 import { toast } from "sonner";
-
-const COUNTRY_POINTS: Record<string, { x: number; y: number }> = {
-  US: { x: 20, y: 38 }, CA: { x: 18, y: 25 }, MX: { x: 18, y: 49 },
-  BR: { x: 34, y: 70 }, AR: { x: 31, y: 84 }, CL: { x: 28, y: 82 }, CO: { x: 29, y: 62 },
-  PE: { x: 27, y: 69 }, UY: { x: 33, y: 82 }, EC: { x: 26, y: 63 },
-  GB: { x: 46, y: 32 }, FR: { x: 48, y: 38 }, ES: { x: 46, y: 43 }, IT: { x: 51, y: 43 },
-  DE: { x: 50, y: 35 }, PL: { x: 54, y: 34 }, NL: { x: 49, y: 34 }, BE: { x: 49, y: 36 },
-  UA: { x: 58, y: 38 }, RU: { x: 66, y: 28 }, TR: { x: 58, y: 47 },
-  ZA: { x: 54, y: 82 }, EG: { x: 55, y: 55 }, NG: { x: 49, y: 62 }, GH: { x: 47, y: 61 },
-  IN: { x: 70, y: 55 }, CN: { x: 76, y: 45 }, JP: { x: 86, y: 45 }, KR: { x: 83, y: 45 },
-  AU: { x: 82, y: 80 }, SG: { x: 73, y: 67 }, ID: { x: 76, y: 72 },
-};
 
 const fmtDate = (iso?: string | null) => {
   if (!iso) return "-";
@@ -56,12 +45,6 @@ const ThreatMap = () => {
 
   useEffect(() => { load(); }, []);
 
-  const plotted = useMemo(() => {
-    const max = Math.max(1, ...(data?.countries.map((c) => c.count) || [1]));
-    return (data?.countries || [])
-      .map((c) => ({ ...c, point: COUNTRY_POINTS[c.name], radius: 6 + (c.count / max) * 24 }))
-      .filter((c) => c.point);
-  }, [data]);
   const sectors = useMemo(() => countBy((data?.victims || []).map((v) => v.sector || "Unknown")), [data]);
   const topGroup = data?.groups[0] || null;
   const latestVictim = data?.victims[0] || null;
@@ -177,29 +160,24 @@ const ThreatMap = () => {
                     <Badge variant="secondary">{data.windowDays} {pt ? "dias" : "days"}</Badge>
                   </div>
                 </div>
-                <div className="relative min-h-[520px] bg-[radial-gradient(circle_at_50%_45%,hsl(var(--primary)/0.10),transparent_38%),linear-gradient(180deg,hsl(var(--secondary)/0.45),transparent)] p-5">
-                  <svg viewBox="0 0 100 58" className="absolute inset-x-5 top-8 h-[420px] w-[calc(100%-2.5rem)] text-border">
-                    <path d="M8 26c8-8 18-8 29-5 8 2 13 0 20-3 11-5 23-4 34 3" fill="none" stroke="currentColor" strokeWidth="0.4" opacity="0.7" />
-                    <path d="M10 36c13 5 23 2 34 4 17 3 27 8 45 2" fill="none" stroke="currentColor" strokeWidth="0.4" opacity="0.7" />
-                    <path d="M21 18l7 5-5 6-10-1-3-5 5-5zM43 22l8-5 8 3-2 9-9 3-7-3zM59 18l19-3 10 7-6 11-17 2-8-7zM26 58l7-15 9 5-3 10zM49 43l7 2 2 11-8 2-5-9zM75 43l12 5-3 8-12-3z" fill="hsl(var(--muted))" opacity="0.38" />
-                    {plotted.map((c) => (
-                      <g key={c.name}>
-                        <circle cx={c.point.x} cy={c.point.y * 0.58} r={c.radius / 3} fill="hsl(var(--primary))" opacity="0.18" />
-                        <circle cx={c.point.x} cy={c.point.y * 0.58} r={Math.max(1.8, c.radius / 8)} fill="hsl(var(--primary))" />
-                      </g>
-                    ))}
-                  </svg>
-                  <div className="absolute bottom-5 left-5 right-5 grid gap-3 md:grid-cols-4">
-                    {stats.map(({ label, value, icon: Icon }) => (
-                      <div key={label} className="rounded-lg border border-border bg-background/90 p-4 backdrop-blur">
-                        <div className="flex items-center justify-between">
-                          <span className="text-[10px] font-black uppercase tracking-wide text-muted-foreground">{label}</span>
-                          <Icon className="h-4 w-4 text-primary" />
-                        </div>
-                        <div className="mt-3 truncate font-mono text-2xl font-black text-foreground">{value}</div>
-                      </div>
-                    ))}
+                <div className="relative bg-[radial-gradient(circle_at_50%_40%,hsl(var(--primary)/0.10),transparent_45%),linear-gradient(180deg,hsl(var(--secondary)/0.40),transparent)] p-3">
+                  <ThreatWorldMap countries={data.countries} />
+                  <div className="pointer-events-none absolute left-4 top-4 flex flex-col gap-1.5 rounded-md border border-border bg-background/80 px-3 py-2 text-[10px] font-semibold text-muted-foreground backdrop-blur">
+                    <span className="flex items-center gap-2"><span className="h-2 w-2 rounded-full bg-primary" />{pt ? "País-vítima (tamanho = volume)" : "Victim country (size = volume)"}</span>
+                    <span className="flex items-center gap-2"><span className="h-2 w-2 rounded-full border border-primary" />{pt ? "Origem (ilustrativa)" : "Origin (illustrative)"}</span>
+                    <span className="flex items-center gap-2"><span className="h-[2px] w-3 rounded bg-primary" />{pt ? "Feixe de ataque" : "Attack beam"}</span>
                   </div>
+                </div>
+                <div className="grid gap-3 border-t border-border p-4 md:grid-cols-4">
+                  {stats.map(({ label, value, icon: Icon }) => (
+                    <div key={label} className="rounded-lg border border-border bg-background/90 p-4">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-black uppercase tracking-wide text-muted-foreground">{label}</span>
+                        <Icon className="h-4 w-4 text-primary" />
+                      </div>
+                      <div className="mt-3 truncate font-mono text-2xl font-black text-foreground">{value}</div>
+                    </div>
+                  ))}
                 </div>
               </CardContent>
             </Card>
