@@ -2237,11 +2237,12 @@ function getCookie(req, name) {
     return null;
 }
 
-// Store de usuários (flat JSON, como os jobs). openRouterKeyEnc = chave LLM cifrada.
+// Store de usuários (flat JSON, como os jobs). apiKeysEnc = chaves BYOK de vendor
+// (VirusTotal/Shodan/etc.) cifradas; a geração usa a chave OpenRouter do servidor.
 const USERS_STORE_PATH = path.join(__dirname, '.users.json');
 function loadUsers() { try { return JSON.parse(fs.readFileSync(USERS_STORE_PATH, 'utf8')); } catch { return {}; } }
 function saveUsers() { try { fs.writeFileSync(USERS_STORE_PATH, JSON.stringify(usersStore, null, 2)); } catch (e) { console.error('users store write failed:', e.message); } }
-let usersStore = loadUsers();   // { githubId: { login, openRouterKeyEnc, createdAt, updatedAt } }
+let usersStore = loadUsers();   // { githubId: { login, apiKeysEnc, createdAt, updatedAt } }
 
 // Premium allow-list: por login e/ou por org. Login no app é aberto; esta lista
 // decide quem acessa recursos premium (relatórios, newsletter e hunting).
@@ -2363,7 +2364,7 @@ app.get('/api/auth/github/callback', async (req, res) => {
         const id = String(gh.data?.id || '');
         if (!login || !id) return back('erro');
         const premium = await resolvePremiumAccess(login, accessToken);
-        const u = usersStore[id] || (usersStore[id] = { login, openRouterKeyEnc: null, createdAt: new Date().toISOString() });
+        const u = usersStore[id] || (usersStore[id] = { login, createdAt: new Date().toISOString() });
         u.login = login;
         u.updatedAt = new Date().toISOString();
         saveUsers();
@@ -2381,11 +2382,9 @@ function setSessionCookie(res, token) {
 app.get('/api/auth/me', (req, res) => {
     const p = verifySession(getCookie(req, 'ts_session'));
     if (!p) return res.json({ authenticated: false });
-    const u = usersStore[p.sub];
     res.json({
         authenticated: true,
         login: p.login,
-        hasKey: !!(u && u.openRouterKeyEnc),
         isAdmin: isAdmin(p.login),
         isPremium: sessionHasPremium(p),
     });
@@ -2396,21 +2395,19 @@ app.post('/api/auth/logout', (req, res) => {
     res.json({ ok: true });
 });
 
-// BYOK: chave OpenRouter do usuário (cifrada). Grava/apaga via /api/user/keys/openrouter.
-const validOpenRouterKey = (k) => typeof k === 'string' && k.length >= 20 && k.length <= 400;
-
-// ─── BYOK genérico: chaves de API por provider, cifradas (apiKeysEnc). O 'openrouter'
-// é roteado pro openRouterKeyEnc (que o gerador já usa). Nunca devolve valores — só
-// quais providers estão configurados. Wiring por-vendor nos lookups fica pra depois.
+// ─── BYOK genérico: chaves de API por provider, cifradas (apiKeysEnc), usadas nos
+// lookups de vendor. A geração de relatórios NÃO usa mais BYOK — roda na chave
+// OpenRouter compartilhada do servidor. Nunca devolve valores, só quais providers
+// estão configurados.
 const BYOK_PROVIDERS = new Set([
-    'openrouter', 'virustotal', 'abuseipdb', 'shodan', 'alienvault', 'pulsedive',
+    'virustotal', 'abuseipdb', 'shodan', 'alienvault', 'pulsedive',
     'hybridanalysis', 'metadefender', 'criminalip', 'censys',
     'urlhaus', 'threatfox', 'phishtank', 'whois', 'dnsdumpster',
 ]);
 function userKeysStatus(u) {
-    const out = { openrouter: !!(u && u.openRouterKeyEnc) };
+    const out = {};
     const m = (u && u.apiKeysEnc) || {};
-    for (const p of BYOK_PROVIDERS) if (p !== 'openrouter') out[p] = !!m[p];
+    for (const p of BYOK_PROVIDERS) out[p] = !!m[p];
     return out;
 }
 app.get('/api/user/keys', requireAuth, (req, res) => {
@@ -2422,10 +2419,8 @@ app.put('/api/user/keys/:provider', requireAuth, (req, res) => {
     if (!BYOK_PROVIDERS.has(provider)) return res.status(400).json({ error: 'provider desconhecido' });
     const key = (req.body?.key || '').toString().trim();
     if (!key || key.length < 8 || key.length > 400) return res.status(400).json({ error: 'chave inválida' });
-    if (provider === 'openrouter' && !validOpenRouterKey(key)) return res.status(400).json({ error: 'chave OpenRouter inválida' });
-    const u = usersStore[req.user.sub] || (usersStore[req.user.sub] = { login: req.user.login, openRouterKeyEnc: null, createdAt: new Date().toISOString() });
-    if (provider === 'openrouter') u.openRouterKeyEnc = encryptSecret(key);
-    else (u.apiKeysEnc || (u.apiKeysEnc = {}))[provider] = encryptSecret(key);
+    const u = usersStore[req.user.sub] || (usersStore[req.user.sub] = { login: req.user.login, createdAt: new Date().toISOString() });
+    (u.apiKeysEnc || (u.apiKeysEnc = {}))[provider] = encryptSecret(key);
     u.updatedAt = new Date().toISOString();
     saveUsers();
     res.json({ provider, hasKey: true });
@@ -2435,8 +2430,7 @@ app.delete('/api/user/keys/:provider', requireAuth, (req, res) => {
     if (!BYOK_PROVIDERS.has(provider)) return res.status(400).json({ error: 'provider desconhecido' });
     const u = usersStore[req.user.sub];
     if (u) {
-        if (provider === 'openrouter') u.openRouterKeyEnc = null;
-        else if (u.apiKeysEnc) delete u.apiKeysEnc[provider];
+        if (u.apiKeysEnc) delete u.apiKeysEnc[provider];
         u.updatedAt = new Date().toISOString();
         saveUsers();
     }
@@ -2453,15 +2447,9 @@ function loadJobs() { try { return JSON.parse(fs.readFileSync(JOBS_STORE_PATH, '
 function saveJobs() { try { fs.writeFileSync(JOBS_STORE_PATH, JSON.stringify(jobsStore, null, 2)); } catch (e) { console.error('jobs store write failed:', e.message); } }
 let jobsStore = loadJobs();   // { id: { id,url,type,title,status,json,error,createdAt,updatedAt } }
 
-// Chave OpenRouter/LLM (BYOK) por job — só em RAM. Nunca persiste: se persistisse iria pro
-// disco em claro no .feed-jobs.json. É entregue ao worker só via /jobs/pending
-// (rota com segredo) e descartada assim que o job sai de 'pending'.
-const jobSecrets = new Map();   // jobId -> chave OpenRouter/LLM (texto claro, efêmera)
-function dropSecret(id) { jobSecrets.delete(id); }
-
 function pruneJobs(max = 100) {
     const ids = Object.keys(jobsStore).sort((a, b) => (jobsStore[a].createdAt || '').localeCompare(jobsStore[b].createdAt || ''));
-    while (ids.length > max) { const id = ids.shift(); dropSecret(id); delete jobsStore[id]; }
+    while (ids.length > max) { const id = ids.shift(); delete jobsStore[id]; }
 }
 
 // Expira jobs presos em 'pending' além do TTL (worker caiu / geração longa demais),
@@ -2484,7 +2472,6 @@ function expireStaleJobs() {
             j.status = 'error';
             j.error = 'expirou (worker indisponível ou geração longa demais)';
             j.updatedAt = new Date().toISOString();
-            dropSecret(j.id);
             changed = true;
         }
     }
@@ -2499,14 +2486,9 @@ app.post('/api/feed/generate', requirePremium, scanLimiter, async (req, res) => 
         const type = req.body?.type === 'campaign' ? 'campaign' : 'vuln';
         const title = (req.body?.title || '').toString().slice(0, 300);
         if (!/^https?:\/\//i.test(url)) return res.status(400).json({ error: 'url http(s) obrigatória' });
-        // BYOK obrigatório: sem a chave do usuário não há como gerar. Decifra aqui
-        // e guarda só em RAM (jobSecrets) — o worker pega via /jobs/pending.
-        const u = usersStore[req.user.sub];
-        const encKey = u?.openRouterKeyEnc;
-        if (!encKey) return res.status(400).json({ error: 'adicione sua chave OpenRouter nas configurações antes de gerar', needKey: true });
-        let userKey;
-        try { userKey = decryptSecret(encKey); }
-        catch { return res.status(500).json({ error: 'falha ao ler sua chave; reinsira-a nas configurações' }); }
+        // Sem BYOK: a geração usa a chave OpenRouter compartilhada do servidor
+        // (OPENROUTER_API_KEY no .env do worker/engine). O acesso já é gated por
+        // login + allow-list premium (requirePremium) acima.
         // Sempre valida (sem atalho de "confiar em URL do feed") — o guard SSRF
         // bloqueia IP privado/loopback/metadata. O worker na VPS revalida também.
         try { await assertSafePublicUrl(url); } catch (e) { return res.status(400).json({ error: e.message || 'URL rejeitada' }); }
@@ -2524,7 +2506,6 @@ app.post('/api/feed/generate', requirePremium, scanLimiter, async (req, res) => 
         const id = crypto.randomUUID();
         const now = new Date().toISOString();
         jobsStore[id] = { id, ownerSub: req.user.sub, url, type, title, status: 'pending', json: null, error: null, createdAt: now, updatedAt: now };
-        jobSecrets.set(id, userKey);
         pruneJobs();
         saveJobs();
         res.json({ id, status: 'pending' });
@@ -2555,19 +2536,15 @@ app.get('/api/feed/job', requirePremium, (req, res) => {
 app.get('/api/feed/jobs/pending', (req, res) => {
     if (!requireFeedSecret(req, res)) return;
     expireStaleJobs();
-    // Só entrega jobs que ainda têm a chave BYOK em RAM. Após um restart do
-    // servidor o jobSecrets zera; jobs pending órfãos (sem chave) não vão pro
-    // worker (não dá pra gerar sem chave) e expiram sozinhos pelo TTL.
+    // Sem BYOK: todo job pending vai pro worker. A chave OpenRouter é do servidor
+    // (no .env do worker), não viaja no payload. Só encaminhamos o modelo.
     const pending = Object.values(jobsStore)
-        .filter((j) => j.status === 'pending' && jobSecrets.has(j.id))
+        .filter((j) => j.status === 'pending')
         .map((j) => ({
             id: j.id,
             url: j.url,
             type: j.type,
             title: j.title,
-            openRouterKey: jobSecrets.get(j.id),
-            llmKey: jobSecrets.get(j.id),
-            llmProvider: 'openrouter',
             model: process.env.OPENROUTER_MODEL || 'deepseek/deepseek-chat-v3.1',
         }));
     res.json({ pending });
@@ -2582,7 +2559,6 @@ app.post('/api/feed/job/result', (req, res) => {
     else if (req.body?.json && typeof req.body.json === 'object') { job.status = 'done'; job.json = req.body.json; }
     else return res.status(400).json({ error: 'json ou error obrigatório' });
     job.updatedAt = new Date().toISOString();
-    dropSecret(job.id);   // job terminou: descarta a chave BYOK da RAM
     saveJobs();
     res.json({ id: job.id, status: job.status });
 });

@@ -21,12 +21,6 @@ interface Group { title: { pt: string; en: string }; items: Provider[] }
 
 const CATALOG: Group[] = [
   {
-    title: { pt: "IA / LLM", en: "AI / LLM" },
-    items: [
-      { id: "openrouter", label: "OpenRouter", url: "https://openrouter.ai/settings/keys", placeholder: "sk-or-v1-...", note: { pt: "Usada para gerar relatórios com DeepSeek.", en: "Used to generate reports with DeepSeek." } },
-    ],
-  },
-  {
     title: { pt: "Enriquecimento & Reputação", en: "Enrichment & Reputation" },
     items: [
       { id: "virustotal", label: "VirusTotal", url: "https://www.virustotal.com/gui/my-apikey" },
@@ -150,7 +144,6 @@ const Settings = () => {
   }, []);
   useEffect(() => { if (auth.authenticated) load(); }, [auth.authenticated, load]);
 
-  // openrouter altera auth.hasKey (usado pelo gerador de relatórios) — mantém a sessão em sincronia.
   const onChanged = () => { load(); refresh(); };
 
   const shell = (children: React.ReactNode) => (
@@ -178,8 +171,8 @@ const Settings = () => {
       <div className="rounded-lg border border-border/60 bg-muted/20 px-4 py-3 mb-6 text-sm text-muted-foreground flex items-start gap-2.5">
         <ShieldCheck className="h-4 w-4 mt-0.5 text-primary shrink-0" />
         {pt
-          ? "As chaves são armazenadas cifradas (AES) e vinculadas só à sua conta. A chave OpenRouter já é usada no gerador de relatórios; as demais serão usadas nos lookups em breve."
-          : "Keys are stored encrypted (AES) and tied only to your account. The OpenRouter key already powers the report generator; the others will be wired into lookups soon."}
+          ? "As chaves são armazenadas cifradas (AES) e vinculadas só à sua conta. Opcionais — usadas nos lookups de vendor. O gerador de relatórios roda na chave do servidor."
+          : "Keys are stored encrypted (AES) and tied only to your account. Optional — used for vendor lookups. The report generator runs on the server's key."}
       </div>
 
       {loading ? (

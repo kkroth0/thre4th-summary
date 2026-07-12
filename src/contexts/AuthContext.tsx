@@ -33,7 +33,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // GitHub login (email/name are never sent to the client), so that's all we
     // pass — no PII is invented here.
     if (a.authenticated && a.login) {
-      identify({ name: a.login, metadata: { login: a.login, hasKey: !!a.hasKey } });
+      identify({ name: a.login, metadata: { login: a.login } });
     }
   }, []);
 

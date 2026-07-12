@@ -1160,8 +1160,8 @@ export const fetchThreatMap = async (days = 90): Promise<ThreatMapData> => {
     return r.json();
 };
 
-// ── Auth GitHub + BYOK (chave OpenRouter por usuário) ────────────────────────
-export interface AuthState { authenticated: boolean; login?: string; hasKey?: boolean; isAdmin?: boolean; isPremium?: boolean; }
+// ── Auth GitHub (allow-list). Geração usa a chave OpenRouter do servidor ─────
+export interface AuthState { authenticated: boolean; login?: string; isAdmin?: boolean; isPremium?: boolean; }
 
 // Estado de login (cookie de sessão é httpOnly — o front só sabe via /me).
 export const fetchAuth = async (): Promise<AuthState> => {

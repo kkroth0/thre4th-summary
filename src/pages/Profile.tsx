@@ -133,14 +133,14 @@ const Profile = () => {
             <div className="min-w-0 flex-1">
               <div className="font-medium flex items-center gap-2">
                 {pt ? "Chaves de API (BYOK)" : "API keys (BYOK)"}
-                {auth.hasKey && <Badge variant="secondary" className="gap-1"><CheckCircle2 className="h-3 w-3 text-emerald-500" /> OpenRouter</Badge>}
+                {keyCount !== null && keyCount > 0 && <Badge variant="secondary" className="gap-1"><CheckCircle2 className="h-3 w-3 text-emerald-500" /> {keyCount}</Badge>}
               </div>
               <div className="text-sm text-muted-foreground">
                 {keyCount === null
-                  ? (pt ? "Gerencie suas chaves de API." : "Manage your API keys.")
+                  ? (pt ? "Gerencie suas chaves de lookup de vendor." : "Manage your vendor lookup keys.")
                   : keyCount > 0
                     ? (pt ? `${keyCount} chave(s) configurada(s).` : `${keyCount} key(s) configured.`)
-                    : (pt ? "Nenhuma chave ainda — adicione a sua chave OpenRouter para gerar." : "No keys yet — add your OpenRouter key to generate.")}
+                    : (pt ? "Nenhuma chave ainda — opcional, para lookups de vendor." : "No keys yet — optional, for vendor lookups.")}
               </div>
             </div>
             <SettingsIcon className="h-4 w-4 text-muted-foreground shrink-0" />
@@ -158,13 +158,11 @@ const Profile = () => {
               <div className="text-sm text-muted-foreground truncate">
                 {!auth.isPremium
                   ? (pt ? "Recurso premium — peça liberação para acessar." : "Premium feature — request access to use it.")
-                  : auth.hasKey
-                  ? (pt ? "Tudo pronto — cole uma URL e gere seu relatorio." : "All set — paste a URL and generate your report.")
-                  : (pt ? "Adicione sua chave OpenRouter nas configurações para começar." : "Add your OpenRouter key in settings to get started.")}
+                  : (pt ? "Tudo pronto — cole uma URL e gere seu relatorio." : "All set — paste a URL and generate your report.")}
               </div>
             </div>
           </div>
-          <Button asChild variant={auth.isPremium && auth.hasKey ? "default" : "outline"} className="shrink-0">
+          <Button asChild variant={auth.isPremium ? "default" : "outline"} className="shrink-0">
             <Link to="/relatorios">{auth.isPremium ? (pt ? "Gerar" : "Create") : "Premium"} <ArrowRight className="h-4 w-4 ml-1.5" /></Link>
           </Button>
         </CardContent>

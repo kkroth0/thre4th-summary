@@ -139,7 +139,6 @@ const DailyBulletin: React.FC = () => {
 
   const generate = async (url: string, type: DeckType, title: string) => {
     if (!auth?.authenticated) { toast.error(pt ? "Entre com o GitHub para gerar" : "Sign in with GitHub to generate"); return; }
-    if (!auth?.hasKey) { toast.error(pt ? "Adicione sua chave OpenRouter antes de gerar" : "Add your OpenRouter key before generating"); return; }
     if (!/^https?:\/\//i.test(url)) { toast.error(pt ? "URL inválida" : "Invalid URL"); return; }
     try {
       const { id } = await generateBoletim(url, type, title);
@@ -185,7 +184,7 @@ const DailyBulletin: React.FC = () => {
 
         {/* Generator — one calm input row, no card chrome */}
         <section className="mb-12">
-          {auth.hasKey ? (
+          {auth.authenticated ? (
             <div className="space-y-3">
               <div className="flex flex-col sm:flex-row gap-2 rounded-xl bg-muted/40 p-2">
                 <Input
@@ -210,19 +209,19 @@ const DailyBulletin: React.FC = () => {
               </div>
               <div className="flex items-center gap-1.5 px-1 text-xs text-muted-foreground">
                 <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
-                <span className="truncate">{auth.login} · {pt ? "chave OpenRouter ativa" : "OpenRouter key active"}</span>
-                <Link to="/settings" className="ml-auto shrink-0 hover:text-foreground">{pt ? "Gerenciar" : "Manage"}</Link>
+                <span className="truncate">{auth.login} · {pt ? "pronto para gerar" : "ready to generate"}</span>
+                <Link to="/settings" className="ml-auto shrink-0 hover:text-foreground">{pt ? "Configurações" : "Settings"}</Link>
               </div>
             </div>
           ) : (
             <div className="flex items-center gap-4 rounded-xl bg-muted/40 p-5">
               <KeyRound className="h-5 w-5 text-muted-foreground shrink-0" />
               <div className="flex-1 min-w-0">
-                <div className="text-sm font-medium">{pt ? "Adicione sua chave OpenRouter" : "Add your OpenRouter key"}</div>
-                <div className="text-xs text-muted-foreground">{pt ? "Necessária (BYOK) para gerar relatórios." : "Required (BYOK) to generate reports."}</div>
+                <div className="text-sm font-medium">{pt ? "Entre para gerar" : "Sign in to generate"}</div>
+                <div className="text-xs text-muted-foreground">{pt ? "Requer login com GitHub (acesso liberado)." : "Requires GitHub sign-in (approved access)."}</div>
               </div>
               <Button asChild variant="outline" size="sm" className="shrink-0">
-                <Link to="/settings">{pt ? "Configurações" : "Settings"} <ArrowRight className="h-4 w-4 ml-1.5" /></Link>
+                <Link to="/login">{pt ? "Entrar" : "Sign in"} <ArrowRight className="h-4 w-4 ml-1.5" /></Link>
               </Button>
             </div>
           )}
