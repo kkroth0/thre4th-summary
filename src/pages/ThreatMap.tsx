@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, Building2, Clock, Crosshair, Globe2, Loader2, MapPinned, RadioTower, ShieldAlert, Target, Users } from "lucide-react";
+import { AlertTriangle, Building2, Crosshair, Globe2, Loader2, MapPinned, RadioTower, ShieldAlert, Target, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -55,11 +55,23 @@ const ThreatMap = () => {
         ? { label: pt ? "Pressão moderada" : "Moderate pressure", tone: "text-amber-500", copy: pt ? "Atividade constante, com prioridade para países e grupos no topo." : "Steady activity, prioritize top countries and crews." }
         : { label: pt ? "Pressão baixa" : "Low pressure", tone: "text-emerald-500", copy: pt ? "Baixo volume no recorte, manter monitoramento." : "Low volume in this window, keep monitoring." }
     : null;
-  const stats = data ? [
-    { label: pt ? "Vitimas recentes" : "Recent victims", value: data.victims.length, icon: AlertTriangle },
-    { label: pt ? "Paises" : "Countries", value: data.countries.length, icon: Globe2 },
+  const kpis = data ? [
+    { label: pt ? "Vítimas recentes" : "Recent victims", value: data.victims.length, icon: AlertTriangle },
+    { label: pt ? "Países" : "Countries", value: data.countries.length, icon: Globe2 },
     { label: pt ? "Grupos ativos" : "Active groups", value: data.activeGroups, icon: Crosshair },
-    { label: pt ? "Mais atingido" : "Top country", value: data.topCountry?.name || "-", icon: MapPinned },
+    { label: pt ? "Setores impactados" : "Impacted sectors", value: sectors.length, icon: Building2 },
+  ] : [];
+
+  const priority = data ? [
+    { label: pt ? "País mais atingido" : "Top country", value: data.topCountry?.countryName || data.topCountry?.name || "-" },
+    { label: pt ? "Grupo mais ativo" : "Top crew", value: topGroup?.name || "-" },
+    { label: pt ? "Última vítima" : "Latest victim", value: latestVictim?.name || "-" },
+  ] : [];
+
+  const lists = data ? [
+    { icon: Globe2, title: pt ? "Países mais atingidos" : "Most affected countries", rows: data.countries.slice(0, 8).map((c) => ({ name: c.countryName || c.name, count: c.count })) },
+    { icon: Users, title: pt ? "Grupos ativos" : "Active groups", rows: data.groups.slice(0, 8).map((g) => ({ name: g.name, count: g.count })) },
+    { icon: Building2, title: pt ? "Setores impactados" : "Impacted sectors", rows: sectors.slice(0, 8) },
   ] : [];
 
   return (
@@ -73,7 +85,7 @@ const ThreatMap = () => {
           <h1 className="text-4xl font-black tracking-tight">{pt ? "Mapa de ameaças" : "Threat map"}</h1>
           <p className="mt-2 max-w-2xl text-sm font-medium leading-6 text-muted-foreground">
             {pt
-              ? "Vitimas de ransomware reivindicadas publicamente, agregadas por pais nos ultimos 90 dias."
+              ? "Vítimas de ransomware reivindicadas publicamente, agregadas por país nos últimos 90 dias."
               : "Publicly claimed ransomware victims, aggregated by country over the last 90 days."}
           </p>
         </div>
@@ -89,78 +101,33 @@ const ThreatMap = () => {
         </div>
       ) : data ? (
         <div className="space-y-6">
-          <div className="grid gap-4 lg:grid-cols-3">
-            <Card>
-              <CardContent className="p-5">
-                <div className="mb-4 flex items-center gap-2">
-                  <ShieldAlert className="h-5 w-5 text-primary" />
-                  <h2 className="text-lg font-black tracking-tight">{pt ? "Sinal CTI" : "CTI signal"}</h2>
-                </div>
-                <div className={`font-mono text-3xl font-black ${signal?.tone}`}>{signal?.label}</div>
-                <p className="mt-3 text-sm font-medium leading-6 text-muted-foreground">{signal?.copy}</p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardContent className="p-5">
-                <div className="mb-4 flex items-center gap-2">
-                  <Target className="h-5 w-5 text-primary" />
-                  <h2 className="text-lg font-black tracking-tight">{pt ? "Prioridade de monitoramento" : "Monitoring priority"}</h2>
-                </div>
-                <div className="grid gap-3 text-sm">
-                  <div className="flex items-center justify-between gap-3">
-                    <span className="text-muted-foreground">{pt ? "País mais atingido" : "Top country"}</span>
-                    <span className="font-mono font-black text-foreground">{data.topCountry?.countryName || data.topCountry?.name || "-"}</span>
+          {/* KPI strip — uniform metrics up top */}
+          <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+            {kpis.map(({ label, value, icon: Icon }) => (
+              <Card key={label}>
+                <CardContent className="p-5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-black uppercase tracking-wide text-muted-foreground">{label}</span>
+                    <Icon className="h-4 w-4 text-primary" />
                   </div>
-                  <div className="flex items-center justify-between gap-3">
-                    <span className="text-muted-foreground">{pt ? "Grupo mais ativo" : "Top crew"}</span>
-                    <span className="font-mono font-black text-foreground">{topGroup?.name || "-"}</span>
-                  </div>
-                  <div className="flex items-center justify-between gap-3">
-                    <span className="text-muted-foreground">{pt ? "Última vítima" : "Latest victim"}</span>
-                    <span className="max-w-[160px] truncate font-semibold text-foreground">{latestVictim?.name || "-"}</span>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardContent className="p-5">
-                <div className="mb-4 flex items-center gap-2">
-                  <Clock className="h-5 w-5 text-primary" />
-                  <h2 className="text-lg font-black tracking-tight">{pt ? "Fonte e recorte" : "Source and window"}</h2>
-                </div>
-                <div className="grid gap-3 text-sm">
-                  <div className="flex items-center justify-between gap-3">
-                    <span className="text-muted-foreground">Source</span>
-                    <span className="font-mono font-black text-foreground">{data.source}</span>
-                  </div>
-                  <div className="flex items-center justify-between gap-3">
-                    <span className="text-muted-foreground">{pt ? "Janela" : "Window"}</span>
-                    <span className="font-mono font-black text-foreground">{data.windowDays} {pt ? "dias" : "days"}</span>
-                  </div>
-                  <div className="flex items-center justify-between gap-3">
-                    <span className="text-muted-foreground">{pt ? "Atualizado" : "Updated"}</span>
-                    <span className="font-mono font-black text-foreground">{fmtDate(data.generatedAt)}</span>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+                  <div className="mt-3 font-mono text-3xl font-black text-foreground">{value}</div>
+                </CardContent>
+              </Card>
+            ))}
           </div>
 
-          <div className="grid gap-6 xl:grid-cols-[1.55fr_0.85fr]">
-            <Card className="overflow-hidden">
-              <CardContent className="p-0">
-                <div className="border-b border-border p-5">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div className="flex items-center gap-2">
-                      <MapPinned className="h-5 w-5 text-primary" />
-                      <h2 className="text-xl font-black tracking-tight">{pt ? "Ransomware no mundo" : "Global ransomware"}</h2>
-                    </div>
-                    <Badge variant="secondary">{data.windowDays} {pt ? "dias" : "days"}</Badge>
+          {/* Hero: world map (2 cols) + consolidated CTI sidebar (1 col), equal height */}
+          <div className="grid gap-6 lg:grid-cols-3">
+            <Card className="overflow-hidden lg:col-span-2">
+              <CardContent className="flex h-full flex-col p-0">
+                <div className="flex items-center justify-between gap-3 border-b border-border p-5">
+                  <div className="flex items-center gap-2">
+                    <MapPinned className="h-5 w-5 text-primary" />
+                    <h2 className="text-xl font-black tracking-tight">{pt ? "Ransomware no mundo" : "Global ransomware"}</h2>
                   </div>
+                  <Badge variant="secondary">{data.windowDays} {pt ? "dias" : "days"}</Badge>
                 </div>
-                <div className="relative bg-[radial-gradient(circle_at_50%_32%,rgba(251,113,133,0.12),transparent_55%),linear-gradient(180deg,#0a1120,#0d1a2f)] p-3">
+                <div className="relative flex-1 bg-[radial-gradient(circle_at_50%_32%,rgba(251,113,133,0.12),transparent_55%),linear-gradient(180deg,#0a1120,#0d1a2f)] p-3">
                   <ThreatWorldMap countries={data.countries} />
                   <div className="pointer-events-none absolute left-4 top-4 flex flex-col gap-1.5 rounded-md border border-white/10 bg-black/40 px-3 py-2 text-[10px] font-semibold text-slate-300 backdrop-blur">
                     <span className="flex items-center gap-2"><span className="h-2 w-2 rounded-full bg-rose-400" />{pt ? "País-vítima (tamanho = volume)" : "Victim country (size = volume)"}</span>
@@ -168,74 +135,79 @@ const ThreatMap = () => {
                     <span className="flex items-center gap-2"><span className="h-[2px] w-3 rounded bg-rose-400" />{pt ? "Feixe de ataque" : "Attack beam"}</span>
                   </div>
                 </div>
-                <div className="grid gap-3 border-t border-border p-4 md:grid-cols-4">
-                  {stats.map(({ label, value, icon: Icon }) => (
-                    <div key={label} className="rounded-lg border border-border bg-background/90 p-4">
-                      <div className="flex items-center justify-between">
-                        <span className="text-[10px] font-black uppercase tracking-wide text-muted-foreground">{label}</span>
-                        <Icon className="h-4 w-4 text-primary" />
-                      </div>
-                      <div className="mt-3 truncate font-mono text-2xl font-black text-foreground">{value}</div>
-                    </div>
-                  ))}
-                </div>
               </CardContent>
             </Card>
 
-            <div className="grid gap-6">
-              <Card>
-                <CardContent className="p-5">
-                  <div className="mb-4 flex items-center gap-2">
-                    <Globe2 className="h-5 w-5 text-primary" />
-                    <h2 className="text-lg font-black tracking-tight">{pt ? "Paises mais atingidos" : "Most affected countries"}</h2>
+            <Card>
+              <CardContent className="flex h-full flex-col gap-5 p-5">
+                {/* CTI signal */}
+                <div>
+                  <div className="mb-3 flex items-center gap-2">
+                    <ShieldAlert className="h-5 w-5 text-primary" />
+                    <h2 className="text-lg font-black tracking-tight">{pt ? "Sinal CTI" : "CTI signal"}</h2>
                   </div>
-                  <div className="space-y-3">
-                    {data.countries.slice(0, 8).map((c) => (
-                      <div key={c.name} className="flex items-center justify-between gap-3 rounded-md border border-border bg-background px-3 py-2">
-                        <span className="font-semibold text-foreground">{c.countryName || c.name}</span>
-                        <span className="font-mono text-sm font-black text-primary">{c.count}</span>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
+                  <div className={`font-mono text-3xl font-black ${signal?.tone}`}>{signal?.label}</div>
+                  <p className="mt-2 text-sm font-medium leading-6 text-muted-foreground">{signal?.copy}</p>
+                </div>
 
-              <Card>
-                <CardContent className="p-5">
-                  <div className="mb-4 flex items-center gap-2">
-                    <Users className="h-5 w-5 text-primary" />
-                    <h2 className="text-lg font-black tracking-tight">{pt ? "Grupos ativos" : "Active groups"}</h2>
+                {/* Monitoring priority */}
+                <div className="border-t border-border pt-4">
+                  <div className="mb-3 flex items-center gap-2">
+                    <Target className="h-4 w-4 text-primary" />
+                    <h3 className="text-xs font-black uppercase tracking-wide text-muted-foreground">{pt ? "Prioridade de monitoramento" : "Monitoring priority"}</h3>
                   </div>
-                  <div className="space-y-3">
-                    {data.groups.slice(0, 8).map((g) => (
-                      <div key={g.name} className="flex items-center justify-between gap-3 rounded-md border border-border bg-background px-3 py-2">
-                        <span className="font-semibold text-foreground">{g.name}</span>
-                        <span className="font-mono text-sm font-black text-primary">{g.count}</span>
+                  <div className="grid gap-3 text-sm">
+                    {priority.map((p) => (
+                      <div key={p.label} className="flex items-center justify-between gap-3">
+                        <span className="text-muted-foreground">{p.label}</span>
+                        <span className="max-w-[150px] truncate text-right font-semibold text-foreground">{p.value}</span>
                       </div>
                     ))}
                   </div>
-                </CardContent>
-              </Card>
+                </div>
 
-              <Card>
-                <CardContent className="p-5">
-                  <div className="mb-4 flex items-center gap-2">
-                    <Building2 className="h-5 w-5 text-primary" />
-                    <h2 className="text-lg font-black tracking-tight">{pt ? "Setores impactados" : "Impacted sectors"}</h2>
+                {/* Source + window meta, pinned to bottom */}
+                <div className="mt-auto space-y-2 border-t border-border pt-4 text-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">{pt ? "Fonte" : "Source"}</span>
+                    <span className="font-mono font-bold text-foreground">{data.source}</span>
                   </div>
-                  <div className="space-y-3">
-                    {sectors.slice(0, 6).map((s) => (
-                      <div key={s.name} className="flex items-center justify-between gap-3 rounded-md border border-border bg-background px-3 py-2">
-                        <span className="min-w-0 truncate font-semibold text-foreground">{s.name}</span>
-                        <span className="font-mono text-sm font-black text-primary">{s.count}</span>
-                      </div>
-                    ))}
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">{pt ? "Janela" : "Window"}</span>
+                    <span className="font-mono font-bold text-foreground">{data.windowDays} {pt ? "dias" : "days"}</span>
                   </div>
-                </CardContent>
-              </Card>
-            </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">{pt ? "Atualizado" : "Updated"}</span>
+                    <span className="font-mono font-bold text-foreground">{fmtDate(data.generatedAt)}</span>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
           </div>
 
+          {/* Three aligned breakdown columns */}
+          <div className="grid gap-6 md:grid-cols-3">
+            {lists.map(({ icon: Icon, title, rows }) => (
+              <Card key={title}>
+                <CardContent className="p-5">
+                  <div className="mb-4 flex items-center gap-2">
+                    <Icon className="h-5 w-5 text-primary" />
+                    <h2 className="text-lg font-black tracking-tight">{title}</h2>
+                  </div>
+                  <div className="space-y-2.5">
+                    {rows.map((r) => (
+                      <div key={r.name} className="flex items-center justify-between gap-3 rounded-md border border-border bg-background px-3 py-2">
+                        <span className="min-w-0 truncate font-semibold text-foreground">{r.name}</span>
+                        <span className="shrink-0 font-mono text-sm font-black text-primary">{r.count}</span>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+
+          {/* Latest claims */}
           <Card>
             <CardContent className="p-5">
               <div className="mb-4 flex items-center justify-between gap-3">
