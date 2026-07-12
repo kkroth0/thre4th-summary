@@ -2111,7 +2111,7 @@ const Index = () => {
                 </div>
 
                 {/* The search form is the hero on the empty state — not a pointer to a bar elsewhere. */}
-                <div className="mt-8 rounded-xl border-2 border-primary/40 bg-background p-3 shadow-lg shadow-primary/5 md:p-4">
+                <div className="mt-8">
                   <SearchForm
                     query={query}
                     setQuery={setQuery}
