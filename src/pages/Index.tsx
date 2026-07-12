@@ -2036,30 +2036,40 @@ const Index = () => {
     );
   }
 
+  const hasResults = results.length > 0 || isAnalyzing;
+
   return (
     <div className={shellClassName}>
       <Header onLogoClick={handleReset} showBackButton={false} />
-      {/* Persistent search bar: fixed so the primary tool remains available while reviewing results. */}
+      {/* Persistent search bar: only once a search is running or done, so the tool stays
+          reachable while reviewing results. On the empty state the form is the hero instead. */}
+      {hasResults && (
+        <div
+          className={cn(
+            "fixed left-0 right-0 top-14 z-30 border-b border-border bg-background/95 px-4 py-3.5 backdrop-blur animate-fade-in md:px-8 lg:top-0",
+            isCollapsed ? "lg:left-[72px]" : "lg:left-[264px]"
+          )}
+        >
+          <div className="max-w-7xl mx-auto">
+            <SearchForm
+              query={query}
+              setQuery={setQuery}
+              onSubmit={handleSearch}
+              isLoading={isAnalyzing}
+              className="w-full"
+              selectedVendors={selectedVendors}
+              onVendorsChange={setSelectedVendors}
+            />
+          </div>
+        </div>
+      )}
+
       <div
         className={cn(
-          "fixed left-0 right-0 top-14 z-30 border-b border-border bg-background/95 px-4 py-3.5 backdrop-blur animate-fade-in md:px-8 lg:top-0",
-          isCollapsed ? "lg:left-[72px]" : "lg:left-[264px]"
+          "relative z-10 flex-1 px-4 pb-4 md:px-8 md:pb-8",
+          hasResults ? "pt-28 md:pt-32 lg:pt-28" : "pt-20 md:pt-24 lg:pt-10"
         )}
       >
-        <div className="max-w-7xl mx-auto">
-          <SearchForm
-            query={query}
-            setQuery={setQuery}
-            onSubmit={handleSearch}
-            isLoading={isAnalyzing}
-            className="w-full"
-            selectedVendors={selectedVendors}
-            onVendorsChange={setSelectedVendors}
-          />
-        </div>
-      </div>
-
-      <div className="relative z-10 flex-1 px-4 pb-4 pt-28 md:px-8 md:pb-8 md:pt-32 lg:pt-28">
         <div className="max-w-7xl mx-auto space-y-6">
 
           {error && (
@@ -2082,8 +2092,8 @@ const Index = () => {
                     </h1>
                     <p className="mt-4 text-base font-semibold leading-8 text-muted-foreground md:text-lg">
                       {language === "pt"
-                        ? "Use a barra acima para consultar IPs, dominios, URLs, hashes ou CVEs. A busca consolida reputacao, DNS, WHOIS, vendors e contexto operacional em um unico resultado."
-                        : "Use the bar above to query IPs, domains, URLs, hashes or CVEs. Search consolidates reputation, DNS, WHOIS, vendors and operational context into one result."}
+                        ? "Consulte IPs, dominios, URLs, hashes ou CVEs. A busca consolida reputacao, DNS, WHOIS, vendors e contexto operacional em um unico resultado."
+                        : "Query IPs, domains, URLs, hashes or CVEs. Search consolidates reputation, DNS, WHOIS, vendors and operational context into one result."}
                     </p>
                   </div>
                   <div className="grid min-w-0 grid-cols-3 gap-2 md:w-72">
@@ -2100,7 +2110,23 @@ const Index = () => {
                   </div>
                 </div>
 
-                <div className="mt-8 flex flex-wrap gap-2">
+                {/* The search form is the hero on the empty state — not a pointer to a bar elsewhere. */}
+                <div className="mt-8 rounded-xl border-2 border-primary/40 bg-background p-3 shadow-lg shadow-primary/5 md:p-4">
+                  <SearchForm
+                    query={query}
+                    setQuery={setQuery}
+                    onSubmit={handleSearch}
+                    isLoading={isAnalyzing}
+                    className="w-full"
+                    selectedVendors={selectedVendors}
+                    onVendorsChange={setSelectedVendors}
+                  />
+                </div>
+
+                <div className="mt-5 flex flex-wrap items-center gap-2">
+                  <span className="mr-1 text-[11px] font-black uppercase tracking-wide text-muted-foreground">
+                    {language === "pt" ? "Exemplos" : "Try"}
+                  </span>
                   {["14.103.115.208", "CVE-2024-3094", "example.com", "8.8.8.8"].map((sample) => (
                     <button
                       key={sample}
