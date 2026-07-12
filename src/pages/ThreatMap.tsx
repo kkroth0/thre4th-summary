@@ -160,12 +160,12 @@ const ThreatMap = () => {
                     <Badge variant="secondary">{data.windowDays} {pt ? "dias" : "days"}</Badge>
                   </div>
                 </div>
-                <div className="relative bg-[radial-gradient(circle_at_50%_40%,hsl(var(--primary)/0.10),transparent_45%),linear-gradient(180deg,hsl(var(--secondary)/0.40),transparent)] p-3">
+                <div className="relative bg-[radial-gradient(circle_at_50%_32%,rgba(251,113,133,0.12),transparent_55%),linear-gradient(180deg,#0a1120,#0d1a2f)] p-3">
                   <ThreatWorldMap countries={data.countries} />
-                  <div className="pointer-events-none absolute left-4 top-4 flex flex-col gap-1.5 rounded-md border border-border bg-background/80 px-3 py-2 text-[10px] font-semibold text-muted-foreground backdrop-blur">
-                    <span className="flex items-center gap-2"><span className="h-2 w-2 rounded-full bg-primary" />{pt ? "País-vítima (tamanho = volume)" : "Victim country (size = volume)"}</span>
-                    <span className="flex items-center gap-2"><span className="h-2 w-2 rounded-full border border-primary" />{pt ? "Origem (ilustrativa)" : "Origin (illustrative)"}</span>
-                    <span className="flex items-center gap-2"><span className="h-[2px] w-3 rounded bg-primary" />{pt ? "Feixe de ataque" : "Attack beam"}</span>
+                  <div className="pointer-events-none absolute left-4 top-4 flex flex-col gap-1.5 rounded-md border border-white/10 bg-black/40 px-3 py-2 text-[10px] font-semibold text-slate-300 backdrop-blur">
+                    <span className="flex items-center gap-2"><span className="h-2 w-2 rounded-full bg-rose-400" />{pt ? "País-vítima (tamanho = volume)" : "Victim country (size = volume)"}</span>
+                    <span className="flex items-center gap-2"><span className="h-2 w-2 rounded-full border border-amber-400" />{pt ? "Origem (ilustrativa)" : "Origin (illustrative)"}</span>
+                    <span className="flex items-center gap-2"><span className="h-[2px] w-3 rounded bg-rose-400" />{pt ? "Feixe de ataque" : "Attack beam"}</span>
                   </div>
                 </div>
                 <div className="grid gap-3 border-t border-border p-4 md:grid-cols-4">

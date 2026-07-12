@@ -7,6 +7,15 @@ import type { Feature, FeatureCollection, Geometry } from "geojson";
 const W = 980;
 const H = 500;
 
+// Fixed dark "cyber map" palette (independent of the app light/dark theme) so
+// the beams and victim nodes always read with high contrast.
+const COUNTRY_FILL = "#16223a";
+const COUNTRY_STROKE = "#2c4066";
+const BEAM = "#fb7185"; // rose — reads as "attack/ransomware"
+const BEAM_DOT = "#ffe4e6";
+const VICTIM = "#fb7185";
+const HUB = "#fbbf24"; // amber origin hubs
+
 // ISO-3166 alpha-2 → [lon, lat] approximate country centroids, covering the
 // countries our ransomware feed surfaces (plus common extras).
 const COUNTRY_COORDS: Record<string, [number, number]> = {
@@ -71,19 +80,20 @@ function AttackArc({
   const d = `M${sx},${sy} Q${cx},${cy} ${ex},${ey}`;
   return (
     <g>
-      <path d={d} fill="none" stroke={color} strokeWidth={0.7} opacity={0.25} />
+      <path d={d} fill="none" stroke={color} strokeWidth={0.6} opacity={0.35} />
       <path
         d={d}
         fill="none"
         stroke={color}
-        strokeWidth={1.6}
+        strokeWidth={1.8}
         strokeLinecap="round"
-        strokeDasharray="10 260"
-        opacity={0.95}
+        strokeDasharray="12 300"
+        opacity={1}
+        filter="url(#beamGlow)"
       >
-        <animate attributeName="stroke-dashoffset" from="270" to="0" dur={`${dur}s`} begin={`${delay}s`} repeatCount="indefinite" />
+        <animate attributeName="stroke-dashoffset" from="312" to="0" dur={`${dur}s`} begin={`${delay}s`} repeatCount="indefinite" />
       </path>
-      <circle r={2.4} fill={color}>
+      <circle r={2.8} fill={BEAM_DOT} filter="url(#beamGlow)">
         <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.1;0.85;1" dur={`${dur}s`} begin={`${delay}s`} repeatCount="indefinite" />
         <animateMotion dur={`${dur}s`} begin={`${delay}s`} repeatCount="indefinite" path={d} />
       </circle>
@@ -141,6 +151,15 @@ export function ThreatWorldMap({ countries, className }: { countries: CountItem[
         height={H}
         style={{ width: "100%", height: "auto" }}
       >
+        <defs>
+          <filter id="beamGlow" x="-60%" y="-60%" width="220%" height="220%">
+            <feGaussianBlur stdDeviation="2.2" result="b" />
+            <feMerge>
+              <feMergeNode in="b" />
+              <feMergeNode in="SourceGraphic" />
+            </feMerge>
+          </filter>
+        </defs>
         <Geographies geography="/data/world-countries-110m.json">
           {({ geographies: geos }) =>
             geos
@@ -149,12 +168,12 @@ export function ThreatWorldMap({ countries, className }: { countries: CountItem[
                 <Geography
                   key={g.rsmKey}
                   geography={g}
-                  fill="hsl(var(--muted))"
-                  stroke="hsl(var(--border))"
-                  strokeWidth={0.3}
+                  fill={COUNTRY_FILL}
+                  stroke={COUNTRY_STROKE}
+                  strokeWidth={0.4}
                   style={{
-                    default: { outline: "none", opacity: 0.45 },
-                    hover: { outline: "none", opacity: 0.6, fill: "hsl(var(--muted))" },
+                    default: { outline: "none" },
+                    hover: { outline: "none", fill: "#1d2c49" },
                     pressed: { outline: "none" },
                   }}
                 />
@@ -172,7 +191,7 @@ export function ThreatWorldMap({ countries, className }: { countries: CountItem[
                   projection={projection}
                   from={a.from}
                   to={a.to}
-                  color="hsl(var(--primary))"
+                  color={BEAM}
                   delay={a.delay}
                   dur={a.dur}
                 />
@@ -184,10 +203,11 @@ export function ThreatWorldMap({ countries, className }: { countries: CountItem[
               const r = 3 + (p.count / maxCount) * 12;
               return (
                 <Marker key={p.name} coordinates={p.coord}>
-                  <circle r={r} fill="hsl(var(--primary))" opacity={0.14}>
-                    <animate attributeName="r" values={`${r};${r * 1.25};${r}`} dur="2.6s" repeatCount="indefinite" />
+                  <circle r={r} fill={VICTIM} opacity={0.18}>
+                    <animate attributeName="r" values={`${r};${r * 1.3};${r}`} dur="2.6s" repeatCount="indefinite" />
+                    <animate attributeName="opacity" values="0.18;0.05;0.18" dur="2.6s" repeatCount="indefinite" />
                   </circle>
-                  <circle r={Math.max(1.8, r * 0.3)} fill="hsl(var(--primary))" />
+                  <circle r={Math.max(1.8, r * 0.32)} fill={VICTIM} filter="url(#beamGlow)" />
                 </Marker>
               );
             })}
@@ -195,8 +215,11 @@ export function ThreatWorldMap({ countries, className }: { countries: CountItem[
             {/* symbolic origin hubs */}
             {HUBS.map((h) => (
               <Marker key={h.name} coordinates={h.coord}>
-                <circle r={4.5} fill="none" stroke="hsl(var(--primary))" strokeWidth={1.2} opacity={0.85} />
-                <circle r={1.7} fill="hsl(var(--primary))" />
+                <circle r={5} fill="none" stroke={HUB} strokeWidth={1.3} opacity={0.9}>
+                  <animate attributeName="r" values="5;8;5" dur="2.4s" repeatCount="indefinite" />
+                  <animate attributeName="opacity" values="0.9;0.2;0.9" dur="2.4s" repeatCount="indefinite" />
+                </circle>
+                <circle r={2} fill={HUB} filter="url(#beamGlow)" />
               </Marker>
             ))}
           </>
