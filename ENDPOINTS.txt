@@ -22,8 +22,6 @@ USER KEYS (BYOK)
   GET     /api/user/keys                       [auth]
   PUT     /api/user/keys/:provider             [auth]
   DELETE  /api/user/keys/:provider             [auth]
-  PUT     /api/user/groq-key                   [auth]
-  DELETE  /api/user/groq-key                   [auth]
 
 ====================================================================
 THREAT BRIEF (FEED JOBS)

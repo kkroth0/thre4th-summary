@@ -80,18 +80,18 @@ function AttackArc({
   const d = `M${sx},${sy} Q${cx},${cy} ${ex},${ey}`;
   return (
     <g>
-      <path d={d} fill="none" stroke={color} strokeWidth={0.6} opacity={0.35} />
+      <path d={d} fill="none" stroke={color} strokeWidth={1} opacity={0.5} />
       <path
         d={d}
         fill="none"
         stroke={color}
-        strokeWidth={1.8}
+        strokeWidth={2.4}
         strokeLinecap="round"
-        strokeDasharray="12 300"
+        strokeDasharray="45 265"
         opacity={1}
         filter="url(#beamGlow)"
       >
-        <animate attributeName="stroke-dashoffset" from="312" to="0" dur={`${dur}s`} begin={`${delay}s`} repeatCount="indefinite" />
+        <animate attributeName="stroke-dashoffset" from="310" to="0" dur={`${dur}s`} begin={`${delay}s`} repeatCount="indefinite" />
       </path>
       <circle r={2.8} fill={BEAM_DOT} filter="url(#beamGlow)">
         <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.1;0.85;1" dur={`${dur}s`} begin={`${delay}s`} repeatCount="indefinite" />
@@ -134,11 +134,11 @@ export function ThreatWorldMap({ countries, className }: { countries: CountItem[
   );
   const arcs = useMemo(
     () =>
-      points.slice(0, 8).map((t, i) => ({
+      points.slice(0, 12).map((t, i) => ({
         from: HUBS[i % HUBS.length].coord,
         to: t.coord,
-        delay: i * 0.32,
-        dur: 2 + (i % 3) * 0.4,
+        delay: i * 0.28,
+        dur: 2.2 + (i % 3) * 0.4,
       })),
     [points],
   );

@@ -53,7 +53,7 @@ PILAR B — A BIBLIOTECA DE CAÇA (inspirado/integrado ao HEARTH)
   atribuição), traduzir para PT, e ligar cada hunt ao motor de busca: ao
   investigar um IOC/técnica, o analista vê hipóteses de caça relacionadas e
   o mapa de cobertura MITRE. Já temos um "hunt-service" próprio (Python +
-  Groq/Llama) que transforma a URL de um relatório de ameaça em um "Hunt
+  OpenRouter/DeepSeek) que transforma a URL de um relatório de ameaça em um "Hunt
   Pack" completo: ator, TTPs MITRE, IOCs, hipótese, KQL de Sentinel e Sigma.
   >>> Esse é o nosso diferencial: o HEARTH para na hipótese; nós entregamos
   a QUERY pronta para rodar + enriquecimento ao vivo dos IOCs.
@@ -138,7 +138,7 @@ Integrar o ponto forte de cada fonte para formar o veredito consolidado:
 6.5. Stack técnica (atual / proposta)
    - Frontend: React 18 + Vite + TypeScript + Tailwind + shadcn/ui.
    - Backend: Node/Express (proxy dos vendors, rate limit).
-   - Microsserviço de caça: Python + FastAPI + Groq (Llama 3.3 70B) com
+   - Microsserviço de caça: Python + FastAPI + OpenRouter (DeepSeek) com
      validação Pydantic; saída defanged (IOCs neutralizados).
    - Cache: Redis. Filas/jobs para ingestão bulk.
    - i18n PT/EN já existente. Export PDF/PPTX/Excel já existente.
