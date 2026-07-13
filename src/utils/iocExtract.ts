@@ -17,13 +17,15 @@ export type AnalyzerQueryType = "ip" | "domain" | "hash" | "url" | "unknown";
 export const isPublicIpv4 = (value: string): boolean => {
   if (!IPV4_QUERY_REGEX.test(value)) return false;
 
-  const [first, second, third] = value.split(".").map(Number);
+  const [first, second, third, fourth] = value.split(".").map(Number);
   if (first === 0 || first === 10 || first === 127 || first >= 224) return false;
   if (first === 100 && second >= 64 && second <= 127) return false;
   if (first === 169 && second === 254) return false;
   if (first === 172 && second >= 16 && second <= 31) return false;
   if (first === 192 && second === 168) return false;
-  if (first === 192 && second === 0 && (third === 0 || third === 2)) return false;
+  if (first === 192 && second === 0 && third === 0 && fourth !== 9 && fourth !== 10) return false;
+  if (first === 192 && second === 0 && third === 2) return false;
+  if (first === 192 && second === 88 && third === 99) return false;
   if (first === 198 && (second === 18 || second === 19)) return false;
   if (first === 198 && second === 51 && third === 100) return false;
   if (first === 203 && second === 0 && third === 113) return false;

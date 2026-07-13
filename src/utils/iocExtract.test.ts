@@ -57,6 +57,17 @@ test("accepts only public IPv4 addresses in primary search and extraction", () =
   );
 });
 
+test("handles globally reachable exceptions in special-use IPv4 ranges", () => {
+  assert.equal(detectAnalyzerQueryType("192.0.0.9"), "ip");
+  assert.equal(detectAnalyzerQueryType("192.0.0.10"), "ip");
+  assert.equal(detectAnalyzerQueryType("192.0.0.8"), "unknown");
+  assert.equal(detectAnalyzerQueryType("192.88.99.1"), "unknown");
+  assert.deepEqual(
+    extractIocsFromText("192.0.0.8 192.0.0.9 192.0.0.10 192.88.99.1"),
+    ["192.0.0.9", "192.0.0.10"],
+  );
+});
+
 test("accepts public IPv6 inputs and excludes non-global IPv6 ranges", () => {
   const publicAddresses = [
     "2001:4860:4860::8888",
