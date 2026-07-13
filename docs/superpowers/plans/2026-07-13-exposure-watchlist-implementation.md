@@ -70,7 +70,7 @@
   - `selectDueAssets(assets, now)`
   - `applySnapshotRetention(snapshots, assetId)`
 
-- [ ] **Step 1: Write failing tests for validation, conversion, summary, diff, due selection, and retention**
+- [x] **Step 1: Write failing tests for validation, conversion, summary, diff, due selection, and retention**
 
 Create `server/test/exposureWatchlist.test.js`:
 
@@ -248,7 +248,7 @@ test('applySnapshotRetention keeps latest snapshots for an asset', () => {
 });
 ```
 
-- [ ] **Step 2: Run tests to verify failure**
+- [x] **Step 2: Run tests to verify failure**
 
 Run:
 
@@ -258,7 +258,7 @@ node --test server/test/exposureWatchlist.test.js
 
 Expected: FAIL with `Cannot find module '../exposureWatchlist.js'`.
 
-- [ ] **Step 3: Implement pure logic**
+- [x] **Step 3: Implement pure logic**
 
 Create `server/exposureWatchlist.js` with these exports and behavior:
 
@@ -475,7 +475,7 @@ export function applySnapshotRetention(snapshots = [], assetId) {
 }
 ```
 
-- [ ] **Step 4: Run tests to verify pure logic passes**
+- [x] **Step 4: Run tests to verify pure logic passes**
 
 Run:
 
@@ -485,7 +485,7 @@ node --test server/test/exposureWatchlist.test.js
 
 Expected: PASS for all Task 1 tests.
 
-- [ ] **Step 5: Commit Task 1**
+- [x] **Step 5: Commit Task 1**
 
 ```bash
 git add server/exposureWatchlist.js server/test/exposureWatchlist.test.js docs/superpowers/plans/2026-07-13-exposure-watchlist-implementation.md
