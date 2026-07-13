@@ -18,6 +18,7 @@ import { VendorFilter } from "@/components/VendorFilter";
 import { Footer } from "@/components/Footer";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { Header } from "@/components/Header";
+import { BrandMark } from "@/components/BrandMark";
 import { useSidebar } from "@/contexts/SidebarContext";
 
 import { IocTimeline } from "@/components/IocTimeline";
@@ -212,7 +213,7 @@ const Index = () => {
   const toolCards = [
     {
       title: "ThreatSumm4ry Search",
-      description: language === "pt" ? "Busque IP, dominio, URL ou hash e consolide 21 fontes em um veredito unico." : "Search IPs, domains, URLs, or hashes and consolidate 21 sources into one verdict.",
+      description: language === "pt" ? "Busque IPv4/IPv6, dominio, URL ou hash e consolide 21 fontes em um veredito unico." : "Search IPv4/IPv6, domain, URL, or hash and consolidate 21 sources into one verdict.",
       href: "/analyzer",
       icon: Search,
       tags: [language === "pt" ? "BUSCA" : "SEARCH", language === "pt" ? "21 FONTES" : "21 SOURCES", "EXPORT"],
@@ -1512,7 +1513,7 @@ const Index = () => {
           <div className="mx-auto flex min-h-20 max-w-6xl flex-col gap-3 px-4 py-3 md:min-h-24 md:flex-row md:items-center md:justify-between md:px-8">
             <div className="flex items-center justify-between gap-4">
               <Link to="/" onClick={handleReset} className="flex min-w-0 items-center gap-3">
-                <span className="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-foreground text-[11px] font-black text-background">t4</span>
+                <BrandMark className="h-8 w-8 rounded-md" />
                 <span className="truncate text-lg font-black tracking-tight">threatsumm4ry</span>
               </Link>
               <Button size="sm" asChild className="h-9 px-3 md:hidden">
@@ -1612,8 +1613,8 @@ const Index = () => {
                     </h2>
                     <p className="mt-1 text-sm font-semibold text-muted-foreground">
                       {language === "pt"
-                        ? "Cole IP, dominio, URL ou hash e veja a analise multi-fonte na hora."
-                        : "Paste an IP, domain, URL, or hash and see the multi-source analysis right away."}
+                        ? "Cole IPv4/IPv6, dominio, URL ou hash e veja a analise multi-fonte na hora."
+                        : "Paste an IPv4/IPv6 address, domain, URL, or hash and see the multi-source analysis right away."}
                     </p>
                   </div>
                   <div className="grid grid-cols-3 gap-2 text-center">
@@ -1803,7 +1804,7 @@ const Index = () => {
 
         <footer className="mx-auto flex max-w-6xl flex-col gap-4 border-t border-border px-4 py-8 text-sm font-semibold text-muted-foreground md:flex-row md:items-center md:justify-between md:px-8">
           <div className="flex items-center gap-3">
-            <span className="grid h-7 w-7 place-items-center rounded-md bg-foreground text-[10px] font-black text-background">t4</span>
+            <BrandMark className="h-7 w-7 rounded-md" />
             <span>{language === "pt" ? "threatsumm4ry · coletanea de tools · 2026" : "threatsumm4ry · tool collection · 2026"}</span>
           </div>
           <div className="flex items-center gap-5">

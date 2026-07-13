@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   viewBox="0 0 256 256"
+   role="img"
+   version="1.1"
+   id="svg1"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <defs
+     id="defs1" />
+  <title
+     id="title1">Threatsumm4ry monochrome mark</title>
+  <rect
+     x="8"
+     y="8"
+     width="240"
+     height="240"
+     rx="48"
+     fill="#F8FAFC"
+     id="rect1" />
+  <path
+     d="m 83.417969,98.482422 h -13.3125 V 80.039062 H 42.232422 v 18.44336 h -9.845703 v 20.246098 h 9.845703 v 34.94531 c 0,15.46191 8.875,23.50488 26.27832,23.50488 4.992188,0 10.608399,-0.48535 16.987305,-2.21875 l -3.328125,-19.89941 c -1.040039,0.34668 -5.13086,0.90136 -6.794922,0.90136 -3.674805,0 -5.269531,-1.59472 -5.269531,-4.85351 v -32.37988 h 13.3125 z m 2.123047,61.431638 H 135.74023 V 176 h 26.90235 v -16.08594 h 11.92578 V 138.14258 H 162.64258 V 72.689453 h -35.5 L 85.541016,138.14258 Z m 50.892574,-21.77148 h -23.29687 v -0.83203 l 22.46484,-35.5 h 0.83203 z"
+     id="text1"
+     style="font-weight:900;font-size:142px;font-family:Inter;letter-spacing:-8;fill:#050a0e"
+     aria-label="t4" />
+</svg>

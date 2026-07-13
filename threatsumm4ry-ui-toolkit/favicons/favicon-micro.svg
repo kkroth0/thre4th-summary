@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   viewBox="0 0 256 256"
+   version="1.1"
+   id="svg3"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <defs
+     id="defs2">
+    <linearGradient
+       id="b"
+       x1="20"
+       y1="16"
+       x2="236"
+       y2="240">
+      <stop
+         stop-color="#071017"
+         id="stop1" />
+      <stop
+         offset="1"
+         stop-color="#03070A"
+         id="stop2" />
+    </linearGradient>
+  </defs>
+  <rect
+     x="8"
+     y="8"
+     width="240"
+     height="240"
+     rx="48"
+     fill="url(#b)"
+     id="rect2" />
+  <path
+     d="m 86.371094,99.115234 h -14.0625 V 79.632812 h -29.44336 v 19.482422 h -10.40039 v 21.386716 h 10.40039 v 36.91407 c 0,16.333 9.375,24.8291 27.758789,24.8291 5.273438,0 11.206055,-0.5127 17.944336,-2.34375 l -3.515625,-21.02051 c -1.098632,0.36621 -5.419922,0.95215 -7.177734,0.95215 -3.881836,0 -5.566406,-1.68457 -5.566406,-5.12696 v -34.2041 h 14.0625 z"
+     id="text2"
+     style="font-weight:900;font-size:150px;font-family:Inter;letter-spacing:-8;fill:#f8fafc"
+     aria-label="t" />
+  <path
+     d="M 90.152344,164.00781 H 143.17969 V 181 h 28.41797 v -16.99219 h 12.59765 V 141.00977 H 171.59766 V 71.869141 h -37.5 L 90.152344,141.00977 Z m 53.759766,-22.99804 h -24.60938 v -0.87891 l 23.73047,-37.5 h 0.87891 z"
+     id="text3"
+     style="font-weight:900;font-size:150px;font-family:Inter;letter-spacing:-8;fill:#f36b08"
+     aria-label="4" />
+  <rect
+     x="190"
+     y="43"
+     width="24"
+     height="24"
+     rx="3"
+     fill="#F36B08"
+     id="rect3" />
+</svg>

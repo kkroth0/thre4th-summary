@@ -28,6 +28,7 @@ import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Sheet, SheetClose, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { BrandMark } from "@/components/BrandMark";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useSidebar } from "@/contexts/SidebarContext";
 import { useAuth } from "@/contexts/AuthContext";
@@ -365,9 +366,7 @@ export function Header({ actions, logoAddon, onLogoClick, showBackButton = false
               </Button>
             )}
             <Link to="/" onClick={handleLogoClick} className="flex min-w-0 items-center gap-2">
-              <span className="grid h-7 w-7 place-items-center rounded-md border border-border bg-foreground text-[11px] font-black text-background">
-                t4
-              </span>
+              <BrandMark className="h-7 w-7 rounded-md" />
               <span className="truncate text-sm font-bold tracking-tight text-foreground">threatsumm4ry</span>
             </Link>
             {logoAddon}
@@ -389,9 +388,7 @@ export function Header({ actions, logoAddon, onLogoClick, showBackButton = false
               <SheetContent side="left" className="flex w-[92vw] max-w-sm flex-col overflow-y-auto border-border bg-background p-4">
                 <SheetHeader className="mb-5 text-left">
                   <SheetTitle className="flex items-center gap-2">
-                    <span className="grid h-7 w-7 place-items-center rounded-md border border-border bg-foreground text-[11px] font-black text-background">
-                      t4
-                    </span>
+                    <BrandMark className="h-7 w-7 rounded-md" />
                     threatsumm4ry
                   </SheetTitle>
                 </SheetHeader>
@@ -448,9 +445,7 @@ export function Header({ actions, logoAddon, onLogoClick, showBackButton = false
           <div className={cn("border-b border-border p-3", isCollapsed ? "px-3" : "px-4")}>
             <div className={cn("flex h-9 items-center", isCollapsed ? "justify-center" : "justify-between gap-2")}>
               <Link to="/" onClick={handleLogoClick} className="flex min-w-0 items-center gap-2">
-                <span className="grid h-8 w-8 shrink-0 place-items-center rounded-md border border-border bg-foreground text-[11px] font-black text-background">
-                  t4
-                </span>
+                <BrandMark className="h-8 w-8 rounded-md" />
                 {!isCollapsed && (
                   <span className="min-w-0">
                     <span className="block truncate text-sm font-bold tracking-tight text-foreground">threatsumm4ry</span>

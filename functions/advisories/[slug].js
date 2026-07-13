@@ -35,7 +35,7 @@ export async function onRequest(context) {
                         `<meta property="og:description" content="${desc}" />`,
                         `<meta property="og:type" content="article" />`,
                         `<meta property="og:url" content="${esc(canonical)}" />`,
-                        `<meta property="og:image" content="${url.origin}/favicon.png" />`,
+                        `<meta property="og:image" content="${url.origin}/threatsumm4ry-og-image-1200x630.png" />`,
                         `<meta name="twitter:card" content="summary_large_image" />`,
                         `<meta name="twitter:title" content="${esc(post.title)}" />`,
                         `<meta name="twitter:description" content="${desc}" />`,
