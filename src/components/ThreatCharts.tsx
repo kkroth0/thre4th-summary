@@ -420,7 +420,6 @@ export const ThreatCharts = ({ vendorData, detections, totalVendors }: ThreatCha
                               vendor.name === "Pulsedive" ? "pulsedive.com" :
                               vendor.name === "Hybrid Analysis" ? "hybrid-analysis.com" :
                               vendor.name === "CIRCL hashlookup" ? "circl.lu" :
-                              vendor.name === "Criminal IP" ? "criminalip.io" :
                               vendor.name === "MetaDefender" ? "opswat.com" :
                               vendor.name === "PhishStats" ? "phishstats.info" :
                               vendor.name === "Ransomware.live" ? "ransomware.live" :

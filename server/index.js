@@ -718,31 +718,6 @@ app.post('/api/circl', scanLimiter, async (req, res) => {
     }
 });
 
-// Criminal IP
-app.post('/api/criminalip', scanLimiter, async (req, res) => {
-    const { query } = req.body;
-    if (!process.env.CRIMINALIP_API_KEY) return res.status(500).json({ error: "API Key missing" });
-
-    try {
-        const queryType = detectQueryType(query);
-        if (queryType !== "ip" && queryType !== "domain") return res.json({ data: { "Status": "IP/Domain only" } });
-        const sanitized = sanitizeQuery(query, queryType);
-
-        const endpoint = queryType === "ip"
-            ? `https://api.criminalip.io/v1/ip/data`
-            : `https://api.criminalip.io/v1/domain/reports`;
-
-        const response = await axios.get(endpoint, {
-            params: queryType === "ip" ? { ip: sanitized } : { query: sanitized },
-            headers: { "x-api-key": process.env.CRIMINALIP_API_KEY },
-        });
-        res.json(response.data);
-    } catch (error) {
-        const { status, message } = sanitizeError(error);
-        res.status(status).json({ error: message });
-    }
-});
-
 // MetaDefender
 app.post('/api/metadefender', scanLimiter, async (req, res) => {
     const { query } = req.body;
@@ -2002,7 +1977,6 @@ app.get('/api/admin/integrations', requireAdmin, (req, res) => {
         { name: 'Shodan', env: 'SHODAN_API_KEY', configured: set('SHODAN_API_KEY'), required: true },
         { name: 'abuse.ch (MalwareBazaar/ThreatFox/URLhaus)', env: 'ABUSE_CH_API_KEY', configured: !!abuseChKey(), required: true },
         { name: 'Hybrid Analysis', env: 'HYBRID_ANALYSIS_API_KEY', configured: set('HYBRID_ANALYSIS_API_KEY'), required: true },
-        { name: 'Criminal IP', env: 'CRIMINALIP_API_KEY', configured: set('CRIMINALIP_API_KEY'), required: true },
         { name: 'MetaDefender', env: 'METADEFENDER_API_KEY', configured: set('METADEFENDER_API_KEY'), required: true },
         { name: 'WHOIS', env: 'WHOIS_API_KEY', configured: set('WHOIS_API_KEY'), required: true },
         { name: 'Censys', env: 'CENSYS_API_KEY', configured: set('CENSYS_API_KEY'), required: true },
@@ -2439,7 +2413,7 @@ app.post('/api/auth/logout', (req, res) => {
 // estão configurados.
 const BYOK_PROVIDERS = new Set([
     'virustotal', 'abuseipdb', 'shodan', 'alienvault', 'pulsedive',
-    'hybridanalysis', 'metadefender', 'criminalip', 'censys',
+    'hybridanalysis', 'metadefender', 'censys',
     'urlhaus', 'threatfox', 'phishtank', 'whois', 'dnsdumpster',
 ]);
 function userKeysStatus(u) {

@@ -64,11 +64,6 @@ const VENDOR_INFO: Record<string, { description: string; docLink: string; domain
         docLink: "https://hashlookup.circl.lu/",
         domain: "circl.lu"
     },
-    "Criminal IP": {
-        description: "Cyber Threat Intelligence (CTI) search engine monitoring open ports and vulnerability vectors globaly.",
-        docLink: "https://www.criminalip.io/developer/api-docs",
-        domain: "criminalip.io"
-    },
     "MetaDefender": {
         description: "Advanced malware prevention cloud sandbox and multiscanning platform by OPSWAT.",
         docLink: "https://docs.opswat.com/mdcloud/metadefender-cloud-api-v4",

@@ -39,7 +39,6 @@ export const VENDOR_IOC_SUPPORT: Record<string, ('ip' | 'domain' | 'hash' | 'url
     "Pulsedive": ['ip', 'domain', 'hash', 'url'],
     "Hybrid Analysis": ['hash'],
     "CIRCL hashlookup": ['hash'],
-    "Criminal IP": ['ip', 'domain'],
     "MetaDefender": ['ip', 'hash', 'domain', 'url'],
     "PhishStats": ['url', 'domain'],
     "OpenPhish": ['url', 'domain'],
@@ -259,26 +258,6 @@ const formatVendorData = (vendorName: string, data: any, query: string): any => 
                 "File Name": data.FileName || "Unknown",
                 "File Size": data.FileSize || "Unknown",
             };
-        case "Criminal IP": {
-            // Criminal IP returns `issues` as an OBJECT of booleans (is_vpn, is_tor…),
-            // not an array, and `score` as {inbound, outbound}. The card renderer
-            // expects Score/Issues/Classification/VPN/Proxy/Tor/Cloud, so map to those.
-            const ciIssues = (data.issues && typeof data.issues === "object") ? data.issues : {};
-            const ciScoreRaw = typeof data.score === "object" ? (data.score?.inbound ?? data.score?.outbound ?? 0) : (data.score ?? 0);
-            const ciScore = typeof ciScoreRaw === "number" ? ciScoreRaw : (parseInt(ciScoreRaw) || 0);
-            const ciIssueCount = Object.values(ciIssues).filter(Boolean).length;
-            const ciMalicious = data.is_malicious || ciIssues.is_malicious;
-            return {
-                "Score": ciScore,
-                "Issues": ciIssueCount,
-                "Classification": ciMalicious ? "Malicious" : ciIssueCount ? "Suspicious" : "Clean",
-                "VPN": ciIssues.is_vpn ? "Yes" : "No",
-                "Proxy": ciIssues.is_proxy ? "Yes" : "No",
-                "Tor": ciIssues.is_tor ? "Yes" : "No",
-                "Cloud": ciIssues.is_cloud ? "Yes" : "No",
-                "Status": ciMalicious ? "Malicious" : "Clean",
-            };
-        }
         case "MetaDefender": {
             if (data.scan_results) {
                 return {
@@ -526,7 +505,6 @@ const getVendorLink = (vendorName: string, query: string): string | undefined =>
 
         case "Hybrid Analysis": return `https://www.hybrid-analysis.com/search?query=${encodedQuery}`;
         case "CIRCL hashlookup": return `https://hashlookup.circl.lu/`;
-        case "Criminal IP": return `https://www.criminalip.io/asset/report/${query}`;
         case "MetaDefender": return `https://metadefender.opswat.com/results/ip/${query}`;
         case "PhishStats": return `https://phishstats.info/`;
         case "Ransomware.live": return `https://ransomware.live/`;
@@ -713,7 +691,6 @@ export const fetchPulsediveData = (query: string) => fetchFromBackend('pulsedive
 
 export const fetchHybridAnalysisData = (query: string) => fetchFromBackend('hybridanalysis', query, "Hybrid Analysis");
 export const fetchCIRCLData = (query: string) => fetchFromBackend('circl', query, "CIRCL hashlookup");
-export const fetchCriminalIPData = (query: string) => fetchFromBackend('criminalip', query, "Criminal IP");
 export const fetchMetaDefenderData = (query: string) => fetchFromBackend('metadefender', query, "MetaDefender");
 export const fetchPhishStatsData = (query: string) => fetchFromBackend('phishstats', query, "PhishStats");
 export const fetchRansomwareLiveData = (query: string) => fetchFromBackend('ransomwarelive', query, "Ransomware.live");
@@ -776,7 +753,6 @@ const buildVendorMap = (query: string): Record<string, () => Promise<VendorData>
     "Pulsedive": () => fetchPulsediveData(query),
     "Hybrid Analysis": () => fetchHybridAnalysisData(query),
     "CIRCL hashlookup": () => fetchCIRCLData(query),
-    "Criminal IP": () => fetchCriminalIPData(query),
     "MetaDefender": () => fetchMetaDefenderData(query),
     "PhishStats": () => fetchPhishStatsData(query),
     "Ransomware.live": () => fetchRansomwareLiveData(query),

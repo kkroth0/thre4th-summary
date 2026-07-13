@@ -12,6 +12,7 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
+import { SUPPORTED_VENDORS } from "@/config/vendorCatalog";
 
 interface VendorConfig {
     name: string;
@@ -21,7 +22,7 @@ interface VendorConfig {
     supportsHash: boolean;
 }
 
-const VENDOR_LIST: VendorConfig[] = [
+const VENDOR_OPTIONS: VendorConfig[] = [
     { name: "IP Geolocation", free: true, supportsIP: true, supportsDomain: false, supportsHash: false },
     { name: "WHOIS", free: true, supportsIP: false, supportsDomain: true, supportsHash: false },
     { name: "VirusTotal", free: false, supportsIP: true, supportsDomain: true, supportsHash: true },
@@ -38,7 +39,6 @@ const VENDOR_LIST: VendorConfig[] = [
     { name: "Censys", free: false, supportsIP: true, supportsDomain: false, supportsHash: false },
     { name: "Hybrid Analysis", free: false, supportsIP: false, supportsDomain: false, supportsHash: true },
     { name: "CIRCL hashlookup", free: true, supportsIP: false, supportsDomain: false, supportsHash: true },
-    { name: "Criminal IP", free: false, supportsIP: true, supportsDomain: true, supportsHash: false },
     { name: "MetaDefender", free: false, supportsIP: true, supportsDomain: false, supportsHash: true },
     { name: "PhishStats", free: true, supportsIP: false, supportsDomain: true, supportsHash: false },
     { name: "Ransomware.live", free: true, supportsIP: false, supportsDomain: true, supportsHash: false },
@@ -47,6 +47,8 @@ const VENDOR_LIST: VendorConfig[] = [
     { name: "OpenPhish", free: true, supportsIP: false, supportsDomain: true, supportsHash: false },
     { name: "Team Cymru", free: true, supportsIP: true, supportsDomain: false, supportsHash: true },
 ];
+
+const VENDOR_LIST = VENDOR_OPTIONS.filter((vendor) => (SUPPORTED_VENDORS as readonly string[]).includes(vendor.name));
 
 interface VendorFilterProps {
     selectedVendors: string[];

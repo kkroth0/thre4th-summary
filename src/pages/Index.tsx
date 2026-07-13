@@ -36,6 +36,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { SearchForm } from "@/components/SearchForm";
 import { extractIocsFromText, isSupportedAnalyzerQuery, MAX_ANALYZER_TARGETS } from "@/utils/iocExtract";
+import { normalizeVendorSelection, SUPPORTED_VENDORS } from "@/config/vendorCatalog";
 import { ThreatIntelligenceResult } from "@/types/threat-intelligence";
 import { cn } from "@/lib/utils";
 // jsPDF + autoTable are loaded lazily inside exportGlobalPDF (see below) so the
@@ -125,14 +126,7 @@ const TypingTitle = ({ language }: { language: string }) => {
 };
 
 
-const ALL_VENDORS = [
-  "IP Geolocation", "WHOIS", "VirusTotal", "AbuseIPDB", "AlienVault OTX",
-  "Shodan", "URLhaus", "MalwareBazaar", "ThreatFox", "Google Safe Browsing",
-  "PhishTank", "Pulsedive",
-  "Hybrid Analysis", "CIRCL hashlookup",
-  "Criminal IP", "MetaDefender", "PhishStats", "Ransomware.live",
-  "OpenPhish", "Team Cymru", "Censys"
-];
+const ALL_VENDORS = [...SUPPORTED_VENDORS];
 
 const HeroOpsPanel = ({ language }: { language: string }) => {
   const rows = [
@@ -218,7 +212,7 @@ const Index = () => {
   const toolCards = [
     {
       title: "ThreatSumm4ry Search",
-      description: language === "pt" ? "Busque IP, dominio, URL, hash ou CVE e consolide 21 fontes em um veredito unico." : "Search IPs, domains, URLs, hashes or CVEs and consolidate 21 sources into one verdict.",
+      description: language === "pt" ? "Busque IP, dominio, URL ou hash e consolide 21 fontes em um veredito unico." : "Search IPs, domains, URLs, or hashes and consolidate 21 sources into one verdict.",
       href: "/analyzer",
       icon: Search,
       tags: [language === "pt" ? "BUSCA" : "SEARCH", language === "pt" ? "21 FONTES" : "21 SOURCES", "EXPORT"],
@@ -356,9 +350,7 @@ const Index = () => {
     const savedVendors = localStorage.getItem("selectedVendors");
     if (savedVendors) {
       try {
-        const parsed = JSON.parse(savedVendors);
-        // Filter out vendors that are no longer in ALL_VENDORS
-        const validVendors = parsed.filter((v: string) => ALL_VENDORS.includes(v));
+        const validVendors = normalizeVendorSelection(JSON.parse(savedVendors));
         setSelectedVendors(validVendors.length > 0 ? validVendors : ALL_VENDORS);
       } catch (e) {
         console.error("Failed to parse saved vendors", e);
@@ -1347,7 +1339,6 @@ const Index = () => {
       urls.push(`AbuseIPDB: https://www.abuseipdb.com/check/${searchQuery}`);
       urls.push(`AlienVault OTX: https://otx.alienvault.com/indicator/ip/${searchQuery}`);
       urls.push(`Shodan: https://www.shodan.io/host/${searchQuery}`);
-      urls.push(`Criminal IP: https://www.criminalip.io/asset/report/${searchQuery}`);
     } else if (type === "domain") {
       urls.push(`VirusTotal: https://www.virustotal.com/gui/domain/${searchQuery}`);
       urls.push(`AlienVault OTX: https://otx.alienvault.com/indicator/domain/${searchQuery}`);
@@ -1389,7 +1380,6 @@ const Index = () => {
       "Pulsedive": "pulsedive.com",
       "Hybrid Analysis": "hybrid-analysis.com",
       "CIRCL hashlookup": "circl.lu",
-      "Criminal IP": "criminalip.io",
       "MetaDefender": "opswat.com",
       "PhishStats": "phishstats.info",
       "Ransomware.live": "ransomware.live",
@@ -1426,7 +1416,6 @@ const Index = () => {
       case "Pulsedive": fallback = <Radar className="h-5 w-5 text-primary" />; break;
       case "Hybrid Analysis": fallback = <Bug className="h-5 w-5 text-primary" />; break;
       case "CIRCL hashlookup": fallback = <Database className="h-5 w-5 text-primary" />; break;
-      case "Criminal IP": fallback = <AlertTriangle className="h-5 w-5 text-primary" />; break;
       case "MetaDefender": fallback = <Shield className="h-5 w-5 text-primary" />; break;
       case "PhishStats": fallback = <LinkIcon className="h-5 w-5 text-primary" />; break;
       case "Ransomware.live": fallback = <Bug className="h-5 w-5 text-primary" />; break;
@@ -1450,7 +1439,6 @@ const Index = () => {
       case "Pulsedive": return "https://pulsedive.com";
       case "Hybrid Analysis": return "https://hybrid-analysis.com";
       case "CIRCL hashlookup": return "https://hashlookup.circl.lu";
-      case "Criminal IP": return "https://criminalip.io";
       case "MetaDefender": return "https://metadefender.opswat.com";
       case "PhishStats": return "https://phishstats.info";
       case "Ransomware.live": return "https://ransomware.live";
@@ -1624,8 +1612,8 @@ const Index = () => {
                     </h2>
                     <p className="mt-1 text-sm font-semibold text-muted-foreground">
                       {language === "pt"
-                        ? "Cole IP, dominio, URL, hash ou CVE e veja a analise multi-fonte na hora."
-                        : "Paste an IP, domain, URL, hash or CVE and see the multi-source analysis right away."}
+                        ? "Cole IP, dominio, URL ou hash e veja a analise multi-fonte na hora."
+                        : "Paste an IP, domain, URL, or hash and see the multi-source analysis right away."}
                     </p>
                   </div>
                   <div className="grid grid-cols-3 gap-2 text-center">
@@ -1885,8 +1873,8 @@ const Index = () => {
                     </h1>
                     <p className="mt-4 text-base font-semibold leading-8 text-muted-foreground md:text-lg">
                       {language === "pt"
-                        ? "Consulte IPs, dominios, URLs, hashes ou CVEs. A busca consolida reputacao, DNS, WHOIS, vendors e contexto operacional em um unico resultado."
-                        : "Query IPs, domains, URLs, hashes or CVEs. Search consolidates reputation, DNS, WHOIS, vendors and operational context into one result."}
+                        ? "Consulte IPs, dominios, URLs ou hashes. A busca consolida reputacao, DNS, WHOIS, vendors e contexto operacional em um unico resultado."
+                        : "Query IPs, domains, URLs, or hashes. Search consolidates reputation, DNS, WHOIS, vendors and operational context into one result."}
                     </p>
                   </div>
                   <div className="grid min-w-0 grid-cols-3 gap-2 md:w-72">
@@ -1920,7 +1908,7 @@ const Index = () => {
                   <span className="mr-1 text-[11px] font-black uppercase tracking-wide text-muted-foreground">
                     {language === "pt" ? "Exemplos" : "Try"}
                   </span>
-                  {["14.103.115.208", "CVE-2024-3094", "example.com", "8.8.8.8"].map((sample) => (
+                  {["14.103.115.208", "https://example.com", "example.com", "8.8.8.8"].map((sample) => (
                     <button
                       key={sample}
                       onClick={() => setQuery(sample)}
@@ -2068,7 +2056,7 @@ const Index = () => {
                           .sort((a, b) => {
                             // Define vendor importance tiers
                             const tier1 = ["VirusTotal", "AbuseIPDB"];
-                            const tier2 = ["Shodan", "AlienVault OTX", "Criminal IP"];
+                            const tier2 = ["Shodan", "AlienVault OTX"];
                             const tier3 = ["Pulsedive", "URLhaus", "PhishTank"];
 
                             const getTier = (name: string) => {

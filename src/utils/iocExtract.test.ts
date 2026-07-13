@@ -34,3 +34,25 @@ test("classifies only supported primary-search inputs", () => {
   assert.equal(detectAnalyzerQueryType("AS15169"), "unknown");
   assert.equal(isSupportedAnalyzerQuery("999.1.1.1"), false);
 });
+
+test("accepts only public IPv4 addresses in primary search and extraction", () => {
+  const nonPublicAddresses = [
+    "10.0.0.1",
+    "127.0.0.1",
+    "169.254.1.1",
+    "172.16.0.1",
+    "192.168.1.1",
+    "100.64.0.1",
+    "224.0.0.1",
+    "0.0.0.0",
+  ];
+
+  assert.equal(detectAnalyzerQueryType("8.8.8.8"), "ip");
+  for (const address of nonPublicAddresses) {
+    assert.equal(detectAnalyzerQueryType(address), "unknown", address);
+  }
+  assert.deepEqual(
+    extractIocsFromText(["8.8.8.8", ...nonPublicAddresses].join(" ")),
+    ["8.8.8.8"],
+  );
+});

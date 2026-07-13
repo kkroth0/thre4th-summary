@@ -28,7 +28,6 @@ const CATALOG: Group[] = [
       { id: "shodan", label: "Shodan", url: "https://account.shodan.io/" },
       { id: "alienvault", label: "AlienVault OTX", url: "https://otx.alienvault.com/api" },
       { id: "pulsedive", label: "Pulsedive", url: "https://pulsedive.com/api/" },
-      { id: "criminalip", label: "Criminal IP", url: "https://www.criminalip.io/" },
       { id: "censys", label: "Censys", url: "https://search.censys.io/account/api" },
     ],
   },

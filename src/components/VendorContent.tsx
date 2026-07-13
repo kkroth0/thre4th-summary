@@ -383,29 +383,6 @@ export const VendorContent = ({ vendor, onPivot }: VendorContentProps) => {
         );
     }
 
-    // Criminal IP - Enhanced Display
-    if (name === "Criminal IP") {
-        const score = parseInt(data["Score"] || "0");
-        const issues = data["Issues"] || 0;
-
-        return (
-            <div className="space-y-3">
-                <div><p className="text-sm text-muted-foreground mb-2">Threat Score</p><div className="flex items-center gap-3"><Progress value={score} className="flex-1" /><span className={`font-semibold ${score > 50 ? "text-destructive" : "text-green-500"}`}>{score}/100</span></div></div>
-                <div className="grid grid-cols-2 gap-3">
-                    <div><p className="text-xs text-muted-foreground">Issues Found</p><p className="text-2xl font-bold text-destructive">{issues}</p></div>
-                    <div><p className="text-xs text-muted-foreground">Classification</p><p className="text-lg font-semibold">{data["Classification"]}</p></div>
-                </div>
-                <div className="grid grid-cols-2 gap-2 text-xs">
-                    <div><p className="text-muted-foreground">VPN</p><Badge variant={data["VPN"] === "Yes" ? "default" : "secondary"} className="text-xs">{data["VPN"]}</Badge></div>
-                    <div><p className="text-muted-foreground">Proxy</p><Badge variant={data["Proxy"] === "Yes" ? "default" : "secondary"} className="text-xs">{data["Proxy"]}</Badge></div>
-                    <div><p className="text-muted-foreground">Tor</p><Badge variant={data["Tor"] === "Yes" ? "destructive" : "secondary"} className="text-xs">{data["Tor"]}</Badge></div>
-                    <div><p className="text-muted-foreground">Cloud</p><Badge variant={data["Cloud"] === "Yes" ? "default" : "secondary"} className="text-xs">{data["Cloud"]}</Badge></div>
-                </div>
-                <div className="pt-3 border-t"><Button variant="outline" size="sm" onClick={() => setShowRaw(true)} className="w-full"><Code className="h-4 w-4 mr-2" />Show Raw Data</Button></div>
-            </div>
-        );
-    }
-
     // Censys - Enhanced Display
     if (name === "Censys") {
         if (data["Status"]) {

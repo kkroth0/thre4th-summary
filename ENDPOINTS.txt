@@ -77,7 +77,6 @@ VENDOR / THREAT-INTEL LOOKUPS  (all POST, all [rl])
   POST    /api/pulsedive                       [rl]
   POST    /api/hybridanalysis                  [rl]
   POST    /api/circl                           [rl]
-  POST    /api/criminalip                      [rl]
   POST    /api/metadefender                    [rl]
   POST    /api/phishstats                      [rl]
   POST    /api/ransomwarelive                  [rl]

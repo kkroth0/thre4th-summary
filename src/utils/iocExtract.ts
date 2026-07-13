@@ -14,11 +14,27 @@ const cleanUrlIoc = (url: string) => url.replace(/[),.;\]]+$/g, "");
 
 export type AnalyzerQueryType = "ip" | "domain" | "hash" | "url" | "unknown";
 
+export const isPublicIpv4 = (value: string): boolean => {
+  if (!IPV4_QUERY_REGEX.test(value)) return false;
+
+  const [first, second, third] = value.split(".").map(Number);
+  if (first === 0 || first === 10 || first === 127 || first >= 224) return false;
+  if (first === 100 && second >= 64 && second <= 127) return false;
+  if (first === 169 && second === 254) return false;
+  if (first === 172 && second >= 16 && second <= 31) return false;
+  if (first === 192 && second === 168) return false;
+  if (first === 192 && second === 0 && (third === 0 || third === 2)) return false;
+  if (first === 198 && (second === 18 || second === 19)) return false;
+  if (first === 198 && second === 51 && third === 100) return false;
+  if (first === 203 && second === 0 && third === 113) return false;
+  return true;
+};
+
 export const detectAnalyzerQueryType = (query: string): AnalyzerQueryType => {
   const value = query.trim();
   if (/^https?:\/\/[^ "<>]+$/i.test(value)) return "url";
   if (/^[a-fA-F0-9]{32}$|^[a-fA-F0-9]{40}$|^[a-fA-F0-9]{64}$/.test(value)) return "hash";
-  if (IPV4_QUERY_REGEX.test(value)) return "ip";
+  if (isPublicIpv4(value)) return "ip";
   if (/^([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$/.test(value)) return "domain";
   return "unknown";
 };
@@ -30,7 +46,7 @@ export const extractIocsFromText = (text: string) => {
 
   const urls = (text.match(URL_GLOBAL_REGEX) ?? []).map(cleanUrlIoc);
   const textWithoutUrls = text.replace(URL_GLOBAL_REGEX, " ");
-  const ips = text.match(IPV4_GLOBAL_REGEX) ?? [];
+  const ips = (text.match(IPV4_GLOBAL_REGEX) ?? []).filter(isPublicIpv4);
   const hashes = text.match(HASH_GLOBAL_REGEX) ?? [];
   const domains = (textWithoutUrls.match(DOMAIN_GLOBAL_REGEX) ?? []).filter((domain) => {
     const ext = domain.split(".").pop()?.toLowerCase() || "";
