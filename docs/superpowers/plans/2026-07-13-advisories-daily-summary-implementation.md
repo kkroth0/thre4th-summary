@@ -184,7 +184,6 @@ Create `server/dailyBrief.js` with pure ESM exports:
 
 ```js
 const WINDOW_HOURS = 36;
-const DAY_MS = 24 * 60 * 60 * 1000;
 const WINDOW_MS = WINDOW_HOURS * 60 * 60 * 1000;
 
 const plural = (count, one, many) => `${count} ${count === 1 ? one : many}`;
@@ -286,10 +285,10 @@ export function buildDailyBrief({ feed, victims, now = Date.now(), countBy, lata
   const recent = (feed || []).filter((item) => {
     const t = new Date(item.pubDate || item.date || 0).getTime();
     return Number.isFinite(t) && now - t <= WINDOW_MS;
-  });
-  const recentVictims = (victims || [])
-    .filter((victim) => !victim.discovered || now - new Date(victim.discovered).getTime() <= DAY_MS)
-    .slice(0, 12);
+    });
+    const recentVictims = (victims || [])
+        .filter((victim) => !victim.discovered || now - new Date(victim.discovered).getTime() <= WINDOW_MS)
+        .slice(0, 12);
   const highSignal = recent.filter((item) => (item.score || 0) >= 65 || item.kev);
   const kev = recent.filter((item) => item.kev);
   const cves = [...new Set(recent.flatMap((item) => item.cves || []))];
@@ -456,7 +455,7 @@ Expected: commit succeeds.
 - Consumes: `DailyBrief.windowHours`, `DailyBrief.executiveSummary`, `DailyBrief.feedGroups`, existing `highlights`, `summary`, `ransomware`, and manual posts.
 - Produces: public `/advisories` page that reads as "Summ4ry das ultimas 36h" with manual posts below.
 
-- [ ] **Step 1: Add display helpers**
+- [x] **Step 1: Add display helpers**
 
 Add helper functions near the existing `fmtDate`:
 
@@ -477,7 +476,7 @@ const groupTone: Record<string, string> = {
 };
 ```
 
-- [ ] **Step 2: Change page header copy**
+- [x] **Step 2: Change page header copy**
 
 Change the page title to:
 
@@ -487,7 +486,7 @@ Change the page title to:
 
 Change subtitle to mention advisories, exploração ativa, ransomware, CVEs, and security news from the last 36 hours.
 
-- [ ] **Step 3: Render executive summary in the top block**
+- [x] **Step 3: Render executive summary in the top block**
 
 Inside the `brief &&` section, add a compact executive summary column:
 
@@ -514,7 +513,7 @@ Also show the generated timestamp:
 <span>{fmtDateTime(brief.generatedAt, language)}</span>
 ```
 
-- [ ] **Step 4: Render organized feed groups below highlights/ransomware**
+- [x] **Step 4: Render organized feed groups below highlights/ransomware**
 
 Add a new section after the top brief grid:
 
@@ -578,11 +577,11 @@ Add a new section after the top brief grid:
 </section>
 ```
 
-- [ ] **Step 5: Rename manual posts section**
+- [x] **Step 5: Rename manual posts section**
 
 Change section title from "Publicações" to "Analises publicadas" in Portuguese and equivalent copy in other languages. Keep `PostEditor`, post cards, RSS button, and post links unchanged.
 
-- [ ] **Step 6: Run frontend checks**
+- [x] **Step 6: Run frontend checks**
 
 Run:
 
@@ -593,7 +592,7 @@ npm run build
 
 Expected: both commands exit 0.
 
-- [ ] **Step 7: Commit frontend page**
+- [x] **Step 7: Commit frontend page**
 
 Run:
 

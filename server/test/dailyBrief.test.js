@@ -99,9 +99,30 @@ test('buildFeedGroups separates KEV, critical, ransomware and other items', () =
 });
 
 test('buildDailyBrief filters the last 36 hours and returns the new contract', () => {
+  const windowVictims = [
+    ...victims,
+    {
+      name: 'Example US',
+      group: 'LockExample',
+      country: 'US',
+      countryName: 'United States',
+      sector: 'Technology',
+      discovered: '2026-07-12T00:30:00.000Z',
+      source: 'ransomware.live',
+    },
+    {
+      name: 'Old Victim',
+      group: 'OldGroup',
+      country: 'BR',
+      countryName: 'Brazil',
+      sector: 'Retail',
+      discovered: '2026-07-11T23:00:00.000Z',
+      source: 'ransomware.live',
+    },
+  ];
   const brief = buildDailyBrief({
     feed,
-    victims,
+    victims: windowVictims,
     now,
     countBy,
     latamCountries: new Set(['BR']),
@@ -112,7 +133,7 @@ test('buildDailyBrief filters the last 36 hours and returns the new contract', (
   assert.equal(brief.summary.kev, 1);
   assert.equal(brief.summary.critical, 2);
   assert.equal(brief.summary.cves, 2);
-  assert.equal(brief.summary.ransomwareVictims, 1);
+  assert.equal(brief.summary.ransomwareVictims, 2);
   assert.equal(brief.summary.latamVictims, 1);
   assert.ok(Array.isArray(brief.executiveSummary));
   assert.ok(Array.isArray(brief.feedGroups));

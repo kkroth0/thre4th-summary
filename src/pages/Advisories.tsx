@@ -13,6 +13,15 @@ import { fetchDailyBrief, fetchPosts, type DailyBrief, type PostCard } from "@/s
 const LOCALE: Record<string, string> = { pt: "pt-BR", en: "en-US", es: "es-ES", fr: "fr-FR" };
 const fmtDate = (iso: string | null, lang: string) =>
     iso ? new Date(iso).toLocaleDateString(LOCALE[lang] || "en-US", { day: "2-digit", month: "short", year: "numeric" }) : "";
+const fmtDateTime = (iso: string | null | undefined, lang: string) =>
+    iso ? new Date(iso).toLocaleString(LOCALE[lang] || "en-US", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : "";
+
+const groupTone: Record<string, string> = {
+    kev: "border-red-500/30 bg-red-500/5",
+    critical: "border-orange-500/30 bg-orange-500/5",
+    ransomware: "border-purple-500/30 bg-purple-500/5",
+    other: "border-border bg-card",
+};
 
 const Advisories = () => {
     const { language, tr } = useLanguage();
@@ -21,18 +30,23 @@ const Advisories = () => {
     const [brief, setBrief] = useState<DailyBrief | null>(null);
     const [isAdmin, setIsAdmin] = useState(false);
     const [loading, setLoading] = useState(true);
+    const [briefError, setBriefError] = useState(false);
 
     const load = async () => {
         setLoading(true);
+        setBriefError(false);
         try {
+            let dailyFailed = false;
             const [daily, r] = await Promise.all([
                 fetchDailyBrief().catch((e) => {
                     console.warn(e);
+                    dailyFailed = true;
                     return null;
                 }),
                 fetchPosts(),
             ]);
             setBrief(daily);
+            setBriefError(dailyFailed);
             setPosts(r.posts);
             setIsAdmin(r.isAdmin);
         } catch (e) {
@@ -50,14 +64,14 @@ const Advisories = () => {
                 <div className="mb-6 flex items-start justify-between gap-4">
                     <div>
                         <h1 className="text-3xl font-bold flex items-center gap-2">
-                            <Megaphone className="h-7 w-7 text-primary" /> {tr({ pt: "Boletim & Advisories", en: "Brief & Advisories", es: "Boletín y avisos", fr: "Bulletin et advisories" })}
+                            <Megaphone className="h-7 w-7 text-primary" /> {tr({ pt: "Summ4ry das ultimas 36h", en: "Last 36h Summ4ry", es: "Summ4ry de las ultimas 36h", fr: "Summ4ry des dernieres 36 h" })}
                         </h1>
                         <p className="text-muted-foreground mt-1">
                             {tr({
-                                pt: "O sinal do dia: CVEs, exploração ativa, ransomware e alertas que merecem atenção.",
-                                en: "The signal of the day: CVEs, active exploitation, ransomware and alerts worth attention.",
-                                es: "Análisis y alertas sobre campañas, amenazas y tendencias.",
-                                fr: "Analyses et alertes sur les campagnes, menaces et tendances.",
+                                pt: "Um apanhado de advisories, exploração ativa, ransomware, CVEs e notícias relevantes no recorte recente.",
+                                en: "A roundup of advisories, active exploitation, ransomware, CVEs and relevant security news in the recent window.",
+                                es: "Resumen de advisories, explotación activa, ransomware, CVEs y noticias relevantes recientes.",
+                                fr: "Synthese des advisories, exploitation active, ransomware, CVE et actualites de securite recentes.",
                             })}
                         </p>
                     </div>
@@ -80,6 +94,19 @@ const Advisories = () => {
                     </div>
                 ) : (
                     <div className="space-y-8">
+                        {briefError && !brief && (
+                            <Card className="border-dashed">
+                                <CardContent className="p-6 text-sm text-muted-foreground">
+                                    {tr({
+                                        pt: "O summ4ry automatizado esta temporariamente indisponivel. As analises publicadas continuam abaixo.",
+                                        en: "The automated summ4ry is temporarily unavailable. Published analysis remains available below.",
+                                        es: "El summ4ry automatizado no esta disponible temporalmente. Los analisis publicados siguen abajo.",
+                                        fr: "Le summ4ry automatise est temporairement indisponible. Les analyses publiees restent disponibles ci-dessous.",
+                                    })}
+                                </CardContent>
+                            </Card>
+                        )}
+
                         {brief && (
                             <section className="overflow-hidden rounded-lg border border-border bg-card">
                                 <div className="border-b border-border bg-secondary/30 p-6">
@@ -92,9 +119,11 @@ const Advisories = () => {
                                                     : tr({ pt: "calmo", en: "calm", es: "tranquilo", fr: "calme" })}
                                             </Badge>
                                             <h2 className="max-w-3xl text-3xl font-black tracking-tight">{brief.title}</h2>
-                                            <p className="mt-2 text-sm font-medium text-muted-foreground">
-                                                {tr({ pt: "Resumo automatizado por fontes: RSS advisories, CISA KEV, FIRST EPSS e ransomware.live.", en: "Automated summary from RSS advisories, CISA KEV, FIRST EPSS and ransomware.live.", es: "Resumen automatizado.", fr: "Résumé automatisé." })}
-                                            </p>
+                                            <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm font-medium text-muted-foreground">
+                                                <span>{tr({ pt: "Janela", en: "Window", es: "Ventana", fr: "Fenetre" })}: {brief.windowHours || 36}h</span>
+                                                <span>{fmtDateTime(brief.generatedAt, language)}</span>
+                                                <span>{tr({ pt: "RSS advisories, CISA KEV, FIRST EPSS e ransomware.live", en: "RSS advisories, CISA KEV, FIRST EPSS and ransomware.live", es: "RSS advisories, CISA KEV, FIRST EPSS y ransomware.live", fr: "RSS advisories, CISA KEV, FIRST EPSS et ransomware.live" })}</span>
+                                            </div>
                                         </div>
                                         <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
                                             {[
@@ -112,6 +141,19 @@ const Advisories = () => {
                                             ))}
                                         </div>
                                     </div>
+                                    <div className="mt-5 rounded-lg border border-border bg-background p-4">
+                                        <div className="mb-3 text-xs font-bold uppercase tracking-wide text-muted-foreground">
+                                            {tr({ pt: "Resumo executivo", en: "Executive summary", es: "Resumen ejecutivo", fr: "Resume executif" })}
+                                        </div>
+                                        <ul className="space-y-2">
+                                            {(brief.executiveSummary || []).map((line) => (
+                                                <li key={line} className="flex gap-2 text-sm leading-relaxed text-foreground">
+                                                    <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
+                                                    <span>{line}</span>
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    </div>
                                 </div>
 
                                 <div className="grid gap-6 p-6 lg:grid-cols-[1.15fr_0.85fr]">
@@ -122,10 +164,10 @@ const Advisories = () => {
                                         </div>
                                         <div className="space-y-3">
                                             {brief.highlights.slice(0, 6).map((item, idx) => (
-                                                <a key={`${item.link}-${idx}`} href={item.link} target="_blank" rel="noreferrer" className="block rounded-lg border border-border bg-background p-4 transition-colors hover:border-primary/40">
+                                                <a key={`${item.id}-${idx}`} href={item.link} target="_blank" rel="noreferrer" className="block rounded-lg border border-border bg-background p-4 transition-colors hover:border-primary/40">
                                                     <div className="flex flex-wrap items-center gap-2">
                                                         <Badge variant={item.kev ? "destructive" : "secondary"}>{item.kev ? "CISA KEV" : item.severity}</Badge>
-                                                        <span className="font-mono text-xs font-bold text-muted-foreground">{item.score}/100</span>
+                                                        <span className="font-mono text-xs font-bold text-muted-foreground">{item.score ?? 0}/100</span>
                                                         <span className="text-xs text-muted-foreground">{item.source}</span>
                                                     </div>
                                                     <h4 className="mt-2 line-clamp-2 font-semibold text-foreground">{language === "pt" ? item.titlePt || item.title : item.title}</h4>
@@ -138,7 +180,7 @@ const Advisories = () => {
                                     <div>
                                         <div className="mb-4 flex items-center gap-2">
                                             <Crosshair className="h-5 w-5 text-primary" />
-                                            <h3 className="text-xl font-black tracking-tight">{tr({ pt: "Ransomware do dia", en: "Ransomware today", es: "Ransomware del día", fr: "Ransomware du jour" })}</h3>
+                                            <h3 className="text-xl font-black tracking-tight">{tr({ pt: "Ransomware nas ultimas 36h", en: "Ransomware in the last 36h", es: "Ransomware en las ultimas 36h", fr: "Ransomware sur les dernieres 36 h" })}</h3>
                                         </div>
                                         <div className="rounded-lg border border-border bg-background">
                                             <div className="divide-y divide-border">
@@ -161,11 +203,76 @@ const Advisories = () => {
                             </section>
                         )}
 
+                        {brief && (
+                            <section>
+                                <div className="mb-4 flex items-center justify-between gap-4 border-b border-border pb-4">
+                                    <div>
+                                        <h2 className="text-2xl font-black tracking-tight">
+                                            {tr({ pt: "Feed organizado", en: "Organized feed", es: "Feed organizado", fr: "Flux organise" })}
+                                        </h2>
+                                        <p className="mt-1 text-sm text-muted-foreground">
+                                            {tr({
+                                                pt: "Itens das ultimas 36h agrupados por prioridade operacional.",
+                                                en: "Last 36h items grouped by operational priority.",
+                                                es: "Items de las ultimas 36h agrupados por prioridad.",
+                                                fr: "Elements des dernieres 36 h groupes par priorite.",
+                                            })}
+                                        </p>
+                                    </div>
+                                </div>
+                                <div className="space-y-4">
+                                    {(brief.feedGroups || []).map((group) => (
+                                        <div key={group.key} className={`rounded-lg border p-4 ${groupTone[group.key] || groupTone.other}`}>
+                                            <div className="mb-3 flex items-start justify-between gap-3">
+                                                <div>
+                                                    <h3 className="font-bold">{group.title}</h3>
+                                                    <p className="text-sm text-muted-foreground">{group.description}</p>
+                                                </div>
+                                                <Badge variant="secondary">{group.items.length}</Badge>
+                                            </div>
+                                            {group.items.length ? (
+                                                <div className="divide-y divide-border/70">
+                                                    {group.items.map((item) => (
+                                                        <div key={item.id} className="py-3 first:pt-0 last:pb-0">
+                                                            <div className="flex flex-wrap items-center gap-2">
+                                                                {item.kind === "ransomware" && <Badge variant="outline">ransomware</Badge>}
+                                                                {item.kev && <Badge variant="destructive">KEV</Badge>}
+                                                                {item.severity && <Badge variant="secondary">{item.severity}</Badge>}
+                                                                {typeof item.score === "number" && <span className="font-mono text-xs text-muted-foreground">{item.score}/100</span>}
+                                                                <span className="text-xs text-muted-foreground">{item.source}</span>
+                                                                {item.pubDate && <span className="text-xs text-muted-foreground">{fmtDateTime(item.pubDate, language)}</span>}
+                                                            </div>
+                                                            {item.link ? (
+                                                                <a href={item.link} target="_blank" rel="noreferrer" className="mt-1 block font-semibold text-foreground hover:text-primary">
+                                                                    {language === "pt" ? item.titlePt || item.title : item.title}
+                                                                </a>
+                                                            ) : (
+                                                                <div className="mt-1 font-semibold text-foreground">{item.title}</div>
+                                                            )}
+                                                            {item.kind === "ransomware" ? (
+                                                                <p className="mt-1 text-xs text-muted-foreground">{[item.group, item.countryName, item.sector].filter(Boolean).join(" · ")}</p>
+                                                            ) : item.cves.length ? (
+                                                                <p className="mt-1 font-mono text-xs text-muted-foreground">{item.cves.slice(0, 6).join(" · ")}</p>
+                                                            ) : null}
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            ) : (
+                                                <p className="py-4 text-sm text-muted-foreground">
+                                                    {tr({ pt: "Nenhum item neste grupo.", en: "No items in this group.", es: "Sin items en este grupo.", fr: "Aucun element dans ce groupe." })}
+                                                </p>
+                                            )}
+                                        </div>
+                                    ))}
+                                </div>
+                            </section>
+                        )}
+
                         <section>
                             <div className="mb-4 flex items-center justify-between gap-4 border-b border-border pb-4">
                                 <div>
-                                    <h2 className="text-2xl font-black tracking-tight">{tr({ pt: "Publicações", en: "Posts", es: "Publicaciones", fr: "Publications" })}</h2>
-                                    <p className="mt-1 text-sm text-muted-foreground">{tr({ pt: "Análises manuais e rascunhos publicados.", en: "Manual analysis and published drafts.", es: "Análisis manuales.", fr: "Analyses manuelles." })}</p>
+                                    <h2 className="text-2xl font-black tracking-tight">{tr({ pt: "Analises publicadas", en: "Published analysis", es: "Analisis publicados", fr: "Analyses publiees" })}</h2>
+                                    <p className="mt-1 text-sm text-muted-foreground">{tr({ pt: "Conteudo editorial salvo a partir de curadoria manual.", en: "Editorial content saved from manual curation.", es: "Contenido editorial guardado desde curadoria manual.", fr: "Contenu editorial enregistre depuis une curation manuelle." })}</p>
                                 </div>
                             </div>
 

@@ -1,7 +1,6 @@
 import crypto from 'crypto';
 
 const WINDOW_HOURS = 36;
-const DAY_MS = 24 * 60 * 60 * 1000;
 const WINDOW_MS = WINDOW_HOURS * 60 * 60 * 1000;
 
 const plural = (count, one, many) => `${count} ${count === 1 ? one : many}`;
@@ -121,7 +120,7 @@ export function buildDailyBrief({ feed, victims, now = Date.now(), countBy, lata
         return Number.isFinite(t) && now - t <= WINDOW_MS;
     });
     const recentVictims = (victims || [])
-        .filter((victim) => !victim.discovered || now - new Date(victim.discovered).getTime() <= DAY_MS)
+        .filter((victim) => !victim.discovered || now - new Date(victim.discovered).getTime() <= WINDOW_MS)
         .slice(0, 12);
     const highSignal = recent.filter((item) => (item.score || 0) >= 65 || item.kev);
     const kev = recent.filter((item) => item.kev);
