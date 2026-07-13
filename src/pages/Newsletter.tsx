@@ -7,7 +7,6 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageLayout } from "@/components/PageLayout";
 import { useLanguage } from "@/contexts/LanguageContext";
-import FeedSourcesManager from "@/components/FeedSourcesManager";
 import { toast } from "sonner";
 import {
   Select,
@@ -591,20 +590,17 @@ const Newsletter = () => {
                     </span>
                   )}
               </div>
-              <FeedSourcesManager />
             </div>
           </div>
 
-          {/* Current date */}
-          <div className="flex items-center gap-2.5 bg-card border rounded-lg p-3">
-            <Calendar className="h-4 w-4 text-primary shrink-0" />
-            <span className="text-sm font-semibold text-foreground capitalize">
-              {formatNewsletterDate(new Date(), language)}
-            </span>
-          </div>
-
-          {/* Search, Layer Filter, and Action Bar at the Top */}
-          <div className="flex flex-col xl:flex-row gap-3 bg-card border p-3 rounded-lg">
+          {/* Date + search + filters — one bar */}
+          <div className="flex flex-col xl:flex-row xl:items-center gap-3 bg-card border p-3 rounded-lg">
+            <div className="flex items-center gap-2.5 shrink-0">
+              <Calendar className="h-4 w-4 text-primary shrink-0" />
+              <span className="text-sm font-semibold text-foreground capitalize whitespace-nowrap">
+                {formatNewsletterDate(new Date(), language)}
+              </span>
+            </div>
             <div className="relative flex-1">
               <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
               <Input

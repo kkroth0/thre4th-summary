@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Navigate, Link } from "react-router-dom";
 import {
-  Github, KeyRound, LogOut, CheckCircle2, Loader2, ArrowRight, FileText,
+  Github, KeyRound, LogOut, CheckCircle2, Loader2, ArrowRight,
   ExternalLink, Settings as SettingsIcon, ShieldCheck,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -128,25 +128,6 @@ const Profile = () => {
         </Card>
       </Link>
 
-      {/* Atalho pro gerador premium */}
-      <Card className="bg-muted/20 border-dashed">
-        <CardContent className="p-4 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3 min-w-0">
-            <FileText className="h-5 w-5 text-primary shrink-0" />
-            <div className="min-w-0">
-              <div className="font-medium">{pt ? "Gerador de Relatorios" : "Report Generator"}</div>
-              <div className="text-sm text-muted-foreground truncate">
-                {!auth.isPremium
-                  ? (pt ? "Recurso premium — peça liberação para acessar." : "Premium feature — request access to use it.")
-                  : (pt ? "Tudo pronto — cole uma URL e gere seu relatorio." : "All set — paste a URL and generate your report.")}
-              </div>
-            </div>
-          </div>
-          <Button asChild variant={auth.isPremium ? "default" : "outline"} className="shrink-0">
-            <Link to="/relatorios">{auth.isPremium ? (pt ? "Gerar" : "Create") : "Premium"} <ArrowRight className="h-4 w-4 ml-1.5" /></Link>
-          </Button>
-        </CardContent>
-      </Card>
     </>
   );
 };

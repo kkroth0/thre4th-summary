@@ -22,7 +22,6 @@ import {
   ShieldAlert,
   User,
   Users,
-  Wrench,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -146,6 +145,19 @@ export function Header({ actions, logoAddon, onLogoClick, showBackButton = false
           description: pt ? "Timeline mensal Microsoft." : "Monthly Microsoft timeline.",
           icon: CalendarCheck,
         },
+        {
+          path: "/newsletter",
+          label: "Newsletter",
+          description: pt ? "Recorte semanal curado." : "Curated weekly digest.",
+          icon: Database,
+          premium: true,
+        },
+        {
+          path: "/vendors",
+          label: pt ? "Fontes" : "Sources",
+          description: pt ? "Fontes, integracoes e cobertura." : "Sources, integrations and coverage.",
+          icon: BookOpen,
+        },
       ],
     },
     {
@@ -157,30 +169,6 @@ export function Header({ actions, logoAddon, onLogoClick, showBackButton = false
           description: pt ? "Hipoteses e queries por tecnica." : "Hypotheses and queries by technique.",
           icon: Crosshair,
           premium: true,
-        },
-      ],
-    },
-    {
-      label: pt ? "Relatorios" : "Reports",
-      items: [
-        {
-          path: "/newsletter",
-          label: "Newsletter",
-          description: pt ? "Recorte semanal curado." : "Curated weekly digest.",
-          icon: Database,
-          premium: true,
-        },
-        {
-          path: "/features",
-          label: tr({ pt: "Funcionalidades", en: "Features", es: "Funciones", fr: "Fonctionnalités" }),
-          description: pt ? "Mapa de capabilities." : "Capability map.",
-          icon: Wrench,
-        },
-        {
-          path: "/vendors",
-          label: pt ? "Fontes" : "Sources",
-          description: pt ? "Fontes, integracoes e cobertura." : "Sources, integrations and coverage.",
-          icon: BookOpen,
         },
       ],
     },
@@ -373,11 +361,11 @@ export function Header({ actions, logoAddon, onLogoClick, showBackButton = false
           </div>
 
           <div className="flex items-center gap-2">
-            <Button variant="ghost" size="sm" asChild className="hidden h-8 px-2 text-xs sm:inline-flex">
-              <Link to={auth.authenticated ? "/relatorios" : "/cadastro"}>
-                {auth.authenticated ? (pt ? "Gerar relatorio" : "Create report") : (pt ? "Cadastrar" : "Sign up")}
-              </Link>
-            </Button>
+            {!auth.authenticated && (
+              <Button variant="ghost" size="sm" asChild className="hidden h-8 px-2 text-xs sm:inline-flex">
+                <Link to="/cadastro">{pt ? "Cadastrar" : "Sign up"}</Link>
+              </Button>
+            )}
             <Sheet>
               <SheetTrigger asChild>
                 <Button variant="outline" size="icon" className="h-8 w-8 rounded-md px-0">
@@ -466,15 +454,6 @@ export function Header({ actions, logoAddon, onLogoClick, showBackButton = false
 
           <div className={cn("border-t border-border p-3", isCollapsed ? "space-y-2" : "space-y-3")}>
             {actions && !isCollapsed && <div className="grid gap-2">{actions}</div>}
-
-            {!isCollapsed && auth.authenticated && (
-              <Button asChild className="h-9 w-full justify-start rounded-md">
-                <Link to="/relatorios">
-                  <FileSearch className="h-4 w-4" />
-                  {pt ? "Gerar relatorio" : "Create report"}
-                </Link>
-              </Button>
-            )}
 
             {renderDesktopAccount()}
 
