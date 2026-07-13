@@ -646,12 +646,12 @@ git commit -m "docs: mark advisories summary plan complete"
 
 Expected: commit succeeds, or no commit is needed if the plan was already clean.
 
-- [ ] **Step 4: Push to deploy**
+- [x] **Step 4: Push to deploy**
 
 Run: `git push origin main`
 
 Expected: push succeeds and the existing deployment pipeline starts from `main`.
 
-- [ ] **Step 5: Report deploy status**
+- [x] **Step 5: Report deploy status**
 
 Check local push output and report the pushed commit SHA. If the repository exposes deployment status locally or through existing tooling, include it. If not, report that the push was completed and CI/CD should publish from `main`.
