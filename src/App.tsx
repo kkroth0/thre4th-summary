@@ -15,6 +15,7 @@ const Profile = lazy(() => import("./pages/Profile"));
 const Settings = lazy(() => import("./pages/Settings"));
 const VendorDirectory = lazy(() => import("./pages/VendorDirectory"));
 const DnsblCheck = lazy(() => import("./pages/DnsblCheck"));
+const AttackSurface = lazy(() => import("./pages/AttackSurface"));
 const Newsletter = lazy(() => import("./pages/Newsletter"));
 const CveDashboard = lazy(() => import("./pages/CveDashboard"));
 const Actors = lazy(() => import("./pages/Actors"));
@@ -64,6 +65,7 @@ const App = () => (
                 {/* Tool Routes */}
                 <Route path="/vendors" element={<VendorDirectory />} />
                 <Route path="/dnsbl" element={<DnsblCheck />} />
+                <Route path="/attack-surface" element={<AttackSurface />} />
                 <Route path="/phishing-analyzer" element={<PhishingAnalyzer />} />
 
                 {/* Premium Routes (require premium allow-list) */}

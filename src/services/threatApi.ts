@@ -1270,6 +1270,84 @@ export const fetchIntegrationStatus = async (): Promise<IntegrationsResponse> =>
     return r.json();
 };
 
+// Attack Surface: Shodan-led external exposure search with optional Censys and TCP validation.
+export type AttackSurfaceMode = 'guided' | 'advanced';
+export type AttackSurfaceTargetType = 'ip' | 'domain' | 'cidr' | 'org';
+export type AttackSurfaceRisk = 'critical' | 'high' | 'medium' | 'low';
+export type AttackSurfaceValidationStatus = 'open' | 'closed' | 'timeout' | 'udp_not_supported' | 'error' | 'not_requested';
+
+export interface AttackSurfaceInput {
+    mode: AttackSurfaceMode;
+    targetType?: AttackSurfaceTargetType;
+    target?: string;
+    advancedQuery?: string;
+    limit: number;
+    activeValidation: boolean;
+}
+
+export interface AttackSurfaceFinding {
+    id: string;
+    ip: string;
+    port: number;
+    transport: 'tcp' | 'udp';
+    risk: AttackSurfaceRisk;
+    riskScore: number;
+    riskReasons: string[];
+    service: string | null;
+    product: string | null;
+    version: string | null;
+    organization: string | null;
+    asn: string | null;
+    hostnames: string[];
+    country: string | null;
+    city: string | null;
+    source: { shodan: boolean; censys: boolean };
+    observedAt: string | null;
+    cves: string[];
+    tags: string[];
+    bannerSnippet: string | null;
+    validation: {
+        attempted: boolean;
+        status: AttackSurfaceValidationStatus;
+        detail: string | null;
+    };
+}
+
+export interface AttackSurfaceSummary {
+    totalAssets: number;
+    totalServices: number;
+    criticalHighFindings: number;
+    activelyConfirmedOpen: number;
+    byRisk: Record<AttackSurfaceRisk, number>;
+    providers: { shodan: boolean; censys: boolean };
+    warnings: string[];
+    totalObserved: number;
+}
+
+export interface AttackSurfaceResponse {
+    generatedAt: string;
+    query: string;
+    queryKind: 'host' | 'search';
+    limit: number;
+    activeValidation: boolean;
+    summary: AttackSurfaceSummary;
+    findings: AttackSurfaceFinding[];
+    warnings: string[];
+}
+
+export const fetchAttackSurface = async (input: AttackSurfaceInput): Promise<AttackSurfaceResponse> => {
+    const response = await fetch('/api/attack-surface', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(input),
+    });
+    if (!response.ok) {
+        const text = await response.text();
+        throw new Error(`Attack Surface API error: ${response.status} ${response.statusText} - ${text}`);
+    }
+    return response.json();
+};
+
 // ─── Scans salvos (histórico do IOC search, por usuário) ───────────────────
 export interface SavedScan {
     id: string; query: string; queryType: string;

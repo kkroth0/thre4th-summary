@@ -13,6 +13,7 @@ import crypto from 'crypto';
 import compression from 'compression';
 import * as cheerio from 'cheerio';
 import { scoreArticle, localizeEnrichment, severityFromScore, extractIOCs, CTI_FEEDS } from './ctiIntel.js';
+import { runAttackSurfaceScan } from './attackSurface.js';
 
 // Load the root .env regardless of the process cwd (systemd runs from server/,
 // local dev may not).
@@ -3499,6 +3500,20 @@ app.post('/api/dns/lookup', scanLimiter, async (req, res) => {
     } catch (error) {
         const { status, message } = sanitizeError(error);
         res.status(status).json({ error: message });
+    }
+});
+
+app.post('/api/attack-surface', scanLimiter, async (req, res) => {
+    try {
+        const result = await runAttackSurfaceScan(req.body, {
+            axiosClient: axios,
+            shodanApiKey: process.env.SHODAN_API_KEY,
+            censysApiKey: process.env.CENSYS_API_KEY,
+        });
+        res.json(result);
+    } catch (error) {
+        const status = error.status || 500;
+        res.status(status).json({ error: error.publicMessage || error.message || 'Internal server error' });
     }
 });
 
