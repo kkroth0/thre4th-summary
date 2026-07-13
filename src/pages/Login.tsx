@@ -2,8 +2,6 @@ import { useEffect } from "react";
 import { Navigate, Link, useLocation } from "react-router-dom";
 import { Github, ShieldCheck, KeyRound, ArrowLeft, Loader2, FileText, Crosshair, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { ThemeToggle } from "@/components/ThemeToggle";
-import { LanguageToggle } from "@/components/LanguageToggle";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
@@ -33,12 +31,6 @@ const Login = () => {
 
   return (
     <div className="min-h-screen w-full bg-background lg:grid lg:grid-cols-2">
-      {/* Toggles no canto */}
-      <div className="absolute top-4 right-4 z-20 flex items-center gap-1">
-        <LanguageToggle />
-        <ThemeToggle />
-      </div>
-
       {/* Painel hero (esquerda) */}
       <div className="relative hidden lg:flex flex-col justify-between overflow-hidden bg-gradient-to-br from-primary/12 via-primary/5 to-background p-12 border-r border-border/50">
         <div className="absolute inset-0 bg-[radial-gradient(60%_60%_at_30%_20%,hsl(var(--primary)/0.10),transparent)]" />

@@ -20,7 +20,6 @@ import {
   Settings as SettingsIcon,
   Shield,
   ShieldAlert,
-  ShieldCheck,
   User,
   Users,
   Wrench,
@@ -29,8 +28,6 @@ import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Sheet, SheetClose, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { ThemeToggle } from "@/components/ThemeToggle";
-import { LanguageToggle } from "@/components/LanguageToggle";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useSidebar } from "@/contexts/SidebarContext";
 import { useAuth } from "@/contexts/AuthContext";
@@ -404,10 +401,6 @@ export function Header({ actions, logoAddon, onLogoClick, showBackButton = false
                   {navGroups.map(renderMobileGroup)}
 
                   <div className="mt-auto border-t border-border pt-4">
-                    <div className="mb-3 flex items-center gap-2">
-                      <LanguageToggle />
-                      <ThemeToggle />
-                    </div>
                     <div className="grid gap-2">
                       {auth.authenticated ? (
                         <>
@@ -421,13 +414,6 @@ export function Header({ actions, logoAddon, onLogoClick, showBackButton = false
                               <Link to="/settings"><SettingsIcon className="h-4 w-4" /> {pt ? "Configuracoes" : "Settings"}</Link>
                             </Button>
                           </SheetClose>
-                          {auth.isAdmin && (
-                            <SheetClose asChild>
-                              <Button variant="outline" asChild className="justify-start">
-                                <Link to="/admin"><ShieldCheck className="h-4 w-4" /> Admin</Link>
-                              </Button>
-                            </SheetClose>
-                          )}
                         </>
                       ) : (
                         <>
@@ -508,7 +494,6 @@ export function Header({ actions, logoAddon, onLogoClick, showBackButton = false
 
             {!authLoading && auth.authenticated && (
               <div className={cn("grid gap-1", isCollapsed ? "justify-items-center" : "")}>
-                {auth.isAdmin && renderDesktopItem({ path: "/admin", label: "Admin", icon: ShieldCheck })}
                 {renderDesktopItem({
                   path: "/settings",
                   label: tr({ pt: "Configuracoes", en: "Settings", es: "Configuración", fr: "Paramètres" }),
@@ -517,11 +502,7 @@ export function Header({ actions, logoAddon, onLogoClick, showBackButton = false
               </div>
             )}
 
-            <div className={cn("flex items-center gap-2", isCollapsed ? "flex-col" : "justify-between")}>
-              <div className={cn("flex items-center gap-2", isCollapsed && "flex-col")}>
-                <LanguageToggle />
-                <ThemeToggle />
-              </div>
+            <div className={cn("flex", isCollapsed ? "justify-center" : "justify-end")}>
               <Button
                 variant="ghost"
                 size="icon"

@@ -103,26 +103,6 @@ const Profile = () => {
         </Card>
       )}
 
-      {/* Admin (só admin): allow-list premium, publicações, integrações num só lugar */}
-      {auth.isAdmin && (
-        <Link to="/admin" className="block mb-5 group">
-          <Card className="transition-colors group-hover:border-border/50">
-            <CardContent className="p-5 flex items-center gap-4">
-              <span className="h-11 w-11 rounded-xl bg-primary/10 ring-1 ring-inset ring-primary/20 flex items-center justify-center shrink-0">
-                <ShieldCheck className="h-5 w-5 text-primary" />
-              </span>
-              <div className="min-w-0 flex-1">
-                <div className="font-medium">{pt ? "Painel de administração" : "Admin panel"}</div>
-                <div className="text-sm text-muted-foreground">
-                  {pt ? "Premium allow-list, publicações e status das integrações." : "Premium allow-list, posts and integration status."}
-                </div>
-              </div>
-              <ArrowRight className="h-4 w-4 text-muted-foreground shrink-0" />
-            </CardContent>
-          </Card>
-        </Link>
-      )}
-
       {/* Chaves de API -> Settings */}
       <Link to="/settings" className="block mb-5 group">
         <Card className="transition-colors group-hover:border-border/50">
