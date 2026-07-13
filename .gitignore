@@ -39,3 +39,6 @@ server/.users.json
 server/.allowlist.json
 # Catálogo de feeds RSS · overrides do dono (desativados + custom)
 server/.feed-sources.json
+
+# Sessões do visual companion (brainstorming) · mockups locais
+.superpowers/
