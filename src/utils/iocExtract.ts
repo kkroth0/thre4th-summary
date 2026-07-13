@@ -30,11 +30,53 @@ export const isPublicIpv4 = (value: string): boolean => {
   return true;
 };
 
+const parseIpv6 = (value: string): number[] | null => {
+  if (!value || value.includes("%") || value.includes(".")) return null;
+
+  const compressionIndex = value.indexOf("::");
+  if (compressionIndex !== -1 && compressionIndex !== value.lastIndexOf("::")) return null;
+
+  const parseSection = (section: string) => {
+    if (!section) return [];
+    const groups = section.split(":");
+    if (groups.some((group) => !/^[a-fA-F0-9]{1,4}$/.test(group))) return null;
+    return groups.map((group) => Number.parseInt(group, 16));
+  };
+
+  if (compressionIndex === -1) {
+    const groups = parseSection(value);
+    return groups?.length === 8 ? groups : null;
+  }
+
+  const left = parseSection(value.slice(0, compressionIndex));
+  const right = parseSection(value.slice(compressionIndex + 2));
+  if (!left || !right || left.length + right.length >= 8) return null;
+  return [...left, ...Array(8 - left.length - right.length).fill(0), ...right];
+};
+
+export const isPublicIpv6 = (value: string): boolean => {
+  const groups = parseIpv6(value);
+  if (!groups) return false;
+
+  const [first, second, third] = groups;
+  if (first === 0) return false;
+  if ((first & 0xfe00) === 0xfc00) return false;
+  if ((first & 0xffc0) === 0xfe80) return false;
+  if ((first & 0xff00) === 0xff00) return false;
+  if ((first & 0xe000) !== 0x2000) return false;
+  if (first === 0x2001 && second === 0x0002 && third === 0) return false;
+  if (first === 0x2001 && ((second & 0xfff0) === 0x0010 || (second & 0xfff0) === 0x0020)) return false;
+  if (first === 0x2001 && second === 0x0db8) return false;
+  if (first === 0x2002) return false;
+  if ((first & 0xfff0) === 0x3ff0) return false;
+  return true;
+};
+
 export const detectAnalyzerQueryType = (query: string): AnalyzerQueryType => {
   const value = query.trim();
   if (/^https?:\/\/[^ "<>]+$/i.test(value)) return "url";
   if (/^[a-fA-F0-9]{32}$|^[a-fA-F0-9]{40}$|^[a-fA-F0-9]{64}$/.test(value)) return "hash";
-  if (isPublicIpv4(value)) return "ip";
+  if (isPublicIpv4(value) || isPublicIpv6(value)) return "ip";
   if (/^([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$/.test(value)) return "domain";
   return "unknown";
 };
@@ -47,11 +89,15 @@ export const extractIocsFromText = (text: string) => {
   const urls = (text.match(URL_GLOBAL_REGEX) ?? []).map(cleanUrlIoc);
   const textWithoutUrls = text.replace(URL_GLOBAL_REGEX, " ");
   const ips = (text.match(IPV4_GLOBAL_REGEX) ?? []).filter(isPublicIpv4);
+  const ipv6s = textWithoutUrls
+    .split(/[\s,"'()\[\]{}|<>]+/)
+    .map((candidate) => candidate.replace(/[),.;\]]+$/g, ""))
+    .filter(isPublicIpv6);
   const hashes = text.match(HASH_GLOBAL_REGEX) ?? [];
   const domains = (textWithoutUrls.match(DOMAIN_GLOBAL_REGEX) ?? []).filter((domain) => {
     const ext = domain.split(".").pop()?.toLowerCase() || "";
     return !IOC_FILE_EXTENSIONS.includes(ext);
   });
 
-  return Array.from(new Set([...ips, ...urls, ...domains, ...hashes]));
+  return Array.from(new Set([...ips, ...ipv6s, ...urls, ...domains, ...hashes]));
 };
