@@ -1,19 +1,25 @@
-import { Loader2 } from "lucide-react";
-import { Navigate } from "react-router-dom";
+import { KeyRound, Loader2, Settings as SettingsIcon, ShieldCheck, SlidersHorizontal } from "lucide-react";
+import { Navigate, useSearchParams } from "react-router-dom";
+import { AdminSettings } from "@/components/settings/AdminSettings";
 import { ApiKeysSettings } from "@/components/settings/ApiKeysSettings";
+import { PreferencesSettings } from "@/components/settings/PreferencesSettings";
 import { Card, CardContent } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PageLayout } from "@/components/PageLayout";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 
+type SettingsSection = "general" | "api-keys" | "admin";
+
 export default function Settings() {
-  const { language } = useLanguage();
+  const { language, tr } = useLanguage();
   const { auth, loading } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
   const pt = language === "pt";
 
   if (loading) {
     return (
-      <PageLayout width="max-w-3xl">
+      <PageLayout width="max-w-4xl">
         <Card><CardContent className="flex items-center gap-2 p-6 text-muted-foreground"><Loader2 className="animate-spin" /> {pt ? "Verificando sessão…" : "Checking session…"}</CardContent></Card>
       </PageLayout>
     );
@@ -21,9 +27,38 @@ export default function Settings() {
 
   if (!auth.authenticated) return <Navigate to="/login" replace />;
 
+  const requested = searchParams.get("section");
+  const section: SettingsSection = requested === "api-keys"
+    ? "api-keys"
+    : requested === "admin" && auth.isAdmin
+      ? "admin"
+      : "general";
+
+  const selectSection = (value: string) => {
+    const next = value as SettingsSection;
+    setSearchParams(next === "general" ? {} : { section: next }, { replace: true });
+  };
+
   return (
-    <PageLayout width="max-w-3xl">
-      <ApiKeysSettings />
+    <PageLayout width="max-w-4xl">
+      <div className="mb-7">
+        <h1 className="flex items-center gap-2 text-3xl font-bold"><SettingsIcon className="text-primary" /> {tr({ pt: "Configurações", en: "Settings", es: "Configuración", fr: "Paramètres" })}</h1>
+        <p className="mt-1 text-muted-foreground">{tr({ pt: "Preferências, integrações e administração da sua conta.", en: "Account preferences, integrations, and administration.", es: "Preferencias, integraciones y administración de tu cuenta.", fr: "Préférences, intégrations et administration de votre compte." })}</p>
+      </div>
+
+      <Tabs value={section} onValueChange={selectSection}>
+        <div className="mb-6 overflow-x-auto pb-1">
+          <TabsList className="w-max justify-start">
+            <TabsTrigger value="general"><SlidersHorizontal /> {tr({ pt: "Geral", en: "General", es: "General", fr: "Général" })}</TabsTrigger>
+            <TabsTrigger value="api-keys"><KeyRound /> {tr({ pt: "Chaves de API", en: "API Keys", es: "Claves de API", fr: "Clés API" })}</TabsTrigger>
+            {auth.isAdmin ? <TabsTrigger value="admin"><ShieldCheck /> Admin</TabsTrigger> : null}
+          </TabsList>
+        </div>
+
+        <TabsContent value="general" className="mt-0"><PreferencesSettings /></TabsContent>
+        <TabsContent value="api-keys" className="mt-0"><ApiKeysSettings /></TabsContent>
+        {auth.isAdmin ? <TabsContent value="admin" className="mt-0"><AdminSettings /></TabsContent> : null}
+      </Tabs>
     </PageLayout>
   );
 }
