@@ -83,3 +83,13 @@ test('exposure watchlist requires authentication', async () => {
     const body = await r.json();
     assert.equal(body.needAuth, true);
 });
+
+test('daily edition route rejects malformed and unavailable historical dates', async () => {
+    const malformed = await fetch(`${BASE}/api/intel/daily-brief?date=not-a-date`);
+    assert.equal(malformed.status, 400);
+
+    const unavailable = await fetch(`${BASE}/api/intel/daily-brief?date=2000-01-01`);
+    assert.equal(unavailable.status, 404);
+    const body = await unavailable.json();
+    assert.match(body.error, /not found/i);
+});
