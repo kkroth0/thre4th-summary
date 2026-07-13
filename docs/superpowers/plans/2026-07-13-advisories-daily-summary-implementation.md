@@ -614,7 +614,7 @@ Expected: commit succeeds.
 - Consumes: all implementation commits from Tasks 1-3.
 - Produces: pushed `main` branch so the configured CI/CD deploys the site.
 
-- [ ] **Step 1: Run full relevant verification**
+- [x] **Step 1: Run full relevant verification**
 
 Run:
 
@@ -629,13 +629,13 @@ node --check server/dailyBrief.js
 
 Expected: all commands exit 0.
 
-- [ ] **Step 2: Check git state**
+- [x] **Step 2: Check git state**
 
 Run: `git status --short --branch`
 
 Expected: branch is `main`; only the plan checkbox file may be modified.
 
-- [ ] **Step 3: Commit final plan checkbox updates if needed**
+- [x] **Step 3: Commit final plan checkbox updates if needed**
 
 If the plan file has checkbox updates after the last feature commit, run:
 
