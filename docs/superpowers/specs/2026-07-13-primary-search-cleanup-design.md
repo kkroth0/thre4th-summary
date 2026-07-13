@@ -10,7 +10,7 @@ Keep the primary analyzer focused on IOC enrichment, eliminate integrations and 
 
 The primary analyzer accepts only:
 
-- public IPv4 addresses;
+- public IPv4 and IPv6 addresses;
 - domains;
 - HTTP/HTTPS URLs;
 - MD5, SHA-1, and SHA-256 hashes.
@@ -73,13 +73,15 @@ The overview reuses already-fetched data and does not add a network request. Pre
 
 The implementation centralizes placeholder filtering and field selection so the UI and exported report do not disagree about whether a value exists.
 
+Direct IPv6 input accepts globally routable addresses in compressed or full form. Loopback, unspecified, unique-local, link-local, multicast, documentation, and other non-global ranges are rejected. HTTP/HTTPS URLs containing bracketed IPv6 literals remain URL inputs.
+
 ## Search verification
 
 Automated tests cover the behavior that can be verified without live third-party credentials:
 
-- free-text extraction includes IP, domain, URL, MD5, SHA-1, and SHA-256, but excludes CVE;
+- free-text extraction includes public IPv4, public IPv6, domain, URL, MD5, SHA-1, and SHA-256, but excludes CVE;
 - client and server query-type detection agree for every supported input;
-- malformed IPs, domains, URLs, and hashes are rejected;
+- malformed or non-public IPv4/IPv6 addresses, domains, URLs, and hashes are rejected;
 - each supported input type routes only to compatible providers;
 - Criminal IP never appears in restored selections or provider routing;
 - Geographic & Network Data field composition honors source precedence and removes placeholders;

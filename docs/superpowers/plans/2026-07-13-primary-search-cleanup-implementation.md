@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Focus the primary analyzer on IP/domain/URL/hash searches, remove Criminal IP and obsolete result cards, and promote a clearer Geographic & Network Data overview to the top of each useful result.
+**Goal:** Focus the primary analyzer on IPv4/IPv6/domain/URL/hash searches, remove Criminal IP and obsolete result cards, and promote a clearer Geographic & Network Data overview to the top of each useful result.
 
 **Architecture:** Move query parsing and network-field composition into small pure utilities that can be tested with Node's built-in test runner. Keep provider routing in `threatApi.ts`, but normalize persisted provider selections against one supported-provider list. Replace the monolithic three-card `ThreatCharts` section with a focused, responsive `GeographicNetworkOverview` rendered directly after `ThreatSummary`.
 
@@ -10,13 +10,14 @@
 
 ## Global Constraints
 
-- The primary analyzer accepts only public IPv4 addresses, domains, HTTP/HTTPS URLs, and MD5/SHA-1/SHA-256 hashes.
+- The primary analyzer accepts only public IPv4 and IPv6 addresses, domains, HTTP/HTTPS URLs, and MD5/SHA-1/SHA-256 hashes.
 - CVE dashboards, advisory feeds, and CVE enrichment outside the primary analyzer remain unchanged.
 - ASN remains an enrichment field and is not a search input.
 - Criminal IP is removed rather than conditionally hidden.
 - Geolocation and provider Top 10 visualizations are removed without replacement.
 - Geographic & Network Data reuses existing provider responses and makes no new network request.
 - No new runtime or test dependency is added.
+- Direct IPv6 input accepts compressed and full globally routable forms; loopback, unspecified, unique-local, link-local, multicast, documentation, and other non-global ranges are rejected.
 
 ---
 
@@ -66,6 +67,7 @@ test("extracts supported IOC types and excludes CVE identifiers", () => {
 
 test("classifies only supported primary-search inputs", () => {
   assert.equal(detectAnalyzerQueryType("8.8.8.8"), "ip");
+  assert.equal(detectAnalyzerQueryType("2001:4860:4860::8888"), "ip");
   assert.equal(detectAnalyzerQueryType("example.com"), "domain");
   assert.equal(detectAnalyzerQueryType("https://example.com/a"), "url");
   assert.equal(detectAnalyzerQueryType("d41d8cd98f00b204e9800998ecf8427e"), "hash");
@@ -392,7 +394,9 @@ Expected: every command exits 0. Existing warnings must be reported; new warning
 
 - [ ] **Step 4: Perform optional credentialed smoke checks when a configured local server is available**
 
-Exercise one public IPv4, one domain, one URL, one MD5, one SHA-1, and one SHA-256 through the running API. Record provider-level success, no-data, authentication, quota, and upstream failures separately. Do not expose keys or claim upstream health from contract tests alone.
+Exercise one public IPv4, one public IPv6, one domain, one URL, one MD5, one SHA-1, and one SHA-256 through the running API. Record provider-level success, no-data, authentication, quota, and upstream failures separately. Do not expose keys or claim upstream health from contract tests alone.
+
+Before the smoke check, add backend contract tests for public IPv6 acceptance, non-global IPv6 rejection, and provider routing. Providers that do not demonstrably accept IPv6 must be filtered before a request is made.
 
 - [ ] **Step 5: Commit final copy and verification adjustments**
 
