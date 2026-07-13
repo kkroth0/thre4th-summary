@@ -14,12 +14,6 @@ const SEVERITY_STYLES: Record<string, string> = {
   Low: "bg-slate-500/10 text-slate-400 border-slate-500/20",
 };
 
-const fmtDate = (iso?: string) => {
-  if (!iso) return "";
-  const d = new Date(iso);
-  return isNaN(+d) ? "" : d.toLocaleDateString("pt-BR");
-};
-
 const Section: React.FC<{ title: string; count?: number; children: React.ReactNode }> = ({ title, count, children }) => (
   <div className="mt-4 first:mt-0">
     <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1.5">
@@ -30,8 +24,9 @@ const Section: React.FC<{ title: string; count?: number; children: React.ReactNo
 );
 
 // Visualizador inline do JSON do boletim — mostra o que foi coletado (sumário,
-// produto/CVE, IOCs por Pirâmide da Dor, TTPs MITRE, referências) sem precisar
-// baixar o arquivo. Tolerante a campos ausentes e aos dois deck_types.
+// produto/CVE, IOCs por Pirâmide da Dor, TTPs MITRE, referências). O meta
+// (TLP/data/fonte) fica com quem embute (ReportPane). Tolerante a campos
+// ausentes e aos dois deck_types.
 export const BoletimView: React.FC<{ report: BoletimReport }> = ({ report }) => {
   const r = report || {};
   const iocs = r.iocs || [];
@@ -41,18 +36,7 @@ export const BoletimView: React.FC<{ report: BoletimReport }> = ({ report }) => 
   const surface = r.superficie_de_ataque || [];
 
   return (
-    <div className="mt-3 border-t pt-3 text-sm">
-      {/* meta */}
-      <div className="flex flex-wrap items-center gap-2 text-xs">
-        {r.tlp && <Badge variant="outline" className="bg-emerald-500/10 text-emerald-500 border-emerald-500/20">TLP:{r.tlp}</Badge>}
-        {r.generated_at && <span className="text-muted-foreground">{fmtDate(r.generated_at)}</span>}
-        {r.source_url && (
-          <a href={r.source_url} target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:underline inline-flex items-center gap-1 truncate max-w-[60%]">
-            fonte <ExternalLink className="h-3 w-3 shrink-0" />
-          </a>
-        )}
-      </div>
-
+    <div className="mt-4 text-sm">
       {r.sumario_executivo && (
         <Section title="Sumário executivo">
           <p className="text-muted-foreground leading-relaxed">{r.sumario_executivo}</p>
