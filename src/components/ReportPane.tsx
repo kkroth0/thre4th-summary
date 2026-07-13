@@ -1,12 +1,9 @@
 import React from "react";
-import { Download, ExternalLink, Sparkles } from "lucide-react";
-import { toast } from "sonner";
+import { Download, ExternalLink } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { BrandMark } from "@/components/BrandMark";
 import { BoletimView } from "@/components/BoletimView";
-import { PostEditor } from "@/components/PostEditor";
-import { boletimToDraft } from "@/services/boletimMarkdown";
 import { useLanguage } from "@/contexts/LanguageContext";
 import type { BoletimJob } from "@/services/threatApi";
 
@@ -23,9 +20,8 @@ const fmtDate = (iso: string | undefined, pt: boolean) => {
 
 // Painel de leitura da workstation: toolbar com meta/ações + BoletimView.
 // `job === null` (ou sem JSON) mostra o estado vazio.
-export function ReportPane({ job, isAdmin, onDownload }: {
+export function ReportPane({ job, onDownload }: {
   job: BoletimJob | null;
-  isAdmin: boolean;
   onDownload: (job: BoletimJob) => void;
 }) {
   const { language } = useLanguage();
@@ -68,19 +64,6 @@ export function ReportPane({ job, isAdmin, onDownload }: {
           </a>
         )}
         <div className="ml-auto flex items-center gap-2">
-          {isAdmin && (
-            <PostEditor
-              key={job.id}
-              initial={boletimToDraft(r)}
-              trigger={
-                <Button variant="outline" size="sm" className="gap-1.5">
-                  <Sparkles className="h-3.5 w-3.5" />
-                  {pt ? "Salvar como Advisory" : "Save as Advisory"}
-                </Button>
-              }
-              onSaved={() => toast.success(pt ? "Rascunho salvo em Advisories" : "Draft saved to Advisories")}
-            />
-          )}
           <Button variant="outline" size="sm" className="gap-1.5" onClick={() => onDownload(job)}>
             <Download className="h-3.5 w-3.5" /> JSON
           </Button>

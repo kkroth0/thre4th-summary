@@ -418,7 +418,7 @@ const DailyBulletin: React.FC = () => {
           ref={paneRef}
           className="min-w-0 scroll-mt-24 lg:sticky lg:top-20 lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto"
         >
-          <ReportPane job={selectedJob} isAdmin={!!auth.isAdmin} onDownload={download} />
+          <ReportPane job={selectedJob} onDownload={download} />
         </div>
       </div>
     </PageLayout>
