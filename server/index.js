@@ -15,6 +15,7 @@ import * as cheerio from 'cheerio';
 import { scoreArticle, localizeEnrichment, severityFromScore, extractIOCs, CTI_FEEDS } from './ctiIntel.js';
 import { runAttackSurfaceScan } from './attackSurface.js';
 import { createWatchlistStore, runDueExposureSnapshots, runExposureSnapshot } from './exposureWatchlist.js';
+import { detectQueryType, sanitizeQuery } from './iocValidation.js';
 import {
     createEditionGenerator,
     createEditionStore,
@@ -176,99 +177,6 @@ const loadDnsblProviders = () => {
     }
 };
 loadDnsblProviders();
-
-// Regex & Sanitization
-const SAFE_IP_REGEX = /^(\d{1,3}\.){3}\d{1,3}$/;
-const SAFE_DOMAIN_REGEX = /^([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$/;
-const SAFE_HASH_REGEX = /^[a-fA-F0-9]{32,64}$/;
-const SAFE_CIDR_REGEX = /^(\d{1,3}\.){3}\d{1,3}\/\d{1,2}$/;
-
-const sanitizeQuery = (query, expectedType) => {
-    const trimmed = query?.trim();
-    if (!trimmed) throw new Error('Empty query');
-    if (trimmed.length > 2048) throw new Error('Query too long');
-
-    switch (expectedType) {
-        case 'ip': {
-            if (!SAFE_IP_REGEX.test(trimmed)) throw new Error('Invalid IP format');
-            const octets = trimmed.split('.').map(Number);
-            if (octets.some(o => o > 255 || o < 0)) throw new Error('Invalid IP octet');
-            if (octets[0] === 10 || octets[0] === 127 ||
-                (octets[0] === 172 && octets[1] >= 16 && octets[1] <= 31) ||
-                (octets[0] === 192 && octets[1] === 168) ||
-                (octets[0] === 169 && octets[1] === 254) ||
-                trimmed === '0.0.0.0') {
-                throw new Error('Internal/reserved IP not allowed');
-            }
-            return trimmed;
-        }
-        case 'cidr': {
-            if (!SAFE_CIDR_REGEX.test(trimmed)) throw new Error('Invalid CIDR format');
-            const [ipPart, maskPart] = trimmed.split('/');
-            const mask = parseInt(maskPart, 10);
-            if (mask < 0 || mask > 32) throw new Error('Invalid CIDR mask');
-            const octets = ipPart.split('.').map(Number);
-            if (octets.some(o => o > 255 || o < 0)) throw new Error('Invalid IP octet in CIDR');
-            if (octets[0] === 10 || octets[0] === 127 ||
-                (octets[0] === 172 && octets[1] >= 16 && octets[1] <= 31) ||
-                (octets[0] === 192 && octets[1] === 168) ||
-                (octets[0] === 169 && octets[1] === 254) ||
-                ipPart === '0.0.0.0') {
-                throw new Error('Internal/reserved CIDR block not allowed');
-            }
-            return trimmed;
-        }
-        case 'domain':
-            if (!SAFE_DOMAIN_REGEX.test(trimmed)) throw new Error('Invalid domain format');
-            if (trimmed.length > 253) throw new Error('Domain too long');
-            return trimmed;
-        case 'hash':
-            if (!SAFE_HASH_REGEX.test(trimmed)) throw new Error('Invalid hash format');
-            return trimmed;
-        case 'url': {
-            try {
-                const parsed = new URL(trimmed);
-                if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-                    throw new Error('Only http/https protocols allowed');
-                }
-                const hostname = parsed.hostname;
-                if (SAFE_IP_REGEX.test(hostname)) {
-                    const octets = hostname.split('.').map(Number);
-                    if (octets[0] === 10 || octets[0] === 127 ||
-                        (octets[0] === 172 && octets[1] >= 16 && octets[1] <= 31) ||
-                        (octets[0] === 192 && octets[1] === 168) ||
-                        (octets[0] === 169 && octets[1] === 254) ||
-                        hostname === '0.0.0.0') {
-                        throw new Error('Internal/reserved IP URL not allowed');
-                    }
-                }
-                if (['localhost', 'localhost.localdomain'].includes(hostname.toLowerCase()) || hostname.endsWith('.local')) {
-                    throw new Error('Local domains not allowed');
-                }
-                return trimmed;
-            } catch (e) {
-                throw new Error('Invalid URL: ' + e.message);
-            }
-        }
-        default:
-            throw new Error('Unknown expected type');
-    }
-};
-
-const detectQueryType = (query) => {
-    if (!query) return "unknown";
-    const trimmed = query.trim();
-    if (trimmed.length > 2048) return "unknown";
-
-    if (/^(http|https):\/\/[^ "]+$/.test(trimmed)) return "url";
-    if (/^[a-fA-F0-9]{32}$/.test(trimmed)) return "hash";
-    if (/^[a-fA-F0-9]{40}$/.test(trimmed)) return "hash";
-    if (/^[a-fA-F0-9]{64}$/.test(trimmed)) return "hash";
-    if (/^(\d{1,3}\.){3}\d{1,3}$/.test(trimmed)) return "ip";
-    if (/^([a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$/.test(trimmed)) return "domain";
-
-    return "unknown";
-};
 
 // Security middleware to validate query format on requests
 const validateRequest = (req, res, next) => {
@@ -3530,11 +3438,10 @@ app.post('/api/dns/lookup', scanLimiter, async (req, res) => {
 
 app.post('/api/attack-surface', scanLimiter, async (req, res) => {
     try {
-        const result = await runAttackSurfaceScan(req.body, {
-            axiosClient: axios,
-            shodanApiKey: process.env.SHODAN_API_KEY,
-            censysApiKey: process.env.CENSYS_API_KEY,
-        });
+        // BYOK-first: chave do usuário no Settings, fallback pra chave compartilhada
+        // do servidor (.env). Endpoint sem auth obrigatória: resolve a sessão se houver.
+        const session = verifySession(getCookie(req, 'ts_session'));
+        const result = await runAttackSurfaceScan(req.body, buildExposureScanDeps(session?.sub));
         res.json(result);
     } catch (error) {
         if (error.status && error.publicMessage) {

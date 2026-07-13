@@ -64,8 +64,8 @@ export const SearchForm = ({
             toast({
               title: language === "pt" ? "Nenhum IOC Encontrado" : "No IOCs Found",
               description: language === "pt"
-                ? "Não foi possível encontrar IPs, domínios, URLs ou hashes válidos no arquivo."
-                : "Could not find any valid IPs, domains, URLs, or hashes in the file.",
+                    ? "Não foi possível encontrar IPv4/IPv6, domínios, URLs ou hashes válidos no arquivo."
+                    : "Could not find any valid IPv4/IPv6 addresses, domains, URLs, or hashes in the file.",
               variant: "destructive"
             });
           }
@@ -92,8 +92,8 @@ export const SearchForm = ({
             <textarea
               ref={textareaRef}
               placeholder={language === "pt"
-                ? "IP, dominio, URL ou hash..."
-                : "IP, domain, URL, or hash..."
+                    ? "IPv4/IPv6, dominio, URL ou hash..."
+                    : "IPv4/IPv6, domain, URL, or hash..."
               }
               value={query}
               onChange={(e) => setQuery(e.target.value)}

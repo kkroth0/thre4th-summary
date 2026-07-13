@@ -1,5 +1,6 @@
 /// <reference types="vite/client" />
 import { ThreatIntelligenceResult, VendorData, TimelineEvent } from "@/types/threat-intelligence";
+import { detectAnalyzerQueryType, isPublicIpv6, type AnalyzerQueryType } from "@/utils/iocExtract";
 
 // Helper to handle response
 const handleResponse = async (response: Response, vendorName: string) => {
@@ -11,14 +12,7 @@ const handleResponse = async (response: Response, vendorName: string) => {
 };
 
 // Detect IOC type from query
-export const detectIOCType = (query: string): 'ip' | 'domain' | 'hash' | 'url' => {
-    if (query.startsWith('http://') || query.startsWith('https://')) return 'url';
-    if (/^[a-fA-F0-9]{32}$/.test(query)) return 'hash'; // MD5
-    if (/^[a-fA-F0-9]{40}$/.test(query)) return 'hash'; // SHA1
-    if (/^[a-fA-F0-9]{64}$/.test(query)) return 'hash'; // SHA256
-    if (/^(\d{1,3}\.){3}\d{1,3}$/.test(query)) return 'ip';
-    return 'domain';
-};
+export const detectIOCType = (query: string): AnalyzerQueryType => detectAnalyzerQueryType(query);
 
 // Map each vendor to the IOC types it can actually be queried for. This MUST stay
 // in sync with what every backend endpoint in server/index.js accepts — a vendor
@@ -47,6 +41,22 @@ export const VENDOR_IOC_SUPPORT: Record<string, ('ip' | 'domain' | 'hash' | 'url
     // Intentionally excluded from per-IOC routing:
     //  - "Ransomware.live": recent-victims feed, ignores the query entirely.
     //  - "Google Safe Browsing": no backend endpoint implemented yet (would 404).
+};
+
+// Conservative allowlist: these repository endpoints use generic IPv6-capable
+// indicator/host/IP paths. OTX is explicitly `/IPv4/`; Team Cymru reverses IPv4
+// octets, so neither may receive a direct IPv6 query.
+export const IPV6_CAPABLE_VENDORS = new Set([
+    "IP Geolocation", "VirusTotal", "AbuseIPDB", "Shodan", "ThreatFox",
+    "Pulsedive", "MetaDefender", "Censys",
+]);
+
+export const resolveVendorsForQuery = (query: string, selectedVendors: string[]): string[] => {
+    const iocType = detectIOCType(query);
+    return selectedVendors.filter((vendor) =>
+        VENDOR_IOC_SUPPORT[vendor]?.includes(iocType as 'ip' | 'domain' | 'hash' | 'url')
+        && (!isPublicIpv6(query.trim()) || IPV6_CAPABLE_VENDORS.has(vendor))
+    );
 };
 
 // Formatting logic moved from individual fetch functions
@@ -764,15 +774,11 @@ const buildVendorMap = (query: string): Record<string, () => Promise<VendorData>
 // Resolve which vendors to actually query: the explicit selection (or all known
 // vendors), narrowed to those that both exist in the map and support this IOC type.
 const resolveVendorsToQuery = (
+    query: string,
     vendorMap: Record<string, () => Promise<VendorData>>,
     selectedVendors: string[] | undefined,
-    iocType: ReturnType<typeof detectIOCType>,
 ): string[] =>
-    (selectedVendors || Object.keys(vendorMap))
-        .filter(vendor => {
-            const supportedTypes = VENDOR_IOC_SUPPORT[vendor];
-            return supportedTypes && supportedTypes.includes(iocType);
-        })
+    resolveVendorsForQuery(query, selectedVendors || Object.keys(vendorMap))
         .filter(vendor => vendorMap[vendor]);
 
 // Aggregate per-vendor results into an overall verdict. VirusTotal and AbuseIPDB
@@ -863,8 +869,7 @@ const scoreThreatResults = (query: string, results: VendorData[]): ThreatIntelli
 
 export const fetchThreatData = async (query: string, selectedVendors?: string[]): Promise<ThreatIntelligenceResult> => {
     const vendorMap = buildVendorMap(query);
-    const iocType = detectIOCType(query);
-    const vendorsToQuery = resolveVendorsToQuery(vendorMap, selectedVendors, iocType);
+    const vendorsToQuery = resolveVendorsToQuery(query, vendorMap, selectedVendors);
 
     const results = await Promise.all(vendorsToQuery.map(vendor => vendorMap[vendor]()));
     return scoreThreatResults(query, results);
@@ -876,8 +881,7 @@ export const fetchThreatDataProgressive = async (
     onProgress: (data: VendorData) => void
 ): Promise<ThreatIntelligenceResult> => {
     const vendorMap = buildVendorMap(query);
-    const iocType = detectIOCType(query);
-    const vendorsToQuery = resolveVendorsToQuery(vendorMap, selectedVendors, iocType);
+    const vendorsToQuery = resolveVendorsToQuery(query, vendorMap, selectedVendors);
 
     // Each vendor is wrapped in a timeout + catch so one slow/failed provider
     // doesn't lose the whole scan, and onProgress streams each result to the UI.

@@ -4,6 +4,10 @@ Threat intelligence workspace for IOC enrichment, CVE tracking, ransomware
 tracking, advisory feeds, DNSBL checks, phishing analysis and guided threat
 hunting.
 
+The primary analyzer accepts public IPv4/IPv6 addresses, domains, HTTP/HTTPS
+URLs, and MD5, SHA-1, or SHA-256 hashes. CVE tracking remains available through
+its dedicated pages and APIs.
+
 ## Stack
 
 - React 18 + Vite + TypeScript
