@@ -87,15 +87,10 @@ export function Header({ actions, logoAddon, onLogoClick, showBackButton = false
         {
           path: "/attack-surface",
           label: "Attack Surface",
-          description: pt ? "Shodan, Censys e validacao TCP controlada." : "Shodan, Censys and controlled TCP validation.",
+          description: pt
+            ? "Scan externo, XLSX e monitoramento de exposicao."
+            : "External scan, XLSX export, and exposure monitoring.",
           icon: Radar,
-        },
-        {
-          path: "/exposure-watchlist",
-          label: "Exposure Watchlist",
-          description: pt ? "Monitore mudancas na superficie exposta." : "Monitor exposed surface changes.",
-          icon: RadioTower,
-          premium: true,
         },
         {
           path: "/relatorios",

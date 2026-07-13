@@ -113,7 +113,8 @@ FRONTEND APP ROUTES (SPA, not HTTP endpoints)   * = premium/sign-in gated
   /vendors              Vendor Directory
   /dnsbl                DNSBL Check
   /phishing-analyzer    Phishing Analyzer
-  /exposure-watchlist * Exposure Watchlist
+  /attack-surface       Attack Surface scan
+  /attack-surface?mode=monitor * Attack Surface monitoring (legacy /exposure-watchlist redirects here)
   /threat-brief     *   Threat Brief
   /newsletter       *   Advisory Feed
   /threat-hunting   *   Threat Hunting

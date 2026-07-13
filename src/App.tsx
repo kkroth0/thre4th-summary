@@ -65,7 +65,7 @@ const App = () => (
                 <Route path="/vendors" element={<VendorDirectory />} />
                 <Route path="/dnsbl" element={<DnsblCheck />} />
                 <Route path="/attack-surface" element={<AttackSurface />} />
-                <Route path="/exposure-watchlist" element={<PremiumRoute feature="exposure-watchlist"><ExposureWatchlist /></PremiumRoute>} />
+                <Route path="/exposure-watchlist" element={<ExposureWatchlist />} />
                 <Route path="/phishing-analyzer" element={<PhishingAnalyzer />} />
 
                 {/* Premium Routes (require premium allow-list) */}
