@@ -424,6 +424,18 @@ const sortFindings = (findings) => [...findings].sort((a, b) => {
   return a.port - b.port;
 });
 
+const httpStatusFromError = (error) => Number(
+  error?.response?.status
+  || error?.status
+  || error?.statusCode
+  || 0,
+);
+
+const isRateLimitError = (error) => (
+  httpStatusFromError(error) === 429
+  || /\b429\b/.test(String(error?.message || ''))
+);
+
 export const runAttackSurfaceScan = async (input = {}, deps = {}) => {
   const {
     axiosClient,
@@ -461,7 +473,8 @@ export const runAttackSurfaceScan = async (input = {}, deps = {}) => {
 
   if (censysApiKey && findings.length > 0) {
     const ips = Array.from(new Set(findings.map((finding) => finding.ip).filter(isPublicIPv4))).slice(0, 25);
-    await Promise.all(ips.map(async (ip) => {
+    for (let index = 0; index < ips.length; index += 1) {
+      const ip = ips[index];
       try {
         const response = await axiosClient.get(`https://api.platform.censys.io/v3/global/asset/host/${ip}`, {
           headers: {
@@ -476,9 +489,14 @@ export const runAttackSurfaceScan = async (input = {}, deps = {}) => {
           findings = mergeCensysResource(findings, ip, resource);
         }
       } catch (error) {
+        if (isRateLimitError(error)) {
+          const skipped = ips.length - index;
+          warnings.push(`Censys enrichment rate limited (HTTP 429); skipped enrichment for ${skipped} IP${skipped === 1 ? '' : 's'}.`);
+          break;
+        }
         warnings.push(`Censys enrichment failed for ${ip}: ${error?.message || 'request failed'}`);
       }
-    }));
+    }
   }
 
   if (input.activeValidation === true) {

@@ -14,6 +14,7 @@ class FakeCell {
 class FakeRow {
   cells = new Map<number | string, FakeCell>();
   height = 0;
+  alignment: unknown = undefined;
 
   set values(values: unknown[]) {
     values.forEach((value, index) => {
@@ -56,6 +57,12 @@ class FakeWorksheet {
       });
     }
     return row;
+  }
+
+  eachRow(callback: (row: FakeRow, rowNumber: number) => void) {
+    Array.from(this.rows.entries())
+      .sort(([a], [b]) => a - b)
+      .forEach(([rowNumber, row]) => callback(row, rowNumber));
   }
 
   getColumn() {
@@ -126,10 +133,58 @@ const sample: AttackSurfaceResponse = {
 test("builds an Attack Surface workbook with overview, findings and risk summary sheets", async () => {
   const workbook = buildAttackSurfaceWorkbook(sample, FakeExcelLib) as unknown as FakeWorkbook;
 
-  assert.deepEqual(workbook.worksheets.map((sheet) => sheet.name), ["Overview", "Findings", "Risk Summary"]);
+  assert.deepEqual(workbook.worksheets.map((sheet) => sheet.name), [
+    "Overview",
+    "Findings",
+    "Assets",
+    "Services",
+    "CVEs",
+    "Hostnames",
+    "Tags",
+    "Evidence",
+    "Validation",
+    "Risk Summary",
+    "Warnings",
+  ]);
   assert.equal(workbook.getWorksheet("Overview")?.getCell("A1").value, "ThreatSumm4ry Attack Surface");
-  assert.equal(workbook.getWorksheet("Findings")?.getRow(2).getCell(1).value, "critical");
-  assert.equal(workbook.getWorksheet("Findings")?.getRow(2).getCell(3).value, "8.8.8.8");
+  assert.deepEqual(workbook.getWorksheet("Findings")?.columns.map((column) => column.header), [
+    "Finding ID",
+    "Service Key",
+    "Risk",
+    "Score",
+    "IP",
+    "Port",
+    "Transport",
+    "Service",
+    "Product",
+    "Version",
+    "Organization",
+    "ASN",
+    "Country",
+    "City",
+    "Sources",
+    "Observed",
+    "TCP Status",
+    "Risk Reason Count",
+    "CVE Count",
+    "Hostname Count",
+    "Tag Count",
+  ]);
+  assert.equal(workbook.getWorksheet("Findings")?.getRow(2).getCell(1).value, "finding-1");
+  assert.equal(workbook.getWorksheet("Findings")?.getRow(2).getCell(2).value, "8.8.8.8:443/tcp");
+  assert.equal(workbook.getWorksheet("Findings")?.getRow(2).getCell(17).value, "open");
+  assert.equal(workbook.getWorksheet("Assets")?.getRow(2).getCell(1).value, "8.8.8.8");
+  assert.equal(workbook.getWorksheet("Assets")?.getRow(2).getCell(2).value, 1);
+  assert.equal(workbook.getWorksheet("Services")?.getRow(2).getCell(7).value, "https");
+  assert.equal(workbook.getWorksheet("CVEs")?.getRow(2).getCell(1).value, "finding-1");
+  assert.equal(workbook.getWorksheet("CVEs")?.getRow(2).getCell(5).value, "CVE-2026-0001");
+  assert.equal(workbook.getWorksheet("Hostnames")?.getRow(2).getCell(5).value, "example.com");
+  assert.equal(workbook.getWorksheet("Tags")?.getRow(2).getCell(5).value, "cloud");
+  assert.equal(workbook.getWorksheet("Evidence")?.getRow(2).getCell(5).value, "risk_reason");
+  assert.equal(workbook.getWorksheet("Evidence")?.getRow(3).getCell(5).value, "banner");
+  assert.equal(workbook.getWorksheet("Validation")?.getRow(2).getCell(5).value, true);
+  assert.equal(workbook.getWorksheet("Validation")?.getRow(2).getCell(6).value, "open");
   assert.equal(workbook.getWorksheet("Risk Summary")?.getRow(2).getCell(1).value, "critical");
   assert.equal(workbook.getWorksheet("Risk Summary")?.getRow(2).getCell(2).value, 1);
+  assert.equal(workbook.getWorksheet("Warnings")?.getRow(2).getCell(1).value, "Censys unavailable");
 });
