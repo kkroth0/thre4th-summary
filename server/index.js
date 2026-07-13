@@ -17,6 +17,15 @@ import { runAttackSurfaceScan } from './attackSurface.js';
 import { createWatchlistStore, runDueExposureSnapshots, runExposureSnapshot } from './exposureWatchlist.js';
 import { detectQueryType, sanitizeQuery } from './iocValidation.js';
 import {
+    asArray,
+    buildThreatMapResponse,
+    countBy,
+    COUNTRY_NAMES,
+    LATAM_COUNTRIES,
+    normalizeVictim,
+    ransomwareLiveRequestOptions,
+} from './ransomwareLive.js';
+import {
     createEditionGenerator,
     createEditionStore,
     getCompletedDate,
@@ -687,67 +696,31 @@ app.post('/api/phishstats', scanLimiter, async (req, res) => {
 // Ransomware.live
 app.post('/api/ransomwarelive', scanLimiter, async (req, res) => {
     try {
-        const response = await axios.get(`https://api.ransomware.live/recentvictims`);
-        res.json(response.data);
+        res.json(await getRecentRansomwareVictims());
     } catch (error) {
         const { status, message } = sanitizeError(error);
         res.status(status).json({ error: message });
     }
 });
 
-const LATAM_COUNTRIES = new Set([
-    'AR', 'BO', 'BR', 'CL', 'CO', 'CR', 'CU', 'DO', 'EC', 'GT', 'HN', 'MX',
-    'NI', 'PA', 'PE', 'PR', 'PY', 'SV', 'UY', 'VE', 'BZ', 'GY', 'SR', 'GF',
-]);
-
-const COUNTRY_NAMES = {
-    AR: 'Argentina', BO: 'Bolivia', BR: 'Brazil', CL: 'Chile', CO: 'Colombia',
-    CR: 'Costa Rica', CU: 'Cuba', DO: 'Dominican Republic', EC: 'Ecuador',
-    GT: 'Guatemala', HN: 'Honduras', MX: 'Mexico', NI: 'Nicaragua', PA: 'Panama',
-    PE: 'Peru', PR: 'Puerto Rico', PY: 'Paraguay', SV: 'El Salvador', UY: 'Uruguay',
-    VE: 'Venezuela', US: 'United States of America', ES: 'Spain', IT: 'Italy',
-    PL: 'Poland', DE: 'Germany', FR: 'France', GB: 'United Kingdom', CA: 'Canada',
-};
-
-const asArray = (v) => Array.isArray(v) ? v : (Array.isArray(v?.data) ? v.data : []);
-const countBy = (items, fn) => {
-    const map = new Map();
-    for (const item of items) {
-        const key = fn(item);
-        if (!key) continue;
-        map.set(key, (map.get(key) || 0) + 1);
-    }
-    return [...map.entries()].sort((a, b) => b[1] - a[1]).map(([name, count]) => ({ name, count }));
-};
-
-function normalizeVictim(v) {
-    const country = String(v.country || v.country_code || '').trim().toUpperCase();
-    const name = String(v.post_title || v.victim || v.name || v.website || 'Unknown victim').trim();
-    return {
-        name,
-        website: v.website || '',
-        group: String(v.group_name || v.group || 'unknown').trim(),
-        country,
-        countryName: COUNTRY_NAMES[country] || country || 'Unknown',
-        sector: String(v.activity || v.sector || 'Not Found').trim(),
-        published: v.published || v.discovered || v.date || null,
-        discovered: v.discovered || v.published || v.date || null,
-        description: v.description && v.description !== 'N/A' ? String(v.description).slice(0, 500) : '',
-        screenshot: v.screenshot || '',
-        source: 'ransomware.live',
-    };
-}
-
 async function getRecentRansomwareVictims() {
     const now = Date.now();
     if (memoryCache.ransomwareVictims.data && memoryCache.ransomwareVictims.expiresAt > now) {
         return memoryCache.ransomwareVictims.data;
     }
-    const resp = await axios.get('https://api.ransomware.live/recentvictims', {
-        timeout: 10000,
-        maxRedirects: 3,
-    });
-    const victims = asArray(resp.data).map(normalizeVictim)
+    const request = ransomwareLiveRequestOptions(process.env.RANSOMWARE_LIVE_API_KEY);
+    let response;
+    let source = request.source;
+    try {
+        response = await axios.get(request.url, request.options);
+    } catch (error) {
+        if (!process.env.RANSOMWARE_LIVE_API_KEY) throw error;
+        console.warn(`Ransomware.live Pro fetch failed: ${error.message}; falling back to public API`);
+        const fallback = ransomwareLiveRequestOptions();
+        source = fallback.source;
+        response = await axios.get(fallback.url, fallback.options);
+    }
+    const victims = asArray(response.data).map((victim) => normalizeVictim(victim, source))
         .sort((a, b) => new Date(b.discovered || 0) - new Date(a.discovered || 0));
     memoryCache.ransomwareVictims.data = victims;
     memoryCache.ransomwareVictims.expiresAt = now + memoryCache.ransomwareVictims.ttl;
@@ -787,23 +760,16 @@ async function getRecentThreatFoxIocs(days = 7) {
 
 app.get('/api/intel/threat-map', async (req, res) => {
     try {
-        const days = Math.max(1, Math.min(180, Number(req.query.days) || 90));
-        const since = Date.now() - days * 24 * 60 * 60 * 1000;
-        const victims = (await getRecentRansomwareVictims())
-            .filter((v) => !v.discovered || new Date(v.discovered).getTime() >= since);
-        const countries = countBy(victims, (v) => v.country)
-            .map((c) => ({ ...c, countryName: COUNTRY_NAMES[c.name] || c.name }));
-        const groups = countBy(victims, (v) => v.group).slice(0, 12);
-        res.json({
+        const days = Math.max(1, Math.min(30, Number(req.query.days) || 3));
+        const victims = await getRecentRansomwareVictims();
+        const source = victims.some((victim) => victim.source === 'ransomware.live Pro')
+            ? 'ransomware.live Pro'
+            : 'ransomware.live';
+        res.json(buildThreatMapResponse(victims, {
             generatedAt: new Date().toISOString(),
-            windowDays: days,
-            source: 'ransomware.live',
-            victims: victims.slice(0, 80),
-            countries,
-            groups,
-            topCountry: countries[0] || null,
-            activeGroups: groups.length,
-        });
+            days,
+            source,
+        }));
     } catch (error) {
         const { status, message } = sanitizeError(error);
         res.status(status).json({ error: message });

@@ -38,6 +38,7 @@ jobs:
       # Runtime secrets to push. Add new lines here (and set the GH secret) to
       # extend. Empty/unset secrets are skipped, so partial rollout is safe.
       SHODAN_API_KEY: ${{ secrets.SHODAN_API_KEY }}
+      RANSOMWARE_LIVE_API_KEY: ${{ secrets.RANSOMWARE_LIVE_API_KEY }}
       SECRETS_ENCRYPTION_KEY: ${{ secrets.SECRETS_ENCRYPTION_KEY }}
       CENSYS_API_KEY: ${{ secrets.CENSYS_API_KEY }}
     steps:
@@ -68,7 +69,7 @@ jobs:
 
           # Build the KEY=VALUE payload from only the secrets that are set.
           payload="$(mktemp)"
-          for k in SHODAN_API_KEY SECRETS_ENCRYPTION_KEY CENSYS_API_KEY; do
+          for k in SHODAN_API_KEY RANSOMWARE_LIVE_API_KEY SECRETS_ENCRYPTION_KEY CENSYS_API_KEY; do
             v="${!k-}"
             [ -n "$v" ] && printf '%s=%s\n' "$k" "$v" >> "$payload"
           done

@@ -1027,6 +1027,7 @@ export const fetchJob = async (id: string): Promise<BoletimJob> => {
 };
 
 export interface RansomwareVictim {
+    id?: string;
     name: string;
     website?: string;
     group: string;
@@ -1037,6 +1038,9 @@ export interface RansomwareVictim {
     discovered?: string | null;
     description?: string;
     screenshot?: string;
+    permalink?: string;
+    infostealer?: unknown;
+    press?: unknown[];
     source: string;
 }
 
@@ -1126,11 +1130,54 @@ export interface ThreatMapData {
     generatedAt: string;
     windowDays: number;
     source: string;
+    totalVictims?: number;
     victims: RansomwareVictim[];
     countries: CountItem[];
     groups: CountItem[];
+    sectors: CountItem[];
     topCountry: CountItem | null;
     activeGroups: number;
+    windows: Array<{
+        key: string;
+        label: string;
+        days: number;
+        totalVictims: number;
+        countries: CountItem[];
+        groups: CountItem[];
+        sectors: CountItem[];
+        topCountry: CountItem | null;
+        activeGroups: number;
+        latestVictim?: RansomwareVictim | null;
+    }>;
+    timeline: Array<{
+        from: string;
+        to: string;
+        label: string;
+        count: number;
+        countries: string[];
+        groups: string[];
+    }>;
+    delta: {
+        victims: number;
+        previousVictims: number;
+        percent: number;
+        direction: "up" | "down" | "flat";
+    };
+    latam: {
+        victims: number;
+        countries: CountItem[];
+        groups: CountItem[];
+    };
+    insights: Array<{
+        kind: "volume" | "top-group" | "sector" | "new-countries" | "latam" | "evidence";
+        severity: "high" | "medium" | "low" | "context" | string;
+        value?: number;
+        previous?: number;
+        delta?: number;
+        name?: string;
+        count?: number;
+        countries?: CountItem[];
+    }>;
 }
 
 const intelError = async (r: Response): Promise<never> => {
@@ -1151,7 +1198,7 @@ export const fetchLatamThreats = async (): Promise<LatamThreats> => {
     return r.json();
 };
 
-export const fetchThreatMap = async (days = 90): Promise<ThreatMapData> => {
+export const fetchThreatMap = async (days = 3): Promise<ThreatMapData> => {
     const r = await fetch(`/api/intel/threat-map?days=${days}`);
     if (!r.ok) return intelError(r);
     return r.json();
@@ -1267,7 +1314,7 @@ export const fetchIntegrationStatus = async (): Promise<IntegrationsResponse> =>
     return r.json();
 };
 
-// Attack Surface: Shodan-led external exposure search with optional Censys and TCP validation.
+// Attack Surface: Shodan-led external exposure search with optional TCP validation.
 export type AttackSurfaceMode = 'guided' | 'advanced';
 export type AttackSurfaceTargetType = 'ip' | 'domain' | 'cidr' | 'org';
 export type AttackSurfaceRisk = 'critical' | 'high' | 'medium' | 'low';
@@ -1298,7 +1345,7 @@ export interface AttackSurfaceFinding {
     hostnames: string[];
     country: string | null;
     city: string | null;
-    source: { shodan: boolean; censys: boolean };
+    source: { shodan: boolean; censys?: boolean };
     observedAt: string | null;
     cves: string[];
     tags: string[];
@@ -1316,7 +1363,7 @@ export interface AttackSurfaceSummary {
     criticalHighFindings: number;
     activelyConfirmedOpen: number;
     byRisk: Record<AttackSurfaceRisk, number>;
-    providers: { shodan: boolean; censys: boolean };
+    providers: { shodan: boolean; censys?: boolean };
     warnings: string[];
     totalObserved: number;
 }
