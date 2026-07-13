@@ -9,13 +9,18 @@ const icons: Record<NetworkOverviewItem["key"], typeof Globe2> = {
 };
 
 export const GeographicNetworkOverview = ({ vendorData }: { vendorData: VendorData[] }) => {
-  const { language } = useLanguage();
+  const { tr } = useLanguage();
   const items = buildNetworkOverview(vendorData);
   if (!items.length) return null;
 
   return <section className="overflow-hidden rounded-lg border border-border bg-card" aria-labelledby="network-overview-title">
     <div className="border-b border-border px-5 py-4">
-      <h2 id="network-overview-title" className="font-bold">{language === "pt" ? "Dados geográficos e de rede" : "Geographic & Network Data"}</h2>
+      <h2 id="network-overview-title" className="font-bold">{tr({
+        pt: "Dados geográficos e de rede",
+        en: "Geographic & Network Data",
+        es: "Datos geográficos y de red",
+        fr: "Données géographiques et réseau",
+      })}</h2>
     </div>
     <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4">
       {items.map((item) => {
