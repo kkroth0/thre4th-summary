@@ -361,7 +361,7 @@ Expected: commit succeeds.
 - Consumes: `buildDailyBrief({ feed, victims, now, countBy, latamCountries })` from `server/dailyBrief.js`.
 - Produces: `DailyBrief` frontend type with `windowHours`, `executiveSummary`, and `feedGroups`.
 
-- [ ] **Step 1: Import helper**
+- [x] **Step 1: Import helper**
 
 In `server/index.js`, add:
 
@@ -369,7 +369,7 @@ In `server/index.js`, add:
 import { buildDailyBrief } from './dailyBrief.js';
 ```
 
-- [ ] **Step 2: Replace inline endpoint shaping**
+- [x] **Step 2: Replace inline endpoint shaping**
 
 Inside `GET /api/intel/daily-brief`, keep feed refresh and victim fetch, then return:
 
@@ -384,7 +384,7 @@ res.json(buildDailyBrief({
 }));
 ```
 
-- [ ] **Step 3: Extend TypeScript contract**
+- [x] **Step 3: Extend TypeScript contract**
 
 In `src/services/threatApi.ts`, add:
 
@@ -422,7 +422,7 @@ executiveSummary: string[];
 feedGroups: DailyBriefFeedGroup[];
 ```
 
-- [ ] **Step 4: Run endpoint/type checks**
+- [x] **Step 4: Run endpoint/type checks**
 
 Run:
 
@@ -434,7 +434,7 @@ npm run typecheck
 
 Expected: all commands exit 0.
 
-- [ ] **Step 5: Commit endpoint and contract**
+- [x] **Step 5: Commit endpoint and contract**
 
 Run:
 

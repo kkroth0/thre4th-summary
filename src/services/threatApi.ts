@@ -1080,10 +1080,37 @@ export interface CountItem {
     countryName?: string;
 }
 
+export interface DailyBriefFeedItem {
+    id: string;
+    kind: "advisory" | "ransomware";
+    title: string;
+    titlePt?: string;
+    link?: string;
+    source: string;
+    pubDate?: string | null;
+    score?: number;
+    severity?: string;
+    cves: string[];
+    kev?: boolean;
+    reasons: string[];
+    group?: string;
+    countryName?: string;
+    sector?: string;
+}
+
+export interface DailyBriefFeedGroup {
+    key: "kev" | "critical" | "ransomware" | "other";
+    title: string;
+    description: string;
+    items: DailyBriefFeedItem[];
+}
+
 export interface DailyBrief {
     generatedAt: string;
+    windowHours: number;
     title: string;
     verdict: "hot" | "watch" | "calm";
+    executiveSummary: string[];
     summary: {
         totalAdvisories: number;
         critical: number;
@@ -1092,23 +1119,13 @@ export interface DailyBrief {
         ransomwareVictims: number;
         latamVictims: number;
     };
-    highlights: Array<{
-        title: string;
-        titlePt?: string;
-        link: string;
-        source: string;
-        pubDate: string;
-        score: number;
-        severity: string;
-        cves: string[];
-        kev: boolean;
-        reasons: string[];
-    }>;
+    highlights: DailyBriefFeedItem[];
     ransomware: {
         victims: RansomwareVictim[];
         groups: CountItem[];
         latam: RansomwareVictim[];
     };
+    feedGroups: DailyBriefFeedGroup[];
     sources: string[];
 }
 

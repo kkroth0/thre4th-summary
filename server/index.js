@@ -14,6 +14,7 @@ import compression from 'compression';
 import * as cheerio from 'cheerio';
 import { scoreArticle, localizeEnrichment, severityFromScore, extractIOCs, CTI_FEEDS } from './ctiIntel.js';
 import { runAttackSurfaceScan } from './attackSurface.js';
+import { buildDailyBrief } from './dailyBrief.js';
 
 // Load the root .env regardless of the process cwd (systemd runs from server/,
 // local dev may not).
@@ -1799,62 +1800,14 @@ app.get('/api/intel/daily-brief', async (req, res) => {
     try {
         if (!memoryCache.newsletter.data) await refreshNewsletterFeed();
         const feed = memoryCache.newsletter.data || [];
-        const now = Date.now();
-        const dayMs = 24 * 60 * 60 * 1000;
-        const recent = feed.filter((item) => {
-            const t = new Date(item.pubDate || item.date || 0).getTime();
-            return Number.isFinite(t) && now - t <= 36 * 60 * 60 * 1000;
-        });
-        const highSignal = recent.filter((item) => (item.score || 0) >= 65 || item.kev);
-        const kev = recent.filter((item) => item.kev);
-        const cves = [...new Set(recent.flatMap((item) => item.cves || []))];
-        const critical = recent.filter((item) => String(item.severity || '').toLowerCase() === 'critical');
-        const victims = (await getRecentRansomwareVictims().catch(() => []))
-            .filter((v) => !v.discovered || now - new Date(v.discovered).getTime() <= dayMs)
-            .slice(0, 12);
-        const latamVictims = victims.filter((v) => LATAM_COUNTRIES.has(v.country));
-        const verdict = kev.length || highSignal.length >= 6 || victims.length >= 8 ? 'hot'
-            : highSignal.length || victims.length ? 'watch'
-            : 'calm';
-        const top = [...recent]
-            .sort((a, b) => (b.kev ? 25 : 0) + (b.score || 0) - ((a.kev ? 25 : 0) + (a.score || 0)))
-            .slice(0, 10);
-
-        res.json({
-            generatedAt: new Date().toISOString(),
-            title: verdict === 'hot'
-                ? 'Dia quente: priorize exploração ativa, ransomware e advisories críticos'
-                : verdict === 'watch'
-                    ? 'Dia de atenção: sinais relevantes em advisories e ransomware'
-                    : 'Dia calmo: monitore CVEs novas e mantenha correções planejadas',
-            verdict,
-            summary: {
-                totalAdvisories: recent.length,
-                critical: critical.length,
-                kev: kev.length,
-                cves: cves.length,
-                ransomwareVictims: victims.length,
-                latamVictims: latamVictims.length,
-            },
-            highlights: top.map((item) => ({
-                title: item.title,
-                titlePt: item.titlePt,
-                link: item.link,
-                source: item.source,
-                pubDate: item.pubDate,
-                score: item.score || 0,
-                severity: item.severity || 'Low',
-                cves: item.cves || [],
-                kev: !!item.kev,
-                reasons: item.reasons || [],
-            })),
-            ransomware: {
-                victims,
-                groups: countBy(victims, (v) => v.group).slice(0, 8),
-                latam: latamVictims,
-            },
-            sources: ['RSS advisories', 'CISA KEV', 'FIRST EPSS', 'ransomware.live'],
-        });
+        const victims = await getRecentRansomwareVictims().catch(() => []);
+        res.json(buildDailyBrief({
+            feed,
+            victims,
+            now: Date.now(),
+            countBy,
+            latamCountries: LATAM_COUNTRIES,
+        }));
     } catch (error) {
         const { status, message } = sanitizeError(error);
         res.status(status).json({ error: message });
