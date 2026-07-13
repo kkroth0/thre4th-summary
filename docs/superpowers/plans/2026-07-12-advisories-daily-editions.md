@@ -292,7 +292,7 @@ Run: `git status --short && git diff HEAD~4 --stat && rg -n "daily-summaries" .g
 
 Expected: only planned files changed and every VPS sync path preserves `.daily-summaries.json`.
 
-- [ ] **Step 3: Commit checklist updates and push**
+- [x] **Step 3: Commit checklist updates and push**
 
 ```bash
 git add docs/superpowers/plans/2026-07-12-advisories-daily-editions.md
@@ -300,6 +300,6 @@ git commit -m "docs: complete daily editions rollout"
 git push origin main
 ```
 
-- [ ] **Step 4: Verify deployments and public route**
+- [x] **Step 4: Verify deployments and public route**
 
 Confirm the Cloudflare Pages and VPS workflows for the pushed SHA succeed. Request `https://threatsumm4ry.app/advisories` and its API, confirming HTTP 200 and a 24-hour edition response. If deployment fails, inspect logs, fix, rerun all affected checks and push the corrective commit.
