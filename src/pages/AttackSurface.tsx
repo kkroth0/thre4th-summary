@@ -98,6 +98,10 @@ const riskSortValue: Record<AttackSurfaceRisk, number> = {
   low: 1,
 };
 
+// Minimum time the scan loading state stays visible (see submit()).
+const MIN_LOADING_MS = 5000;
+const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
 export default function AttackSurface() {
   const { language } = useLanguage();
   const pt = language === "pt";
@@ -190,12 +194,12 @@ export default function AttackSurface() {
       setImportTargets(parsed.targets);
       if (parsed.targets[0]) applyImportedTarget(parsed.targets[0]);
       if (parsed.targets.length === 0) {
-        toast.warning(pt ? "Nenhum alvo reconhecido no TXT." : "No supported targets found in TXT.");
+        toast.warning(pt ? "Nenhum alvo reconhecido no arquivo." : "No supported targets found in the file.");
       } else {
         toast.success(pt ? `${parsed.targets.length} alvo(s) importado(s).` : `${parsed.targets.length} target(s) imported.`);
       }
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : pt ? "Falha ao ler TXT." : "Failed to read TXT.");
+      toast.error(error instanceof Error ? error.message : pt ? "Falha ao ler o arquivo." : "Failed to read the file.");
     } finally {
       if (fileInputRef.current) fileInputRef.current.value = "";
     }
@@ -233,8 +237,13 @@ export default function AttackSurface() {
 
     setIsLoading(true);
     setOpenRows({});
+    const startedAt = Date.now();
     try {
       const response = await fetchAttackSurface(input);
+      // Hold the loading state for a short floor so a fast scan still reads as
+      // "a scan ran" instead of a flicker. Only on success — errors surface now.
+      const elapsed = Date.now() - startedAt;
+      if (elapsed < MIN_LOADING_MS) await sleep(MIN_LOADING_MS - elapsed);
       setResult(response);
       if (response.warnings.length > 0) {
         toast.warning(pt ? "Busca concluida com avisos." : "Search completed with warnings.");
@@ -271,8 +280,8 @@ export default function AttackSurface() {
             </h1>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
               {pt
-                ? "Mapeie servicos expostos, importe alvos por TXT, exporte XLSX e acompanhe mudancas de ativos salvos."
-                : "Map exposed services, import TXT targets, export XLSX, and monitor changes for saved assets."}
+                ? "Mapeie servicos expostos, importe alvos por TXT/JSON, exporte XLSX e acompanhe mudancas de ativos salvos."
+                : "Map exposed services, import TXT/JSON targets, export XLSX, and monitor changes for saved assets."}
             </p>
           </div>
           {result && (
@@ -302,7 +311,7 @@ export default function AttackSurface() {
               <input
                 ref={fileInputRef}
                 type="file"
-                accept=".txt,text/plain"
+                accept=".txt,.json,text/plain,application/json"
                 className="hidden"
                 onChange={(event) => void importTxt(event.target.files?.[0])}
               />
@@ -331,7 +340,7 @@ export default function AttackSurface() {
                 </div>
                 <Button type="button" variant="outline" onClick={() => fileInputRef.current?.click()} className="h-9 gap-2">
                   <Upload className="h-4 w-4" />
-                  TXT
+                  TXT/JSON
                 </Button>
                 <Button type="submit" disabled={isLoading} className="h-9 gap-2">
                   {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
@@ -405,7 +414,21 @@ export default function AttackSurface() {
           )}
         </form>
 
-        {result && (
+        {isLoading && (
+          <div className="soc-panel rounded-lg p-10 text-center">
+            <Loader2 className="mx-auto h-10 w-10 animate-spin text-primary" />
+            <h2 className="mt-4 text-lg font-semibold">
+              {pt ? "Escaneando superficie..." : "Scanning attack surface..."}
+            </h2>
+            <p className="mx-auto mt-2 max-w-xl text-sm text-muted-foreground">
+              {pt
+                ? "Consultando Shodan e validando exposicao. Leva alguns segundos."
+                : "Querying Shodan and validating exposure. This takes a few seconds."}
+            </p>
+          </div>
+        )}
+
+        {result && !isLoading && (
           <>
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
               <Metric icon={Server} label={pt ? "Ativos" : "Assets"} value={result.summary.totalAssets} />

@@ -146,12 +146,12 @@ export function ExposureMonitorPanel() {
       const parsed = parseAttackSurfaceTargets(await file.text());
       setImportTargets(parsed.targets);
       if (parsed.targets.length === 0) {
-        toast.warning(pt ? "Nenhum alvo reconhecido no TXT." : "No supported targets found in TXT.");
+        toast.warning(pt ? "Nenhum alvo reconhecido no arquivo." : "No supported targets found in the file.");
       } else {
         toast.success(pt ? `${parsed.targets.length} alvo(s) importado(s).` : `${parsed.targets.length} target(s) imported.`);
       }
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : pt ? "Falha ao ler TXT." : "Failed to read TXT.");
+      toast.error(error instanceof Error ? error.message : pt ? "Falha ao ler o arquivo." : "Failed to read the file.");
     } finally {
       if (fileInputRef.current) fileInputRef.current.value = "";
     }
@@ -273,13 +273,13 @@ export function ExposureMonitorPanel() {
             <input
               ref={fileInputRef}
               type="file"
-              accept=".txt,text/plain"
+              accept=".txt,.json,text/plain,application/json"
               className="hidden"
               onChange={(event) => void importTxt(event.target.files?.[0])}
             />
             <Button type="button" variant="outline" size="sm" className="gap-2" onClick={() => fileInputRef.current?.click()}>
               <Upload className="h-4 w-4" />
-              TXT
+              TXT/JSON
             </Button>
           </div>
 
