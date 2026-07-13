@@ -77,3 +77,13 @@ test("keeps every public route fully described in both SEO languages", () => {
   assert.equal(titles.size, PUBLIC_SEO_ROUTES.length * 2);
   assert.equal(descriptions.size, PUBLIC_SEO_ROUTES.length * 2);
 });
+
+test("provides metadata needed by the runtime SEO component", () => {
+  const metadata = getSeoMetadata("/cves", "pt");
+
+  assert.equal(metadata.htmlLang, "pt-BR");
+  assert.equal(metadata.locale, "pt_BR");
+  assert.equal(metadata.imageUrl, "https://threatsumm4ry.app/threatsumm4ry-og-image-1200x630.png");
+  assert.match(metadata.title, /CVE/i);
+  assert.match(metadata.description, /EPSS/);
+});

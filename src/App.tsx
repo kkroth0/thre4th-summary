@@ -8,6 +8,7 @@ import { LanguageProvider } from "./contexts/LanguageContext";
 import { SidebarProvider } from "./contexts/SidebarContext";
 import { AuthProvider } from "./contexts/AuthContext";
 import { PremiumRoute } from "./components/PremiumRoute";
+import { Seo } from "./components/Seo";
 
 const Index = lazy(() => import("./pages/Index"));
 const Login = lazy(() => import("./pages/Login"));
@@ -42,6 +43,7 @@ const App = () => (
           <Toaster />
           <Sonner />
           <BrowserRouter>
+            <Seo />
             <Suspense fallback={
               <div className="h-screen w-screen flex flex-col items-center justify-center bg-background gap-3">
                 <div className="h-10 w-10 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
