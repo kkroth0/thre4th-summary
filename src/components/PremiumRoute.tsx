@@ -10,7 +10,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useSidebar } from "@/contexts/SidebarContext";
 import { cn } from "@/lib/utils";
 
-type Feature = "threat-brief" | "advisory-feed" | "threat-hunting";
+type Feature = "threat-brief" | "advisory-feed" | "threat-hunting" | "exposure-watchlist";
 
 const COPY: Record<Feature, { pt: [string, string]; en: [string, string] }> = {
   "threat-brief": {
@@ -24,6 +24,10 @@ const COPY: Record<Feature, { pt: [string, string]; en: [string, string] }> = {
   "threat-hunting": {
     pt: ["Threat Hunting", "Ferramentas pra investigar e cruzar indicadores (IOCs)."],
     en: ["Threat Hunting", "Tools to dig into and cross-check indicators (IOCs)."],
+  },
+  "exposure-watchlist": {
+    pt: ["Exposure Watchlist", "Monitore ativos externos e acompanhe mudancas na superficie exposta."],
+    en: ["Exposure Watchlist", "Monitor external assets and track exposed-surface changes."],
   },
 };
 

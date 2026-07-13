@@ -94,6 +94,13 @@ export function Header({ actions, logoAddon, onLogoClick, showBackButton = false
           icon: Radar,
         },
         {
+          path: "/exposure-watchlist",
+          label: "Exposure Watchlist",
+          description: pt ? "Monitore mudancas na superficie exposta." : "Monitor exposed surface changes.",
+          icon: RadioTower,
+          premium: true,
+        },
+        {
           path: "/relatorios",
           label: pt ? "Gerador de Relatorios" : "Report Generator",
           description: pt ? "URL, PDF ou relatorio em uma analise CTI." : "URL, PDF or report into CTI analysis.",

@@ -1259,7 +1259,7 @@ git commit -m "feat: add exposure watchlist client api"
 - Consumes frontend API helpers from Task 4.
 - Produces route `/exposure-watchlist` behind `PremiumRoute`.
 
-- [ ] **Step 1: Create the page component**
+- [x] **Step 1: Create the page component**
 
 Create `src/pages/ExposureWatchlist.tsx`. Keep the page compact and table-first:
 
@@ -1576,7 +1576,7 @@ export default function ExposureWatchlist() {
 }
 ```
 
-- [ ] **Step 2: Add the route**
+- [x] **Step 2: Add the route**
 
 Modify `src/App.tsx`:
 
@@ -1590,7 +1590,7 @@ Add the route near Attack Surface:
 <Route path="/exposure-watchlist" element={<PremiumRoute feature="exposure-watchlist"><ExposureWatchlist /></PremiumRoute>} />
 ```
 
-- [ ] **Step 3: Add navigation**
+- [x] **Step 3: Add navigation**
 
 Modify `src/components/Header.tsx` in the Analysis/Tools group near Attack Surface:
 
@@ -1605,7 +1605,7 @@ Modify `src/components/Header.tsx` in the Analysis/Tools group near Attack Surfa
 
 Ensure `Radar` is imported from `lucide-react`.
 
-- [ ] **Step 4: Run frontend checks**
+- [x] **Step 4: Run frontend checks**
 
 Run:
 
@@ -1616,7 +1616,7 @@ npm run build
 
 Expected: both pass.
 
-- [ ] **Step 5: Commit Task 5**
+- [x] **Step 5: Commit Task 5**
 
 ```bash
 git add src/pages/ExposureWatchlist.tsx src/App.tsx src/components/Header.tsx docs/superpowers/plans/2026-07-13-exposure-watchlist-implementation.md
