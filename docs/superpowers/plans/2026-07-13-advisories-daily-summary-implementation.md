@@ -45,7 +45,7 @@
   - `buildExecutiveSummary({ kev, critical, victims, latamVictims, cves, highSignal }): string[]`
   - `buildFeedGroups({ recent, victims }): DailyBriefFeedGroup[]`
 
-- [ ] **Step 1: Write failing helper tests**
+- [x] **Step 1: Write failing helper tests**
 
 Create `server/test/dailyBrief.test.js` with this structure:
 
@@ -172,13 +172,13 @@ test('buildDailyBrief filters the last 36 hours and returns the new contract', (
 });
 ```
 
-- [ ] **Step 2: Run tests to verify failure**
+- [x] **Step 2: Run tests to verify failure**
 
 Run: `node --test server/test/dailyBrief.test.js`
 
 Expected: FAIL with module-not-found for `server/dailyBrief.js`.
 
-- [ ] **Step 3: Implement helper**
+- [x] **Step 3: Implement helper**
 
 Create `server/dailyBrief.js` with pure ESM exports:
 
@@ -332,13 +332,13 @@ export function buildDailyBrief({ feed, victims, now = Date.now(), countBy, lata
 }
 ```
 
-- [ ] **Step 4: Run helper tests**
+- [x] **Step 4: Run helper tests**
 
 Run: `node --test server/test/dailyBrief.test.js`
 
 Expected: PASS for all tests in `dailyBrief.test.js`.
 
-- [ ] **Step 5: Commit backend helper**
+- [x] **Step 5: Commit backend helper**
 
 Run:
 
