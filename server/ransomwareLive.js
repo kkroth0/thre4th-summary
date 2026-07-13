@@ -35,7 +35,11 @@ export const THREAT_MAP_WINDOWS = [
 ];
 
 export const asArray = (value) => (
-    Array.isArray(value) ? value : (Array.isArray(value?.data) ? value.data : [])
+    Array.isArray(value) ? value
+        : Array.isArray(value?.data) ? value.data
+            : Array.isArray(value?.victims) ? value.victims
+                : Array.isArray(value?.results) ? value.results
+                    : []
 );
 
 export const countBy = (items, fn) => {

@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+    asArray,
     buildThreatMapResponse,
     normalizeVictim,
     ransomwareLiveRequestOptions,
@@ -53,6 +54,30 @@ test('selects Pro endpoint when API key is configured', () => {
     assert.equal(publicApi.source, 'ransomware.live');
     assert.match(publicApi.url, /api\.ransomware\.live\/v2\/recentvictims$/);
     assert.equal(publicApi.options.headers, undefined);
+});
+
+test('accepts the Ransomware.live Pro victims envelope', () => {
+    const proEnvelope = {
+        client: 'client@example.test',
+        count: 1,
+        order: 'discovered',
+        victims: [
+            { victim: 'Envelope Victim', group: 'qilin', country: 'US', activity: 'Technology', discovered: hoursAgo(2) },
+        ],
+    };
+
+    assert.equal(asArray(proEnvelope).length, 1);
+
+    const response = buildThreatMapResponse(proEnvelope, {
+        days: 1,
+        generatedAt: new Date(NOW).toISOString(),
+        now: NOW,
+        source: 'ransomware.live Pro',
+    });
+
+    assert.equal(response.totalVictims, 1);
+    assert.equal(response.victims[0].name, 'Envelope Victim');
+    assert.equal(response.victims[0].source, 'ransomware.live Pro');
 });
 
 test('builds current threat-map windows, deltas, timeline, and insights', () => {
