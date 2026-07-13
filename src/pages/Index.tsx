@@ -20,8 +20,8 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { Header } from "@/components/Header";
 import { useSidebar } from "@/contexts/SidebarContext";
 
-import { ThreatCharts } from "@/components/ThreatCharts";
 import { IocTimeline } from "@/components/IocTimeline";
+import { GeographicNetworkOverview } from "@/components/GeographicNetworkOverview";
 import { QuickActions } from "@/components/QuickActions";
 import { ViewToggle } from "@/components/ViewToggle";
 import { ThreatCorrelationGraph } from "@/components/ThreatCorrelationGraph";
@@ -2028,6 +2028,8 @@ const Index = () => {
                       reportingVendors={data.reportingVendors}
                     />
 
+                    <GeographicNetworkOverview vendorData={data.vendorData} />
+
                     <IocTimeline vendorData={data.vendorData} />
 
                     <div className="flex items-center justify-between mb-4 animate-fade-in">
@@ -2086,11 +2088,6 @@ const Index = () => {
                       </div>
                     )}
 
-                    <ThreatCharts
-                      vendorData={data.vendorData}
-                      detections={data.detections}
-                      totalVendors={data.totalVendors}
-                    />
                   </div>
                 </TabsContent>
               ))}
