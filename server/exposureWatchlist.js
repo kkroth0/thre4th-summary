@@ -285,3 +285,19 @@ export async function runExposureSnapshot({ store, assetId, ownerId, now = new D
         return snapshot;
     }
 }
+
+export async function runDueExposureSnapshots({ store, now = new Date(), runOne }) {
+    const due = selectDueAssets(store.allAssets(), now);
+    const result = { attempted: 0, completed: 0, failed: 0 };
+    for (const asset of due) {
+        result.attempted += 1;
+        try {
+            await runOne(asset);
+            result.completed += 1;
+        } catch (error) {
+            result.failed += 1;
+            console.error('exposure watchlist scheduled run failed:', error.message || error);
+        }
+    }
+    return result;
+}

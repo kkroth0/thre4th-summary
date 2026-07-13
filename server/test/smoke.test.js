@@ -76,3 +76,10 @@ test('legacy groq-key endpoint is gone', async () => {
     const r = await fetch(`${BASE}/api/user/groq-key`, { method: 'PUT' });
     assert.equal(r.status, 404);
 });
+
+test('exposure watchlist requires authentication', async () => {
+    const r = await fetch(`${BASE}/api/exposure-watchlist/assets`);
+    assert.equal(r.status, 401);
+    const body = await r.json();
+    assert.equal(body.needAuth, true);
+});

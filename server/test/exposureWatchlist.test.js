@@ -8,6 +8,7 @@ import {
     diffSnapshots,
     normalizeExposureAssetInput,
     runExposureSnapshot,
+    runDueExposureSnapshots,
     selectDueAssets,
     summarizeFindings,
 } from '../exposureWatchlist.js';
@@ -201,4 +202,24 @@ test('runExposureSnapshot stores sanitized config errors', async () => {
     assert.equal(snapshot.status, 'config_error');
     assert.equal(store.getAsset('user-1', asset.id).lastStatus, 'config_error');
     assert.match(store.getAsset('user-1', asset.id).lastError, /Shodan API key/);
+});
+
+test('runDueExposureSnapshots runs due assets sequentially and continues after failure', async () => {
+    const assets = [
+        { id: 'old-1', ownerId: 'user-1', scheduleEnabled: true, lastRunAt: '2026-07-12T10:00:00.000Z', lastStatus: 'success' },
+        { id: 'old-2', ownerId: 'user-2', scheduleEnabled: true, lastRunAt: '2026-07-12T10:00:00.000Z', lastStatus: 'success' },
+    ];
+    const calls = [];
+    const result = await runDueExposureSnapshots({
+        store: { allAssets: () => assets }, now: new Date(now),
+        runOne: async (asset) => {
+            calls.push(asset.id);
+            if (asset.id === 'old-1') throw new Error('provider down');
+            return { id: 'snap-ok' };
+        },
+    });
+    assert.deepEqual(calls, ['old-1', 'old-2']);
+    assert.equal(result.attempted, 2);
+    assert.equal(result.failed, 1);
+    assert.equal(result.completed, 1);
 });

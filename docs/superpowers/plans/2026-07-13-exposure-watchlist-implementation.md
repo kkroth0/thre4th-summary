@@ -838,7 +838,7 @@ git commit -m "feat: persist exposure watchlist snapshots"
   - `runDueExposureSnapshots({ store, runOne, now })`
   - Express endpoints under `/api/exposure-watchlist/*`
 
-- [ ] **Step 1: Add focused scheduler test**
+- [x] **Step 1: Add focused scheduler test**
 
 Append to `server/test/exposureWatchlist.test.js`:
 
@@ -868,7 +868,7 @@ test('runDueExposureSnapshots runs due assets sequentially and continues after f
 });
 ```
 
-- [ ] **Step 2: Implement scheduler helper**
+- [x] **Step 2: Implement scheduler helper**
 
 Add to `server/exposureWatchlist.js`:
 
@@ -890,7 +890,7 @@ export async function runDueExposureSnapshots({ store, now = new Date(), runOne 
 }
 ```
 
-- [ ] **Step 3: Wire store, key resolution, and routes in `server/index.js`**
+- [x] **Step 3: Wire store, key resolution, and routes in `server/index.js`**
 
 Modify imports:
 
@@ -1032,7 +1032,7 @@ Start scheduler in `app.listen`:
     }
 ```
 
-- [ ] **Step 4: Add smoke test for anonymous route protection**
+- [x] **Step 4: Add smoke test for anonymous route protection**
 
 Append to `server/test/smoke.test.js`:
 
@@ -1045,7 +1045,7 @@ test('exposure watchlist requires authentication', async () => {
 });
 ```
 
-- [ ] **Step 5: Run backend tests and syntax checks**
+- [x] **Step 5: Run backend tests and syntax checks**
 
 Run:
 
@@ -1057,7 +1057,7 @@ node --check server/exposureWatchlist.js
 
 Expected: all pass.
 
-- [ ] **Step 6: Commit Task 3**
+- [x] **Step 6: Commit Task 3**
 
 ```bash
 git add server/index.js server/exposureWatchlist.js server/test/exposureWatchlist.test.js server/test/smoke.test.js docs/superpowers/plans/2026-07-13-exposure-watchlist-implementation.md
