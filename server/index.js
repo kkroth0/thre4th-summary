@@ -14,6 +14,7 @@ import compression from 'compression';
 import * as cheerio from 'cheerio';
 import { scoreArticle, localizeEnrichment, severityFromScore, extractIOCs, CTI_FEEDS } from './ctiIntel.js';
 import { runAttackSurfaceScan } from './attackSurface.js';
+import { createWatchlistStore, runDueExposureSnapshots, runExposureSnapshot } from './exposureWatchlist.js';
 import {
     createEditionGenerator,
     createEditionStore,
@@ -74,6 +75,14 @@ function writeJsonAtomic(file, data) {
     fs.renameSync(tmp, file);
 }
 
+const EXPOSURE_ASSETS_PATH = path.join(__dirname, '.exposure-watchlist.json');
+const EXPOSURE_SNAPSHOTS_PATH = path.join(__dirname, '.exposure-snapshots.json');
+const exposureStore = createWatchlistStore({
+    assetsPath: EXPOSURE_ASSETS_PATH,
+    snapshotsPath: EXPOSURE_SNAPSHOTS_PATH,
+    readFileSync: fs.readFileSync,
+    writeJsonAtomic,
+});
 const DAILY_SUMMARIES_PATH = path.join(__dirname, '.daily-summaries.json');
 const dailyEditionStore = createEditionStore({ filePath: DAILY_SUMMARIES_PATH, writeJsonAtomic });
 
@@ -88,7 +97,7 @@ const corsOptionsDelegate = (req, callback) => {
 
     callback(null, {
         origin: isAllowed,
-        methods: ['GET', 'POST', 'OPTIONS'],
+        methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
         allowedHeaders: ['Content-Type', 'Authorization'],
     });
 };
@@ -2449,6 +2458,39 @@ app.delete('/api/user/keys/:provider', requireAuth, (req, res) => {
     res.json({ provider, hasKey: false });
 });
 
+function getUserApiKey(userId, provider) {
+    const encrypted = usersStore[userId]?.apiKeysEnc?.[provider];
+    if (!encrypted) return '';
+    try { return decryptSecret(encrypted); }
+    catch (error) {
+        console.error(`failed to decrypt ${provider} key for user:`, error.message);
+        return '';
+    }
+}
+
+function buildExposureScanDeps(ownerId) {
+    return {
+        axiosClient: axios,
+        shodanApiKey: getUserApiKey(ownerId, 'shodan') || process.env.SHODAN_API_KEY,
+        censysApiKey: getUserApiKey(ownerId, 'censys') || process.env.CENSYS_API_KEY,
+    };
+}
+
+async function runExposureForAsset(asset) {
+    return runExposureSnapshot({
+        store: exposureStore,
+        assetId: asset.id,
+        ownerId: asset.ownerId,
+        runAttackSurfaceScan,
+        scanDeps: buildExposureScanDeps(asset.ownerId),
+    });
+}
+
+async function runExposureSchedulerTick() {
+    if (process.env.EXPOSURE_WATCHLIST_DISABLE_DAILY === 'true' || process.env.NODE_ENV === 'test') return;
+    await runDueExposureSnapshots({ store: exposureStore, now: new Date(), runOne: runExposureForAsset });
+}
+
 // ─── Boletim · jobs de geração por URL (1 URL = 1 boletim) ─────────────────
 // O front escolhe UMA url e pede a geração (POST generate); um worker na VPS
 // (saida-so, porta fechada) faz poll dos pendentes (GET jobs/pending), roda
@@ -3503,6 +3545,66 @@ app.post('/api/attack-surface', scanLimiter, async (req, res) => {
     }
 });
 
+app.get('/api/exposure-watchlist/assets', requirePremium, (req, res) => {
+    res.json({ assets: exposureStore.listAssets(req.user.sub) });
+});
+
+app.post('/api/exposure-watchlist/assets', requirePremium, (req, res) => {
+    try {
+        const asset = exposureStore.createAsset(req.user, req.body || {});
+        res.status(201).json({ asset });
+    } catch (error) {
+        if (error.status && error.publicMessage) return res.status(error.status).json({ error: error.publicMessage });
+        const { status, message } = sanitizeError(error);
+        res.status(status).json({ error: message });
+    }
+});
+
+app.patch('/api/exposure-watchlist/assets/:id', requirePremium, (req, res) => {
+    try {
+        const asset = exposureStore.updateAsset(req.user.sub, req.params.id, req.body || {});
+        res.json({ asset });
+    } catch (error) {
+        if (error.status && error.publicMessage) return res.status(error.status).json({ error: error.publicMessage });
+        const { status, message } = sanitizeError(error);
+        res.status(status).json({ error: message });
+    }
+});
+
+app.delete('/api/exposure-watchlist/assets/:id', requirePremium, (req, res) => {
+    const deleted = exposureStore.deleteAsset(req.user.sub, req.params.id);
+    if (!deleted) return res.status(404).json({ error: 'Asset not found' });
+    res.json({ ok: true });
+});
+
+app.post('/api/exposure-watchlist/assets/:id/run', requirePremium, scanLimiter, async (req, res) => {
+    try {
+        const snapshot = await runExposureSnapshot({
+            store: exposureStore, assetId: req.params.id, ownerId: req.user.sub,
+            runAttackSurfaceScan, scanDeps: buildExposureScanDeps(req.user.sub),
+        });
+        res.json({ snapshot, asset: exposureStore.getAsset(req.user.sub, req.params.id) });
+    } catch (error) {
+        if (error.status && error.publicMessage) return res.status(error.status).json({ error: error.publicMessage });
+        const { status, message } = sanitizeError(error);
+        res.status(status).json({ error: message });
+    }
+});
+
+app.get('/api/exposure-watchlist/assets/:id/snapshots', requirePremium, (req, res) => {
+    try {
+        res.json({ snapshots: exposureStore.listSnapshots(req.user.sub, req.params.id) });
+    } catch (error) {
+        if (error.status && error.publicMessage) return res.status(error.status).json({ error: error.publicMessage });
+        const { status, message } = sanitizeError(error);
+        res.status(status).json({ error: message });
+    }
+});
+
+app.get('/api/exposure-watchlist/changes', requirePremium, (req, res) => {
+    res.json({ changes: exposureStore.listChanges(req.user.sub, req.query.limit) });
+});
+
 // Vendors API Status
 app.get('/api/vendors/status', (req, res) => {
     // Use getKeys() so providers configured only via numbered fallback vars
@@ -3555,5 +3657,9 @@ app.listen(PORT, () => {
     // (and mid-month revisions) is picked up automatically.
     refreshPatchTuesday();
     setInterval(refreshPatchTuesday, memoryCache.patchTuesdayMonths.ttl);
+    if (process.env.NODE_ENV !== 'test' && process.env.EXPOSURE_WATCHLIST_DISABLE_DAILY !== 'true') {
+        setTimeout(runExposureSchedulerTick, 30_000);
+        setInterval(runExposureSchedulerTick, 15 * 60 * 1000);
+    }
     scheduleDailyEdition();
 });

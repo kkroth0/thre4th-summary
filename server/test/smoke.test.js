@@ -77,6 +77,13 @@ test('legacy groq-key endpoint is gone', async () => {
     assert.equal(r.status, 404);
 });
 
+test('exposure watchlist requires authentication', async () => {
+    const r = await fetch(`${BASE}/api/exposure-watchlist/assets`);
+    assert.equal(r.status, 401);
+    const body = await r.json();
+    assert.equal(body.needAuth, true);
+});
+
 test('daily edition route rejects malformed and unavailable historical dates', async () => {
     const malformed = await fetch(`${BASE}/api/intel/daily-brief?date=not-a-date`);
     assert.equal(malformed.status, 400);

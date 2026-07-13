@@ -92,6 +92,17 @@ STATUS
   GET     /api/vendors/status
 
 ====================================================================
+EXPOSURE WATCHLIST
+====================================================================
+  GET     /api/exposure-watchlist/assets                 [auth] premium list assets
+  POST    /api/exposure-watchlist/assets                 [auth] premium create asset
+  PATCH   /api/exposure-watchlist/assets/:id             [auth] premium update asset
+  DELETE  /api/exposure-watchlist/assets/:id             [auth] premium delete asset
+  POST    /api/exposure-watchlist/assets/:id/run         [auth] [rl] premium run snapshot
+  GET     /api/exposure-watchlist/assets/:id/snapshots   [auth] premium snapshot history
+  GET     /api/exposure-watchlist/changes                [auth] premium changes feed
+
+====================================================================
 FRONTEND APP ROUTES (SPA, not HTTP endpoints)   * = premium/sign-in gated
 ====================================================================
   /                     Index
@@ -102,6 +113,7 @@ FRONTEND APP ROUTES (SPA, not HTTP endpoints)   * = premium/sign-in gated
   /vendors              Vendor Directory
   /dnsbl                DNSBL Check
   /phishing-analyzer    Phishing Analyzer
+  /exposure-watchlist * Exposure Watchlist
   /threat-brief     *   Threat Brief
   /newsletter       *   Advisory Feed
   /threat-hunting   *   Threat Hunting

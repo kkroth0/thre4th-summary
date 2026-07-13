@@ -70,7 +70,7 @@
   - `selectDueAssets(assets, now)`
   - `applySnapshotRetention(snapshots, assetId)`
 
-- [ ] **Step 1: Write failing tests for validation, conversion, summary, diff, due selection, and retention**
+- [x] **Step 1: Write failing tests for validation, conversion, summary, diff, due selection, and retention**
 
 Create `server/test/exposureWatchlist.test.js`:
 
@@ -248,7 +248,7 @@ test('applySnapshotRetention keeps latest snapshots for an asset', () => {
 });
 ```
 
-- [ ] **Step 2: Run tests to verify failure**
+- [x] **Step 2: Run tests to verify failure**
 
 Run:
 
@@ -258,7 +258,7 @@ node --test server/test/exposureWatchlist.test.js
 
 Expected: FAIL with `Cannot find module '../exposureWatchlist.js'`.
 
-- [ ] **Step 3: Implement pure logic**
+- [x] **Step 3: Implement pure logic**
 
 Create `server/exposureWatchlist.js` with these exports and behavior:
 
@@ -475,7 +475,7 @@ export function applySnapshotRetention(snapshots = [], assetId) {
 }
 ```
 
-- [ ] **Step 4: Run tests to verify pure logic passes**
+- [x] **Step 4: Run tests to verify pure logic passes**
 
 Run:
 
@@ -485,7 +485,7 @@ node --test server/test/exposureWatchlist.test.js
 
 Expected: PASS for all Task 1 tests.
 
-- [ ] **Step 5: Commit Task 1**
+- [x] **Step 5: Commit Task 1**
 
 ```bash
 git add server/exposureWatchlist.js server/test/exposureWatchlist.test.js docs/superpowers/plans/2026-07-13-exposure-watchlist-implementation.md
@@ -511,7 +511,7 @@ git commit -m "feat: add exposure watchlist core logic"
   - `runExposureSnapshot({ store, assetId, ownerId, now, runAttackSurfaceScan, scanDeps })`
   - Store methods: `listAssets(ownerId)`, `createAsset(owner, input)`, `updateAsset(ownerId, assetId, input)`, `deleteAsset(ownerId, assetId)`, `getAsset(ownerId, assetId)`, `listSnapshots(ownerId, assetId)`, `listChanges(ownerId, limit)`
 
-- [ ] **Step 1: Add failing persistence and snapshot runner tests**
+- [x] **Step 1: Add failing persistence and snapshot runner tests**
 
 Append to `server/test/exposureWatchlist.test.js`:
 
@@ -622,7 +622,7 @@ test('runExposureSnapshot stores sanitized config errors', async () => {
 });
 ```
 
-- [ ] **Step 2: Run tests to verify failure**
+- [x] **Step 2: Run tests to verify failure**
 
 Run:
 
@@ -632,7 +632,7 @@ node --test server/test/exposureWatchlist.test.js
 
 Expected: FAIL because `createWatchlistStore` and `runExposureSnapshot` are not exported.
 
-- [ ] **Step 3: Implement store and snapshot runner**
+- [x] **Step 3: Implement store and snapshot runner**
 
 Extend `server/exposureWatchlist.js`:
 
@@ -802,7 +802,7 @@ export async function runExposureSnapshot({ store, assetId, ownerId, now = new D
 }
 ```
 
-- [ ] **Step 4: Run tests to verify persistence passes**
+- [x] **Step 4: Run tests to verify persistence passes**
 
 Run:
 
@@ -812,7 +812,7 @@ node --test server/test/exposureWatchlist.test.js
 
 Expected: PASS for Task 1 and Task 2 tests.
 
-- [ ] **Step 5: Commit Task 2**
+- [x] **Step 5: Commit Task 2**
 
 ```bash
 git add server/exposureWatchlist.js server/test/exposureWatchlist.test.js docs/superpowers/plans/2026-07-13-exposure-watchlist-implementation.md
@@ -838,7 +838,7 @@ git commit -m "feat: persist exposure watchlist snapshots"
   - `runDueExposureSnapshots({ store, runOne, now })`
   - Express endpoints under `/api/exposure-watchlist/*`
 
-- [ ] **Step 1: Add focused scheduler test**
+- [x] **Step 1: Add focused scheduler test**
 
 Append to `server/test/exposureWatchlist.test.js`:
 
@@ -868,7 +868,7 @@ test('runDueExposureSnapshots runs due assets sequentially and continues after f
 });
 ```
 
-- [ ] **Step 2: Implement scheduler helper**
+- [x] **Step 2: Implement scheduler helper**
 
 Add to `server/exposureWatchlist.js`:
 
@@ -890,7 +890,7 @@ export async function runDueExposureSnapshots({ store, now = new Date(), runOne 
 }
 ```
 
-- [ ] **Step 3: Wire store, key resolution, and routes in `server/index.js`**
+- [x] **Step 3: Wire store, key resolution, and routes in `server/index.js`**
 
 Modify imports:
 
@@ -1032,7 +1032,7 @@ Start scheduler in `app.listen`:
     }
 ```
 
-- [ ] **Step 4: Add smoke test for anonymous route protection**
+- [x] **Step 4: Add smoke test for anonymous route protection**
 
 Append to `server/test/smoke.test.js`:
 
@@ -1045,7 +1045,7 @@ test('exposure watchlist requires authentication', async () => {
 });
 ```
 
-- [ ] **Step 5: Run backend tests and syntax checks**
+- [x] **Step 5: Run backend tests and syntax checks**
 
 Run:
 
@@ -1057,7 +1057,7 @@ node --check server/exposureWatchlist.js
 
 Expected: all pass.
 
-- [ ] **Step 6: Commit Task 3**
+- [x] **Step 6: Commit Task 3**
 
 ```bash
 git add server/index.js server/exposureWatchlist.js server/test/exposureWatchlist.test.js server/test/smoke.test.js docs/superpowers/plans/2026-07-13-exposure-watchlist-implementation.md
@@ -1086,7 +1086,7 @@ git commit -m "feat: add exposure watchlist api"
   - `fetchExposureSnapshots(id)`
   - `fetchExposureChanges(limit?)`
 
-- [ ] **Step 1: Add TypeScript types and API helpers**
+- [x] **Step 1: Add TypeScript types and API helpers**
 
 Append near the Attack Surface exports in `src/services/threatApi.ts`:
 
@@ -1229,7 +1229,7 @@ export const fetchExposureChanges = async (limit = 100): Promise<ExposureChange[
 };
 ```
 
-- [ ] **Step 2: Run TypeScript check**
+- [x] **Step 2: Run TypeScript check**
 
 Run:
 
@@ -1239,7 +1239,7 @@ npm run typecheck
 
 Expected: PASS.
 
-- [ ] **Step 3: Commit Task 4**
+- [x] **Step 3: Commit Task 4**
 
 ```bash
 git add src/services/threatApi.ts docs/superpowers/plans/2026-07-13-exposure-watchlist-implementation.md
@@ -1259,7 +1259,7 @@ git commit -m "feat: add exposure watchlist client api"
 - Consumes frontend API helpers from Task 4.
 - Produces route `/exposure-watchlist` behind `PremiumRoute`.
 
-- [ ] **Step 1: Create the page component**
+- [x] **Step 1: Create the page component**
 
 Create `src/pages/ExposureWatchlist.tsx`. Keep the page compact and table-first:
 
@@ -1576,7 +1576,7 @@ export default function ExposureWatchlist() {
 }
 ```
 
-- [ ] **Step 2: Add the route**
+- [x] **Step 2: Add the route**
 
 Modify `src/App.tsx`:
 
@@ -1590,7 +1590,7 @@ Add the route near Attack Surface:
 <Route path="/exposure-watchlist" element={<PremiumRoute feature="exposure-watchlist"><ExposureWatchlist /></PremiumRoute>} />
 ```
 
-- [ ] **Step 3: Add navigation**
+- [x] **Step 3: Add navigation**
 
 Modify `src/components/Header.tsx` in the Analysis/Tools group near Attack Surface:
 
@@ -1605,7 +1605,7 @@ Modify `src/components/Header.tsx` in the Analysis/Tools group near Attack Surfa
 
 Ensure `Radar` is imported from `lucide-react`.
 
-- [ ] **Step 4: Run frontend checks**
+- [x] **Step 4: Run frontend checks**
 
 Run:
 
@@ -1616,7 +1616,7 @@ npm run build
 
 Expected: both pass.
 
-- [ ] **Step 5: Commit Task 5**
+- [x] **Step 5: Commit Task 5**
 
 ```bash
 git add src/pages/ExposureWatchlist.tsx src/App.tsx src/components/Header.tsx docs/superpowers/plans/2026-07-13-exposure-watchlist-implementation.md
@@ -1635,7 +1635,7 @@ git commit -m "feat: add exposure watchlist ui"
 - Consumes all previous tasks.
 - Produces verified production deployment on `main`.
 
-- [ ] **Step 1: Document endpoints**
+- [x] **Step 1: Document endpoints**
 
 Add to `ENDPOINTS.txt` after Attack Surface or Tool sections:
 
@@ -1658,7 +1658,7 @@ Add route list entry:
   /exposure-watchlist *  Exposure Watchlist
 ```
 
-- [ ] **Step 2: Run full local verification**
+- [x] **Step 2: Run full local verification**
 
 Run from `/home/mandrade/Dev/thre4th-summary`:
 
@@ -1679,7 +1679,7 @@ Expected:
 - `npm run lint` may report existing warnings, but no errors.
 - `npm run build` may report existing Browserslist/chunk warnings, but exits `0`.
 
-- [ ] **Step 3: Commit docs and checklist updates**
+- [x] **Step 3: Commit docs and checklist updates**
 
 ```bash
 git add ENDPOINTS.txt docs/superpowers/plans/2026-07-13-exposure-watchlist-implementation.md

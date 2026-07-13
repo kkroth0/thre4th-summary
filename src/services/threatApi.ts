@@ -1341,6 +1341,95 @@ export const fetchAttackSurface = async (input: AttackSurfaceInput): Promise<Att
     return response.json();
 };
 
+export type ExposureAssetType = 'domain' | 'ip' | 'cidr' | 'asn' | 'shodan_query';
+export type ExposureStatus = 'never_run' | 'running' | 'success' | 'error' | 'config_error';
+export type ExposureChangeSeverity = 'critical' | 'high' | 'medium' | 'low' | 'info';
+export type ExposureChangeType = 'baseline_created' | 'service_added' | 'service_removed' | 'cve_added'
+    | 'cve_removed' | 'risk_increased' | 'risk_decreased' | 'banner_changed' | 'validation_changed';
+
+export interface ExposureSnapshotSummary {
+    totalAssets: number;
+    totalServices: number;
+    criticalHighFindings: number;
+    activelyConfirmedOpen: number;
+    byRisk: Record<AttackSurfaceRisk, number>;
+    highestRisk: AttackSurfaceRisk | null;
+}
+
+export interface ExposureAsset {
+    id: string; ownerId: string; ownerLogin: string; label: string; type: ExposureAssetType; value: string;
+    limit: number; activeValidation: boolean; scheduleEnabled: boolean; createdAt: string; updatedAt: string;
+    lastRunAt: string | null; lastStatus: ExposureStatus; lastError: string | null; lastSnapshotId: string | null;
+    lastRisk: AttackSurfaceRisk | null; lastSummary: ExposureSnapshotSummary | null;
+}
+
+export interface ExposureChange {
+    id: string; assetId: string; snapshotId: string; detectedAt: string; severity: ExposureChangeSeverity;
+    type: ExposureChangeType; title: string; description: string; ip: string | null; port: number | null;
+    transport: 'tcp' | 'udp' | null; previous: unknown; current: unknown;
+}
+
+export interface ExposureSnapshot {
+    id: string; assetId: string; ownerId: string; startedAt: string; completedAt: string | null;
+    status: 'success' | 'error' | 'config_error'; error: string | null; input: AttackSurfaceInput;
+    summary: ExposureSnapshotSummary; findings: AttackSurfaceFinding[]; changes: ExposureChange[]; warnings: string[];
+}
+
+export interface ExposureAssetInput {
+    label: string; type: ExposureAssetType; value: string; limit: number;
+    activeValidation: boolean; scheduleEnabled: boolean;
+}
+
+const exposureError = async (response: Response): Promise<never> => {
+    const body = await response.json().catch(() => ({}));
+    throw new Error((body as { error?: string }).error || `Exposure Watchlist API error: ${response.status}`);
+};
+
+export const fetchExposureAssets = async (): Promise<ExposureAsset[]> => {
+    const response = await fetch('/api/exposure-watchlist/assets');
+    if (!response.ok) return exposureError(response);
+    return (await response.json()).assets;
+};
+
+export const createExposureAsset = async (input: ExposureAssetInput): Promise<ExposureAsset> => {
+    const response = await fetch('/api/exposure-watchlist/assets', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input),
+    });
+    if (!response.ok) return exposureError(response);
+    return (await response.json()).asset;
+};
+
+export const updateExposureAsset = async (id: string, input: ExposureAssetInput): Promise<ExposureAsset> => {
+    const response = await fetch(`/api/exposure-watchlist/assets/${encodeURIComponent(id)}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input),
+    });
+    if (!response.ok) return exposureError(response);
+    return (await response.json()).asset;
+};
+
+export const deleteExposureAsset = async (id: string): Promise<void> => {
+    const response = await fetch(`/api/exposure-watchlist/assets/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    if (!response.ok) return exposureError(response);
+};
+
+export const runExposureAsset = async (id: string): Promise<{ asset: ExposureAsset; snapshot: ExposureSnapshot }> => {
+    const response = await fetch(`/api/exposure-watchlist/assets/${encodeURIComponent(id)}/run`, { method: 'POST' });
+    if (!response.ok) return exposureError(response);
+    return response.json();
+};
+
+export const fetchExposureSnapshots = async (id: string): Promise<ExposureSnapshot[]> => {
+    const response = await fetch(`/api/exposure-watchlist/assets/${encodeURIComponent(id)}/snapshots`);
+    if (!response.ok) return exposureError(response);
+    return (await response.json()).snapshots;
+};
+
+export const fetchExposureChanges = async (limit = 100): Promise<ExposureChange[]> => {
+    const response = await fetch(`/api/exposure-watchlist/changes?limit=${encodeURIComponent(String(limit))}`);
+    if (!response.ok) return exposureError(response);
+    return (await response.json()).changes;
+};
+
 // ─── Scans salvos (histórico do IOC search, por usuário) ───────────────────
 export interface SavedScan {
     id: string; query: string; queryType: string;
