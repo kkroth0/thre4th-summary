@@ -107,6 +107,16 @@ test("uses the social image for dynamic advisory metadata", async () => {
   assert.doesNotMatch(advisory, /\$\{url\.origin\}\/favicon\.png/);
 });
 
+test("dynamic advisory metadata stays aligned with production SEO defaults", async () => {
+  const advisory = await read("functions/advisories/[slug].js");
+
+  assert.match(advisory, /<meta property="og:type" content="article" \/>/);
+  assert.match(advisory, /<meta property="og:locale" content="pt_BR" \/>/);
+  assert.match(advisory, /<meta name="language" content="pt-BR" \/>/);
+  assert.match(advisory, /\$\{url\.origin\}\/threatsumm4ry-og-image-1200x630\.png/);
+  assert.match(advisory, /<link rel="canonical" href="\$\{esc\(canonical\)\}" \/>/);
+});
+
 test("does not reference legacy public brand files", async () => {
   const paths = [
     "index.html",

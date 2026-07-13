@@ -36,16 +36,22 @@ export async function onRequest(context) {
                         `<meta property="og:type" content="article" />`,
                         `<meta property="og:url" content="${esc(canonical)}" />`,
                         `<meta property="og:image" content="${url.origin}/threatsumm4ry-og-image-1200x630.png" />`,
+                        `<meta property="og:image:width" content="1200" />`,
+                        `<meta property="og:image:height" content="630" />`,
+                        `<meta property="og:locale" content="pt_BR" />`,
+                        `<meta name="language" content="pt-BR" />`,
                         `<meta name="twitter:card" content="summary_large_image" />`,
                         `<meta name="twitter:title" content="${esc(post.title)}" />`,
                         `<meta name="twitter:description" content="${desc}" />`,
+                        `<meta name="twitter:image" content="${url.origin}/threatsumm4ry-og-image-1200x630.png" />`,
                         `<link rel="canonical" href="${esc(canonical)}" />`,
                     ].join("\n  ");
-                    // Remove os defaults (title/description/og:*) e injeta os do post.
+                    // Remove os defaults de SEO e injeta os do post.
                     html = html
                         .replace(/<title>.*?<\/title>/is, "")
-                        .replace(/<meta\s+name="description"[^>]*>/is, "")
-                        .replace(/<meta\s+property="og:(?:title|description|type)"[^>]*>/gis, "")
+                        .replace(/<meta\s+name="(?:description|language|twitter:(?:card|title|description|image))"[^>]*>/gis, "")
+                        .replace(/<meta\s+property="og:(?:title|description|type|url|image|image:width|image:height|locale|locale:alternate)"[^>]*>/gis, "")
+                        .replace(/<link\s+rel="canonical"[^>]*>/gis, "")
                         .replace("</head>", `  ${injected}\n</head>`);
                 }
             }
