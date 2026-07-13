@@ -11,6 +11,7 @@ import {
     createEditionStore,
     getCompletedDate,
     getDateWindow,
+    selectDailyEdition,
     validateNarrative,
 } from '../dailyEditions.js';
 
@@ -182,4 +183,36 @@ test('saves a deterministic edition when AI generation fails', async () => {
     } finally {
         fs.rmSync(dir, { recursive: true, force: true });
     }
+});
+
+test('selects the completed edition or a saved historical date', async () => {
+    const saved = { date: '2026-07-11' };
+    const generated = { date: '2026-07-12' };
+    const store = {
+        get: (date) => date === saved.date ? saved : null,
+        listDates: () => [generated.date, saved.date],
+    };
+    const calls = [];
+    const generator = { generate: async (date) => { calls.push(date); return generated; } };
+    const now = new Date('2026-07-13T12:00:00Z');
+
+    assert.deepEqual(await selectDailyEdition({ store, generator, now }), {
+        edition: generated,
+        availableDates: [generated.date, saved.date],
+    });
+    assert.deepEqual(await selectDailyEdition({ date: saved.date, store, generator, now }), {
+        edition: saved,
+        availableDates: [generated.date, saved.date],
+    });
+    assert.deepEqual(calls, [generated.date]);
+});
+
+test('rejects malformed, future, and unavailable historical edition dates', async () => {
+    const store = { get: () => null, listDates: () => [] };
+    const generator = { generate: async () => assert.fail('historical requests must not generate') };
+    const now = new Date('2026-07-13T12:00:00Z');
+
+    await assert.rejects(() => selectDailyEdition({ date: 'not-a-date', store, generator, now }), (error) => error.status === 400);
+    await assert.rejects(() => selectDailyEdition({ date: '2026-07-13', store, generator, now }), (error) => error.status === 400);
+    await assert.rejects(() => selectDailyEdition({ date: '2026-07-10', store, generator, now }), (error) => error.status === 404);
 });

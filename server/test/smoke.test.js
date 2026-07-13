@@ -76,3 +76,13 @@ test('legacy groq-key endpoint is gone', async () => {
     const r = await fetch(`${BASE}/api/user/groq-key`, { method: 'PUT' });
     assert.equal(r.status, 404);
 });
+
+test('daily edition route rejects malformed and unavailable historical dates', async () => {
+    const malformed = await fetch(`${BASE}/api/intel/daily-brief?date=not-a-date`);
+    assert.equal(malformed.status, 400);
+
+    const unavailable = await fetch(`${BASE}/api/intel/daily-brief?date=2000-01-01`);
+    assert.equal(unavailable.status, 404);
+    const body = await unavailable.json();
+    assert.match(body.error, /not found/i);
+});

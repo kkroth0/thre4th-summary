@@ -14,7 +14,12 @@ import compression from 'compression';
 import * as cheerio from 'cheerio';
 import { scoreArticle, localizeEnrichment, severityFromScore, extractIOCs, CTI_FEEDS } from './ctiIntel.js';
 import { runAttackSurfaceScan } from './attackSurface.js';
-import { buildDailyBrief } from './dailyBrief.js';
+import {
+    createEditionGenerator,
+    createEditionStore,
+    getCompletedDate,
+    selectDailyEdition,
+} from './dailyEditions.js';
 
 // Load the root .env regardless of the process cwd (systemd runs from server/,
 // local dev may not).
@@ -68,6 +73,9 @@ function writeJsonAtomic(file, data) {
     fs.writeFileSync(tmp, JSON.stringify(data, null, 2));
     fs.renameSync(tmp, file);
 }
+
+const DAILY_SUMMARIES_PATH = path.join(__dirname, '.daily-summaries.json');
+const dailyEditionStore = createEditionStore({ filePath: DAILY_SUMMARIES_PATH, writeJsonAtomic });
 
 // CORS Config
 const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',') || ['http://localhost:8080'];
@@ -1796,19 +1804,67 @@ app.get('/api/feed/daily-suggestions', requirePremium, async (req, res) => {
     }
 });
 
+const OPENROUTER_DAILY_MODEL = process.env.OPENROUTER_DAILY_MODEL || 'openrouter/free';
+
+async function requestDailyNarrative(events, date) {
+    if (!process.env.OPENROUTER_API_KEY) throw new Error('OpenRouter is not configured');
+    const facts = events.map((event) => ({
+        id: event.id,
+        title: event.titlePt || event.title,
+        source: event.source,
+        timestamp: event.timestamp,
+        priority: event.priority,
+        category: event.category,
+        severity: event.severity,
+        cves: event.cves,
+        kev: event.kev,
+        group: event.group,
+        countryName: event.countryName,
+        sector: event.sector,
+    }));
+    const response = await axios.post('https://openrouter.ai/api/v1/chat/completions', {
+        model: OPENROUTER_DAILY_MODEL,
+        temperature: 0.1,
+        response_format: { type: 'json_object' },
+        messages: [
+            {
+                role: 'system',
+                content: 'Voce e um analista senior de CTI. Responda somente JSON em portugues do Brasil com title, summary (3 a 5 fatos) e attentionTopics (2 a 4 temas com title, assessment, recommendedAction opcional e eventIds). Use apenas os fatos e identificadores fornecidos.',
+            },
+            { role: 'user', content: JSON.stringify({ date, events: facts }) },
+        ],
+    }, {
+        headers: {
+            Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
+            'Content-Type': 'application/json',
+            'HTTP-Referer': process.env.APP_BASE_URL || 'https://threatsumm4ry.app',
+            'X-OpenRouter-Title': 'ThreatSumm4ry Daily',
+        },
+        timeout: 30000,
+    });
+    const content = response.data?.choices?.[0]?.message?.content;
+    if (typeof content !== 'string' || !content.trim()) throw new Error('OpenRouter returned no content');
+    return JSON.parse(content);
+}
+
+const dailyEditionGenerator = createEditionGenerator({
+    store: dailyEditionStore,
+    requestNarrative: requestDailyNarrative,
+    getSourceData: async () => {
+        if (!memoryCache.newsletter.data) await refreshNewsletterFeed();
+        return {
+            feed: memoryCache.newsletter.data || [],
+            victims: await getRecentRansomwareVictims().catch(() => []),
+        };
+    },
+});
+
 app.get('/api/intel/daily-brief', async (req, res) => {
     try {
-        if (!memoryCache.newsletter.data) await refreshNewsletterFeed();
-        const feed = memoryCache.newsletter.data || [];
-        const victims = await getRecentRansomwareVictims().catch(() => []);
-        res.json(buildDailyBrief({
-            feed,
-            victims,
-            now: Date.now(),
-            countBy,
-            latamCountries: LATAM_COUNTRIES,
-        }));
+        const date = req.query.date == null ? undefined : String(req.query.date);
+        res.json(await selectDailyEdition({ date, store: dailyEditionStore, generator: dailyEditionGenerator }));
     } catch (error) {
+        if (error.status === 400 || error.status === 404) return res.status(error.status).json({ error: error.message });
         const { status, message } = sanitizeError(error);
         res.status(status).json({ error: message });
     }
@@ -3499,6 +3555,22 @@ if (process.env.NODE_ENV === 'production') {
     });
 }
 
+function scheduleDailyEdition() {
+    const now = new Date();
+    const nextRun = new Date(`${new Date(now.getTime() + 21 * 60 * 60 * 1000).toISOString().slice(0, 10)}T03:05:00.000Z`);
+    if (nextRun <= now) nextRun.setUTCDate(nextRun.getUTCDate() + 1);
+    const timer = setTimeout(async () => {
+        try {
+            await dailyEditionGenerator.generate(getCompletedDate(new Date()));
+        } catch (error) {
+            console.error('daily edition scheduled generation failed:', error.message || error);
+        } finally {
+            scheduleDailyEdition();
+        }
+    }, nextRun.getTime() - now.getTime());
+    timer.unref?.();
+}
+
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
     // Prime the newsletter RSS feed cache and schedule background updates
@@ -3509,4 +3581,5 @@ app.listen(PORT, () => {
     // (and mid-month revisions) is picked up automatically.
     refreshPatchTuesday();
     setInterval(refreshPatchTuesday, memoryCache.patchTuesdayMonths.ttl);
+    scheduleDailyEdition();
 });

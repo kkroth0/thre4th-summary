@@ -274,3 +274,19 @@ export function createEditionGenerator({ store, requestNarrative, getSourceData,
         },
     };
 }
+
+const editionRequestError = (status, message) => Object.assign(new Error(message), { status });
+
+export async function selectDailyEdition({ date, store, generator, now = new Date() }) {
+    let edition;
+    if (date == null || date === '') {
+        edition = await generator.generate(getCompletedDate(now));
+    } else {
+        if (!validDateParts(date) || date > getCompletedDate(now)) {
+            throw editionRequestError(400, 'invalid edition date');
+        }
+        edition = store.get(date);
+        if (!edition) throw editionRequestError(404, 'edition not found');
+    }
+    return { edition, availableDates: store.listDates() };
+}
