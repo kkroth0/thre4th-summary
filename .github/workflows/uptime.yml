@@ -1,0 +1,58 @@
+name: Uptime Monitor
+
+on:
+  schedule:
+    # Every 15 minutes. GitHub may delay scheduled runs a few minutes under load.
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: uptime-monitor
+  cancel-in-progress: true
+
+jobs:
+  probe:
+    name: Probe site and API
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check endpoints
+        id: probe
+        shell: bash
+        run: |
+          set -uo pipefail
+          declare -A targets=(
+            [site]="https://threatsumm4ry.app/"
+            [api]="https://threatsumm4ry.app/api/vendors/status"
+          )
+          failed=""
+          for name in "${!targets[@]}"; do
+            url="${targets[$name]}"
+            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 --retry 2 --retry-delay 5 "$url" || echo 000)
+            echo "$name -> $code"
+            if [ "$code" != "200" ]; then failed="$failed $name($code)"; fi
+          done
+          if [ -n "$failed" ]; then
+            echo "failed=$failed" >> "$GITHUB_OUTPUT"
+            echo "::error::DOWN:$failed"
+            exit 1
+          fi
+
+      # One deduplicated issue while down; closes are manual once service is back.
+      - name: Open incident issue
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          FAILED: ${{ steps.probe.outputs.failed }}
+        run: |
+          set -euo pipefail
+          existing=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --label incident --json number -q '.[0].number' || true)
+          body="Uptime probe failed at $(date -u +%FT%TZ): ${FAILED:-unknown}. Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --repo "$GITHUB_REPOSITORY" --body "$body"
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "🔴 Prod down: ${FAILED:-probe failed}" --label incident --body "$body"
+          fi
