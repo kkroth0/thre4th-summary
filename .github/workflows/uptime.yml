@@ -41,7 +41,19 @@ jobs:
             exit 1
           fi
 
-      # One deduplicated issue while down; closes are manual once service is back.
+      # Probe green again — close any open incident issue automatically.
+      - name: Close incident issue on recovery
+        if: success()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          for n in $(gh issue list --repo "$GITHUB_REPOSITORY" --state open --label incident --json number -q '.[].number'); do
+            gh issue close "$n" --repo "$GITHUB_REPOSITORY" \
+              --comment "✅ Probe recovered at $(date -u +%FT%TZ). Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          done
+
+      # One deduplicated issue while down; auto-closed by the recovery step above.
       - name: Open incident issue
         if: failure()
         env:

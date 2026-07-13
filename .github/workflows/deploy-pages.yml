@@ -15,9 +15,12 @@ permissions:
   contents: read
   deployments: write
   actions: read # download the dist artifact from the triggering CI run
+  pull-requests: write # comment the preview URL on the PR
 
+# Serialize per branch: production deploys (main) queue behind each other while
+# PR previews for different branches can run in parallel.
 concurrency:
-  group: deploy-cloudflare-pages
+  group: deploy-cloudflare-pages-${{ github.event.workflow_run.head_branch || github.ref_name }}
   cancel-in-progress: false
 
 jobs:
@@ -25,7 +28,9 @@ jobs:
     name: Publish frontend and Pages Functions
     runs-on: ubuntu-latest
     environment: cloudflare-pages
-    if: ${{ (github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main')) && vars.CLOUDFLARE_PAGES_PROJECT != '' }}
+    # Deploy production for main, and a preview for same-repo PRs (fork PRs are
+    # excluded so repository secrets never build untrusted code).
+    if: ${{ vars.CLOUDFLARE_PAGES_PROJECT != '' && (github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && (github.event.workflow_run.head_branch == 'main' || (github.event.workflow_run.event == 'pull_request' && github.event.workflow_run.head_repository.full_name == github.repository)))) }}
     steps:
       - name: Checkout release commit
         uses: actions/checkout@v7
@@ -35,7 +40,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: "20"
+          node-version: "22"
           cache: npm
 
       # Reuse the frontend built and validated by CI. Falls back to a fresh
@@ -58,9 +63,27 @@ jobs:
           npm ci
           npm run build
 
+      # PR runs deploy under the PR's branch name, which Cloudflare Pages treats
+      # as a preview deployment with its own URL; everything else ships to main.
       - name: Publish to Cloudflare Pages
+        id: publish
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: pages deploy dist --project-name=${{ vars.CLOUDFLARE_PAGES_PROJECT }} --branch=main
+          command: pages deploy dist --project-name=${{ vars.CLOUDFLARE_PAGES_PROJECT }} --branch=${{ (github.event.workflow_run.event == 'pull_request' && github.event.workflow_run.head_branch) || 'main' }}
+
+      - name: Comment preview URL on PR
+        if: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.event == 'pull_request' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          URL: ${{ steps.publish.outputs.deployment-url }}
+        run: |
+          set -euo pipefail
+          pr=$(gh pr list --repo "$GITHUB_REPOSITORY" --head "$HEAD_BRANCH" --state open --json number -q '.[0].number' || true)
+          [ -n "$pr" ] || { echo "no open PR for $HEAD_BRANCH — skipping comment"; exit 0; }
+          body="🔍 Cloudflare Pages preview: ${URL:-unavailable} (commit ${HEAD_SHA})"
+          gh pr comment "$pr" --repo "$GITHUB_REPOSITORY" --edit-last --create-if-none --body "$body" \
+            || gh pr comment "$pr" --repo "$GITHUB_REPOSITORY" --body "$body"
