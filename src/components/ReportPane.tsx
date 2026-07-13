@@ -15,10 +15,10 @@ export const hostOf = (url?: string): string => {
   try { return url ? new URL(url).host : ""; } catch { return ""; }
 };
 
-const fmtDate = (iso?: string) => {
+const fmtDate = (iso: string | undefined, pt: boolean) => {
   if (!iso) return "";
   const d = new Date(iso);
-  return isNaN(+d) ? "" : d.toLocaleDateString("pt-BR");
+  return isNaN(+d) ? "" : d.toLocaleDateString(pt ? "pt-BR" : "en-US");
 };
 
 // Painel de leitura da workstation: toolbar com meta/ações + BoletimView.
@@ -58,7 +58,7 @@ export function ReportPane({ job, isAdmin, onDownload }: {
           </Badge>
         )}
         <Badge variant="secondary" className="font-mono text-[10px] uppercase">{job.type}</Badge>
-        {r.generated_at && <span className="text-xs text-muted-foreground">{fmtDate(r.generated_at)}</span>}
+        {r.generated_at && <span className="text-xs text-muted-foreground">{fmtDate(r.generated_at, pt)}</span>}
         {r.source_url && (
           <a
             href={r.source_url} target="_blank" rel="noopener noreferrer"
