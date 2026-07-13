@@ -1635,7 +1635,7 @@ git commit -m "feat: add exposure watchlist ui"
 - Consumes all previous tasks.
 - Produces verified production deployment on `main`.
 
-- [ ] **Step 1: Document endpoints**
+- [x] **Step 1: Document endpoints**
 
 Add to `ENDPOINTS.txt` after Attack Surface or Tool sections:
 
@@ -1658,7 +1658,7 @@ Add route list entry:
   /exposure-watchlist *  Exposure Watchlist
 ```
 
-- [ ] **Step 2: Run full local verification**
+- [x] **Step 2: Run full local verification**
 
 Run from `/home/mandrade/Dev/thre4th-summary`:
 
@@ -1679,7 +1679,7 @@ Expected:
 - `npm run lint` may report existing warnings, but no errors.
 - `npm run build` may report existing Browserslist/chunk warnings, but exits `0`.
 
-- [ ] **Step 3: Commit docs and checklist updates**
+- [x] **Step 3: Commit docs and checklist updates**
 
 ```bash
 git add ENDPOINTS.txt docs/superpowers/plans/2026-07-13-exposure-watchlist-implementation.md
