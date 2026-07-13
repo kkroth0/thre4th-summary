@@ -75,12 +75,17 @@ const isValidIPv4 = (ip) => {
 
 export const isPublicIPv4 = (ip) => {
   if (!isValidIPv4(ip)) return false;
-  const [a, b] = ip.split('.').map(Number);
+  const [a, b, c] = ip.split('.').map(Number);
   if (a === 0 || a === 10 || a === 127) return false;
   if (a === 100 && b >= 64 && b <= 127) return false;
   if (a === 169 && b === 254) return false;
   if (a === 172 && b >= 16 && b <= 31) return false;
+  if (a === 192 && b === 0 && (c === 0 || c === 2)) return false;
+  if (a === 192 && b === 88 && c === 99) return false;
   if (a === 192 && b === 168) return false;
+  if (a === 198 && (b === 18 || b === 19)) return false;
+  if (a === 198 && b === 51 && c === 100) return false;
+  if (a === 203 && b === 0 && c === 113) return false;
   if (a >= 224) return false;
   return true;
 };
@@ -106,7 +111,8 @@ const shodanQuoted = (value) => validateTextQuery(value, 'Target', 160).replace(
 
 export const buildAttackSurfaceQuery = (input = {}) => {
   const limit = clampLimit(input.limit);
-  const mode = input.mode === 'advanced' ? 'advanced' : 'guided';
+  const mode = cleanText(input.mode, 16);
+  if (mode !== 'guided' && mode !== 'advanced') throw createPublicError(400, 'Invalid mode');
 
   if (mode === 'advanced') {
     const query = validateTextQuery(input.advancedQuery, 'Advanced query', MAX_TEXT);
@@ -148,6 +154,7 @@ const riskResult = (risk, riskScore, riskReasons) => ({ risk, riskScore, riskRea
 
 export const assessExposureRisk = (service = {}) => {
   const port = Number(service.port);
+  const transport = cleanText(service.transport || 'tcp', 12).toLowerCase();
   const cves = uniqueStrings(service.cves);
   const reasons = [];
 
@@ -156,7 +163,7 @@ export const assessExposureRisk = (service = {}) => {
     return riskResult('critical', 95, reasons);
   }
 
-  if (CRITICAL_PORTS.has(port)) {
+  if (transport === 'tcp' && CRITICAL_PORTS.has(port)) {
     reasons.push(CRITICAL_PORTS.get(port));
     return riskResult('critical', 90, reasons);
   }
@@ -170,22 +177,22 @@ export const assessExposureRisk = (service = {}) => {
     ...(Array.isArray(service.tags) ? service.tags : []),
   ].filter(Boolean).join(' ');
 
-  if (HIGH_PORTS.has(port)) {
+  if (transport === 'tcp' && HIGH_PORTS.has(port)) {
     reasons.push(HIGH_PORTS.get(port));
     return riskResult('high', 75, reasons);
   }
 
-  if (ADMIN_PATTERN.test(haystack)) {
+  if (transport === 'tcp' && ADMIN_PATTERN.test(haystack)) {
     reasons.push('Admin-like web service exposed');
     return riskResult('high', 72, reasons);
   }
 
-  if (MEDIUM_PORTS.has(port)) {
+  if (transport === 'tcp' && MEDIUM_PORTS.has(port)) {
     reasons.push(MEDIUM_PORTS.get(port));
     return riskResult('medium', 50, reasons);
   }
 
-  if (STANDARD_WEB_PORTS.has(port)) {
+  if (transport === 'tcp' && STANDARD_WEB_PORTS.has(port)) {
     reasons.push('Standard web service exposed');
     return riskResult('low', 25, reasons);
   }
@@ -447,6 +454,7 @@ export const runAttackSurfaceScan = async (input = {}, deps = {}) => {
   let findings = queryPlan.kind === 'host'
     ? normalizeShodanHost(shodanData)
     : (Array.isArray(shodanData.matches) ? shodanData.matches.flatMap((match) => normalizeShodanHost(match)) : []);
+  findings = findings.slice(0, queryPlan.limit);
 
   const warnings = [];
   const providers = { shodan: true, censys: false };

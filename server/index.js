@@ -3512,8 +3512,11 @@ app.post('/api/attack-surface', scanLimiter, async (req, res) => {
         });
         res.json(result);
     } catch (error) {
-        const status = error.status || 500;
-        res.status(status).json({ error: error.publicMessage || error.message || 'Internal server error' });
+        if (error.status && error.publicMessage) {
+            return res.status(error.status).json({ error: error.publicMessage });
+        }
+        const { status, message } = sanitizeError(error);
+        res.status(status).json({ error: message });
     }
 });
 
