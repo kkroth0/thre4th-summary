@@ -56,3 +56,36 @@ test("accepts only public IPv4 addresses in primary search and extraction", () =
     ["8.8.8.8"],
   );
 });
+
+test("accepts public IPv6 inputs and excludes non-global IPv6 ranges", () => {
+  const publicAddresses = [
+    "2001:4860:4860::8888",
+    "2606:4700:4700:0000:0000:0000:0000:1111",
+  ];
+  const nonPublicAddresses = [
+    "::",
+    "::1",
+    "fc00::1",
+    "fd12:3456:789a::1",
+    "fe80::1",
+    "ff02::1",
+    "2001:db8::1",
+    "4000::1",
+    "2001:4860:::8888",
+  ];
+
+  for (const address of publicAddresses) {
+    assert.equal(detectAnalyzerQueryType(address), "ip", address);
+  }
+  for (const address of nonPublicAddresses) {
+    assert.equal(detectAnalyzerQueryType(address), "unknown", address);
+  }
+  assert.deepEqual(
+    extractIocsFromText([...publicAddresses, ...nonPublicAddresses].join("\n")),
+    publicAddresses,
+  );
+});
+
+test("classifies an HTTP URL with an IPv6 literal as a URL", () => {
+  assert.equal(detectAnalyzerQueryType("https://[2001:4860:4860::8888]/dns-query"), "url");
+});
