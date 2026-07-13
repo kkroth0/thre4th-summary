@@ -1,12 +1,10 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { Link } from "react-router-dom";
-import { ArrowLeft, Globe, BookOpen, AlertTriangle, Search, Mail, Eye, Sparkles, Filter, CheckCircle2, ChevronLeft, ChevronRight, ChevronDown, Download, Layers, RefreshCw, Calendar, Share2, Loader2, Crosshair, Copy } from "lucide-react";
+import { ArrowLeft, Globe, BookOpen, AlertTriangle, Search, Mail, Eye, Sparkles, Filter, CheckCircle2, ChevronRight, ChevronDown, RefreshCw, Calendar, Share2, Loader2, Crosshair, Copy } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageLayout } from "@/components/PageLayout";
 import { useLanguage } from "@/contexts/LanguageContext";
 import FeedSourcesManager from "@/components/FeedSourcesManager";
@@ -20,6 +18,7 @@ import {
 } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Separator } from "@/components/ui/separator";
+import { filterNewsletterAdvisories, formatNewsletterDate } from "./newsletterView";
 
 interface IocSet {
   ips?: string[];
@@ -207,48 +206,13 @@ const Newsletter = () => {
   // Newsletter States
   const [advisories, setAdvisories] = useState<Advisory[]>([]);
   const [searchNews, setSearchNews] = useState("");
-  const [selectedNews, setSelectedNews] = useState<Record<string, boolean>>({});
   const [loadingNews, setLoadingNews] = useState(true);
   const [newsError, setNewsError] = useState<string | null>(null);
   const [translatingIds, setTranslatingIds] = useState<Record<string, boolean>>({});
-  const [isDigestOpen, setIsDigestOpen] = useState(false);
   const [selectedLayer, setSelectedLayer] = useState<string>("all");
   const [selectedSeverity, setSelectedSeverity] = useState<string>("all");
   const [sortByRelevance, setSortByRelevance] = useState<boolean>(false);
   const [kevOnly, setKevOnly] = useState<boolean>(false);
-
-  // Calendar Month Selector States
-  const [selectedMonth, setSelectedMonth] = useState<number>(new Date().getMonth());
-  const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
-
-  const monthNames = [
-    "January", "February", "March", "April", "May", "June", 
-    "July", "August", "September", "October", "November", "December"
-  ];
-  const monthNamesPt = [
-    "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
-    "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
-  ];
-
-  const handlePrevMonth = () => {
-    setSelectedMonth(prev => {
-      if (prev === 0) {
-        setSelectedYear(y => y - 1);
-        return 11;
-      }
-      return prev - 1;
-    });
-  };
-
-  const handleNextMonth = () => {
-    setSelectedMonth(prev => {
-      if (prev === 11) {
-        setSelectedYear(y => y + 1);
-        return 0;
-      }
-      return prev + 1;
-    });
-  };
 
   // Background Polling / Last Updated States
   const [lastUpdatedNews, setLastUpdatedNews] = useState<Date | null>(null);
@@ -429,72 +393,11 @@ const Newsletter = () => {
     );
   };
 
-  // Toggle selection for a news item
-  const toggleSelectNews = (title: string) => {
-    setSelectedNews(prev => ({
-      ...prev,
-      [title]: !prev[title]
-    }));
-  };
-
-  // Select all / Deselect all
-  const selectAllVisibleNews = (visibleItems: Advisory[]) => {
-    const allSelected = visibleItems.every(item => selectedNews[item.title]);
-    const nextState: Record<string, boolean> = { ...selectedNews };
-    visibleItems.forEach(item => {
-      nextState[item.title] = !allSelected;
-    });
-    setSelectedNews(nextState);
-  };
-
   // Trigger Pivot Search on main dashboard
   const handlePivotSearch = (cveId: string) => {
     localStorage.setItem("pivotSearchQuery", cveId);
     toast.success(language === "pt" ? `Pesquisando ${cveId} no painel...` : `Searching ${cveId} on main dashboard...`);
     window.location.href = "/";
-  };
-
-  // Print Compiled PDF / Print Document
-  const handlePrintDigest = () => {
-    const printWindow = window.open("", "_blank");
-    if (!printWindow) return;
-    const content = document.getElementById("compiled-digest-preview")?.innerHTML || "";
-    printWindow.document.write(`
-      <html>
-        <head>
-          <title>ThreatSumm4ry - CTI Digest</title>
-          <style>
-            body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; padding: 40px; color: #0f172a; background-color: #ffffff; }
-            h1 { color: #6366f1; border-bottom: 2px solid #e2e8f0; padding-bottom: 12px; margin-bottom: 20px; font-size: 24px; font-weight: 800; text-transform: uppercase; tracking: 0.05em; }
-            h2 { color: #1e293b; margin-top: 30px; border-bottom: 1px solid #f1f5f9; padding-bottom: 8px; font-size: 18px; }
-            .meta { color: #64748b; font-size: 12px; margin-bottom: 20px; }
-            .advisory { margin-bottom: 24px; padding: 18px; border: 1px solid #e2e8f0; border-radius: 8px; }
-            .source { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: bold; background-color: #f1f5f9; color: #475569; margin-bottom: 8px; }
-            .source-cisa { background-color: #fee2e2; color: #b91c1c; }
-            .source-bleeping { background-color: #dbeafe; color: #1d4ed8; }
-            .source-hacker { background-color: #fef3c7; color: #b45309; }
-            .title { font-weight: bold; font-size: 16px; margin-bottom: 6px; color: #0f172a; }
-            .date { color: #94a3b8; font-size: 11px; margin-bottom: 10px; }
-            .description { font-size: 13px; line-height: 1.6; color: #334155; white-space: pre-line; }
-            .sev { display: inline-block; margin-left: 6px; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: bold; background-color: #fee2e2; color: #b91c1c; }
-            .kv { font-size: 12px; color: #334155; margin: 2px 0; }
-            .kv strong { color: #0f172a; }
-            .section { font-size: 11px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.05em; color: #6366f1; margin-top: 12px; margin-bottom: 4px; }
-            .ttp-block ul { margin: 0; padding-left: 18px; }
-            .ttp-block li { font-size: 12px; color: #334155; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
-            .footer { margin-top: 50px; font-size: 10px; color: #94a3b8; border-top: 1px solid #e2e8f0; padding-top: 15px; text-align: center; }
-          </style>
-        </head>
-        <body>
-          ${content}
-          <div class="footer">Generated by ThreatSumm4ry - Advanced Threat Intelligence Platform</div>
-          <script>
-            window.onload = function() { window.print(); window.close(); }
-          </script>
-        </body>
-      </html>
-    `);
-    printWindow.document.close();
   };
 
   // ── Actionable analysis: expand + lazy LLM enrichment + share ──
@@ -573,42 +476,13 @@ const Newsletter = () => {
   };
 
   // Filter Advisories / News
-  const filteredAdvisories = useMemo(() => {
-    const filtered = advisories.filter(item => {
-      // 1. Month/Year filter
-      const d = new Date(item.pubDate);
-      if (d.getMonth() !== selectedMonth || d.getFullYear() !== selectedYear) {
-        return false;
-      }
-
-      // 2. Search Text filter
-      const matchesSearch =
-        (item.title ?? '').toLowerCase().includes(searchNews.toLowerCase()) ||
-        (item.description ?? '').toLowerCase().includes(searchNews.toLowerCase()) ||
-        (item.source ?? '').toLowerCase().includes(searchNews.toLowerCase());
-
-      if (!matchesSearch) return false;
-
-      // 3. Severity filter (CTI relevance)
-      if (selectedSeverity !== "all" && item.severity !== selectedSeverity) return false;
-
-      // 3b. KEV-only filter (actively exploited)
-      if (kevOnly && !item.kev) return false;
-
-      // 4. Layer filter
-      if (selectedLayer === "l1" && item.layer !== 1) return false;
-      if (selectedLayer === "l2" && item.layer !== 2) return false;
-      // L3 captures research labs (3) and LATAM/BR regional (4)
-      if (selectedLayer === "l3" && (item.layer ?? 0) < 3) return false;
-
-      return true;
-    });
-
-    // 5. Ordering: relevance (score) or recency
-    return sortByRelevance
-      ? [...filtered].sort((a, b) => (b.score ?? 0) - (a.score ?? 0) || new Date(b.pubDate).getTime() - new Date(a.pubDate).getTime())
-      : filtered;
-  }, [advisories, selectedMonth, selectedYear, searchNews, selectedLayer, selectedSeverity, sortByRelevance, kevOnly]);
+  const filteredAdvisories = useMemo(() => filterNewsletterAdvisories(advisories, {
+    search: searchNews,
+    layer: selectedLayer,
+    severity: selectedSeverity,
+    kevOnly,
+    sortByRelevance,
+  }), [advisories, searchNews, selectedLayer, selectedSeverity, sortByRelevance, kevOnly]);
 
   useEffect(() => {
     if (language !== "pt") return;
@@ -671,9 +545,6 @@ const Newsletter = () => {
     };
   }, [language, filteredAdvisories]);
 
-  const selectedCount = Object.values(selectedNews).filter(Boolean).length;
-  const selectedAdvisoriesList = advisories.filter(item => selectedNews[item.title]);
-
   // How many filters are narrowing the feed — drives the badge on the Filters button.
   const activeFilterCount = [
     selectedLayer !== "all",
@@ -687,16 +558,6 @@ const Newsletter = () => {
     setSortByRelevance(false);
     setKevOnly(false);
   };
-
-  // Pre-load the LLM analysis for selected items when the digest opens, so the
-  // exported PDF includes the Executive Summary + Impact & Mitigation.
-  useEffect(() => {
-    if (!isDigestOpen) return;
-    selectedAdvisoriesList.forEach(item => {
-      if (!enrichment[item.link]) void getEnrichment(item);
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isDigestOpen]);
 
   return (
     <PageLayout width="max-w-7xl">
@@ -734,63 +595,12 @@ const Newsletter = () => {
             </div>
           </div>
 
-          {/* Calendar Month Selector Bar */}
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-card border rounded-lg p-2.5">
-            <div className="flex items-center gap-3">
-              <Button
-                variant="outline"
-                size="icon"
-                className="h-9 w-9 rounded-md shrink-0"
-                onClick={handlePrevMonth}
-                title={language === "pt" ? "Mês Anterior" : "Previous Month"}
-              >
-                <ChevronLeft className="h-4 w-4" />
-              </Button>
-              <div className="flex items-center gap-2 px-2 shrink-0">
-                <Calendar className="h-4 w-4 text-primary" />
-                <span className="text-sm font-bold text-foreground font-mono whitespace-nowrap min-w-[130px] text-center">
-                  {language === "pt" ? monthNamesPt[selectedMonth] : monthNames[selectedMonth]} {selectedYear}
-                </span>
-              </div>
-              <Button
-                variant="outline"
-                size="icon"
-                className="h-9 w-9 rounded-md shrink-0"
-                onClick={handleNextMonth}
-                title={language === "pt" ? "Próximo Mês" : "Next Month"}
-              >
-                <ChevronRight className="h-4 w-4" />
-              </Button>
-            </div>
-
-            {/* Quick Month Select Dropdown */}
-            <div className="flex items-center gap-2.5 w-full sm:w-auto">
-              <Select value={selectedMonth.toString()} onValueChange={(val) => setSelectedMonth(parseInt(val))}>
-                <SelectTrigger className="h-9 w-full sm:w-[130px] rounded-md text-xs font-semibold">
-                  <SelectValue placeholder={language === "pt" ? "Mês" : "Month"} />
-                </SelectTrigger>
-                <SelectContent className="max-h-60 border-border/50 bg-popover/95  rounded-xl">
-                  {(language === "pt" ? monthNamesPt : monthNames).map((name, idx) => (
-                    <SelectItem key={idx} value={idx.toString()} className="text-xs rounded-lg">
-                      {name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              <Select value={selectedYear.toString()} onValueChange={(val) => setSelectedYear(parseInt(val))}>
-                <SelectTrigger className="h-9 w-full sm:w-[95px] rounded-md text-xs font-semibold">
-                  <SelectValue placeholder={language === "pt" ? "Ano" : "Year"} />
-                </SelectTrigger>
-                <SelectContent className="border-border/50 bg-popover/95  rounded-xl">
-                  {["2024", "2025", "2026", "2027"].map(year => (
-                    <SelectItem key={year} value={year} className="text-xs rounded-lg">
-                      {year}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+          {/* Current date */}
+          <div className="flex items-center gap-2.5 bg-card border rounded-lg p-3">
+            <Calendar className="h-4 w-4 text-primary shrink-0" />
+            <span className="text-sm font-semibold text-foreground capitalize">
+              {formatNewsletterDate(new Date(), language)}
+            </span>
           </div>
 
           {/* Search, Layer Filter, and Action Bar at the Top */}
@@ -902,19 +712,6 @@ const Newsletter = () => {
                 </PopoverContent>
               </Popover>
 
-              <div className="h-4 w-px bg-border/60 mx-1 shrink-0" />
-
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => selectAllVisibleNews(filteredAdvisories)}
-                className="h-9 text-xs gap-1.5 border-border/50 hover:bg-primary/5 shrink-0"
-              >
-                <Filter className="h-3.5 w-3.5" />
-                {filteredAdvisories.every(item => selectedNews[item.title])
-                  ? (language === "pt" ? "Desmarcar Todos" : "Deselect All")
-                  : (language === "pt" ? "Selecionar Visíveis" : "Select Visible")}
-              </Button>
               <Button
                 variant="outline"
                 size="icon"
@@ -928,120 +725,8 @@ const Newsletter = () => {
             </div>
           </div>
 
-          {/* Main Layout - Digest Builder at the top, then News Feed full width */}
+          {/* News history */}
           <div className="space-y-6">
-            
-            {/* Top Banner: Digest Builder Tool */}
-            <Card className="border bg-card">
-              <CardContent className="p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
-                <div className="flex items-center gap-3 flex-1 min-w-0">
-                  <div className="p-2 rounded-md bg-primary/10 text-primary shrink-0">
-                    <Layers className="h-5 w-5" />
-                  </div>
-                  <div className="space-y-0.5 min-w-0">
-                    <CardTitle className="text-sm flex items-center gap-2">
-                      {t("generateWeeklyDigest") || "Generate Weekly Digest"}
-                      <Badge variant={selectedCount > 0 ? "default" : "secondary"} className="text-[10px]">
-                        {selectedCount} {language === "pt" ? "selecionados" : "selected"}
-                      </Badge>
-                    </CardTitle>
-                    <CardDescription className="text-xs max-w-2xl truncate">
-                      {t("selectForDigest") || "Select security articles from the feed to compile a report"}
-                    </CardDescription>
-                  </div>
-                </div>
-
-                <div className="shrink-0 flex items-center gap-3 w-full md:w-auto">
-                  <Dialog open={isDigestOpen} onOpenChange={setIsDigestOpen}>
-                    <DialogTrigger asChild>
-                      <Button
-                        className="w-full md:w-auto gap-2 text-xs h-9 px-4"
-                        disabled={selectedCount === 0}
-                      >
-                        <Sparkles className="h-4 w-4" />
-                        {t("generateWeeklyDigest") || "Generate weekly digest"}
-                      </Button>
-                    </DialogTrigger>
-                    <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col p-6">
-                      <DialogHeader className="border-b pb-4">
-                        <DialogTitle className="text-lg font-bold flex items-center gap-2">
-                          <Sparkles className="h-5 w-5 text-primary" />
-                          {t("weeklyDigestTitle") || "Threat Weekly Digest"}
-                        </DialogTitle>
-                      </DialogHeader>
-
-                      <div className="flex-1 overflow-y-auto pr-1 py-4">
-                        {/* Compiled newsletter template print container */}
-                        <div id="compiled-digest-preview" className="space-y-6 text-slate-800 dark:text-slate-100 p-4 border rounded-lg bg-card">
-                          <h1>{t("weeklyDigestTitle") || "Weekly Threat Digest"}</h1>
-                          <p className="meta">
-                            <strong>Date:</strong> {new Date().toLocaleDateString()}<br />
-                            <strong>Source:</strong> ThreatSumm4ry Platform Aggregator
-                          </p>
-                          
-                          <p className="description text-sm leading-relaxed text-muted-foreground">
-                            {language === "pt"
-                              ? "Este documento é um sumário compilado de inteligência contra ameaças digitais coletado e estruturado a partir de múltiplas fontes de segurança cibernética públicas e privadas."
-                              : "This document contains compiled cyber threat intelligence alerts curated and structured from various security feeds and vendor advisories."}
-                          </p>
-
-                          <div className="space-y-4">
-                            {selectedAdvisoriesList.map((item, idx) => {
-                              const e = enrichment[item.link]?.data;
-                              return (
-                              <div key={idx} className="advisory p-4 border rounded-lg space-y-2 bg-card">
-                                <span className={`source text-xs font-bold px-2 py-0.5 rounded ${
-                                  item.source.toLowerCase().includes("cisa")
-                                    ? "bg-red-500/15 text-red-500"
-                                    : item.source.toLowerCase().includes("bleeping")
-                                    ? "bg-blue-500/15 text-blue-500"
-                                    : "bg-amber-500/15 text-amber-500"
-                                }`}>
-                                  {item.source}
-                                </span>
-                                {item.severity && <span className="sev">{item.severity}{typeof item.score === "number" ? ` · ${item.score}` : ""}</span>}
-                                <div className="title font-bold text-base text-foreground">{e?.title || (language === "pt" ? (item.titlePt || item.title) : item.title)}</div>
-                                <div className="date text-xs text-muted-foreground">{new Date(item.pubDate).toLocaleString()}</div>
-                                {mergedField(item, e, "assets").length ? <div className="kv"><strong>Monitored Assets:</strong> {mergedField(item, e, "assets").join(", ")}</div> : null}
-                                {mergedField(item, e, "threats").length ? <div className="kv"><strong>Threats:</strong> {mergedField(item, e, "threats").join(", ")}</div> : null}
-                                {mergedField(item, e, "sectors").length ? <div className="kv"><strong>Targeted Sectors:</strong> {mergedField(item, e, "sectors").join(", ")}</div> : null}
-                                {mergedField(item, e, "ttps").length ? (
-                                  <div className="ttp-block">
-                                    <div className="section">[ MITRE ATT&CK ]</div>
-                                    <ul>{mergedField(item, e, "ttps").map((tp) => <li key={tp}>{tp}</li>)}</ul>
-                                  </div>
-                                ) : null}
-                                <div className="section">[ {language === "pt" ? "Resumo Executivo" : "Executive Summary"} ]</div>
-                                <div className="description text-sm text-muted-foreground leading-relaxed whitespace-pre-line">{e?.executiveSummary || renderHighlightedDescription(language === "pt" ? (item.descriptionPt || item.description) : item.description)}</div>
-                                {e?.impactMitigation ? (
-                                  <>
-                                    <div className="section">[ {language === "pt" ? "Impacto & Mitigação" : "Impact & Mitigation"} ]</div>
-                                    <div className="description text-sm text-muted-foreground leading-relaxed whitespace-pre-line">{e.impactMitigation}</div>
-                                  </>
-                                ) : null}
-                                {mergedField(item, e, "cves").length ? <div className="kv"><strong>Related CVEs:</strong> {mergedField(item, e, "cves").join(", ")}</div> : null}
-                              </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center justify-between border-t pt-4 mt-2">
-                        <Button variant="ghost" onClick={() => setIsDigestOpen(false)}>
-                          {language === "pt" ? "Fechar" : "Close"}
-                        </Button>
-                        <Button className="gap-2" onClick={handlePrintDigest}>
-                          <Download className="h-4 w-4" />
-                          {t("downloadDigest") || "Download Digest"}
-                        </Button>
-                      </div>
-                    </DialogContent>
-                  </Dialog>
-                </div>
-              </CardContent>
-            </Card>
-
             {/* News Feed */}
             <div className="space-y-4">
               {/* Loading/Error/News List */}
@@ -1065,8 +750,8 @@ const Newsletter = () => {
                 <div className="p-12 border border-dashed rounded-lg text-center bg-card space-y-4">
                   <BookOpen className="h-12 w-12 text-muted-foreground/50 mx-auto mb-3" />
                   <div>
-                    <p className="text-muted-foreground font-medium">{language === "pt" ? "Nenhuma notícia encontrada para este mês no cache local" : "No threat advisories found for this month in local cache"}</p>
-                    <p className="text-xs text-muted-foreground mt-1">{language === "pt" ? "Você pode buscar as notícias mais recentes do servidor para popular o cache" : "Try fetching the latest feed from the server or choose another month"}</p>
+                    <p className="text-muted-foreground font-medium">{language === "pt" ? "Nenhuma notícia encontrada no histórico" : "No threat advisories found in the stored history"}</p>
+                    <p className="text-xs text-muted-foreground mt-1">{language === "pt" ? "Ajuste a busca ou os filtros, ou atualize os feeds" : "Adjust the search or filters, or refresh the feeds"}</p>
                   </div>
                   <Button
                     onClick={() => loadNews()}
@@ -1094,18 +779,10 @@ const Newsletter = () => {
                     return (
                       <div
                         key={idx}
-                        className={`rounded-lg border border-l-[3px] bg-card transition-colors flex items-start gap-3 ${accent} ${
+                        className={`rounded-lg border border-l-[3px] bg-card transition-colors flex items-start gap-3 hover:border-border/50 ${accent} ${
                           featured ? "p-5 shadow-sm ring-1 ring-primary/10" : "p-3"
-                        } ${
-                          selectedNews[item.title] ? "border-border/50 bg-primary/5" : "hover:border-border/50"
                         }`}
                       >
-                        <Checkbox
-                          checked={!!selectedNews[item.title]}
-                          onCheckedChange={() => toggleSelectNews(item.title)}
-                          className="mt-1"
-                        />
-
                         <div className="flex-1 min-w-0 space-y-1.5">
                           <div className="flex items-center gap-2 flex-wrap text-xs">
                             {featured && (
