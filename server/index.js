@@ -2346,7 +2346,6 @@ function buildExposureScanDeps(ownerId) {
     return {
         axiosClient: axios,
         shodanApiKey: getUserApiKey(ownerId, 'shodan') || process.env.SHODAN_API_KEY,
-        censysApiKey: getUserApiKey(ownerId, 'censys') || process.env.CENSYS_API_KEY,
     };
 }
 

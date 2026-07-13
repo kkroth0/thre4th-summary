@@ -20,7 +20,7 @@ const baseFinding = (overrides = {}) => ({
     id: 'finding-1', ip: '8.8.8.8', port: 443, transport: 'tcp', risk: 'low', riskScore: 25,
     riskReasons: ['Standard web service exposed'], service: 'https', product: 'nginx', version: '1.24',
     organization: 'Example', asn: 'AS15169', hostnames: ['example.com'], country: 'US', city: 'Mountain View',
-    source: { shodan: true, censys: false }, observedAt: now, cves: [], tags: [], bannerSnippet: 'nginx',
+    source: { shodan: true }, observedAt: now, cves: [], tags: [], bannerSnippet: 'nginx',
     validation: { attempted: false, status: 'not_requested', detail: null }, ...overrides,
 });
 

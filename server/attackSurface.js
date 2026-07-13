@@ -257,7 +257,7 @@ const baseFindingFromEntry = (host, entry, index) => {
     hostnames,
     country: cleanNullable(entry.location?.country_name || entry.country_name || host.location?.country_name || host.country_name, 120),
     city: cleanNullable(entry.location?.city || entry.city || host.location?.city || host.city, 120),
-    source: { shodan: true, censys: false },
+    source: { shodan: true },
     observedAt: parseDate(entry.timestamp || host.last_update || host.timestamp),
     cves,
     tags,
@@ -278,44 +278,6 @@ export const normalizeShodanHost = (host = {}) => {
   return entries
     .map((entry, index) => baseFindingFromEntry(host, entry || {}, index))
     .filter((finding) => finding.ip && finding.port > 0);
-};
-
-const mergeCensysResource = (findings, ip, resource) => {
-  const services = Array.isArray(resource?.services) ? resource.services : [];
-  if (services.length === 0) return findings;
-
-  const serviceMap = new Map(services.map((service) => [`${Number(service.port)}/${String(service.transport || 'tcp').toLowerCase()}`, service]));
-
-  return findings.map((finding) => {
-    if (finding.ip !== ip) return finding;
-    const service = serviceMap.get(`${finding.port}/${finding.transport}`);
-    if (!service) return finding;
-
-    const cves = uniqueStrings([...finding.cves, ...(Array.isArray(service.vulnerabilities) ? service.vulnerabilities : [])]);
-    const tags = uniqueStrings([...finding.tags, ...(Array.isArray(service.labels) ? service.labels : [])]);
-    const merged = {
-      ...finding,
-      source: { ...finding.source, censys: true },
-      product: finding.product || cleanNullable(service.software, 120),
-      version: finding.version || cleanNullable(service.software_version, 80),
-      service: finding.service || cleanNullable(service.protocol || service.transport, 120),
-      cves,
-      tags,
-      bannerSnippet: finding.bannerSnippet || bannerSnippet(service.http_title || service.http_server),
-    };
-    const risk = assessExposureRisk({
-      port: merged.port,
-      transport: merged.transport,
-      cves: merged.cves,
-      tags: merged.tags,
-      product: merged.product,
-      service: merged.service,
-      httpTitle: service.http_title,
-      httpServer: service.http_server,
-      bannerSnippet: merged.bannerSnippet,
-    });
-    return { ...merged, ...risk };
-  });
 };
 
 const defaultTcpConnect = (ip, port, timeoutMs = TCP_TIMEOUT_MS) => new Promise((resolve) => {
@@ -424,23 +386,10 @@ const sortFindings = (findings) => [...findings].sort((a, b) => {
   return a.port - b.port;
 });
 
-const httpStatusFromError = (error) => Number(
-  error?.response?.status
-  || error?.status
-  || error?.statusCode
-  || 0,
-);
-
-const isRateLimitError = (error) => (
-  httpStatusFromError(error) === 429
-  || /\b429\b/.test(String(error?.message || ''))
-);
-
 export const runAttackSurfaceScan = async (input = {}, deps = {}) => {
   const {
     axiosClient,
     shodanApiKey,
-    censysApiKey,
     tcpConnect,
   } = deps;
 
@@ -469,35 +418,7 @@ export const runAttackSurfaceScan = async (input = {}, deps = {}) => {
   findings = findings.slice(0, queryPlan.limit);
 
   const warnings = [];
-  const providers = { shodan: true, censys: false };
-
-  if (censysApiKey && findings.length > 0) {
-    const ips = Array.from(new Set(findings.map((finding) => finding.ip).filter(isPublicIPv4))).slice(0, 25);
-    for (let index = 0; index < ips.length; index += 1) {
-      const ip = ips[index];
-      try {
-        const response = await axiosClient.get(`https://api.platform.censys.io/v3/global/asset/host/${ip}`, {
-          headers: {
-            Authorization: `Bearer ${censysApiKey}`,
-            Accept: 'application/json',
-          },
-          timeout: 10000,
-        });
-        const resource = response?.data?.result?.resource;
-        if (resource) {
-          providers.censys = true;
-          findings = mergeCensysResource(findings, ip, resource);
-        }
-      } catch (error) {
-        if (isRateLimitError(error)) {
-          const skipped = ips.length - index;
-          warnings.push(`Censys enrichment rate limited (HTTP 429); skipped enrichment for ${skipped} IP${skipped === 1 ? '' : 's'}.`);
-          break;
-        }
-        warnings.push(`Censys enrichment failed for ${ip}: ${error?.message || 'request failed'}`);
-      }
-    }
-  }
+  const providers = { shodan: true };
 
   if (input.activeValidation === true) {
     findings = await applyActiveValidation(findings, tcpConnect || defaultTcpConnect);

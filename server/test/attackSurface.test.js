@@ -161,7 +161,7 @@ test('normalizeShodanHost returns one finding per exposed service', () => {
   assert.deepEqual(findings[1].cves, ['CVE-2025-0001']);
 });
 
-test('runAttackSurfaceScan uses Shodan search and fail-soft Censys enrichment', async () => {
+test('runAttackSurfaceScan builds findings from a Shodan search', async () => {
   const calls = [];
   const axiosClient = {
     async get(url, options) {
@@ -183,7 +183,7 @@ test('runAttackSurfaceScan uses Shodan search and fail-soft Censys enrichment', 
           },
         };
       }
-      throw new Error('censys unavailable');
+      throw new Error(`unexpected request: ${url}`);
     },
   };
 
@@ -197,7 +197,6 @@ test('runAttackSurfaceScan uses Shodan search and fail-soft Censys enrichment', 
     {
       axiosClient,
       shodanApiKey: 'shodan-key',
-      censysApiKey: 'censys-key',
       tcpConnect: async () => ({ status: 'open', detail: 'unused' }),
     },
   );
@@ -205,50 +204,8 @@ test('runAttackSurfaceScan uses Shodan search and fail-soft Censys enrichment', 
   assert.equal(result.summary.totalAssets, 1);
   assert.equal(result.summary.totalServices, 1);
   assert.equal(result.findings[0].risk, 'critical');
-  assert.equal(result.warnings.length, 1);
-});
-
-test('runAttackSurfaceScan collapses Censys 429 enrichment warnings and stops retrying the batch', async () => {
-  const calls = [];
-  const axiosClient = {
-    async get(url, options) {
-      calls.push({ url, options });
-      if (url.includes('/shodan/host/search')) {
-        return {
-          data: {
-            total: 3,
-            matches: [
-              { ip_str: '177.128.118.40', port: 443, transport: 'tcp', data: 'https' },
-              { ip_str: '177.128.119.24', port: 8443, transport: 'tcp', data: 'https' },
-              { ip_str: '201.44.252.176', port: 3389, transport: 'tcp', data: 'rdp' },
-            ],
-          },
-        };
-      }
-      const error = new Error('Request failed with status code 429');
-      error.response = { status: 429 };
-      throw error;
-    },
-  };
-
-  const result = await runAttackSurfaceScan(
-    {
-      mode: 'advanced',
-      advancedQuery: 'org:"Example"',
-      limit: 3,
-      activeValidation: false,
-    },
-    {
-      axiosClient,
-      shodanApiKey: 'shodan-key',
-      censysApiKey: 'censys-key',
-    },
-  );
-
-  assert.deepEqual(result.warnings, [
-    'Censys enrichment rate limited (HTTP 429); skipped enrichment for 3 IPs.',
-  ]);
-  assert.equal(calls.filter((call) => call.url.includes('api.platform.censys.io')).length, 1);
+  assert.equal(result.warnings.length, 0);
+  assert.equal(calls.filter((call) => call.url.includes('api.platform.censys.io')).length, 0);
 });
 
 test('runAttackSurfaceScan caps host lookup findings before active validation', async () => {

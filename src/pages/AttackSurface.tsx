@@ -273,7 +273,6 @@ export default function AttackSurface() {
                 Attack Surface
               </Badge>
               <Badge variant="outline">Shodan</Badge>
-              <Badge variant="outline">Censys optional</Badge>
             </div>
             <h1 className="mt-4 text-3xl font-semibold tracking-tight md:text-4xl">
               {pt ? "Superficie exposta externa" : "External attack surface"}
@@ -551,7 +550,6 @@ export default function AttackSurface() {
                               {formatDate(finding.observedAt)}
                               <div className="mt-1 flex gap-1">
                                 {finding.source.shodan && <Badge variant="outline">Shodan</Badge>}
-                                {finding.source.censys && <Badge variant="outline">Censys</Badge>}
                               </div>
                             </TableCell>
                             <TableCell>

@@ -36,7 +36,6 @@ const serviceKey = (finding: AttackSurfaceFinding) => `${finding.ip}:${finding.p
 
 const sources = (finding: AttackSurfaceFinding) => [
   finding.source.shodan && "Shodan",
-  finding.source.censys && "Censys",
 ].filter(Boolean).join(", ");
 
 const percent = (part: number, total: number) => (total > 0 ? Number(((part / total) * 100).toFixed(1)) : 0);
@@ -108,7 +107,6 @@ const buildAssets = (findings: AttackSurfaceFinding[]) => {
     if (finding.city) asset.city.add(finding.city);
     finding.hostnames.forEach((hostname) => asset.hostnames.add(hostname));
     if (finding.source.shodan) asset.sources.add("Shodan");
-    if (finding.source.censys) asset.sources.add("Censys");
   });
 
   return Array.from(assets.values()).map((asset) => ({
