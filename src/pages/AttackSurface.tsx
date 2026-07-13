@@ -1,14 +1,17 @@
-import { useMemo, useState } from "react";
+import { ElementType, Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import {
   Activity,
   AlertTriangle,
   CheckCircle2,
   ChevronDown,
+  FileSpreadsheet,
   Loader2,
   Radar,
   Search,
   Server,
   ShieldAlert,
+  Upload,
 } from "lucide-react";
 import { toast } from "sonner";
 import { PageLayout } from "@/components/PageLayout";
@@ -36,7 +39,7 @@ import {
 } from "@/components/ui/table";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { ElementType, Fragment } from "react";
+import { ExposureMonitorPanel } from "@/components/attack-surface/ExposureMonitorPanel";
 import {
   AttackSurfaceFinding,
   AttackSurfaceInput,
@@ -44,6 +47,8 @@ import {
   AttackSurfaceTargetType,
   fetchAttackSurface,
 } from "@/services/threatApi";
+import { exportAttackSurfaceExcel } from "@/utils/attackSurfaceExcel";
+import { parseAttackSurfaceTargets, type AttackSurfaceImportedTarget } from "@/utils/attackSurfaceImport";
 import { cn } from "@/lib/utils";
 
 const riskStyles: Record<AttackSurfaceRisk, string> = {
@@ -97,7 +102,11 @@ export default function AttackSurface() {
   const { language } = useLanguage();
   const pt = language === "pt";
   const labels = riskLabels[pt ? "pt" : "en"];
+  const [searchParams, setSearchParams] = useSearchParams();
+  const routeMode = searchParams.get("mode") === "monitor" ? "monitor" : "scan";
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
+  const [featureMode, setFeatureMode] = useState<"scan" | "monitor">(routeMode);
   const [mode, setMode] = useState<"guided" | "advanced">("guided");
   const [targetType, setTargetType] = useState<AttackSurfaceTargetType>("cidr");
   const [target, setTarget] = useState("");
@@ -108,7 +117,13 @@ export default function AttackSurface() {
   const [textFilter, setTextFilter] = useState("");
   const [openRows, setOpenRows] = useState<Record<string, boolean>>({});
   const [isLoading, setIsLoading] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+  const [importTargets, setImportTargets] = useState<AttackSurfaceImportedTarget[]>([]);
   const [result, setResult] = useState<Awaited<ReturnType<typeof fetchAttackSurface>> | null>(null);
+
+  useEffect(() => {
+    setFeatureMode(routeMode);
+  }, [routeMode]);
 
   const findings = useMemo(() => result?.findings ?? [], [result?.findings]);
 
@@ -145,6 +160,59 @@ export default function AttackSurface() {
       .sort((a, b) => b[1] - a[1])
       .slice(0, 6);
   }, [findings]);
+
+  const switchFeatureMode = (value: string) => {
+    const next = value === "monitor" ? "monitor" : "scan";
+    setFeatureMode(next);
+    setSearchParams(next === "monitor" ? { mode: "monitor" } : {});
+  };
+
+  const applyImportedTarget = (imported: AttackSurfaceImportedTarget) => {
+    if (imported.kind === "shodan_query") {
+      setMode("advanced");
+      setAdvancedQuery(imported.value);
+      return;
+    }
+    if (imported.kind === "asn") {
+      setMode("advanced");
+      setAdvancedQuery(`asn:"${imported.value}"`);
+      return;
+    }
+    setMode("guided");
+    setTargetType(imported.kind);
+    setTarget(imported.value);
+  };
+
+  const importTxt = async (file: File | undefined) => {
+    if (!file) return;
+    try {
+      const parsed = parseAttackSurfaceTargets(await file.text());
+      setImportTargets(parsed.targets);
+      if (parsed.targets[0]) applyImportedTarget(parsed.targets[0]);
+      if (parsed.targets.length === 0) {
+        toast.warning(pt ? "Nenhum alvo reconhecido no TXT." : "No supported targets found in TXT.");
+      } else {
+        toast.success(pt ? `${parsed.targets.length} alvo(s) importado(s).` : `${parsed.targets.length} target(s) imported.`);
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : pt ? "Falha ao ler TXT." : "Failed to read TXT.");
+    } finally {
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
+  const exportExcel = async () => {
+    if (!result) return;
+    setIsExporting(true);
+    try {
+      await exportAttackSurfaceExcel(result);
+      toast.success(pt ? "XLSX gerado." : "XLSX generated.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : pt ? "Falha ao gerar XLSX." : "Failed to generate XLSX.");
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -199,12 +267,12 @@ export default function AttackSurface() {
               <Badge variant="outline">Censys optional</Badge>
             </div>
             <h1 className="mt-4 text-3xl font-semibold tracking-tight md:text-4xl">
-              {pt ? "Inventario de superficie exposta" : "External attack surface inventory"}
+              {pt ? "Superficie exposta externa" : "External attack surface"}
             </h1>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
               {pt
-                ? "Mapeie servicos expostos por Shodan, enriqueça com Censys quando disponivel e valide TCP somente quando voce habilitar."
-                : "Map exposed services from Shodan, enrich with Censys when available, and run TCP validation only when you enable it."}
+                ? "Mapeie servicos expostos, importe alvos por TXT, exporte XLSX e acompanhe mudancas de ativos salvos."
+                : "Map exposed services, import TXT targets, export XLSX, and monitor changes for saved assets."}
             </p>
           </div>
           {result && (
@@ -215,6 +283,15 @@ export default function AttackSurface() {
           )}
         </header>
 
+        <Tabs value={featureMode} onValueChange={switchFeatureMode} className="flex flex-col gap-6">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <TabsList>
+              <TabsTrigger value="scan">Scan</TabsTrigger>
+              <TabsTrigger value="monitor">{pt ? "Monitoramento" : "Monitor"}</TabsTrigger>
+            </TabsList>
+          </div>
+
+          <TabsContent value="scan" className="mt-0 flex flex-col gap-6">
         <form onSubmit={submit} className="soc-panel rounded-lg p-4">
           <Tabs value={mode} onValueChange={(value) => setMode(value as "guided" | "advanced")} className="flex flex-col gap-4">
             <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
@@ -222,6 +299,13 @@ export default function AttackSurface() {
                 <TabsTrigger value="guided">{pt ? "Guiado" : "Guided"}</TabsTrigger>
                 <TabsTrigger value="advanced">{pt ? "Query Shodan" : "Shodan query"}</TabsTrigger>
               </TabsList>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".txt,text/plain"
+                className="hidden"
+                onChange={(event) => void importTxt(event.target.files?.[0])}
+              />
               <div className="flex flex-wrap items-center gap-3">
                 <div className="flex items-center gap-2">
                   <Label htmlFor="limit" className="text-xs font-semibold text-muted-foreground">Limit</Label>
@@ -245,6 +329,10 @@ export default function AttackSurface() {
                     {pt ? "Validar portas agora" : "Validate ports now"}
                   </Label>
                 </div>
+                <Button type="button" variant="outline" onClick={() => fileInputRef.current?.click()} className="h-9 gap-2">
+                  <Upload className="h-4 w-4" />
+                  TXT
+                </Button>
                 <Button type="submit" disabled={isLoading} className="h-9 gap-2">
                   {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
                   {pt ? "Buscar" : "Search"}
@@ -283,6 +371,26 @@ export default function AttackSurface() {
               />
             </TabsContent>
           </Tabs>
+
+          {importTargets.length > 0 && (
+            <div className="mt-4 flex flex-wrap gap-2">
+              {importTargets.slice(0, 10).map((imported) => (
+                <Button
+                  key={`${imported.kind}:${imported.value}`}
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-8 max-w-full gap-2"
+                  onClick={() => applyImportedTarget(imported)}
+                >
+                  <Badge variant="secondary" className="px-1.5 py-0 text-[10px] uppercase">
+                    {imported.kind.replace("_", " ")}
+                  </Badge>
+                  <span className="max-w-52 truncate font-mono text-xs">{imported.value}</span>
+                </Button>
+              ))}
+            </div>
+          )}
 
           {activeValidation && (
             <Alert className="mt-4 border-amber-500/30 bg-amber-500/10">
@@ -345,6 +453,17 @@ export default function AttackSurface() {
                     placeholder={pt ? "Filtrar IP, CVE, servico..." : "Filter IP, CVE, service..."}
                     className="h-9 sm:w-72"
                   />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-9 gap-2"
+                    onClick={() => void exportExcel()}
+                    disabled={!result || isExporting}
+                  >
+                    {isExporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileSpreadsheet className="h-4 w-4" />}
+                    Excel
+                  </Button>
                 </div>
               </div>
 
@@ -465,6 +584,12 @@ export default function AttackSurface() {
             </p>
           </div>
         )}
+          </TabsContent>
+
+          <TabsContent value="monitor" className="mt-0">
+            <ExposureMonitorPanel />
+          </TabsContent>
+        </Tabs>
       </div>
     </PageLayout>
   );
