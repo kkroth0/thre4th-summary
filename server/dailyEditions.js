@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import fs from 'fs';
 
 export const DAILY_TIMEZONE = 'America/Recife';
 const DAY_MS = 86_400_000;
@@ -160,5 +161,116 @@ export function buildDeterministicNarrative(events) {
         title: active.length || critical.length ? 'Correcao e exposicao lideram as prioridades do dia' : 'Principais mudancas observadas no dia',
         summary,
         attentionTopics,
+    };
+}
+
+const requireText = (value, name, maxLength) => {
+    if (typeof value !== 'string' || !value.trim() || value.length > maxLength) {
+        throw new TypeError(`invalid ${name}`);
+    }
+    return value.trim();
+};
+
+export function validateNarrative(value, events) {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) throw new TypeError('invalid narrative');
+    const title = requireText(value.title, 'title', 140);
+    if (!Array.isArray(value.summary) || value.summary.length < 3 || value.summary.length > 5) {
+        throw new TypeError('invalid summary');
+    }
+    if (!Array.isArray(value.attentionTopics) || value.attentionTopics.length < 2 || value.attentionTopics.length > 4) {
+        throw new TypeError('invalid attention topics');
+    }
+
+    const knownIds = new Set(events.map((event) => event.id));
+    const knownCves = new Set(events.flatMap((event) => event.cves || []).map((cve) => String(cve).toUpperCase()));
+    const summary = value.summary.map((line, index) => requireText(line, `summary ${index + 1}`, 320));
+    const attentionTopics = value.attentionTopics.map((topic, index) => {
+        if (!topic || typeof topic !== 'object' || Array.isArray(topic)) throw new TypeError(`invalid topic ${index + 1}`);
+        if (!Array.isArray(topic.eventIds) || !topic.eventIds.length || topic.eventIds.some((id) => !knownIds.has(id))) {
+            throw new TypeError('unknown event in narrative');
+        }
+        const normalized = {
+            title: requireText(topic.title, `topic ${index + 1} title`, 100),
+            assessment: requireText(topic.assessment, `topic ${index + 1} assessment`, 420),
+            eventIds: [...new Set(topic.eventIds)],
+        };
+        if (topic.recommendedAction != null && String(topic.recommendedAction).trim()) {
+            normalized.recommendedAction = requireText(topic.recommendedAction, `topic ${index + 1} action`, 280);
+        }
+        return normalized;
+    });
+
+    const identifiers = JSON.stringify({ title, summary, attentionTopics }).match(/CVE-\d{4}-\d{4,}/gi) || [];
+    if (identifiers.some((identifier) => !knownCves.has(identifier.toUpperCase()))) {
+        throw new TypeError('unsupported identifier in narrative');
+    }
+
+    return { title, summary, attentionTopics };
+}
+
+export function createEditionStore({ filePath, writeJsonAtomic }) {
+    let editions = [];
+    try {
+        const parsed = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+        editions = Array.isArray(parsed) ? parsed.filter((edition) => edition && validDateParts(edition.date)) : [];
+    } catch { /* empty store */ }
+
+    return {
+        listDates: () => editions.map((edition) => edition.date).sort().reverse(),
+        get: (date) => editions.find((edition) => edition.date === date) || null,
+        save(edition) {
+            const existing = editions.find((item) => item.date === edition.date);
+            if (existing) return existing;
+            editions.push(edition);
+            editions.sort((a, b) => a.date.localeCompare(b.date));
+            writeJsonAtomic(filePath, editions);
+            return edition;
+        },
+    };
+}
+
+export function createEditionGenerator({ store, requestNarrative, getSourceData, now = () => new Date() }) {
+    const inFlight = new Map();
+
+    const generateNew = async (date) => {
+        const existing = store.get(date);
+        if (existing) return existing;
+
+        const { feed = [], victims = [] } = await getSourceData();
+        const events = buildEditionEvents({ feed, victims, date });
+        let narrative;
+        let narrativeSource = 'deterministic';
+        if (events.length) {
+            try {
+                narrative = validateNarrative(await requestNarrative(events, date), events);
+                narrativeSource = 'openrouter';
+            } catch { /* deterministic fallback */ }
+        }
+        if (!narrative) narrative = buildDeterministicNarrative(events);
+
+        const { windowStart, windowEnd } = getDateWindow(date);
+        return store.save({
+            date,
+            timezone: DAILY_TIMEZONE,
+            windowStart,
+            windowEnd,
+            generatedAt: now().toISOString(),
+            narrativeSource,
+            narrative,
+            events,
+            sources: [...new Set(events.map((event) => event.source))],
+        });
+    };
+
+    return {
+        generate(date) {
+            if (!validDateParts(date)) return Promise.reject(new TypeError('invalid date'));
+            const existing = store.get(date);
+            if (existing) return Promise.resolve(existing);
+            if (!inFlight.has(date)) {
+                inFlight.set(date, generateNew(date).finally(() => inFlight.delete(date)));
+            }
+            return inFlight.get(date);
+        },
     };
 }
