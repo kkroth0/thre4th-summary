@@ -4,8 +4,10 @@ import {
     WATCHLIST_LIMITS,
     applySnapshotRetention,
     assetToAttackSurfaceInput,
+    createWatchlistStore,
     diffSnapshots,
     normalizeExposureAssetInput,
+    runExposureSnapshot,
     selectDueAssets,
     summarizeFindings,
 } from '../exposureWatchlist.js';
@@ -20,6 +22,18 @@ const baseFinding = (overrides = {}) => ({
     source: { shodan: true, censys: false }, observedAt: now, cves: [], tags: [], bannerSnippet: 'nginx',
     validation: { attempted: false, status: 'not_requested', detail: null }, ...overrides,
 });
+
+function memoryStore() {
+    const files = new Map();
+    return createWatchlistStore({
+        assetsPath: 'assets.json', snapshotsPath: 'snapshots.json',
+        readFileSync(path) {
+            if (!files.has(path)) throw new Error('missing');
+            return files.get(path);
+        },
+        writeJsonAtomic(path, data) { files.set(path, JSON.stringify(data)); },
+    });
+}
 
 test('normalizeExposureAssetInput validates and normalizes a domain asset', () => {
     const asset = normalizeExposureAssetInput({
@@ -127,4 +141,64 @@ test('applySnapshotRetention keeps latest snapshots for an asset', () => {
     assert.equal(retained.length, WATCHLIST_LIMITS.snapshotsPerAsset);
     assert.equal(retained[0].id, 'snap-16');
     assert.equal(retained.at(-1).id, 'snap-3');
+});
+
+test('createWatchlistStore creates, updates, lists and deletes owner assets', () => {
+    const store = memoryStore();
+    const asset = store.createAsset(owner, {
+        label: 'Edge', type: 'domain', value: 'example.com', limit: 20,
+        activeValidation: false, scheduleEnabled: true,
+    }, now);
+    assert.equal(store.listAssets('user-1').length, 1);
+    assert.equal(store.listAssets('other-user').length, 0);
+    const updated = store.updateAsset('user-1', asset.id, { label: 'Edge Updated', scheduleEnabled: false }, now);
+    assert.equal(updated.label, 'Edge Updated');
+    assert.equal(updated.scheduleEnabled, false);
+    assert.equal(store.deleteAsset('user-1', asset.id), true);
+    assert.equal(store.listAssets('user-1').length, 0);
+});
+
+test('runExposureSnapshot executes scan, stores snapshot and computes changes', async () => {
+    const store = memoryStore();
+    const asset = store.createAsset(owner, {
+        label: 'Edge', type: 'domain', value: 'example.com', limit: 20,
+        activeValidation: false, scheduleEnabled: true,
+    }, now);
+    let runCount = 0;
+    const runAttackSurfaceScan = async () => {
+        runCount += 1;
+        return {
+            summary: { warnings: [] },
+            findings: runCount === 1
+                ? [baseFinding({ ip: '8.8.8.8', port: 443, risk: 'low', cves: [] })]
+                : [baseFinding({ ip: '8.8.8.8', port: 443, risk: 'critical', cves: ['CVE-2026-0001'] })],
+            warnings: [],
+        };
+    };
+    const first = await runExposureSnapshot({ store, assetId: asset.id, ownerId: 'user-1', now: new Date(now), runAttackSurfaceScan, scanDeps: {} });
+    assert.equal(first.status, 'success');
+    assert.equal(first.changes[0].type, 'baseline_created');
+    const second = await runExposureSnapshot({ store, assetId: asset.id, ownerId: 'user-1', now: new Date('2026-07-13T13:00:00.000Z'), runAttackSurfaceScan, scanDeps: {} });
+    assert.equal(second.status, 'success');
+    assert.ok(second.changes.some((change) => change.type === 'cve_added'));
+    assert.equal(store.getAsset('user-1', asset.id).lastRisk, 'critical');
+    assert.equal(store.listChanges('user-1', 10).length >= 2, true);
+});
+
+test('runExposureSnapshot stores sanitized config errors', async () => {
+    const store = memoryStore();
+    const asset = store.createAsset(owner, {
+        label: 'Edge', type: 'domain', value: 'example.com', limit: 20,
+        activeValidation: false, scheduleEnabled: true,
+    }, now);
+    const error = Object.assign(new Error('Shodan API Key missing'), {
+        status: 503, publicMessage: 'Shodan API key is not configured',
+    });
+    const snapshot = await runExposureSnapshot({
+        store, assetId: asset.id, ownerId: 'user-1', now: new Date(now),
+        runAttackSurfaceScan: async () => { throw error; }, scanDeps: {},
+    });
+    assert.equal(snapshot.status, 'config_error');
+    assert.equal(store.getAsset('user-1', asset.id).lastStatus, 'config_error');
+    assert.match(store.getAsset('user-1', asset.id).lastError, /Shodan API key/);
 });

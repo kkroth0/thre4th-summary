@@ -160,3 +160,128 @@ export function applySnapshotRetention(snapshots = [], assetId) {
     return snapshots.filter((snapshot) => snapshot.assetId !== assetId || keepIds.has(snapshot.id))
         .sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime());
 }
+
+const loadJson = (readFileSync, path, fallback) => {
+    try {
+        const data = JSON.parse(readFileSync(path, 'utf8'));
+        return data && typeof data === 'object' ? data : fallback;
+    } catch {
+        return fallback;
+    }
+};
+
+export function createWatchlistStore({ assetsPath, snapshotsPath, readFileSync, writeJsonAtomic }) {
+    let assets = loadJson(readFileSync, assetsPath, []);
+    let snapshots = loadJson(readFileSync, snapshotsPath, []);
+    const saveAssets = () => writeJsonAtomic(assetsPath, assets);
+    const saveSnapshots = () => writeJsonAtomic(snapshotsPath, snapshots);
+    const assertAsset = (ownerId, assetId) => {
+        const asset = assets.find((item) => item.id === assetId && item.ownerId === ownerId);
+        if (!asset) throw createExposureError(404, 'Asset not found');
+        return asset;
+    };
+    return {
+        listAssets(ownerId) {
+            return assets.filter((asset) => asset.ownerId === ownerId)
+                .sort((a, b) => String(a.label).localeCompare(String(b.label)));
+        },
+        allAssets() { return [...assets]; },
+        getAsset(ownerId, assetId) { return assertAsset(ownerId, assetId); },
+        createAsset(owner, input, now = new Date().toISOString()) {
+            if (assets.filter((asset) => asset.ownerId === owner.sub).length >= WATCHLIST_LIMITS.assetsPerUser) {
+                throw createExposureError(409, 'Asset limit reached');
+            }
+            const asset = normalizeExposureAssetInput(input, null, now, owner);
+            assets.unshift(asset);
+            saveAssets();
+            return asset;
+        },
+        updateAsset(ownerId, assetId, input, now = new Date().toISOString()) {
+            const index = assets.findIndex((asset) => asset.id === assetId && asset.ownerId === ownerId);
+            if (index < 0) throw createExposureError(404, 'Asset not found');
+            assets[index] = normalizeExposureAssetInput(input, assets[index], now, { sub: ownerId, login: assets[index].ownerLogin });
+            saveAssets();
+            return assets[index];
+        },
+        updateAssetState(ownerId, assetId, patch) {
+            const asset = assertAsset(ownerId, assetId);
+            Object.assign(asset, patch, { updatedAt: new Date().toISOString() });
+            saveAssets();
+            return asset;
+        },
+        deleteAsset(ownerId, assetId) {
+            const before = assets.length;
+            assets = assets.filter((asset) => !(asset.id === assetId && asset.ownerId === ownerId));
+            snapshots = snapshots.filter((snapshot) => !(snapshot.assetId === assetId && snapshot.ownerId === ownerId));
+            if (assets.length === before) return false;
+            saveAssets();
+            saveSnapshots();
+            return true;
+        },
+        listSnapshots(ownerId, assetId) {
+            assertAsset(ownerId, assetId);
+            return snapshots.filter((snapshot) => snapshot.ownerId === ownerId && snapshot.assetId === assetId)
+                .sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime());
+        },
+        previousSuccessfulSnapshot(ownerId, assetId) {
+            return snapshots.filter((snapshot) => snapshot.ownerId === ownerId && snapshot.assetId === assetId && snapshot.status === 'success')
+                .sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime())[0] || null;
+        },
+        addSnapshot(snapshot) {
+            snapshots.unshift(snapshot);
+            snapshots = applySnapshotRetention(snapshots, snapshot.assetId);
+            saveSnapshots();
+            return snapshot;
+        },
+        listChanges(ownerId, limit = 100) {
+            return snapshots.filter((snapshot) => snapshot.ownerId === ownerId)
+                .flatMap((snapshot) => snapshot.changes || [])
+                .sort((a, b) => new Date(b.detectedAt).getTime() - new Date(a.detectedAt).getTime())
+                .slice(0, Math.min(Math.max(Number(limit) || 100, 1), 200));
+        },
+    };
+}
+
+const sanitizeRunError = (error) => error.publicMessage || (error.status === 503 ? 'Provider configuration error' : 'Snapshot failed');
+const snapshotStatusFor = (error) => error.status === 503 || /key|configured/i.test(error.publicMessage || error.message || '') ? 'config_error' : 'error';
+
+export async function runExposureSnapshot({ store, assetId, ownerId, now = new Date(), runAttackSurfaceScan, scanDeps }) {
+    const asset = store.getAsset(ownerId, assetId);
+    const startedAt = now.toISOString();
+    store.updateAssetState(ownerId, assetId, { lastStatus: 'running', lastError: null });
+    const input = assetToAttackSurfaceInput(asset);
+    const snapshotId = newId('snap');
+    try {
+        const previous = store.previousSuccessfulSnapshot(ownerId, assetId);
+        const result = await runAttackSurfaceScan(input, scanDeps);
+        const findings = result.findings || [];
+        const summary = summarizeFindings(findings);
+        const changes = diffSnapshots({
+            assetId, snapshotId, previous: previous?.findings || null, current: findings,
+            detectedAt: new Date().toISOString(),
+        });
+        const snapshot = {
+            id: snapshotId, assetId, ownerId, startedAt, completedAt: new Date().toISOString(),
+            status: 'success', error: null, input, summary, findings, changes,
+            warnings: result.warnings || result.summary?.warnings || [],
+        };
+        store.addSnapshot(snapshot);
+        store.updateAssetState(ownerId, assetId, {
+            lastRunAt: snapshot.completedAt, lastStatus: 'success', lastError: null,
+            lastSnapshotId: snapshot.id, lastRisk: summary.highestRisk, lastSummary: summary,
+        });
+        return snapshot;
+    } catch (error) {
+        const status = snapshotStatusFor(error);
+        const message = sanitizeRunError(error);
+        const snapshot = {
+            id: snapshotId, assetId, ownerId, startedAt, completedAt: new Date().toISOString(),
+            status, error: message, input, summary: summarizeFindings([]), findings: [], changes: [], warnings: [],
+        };
+        store.addSnapshot(snapshot);
+        store.updateAssetState(ownerId, assetId, {
+            lastRunAt: snapshot.completedAt, lastStatus: status, lastError: message, lastSnapshotId: snapshot.id,
+        });
+        return snapshot;
+    }
+}

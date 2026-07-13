@@ -511,7 +511,7 @@ git commit -m "feat: add exposure watchlist core logic"
   - `runExposureSnapshot({ store, assetId, ownerId, now, runAttackSurfaceScan, scanDeps })`
   - Store methods: `listAssets(ownerId)`, `createAsset(owner, input)`, `updateAsset(ownerId, assetId, input)`, `deleteAsset(ownerId, assetId)`, `getAsset(ownerId, assetId)`, `listSnapshots(ownerId, assetId)`, `listChanges(ownerId, limit)`
 
-- [ ] **Step 1: Add failing persistence and snapshot runner tests**
+- [x] **Step 1: Add failing persistence and snapshot runner tests**
 
 Append to `server/test/exposureWatchlist.test.js`:
 
@@ -622,7 +622,7 @@ test('runExposureSnapshot stores sanitized config errors', async () => {
 });
 ```
 
-- [ ] **Step 2: Run tests to verify failure**
+- [x] **Step 2: Run tests to verify failure**
 
 Run:
 
@@ -632,7 +632,7 @@ node --test server/test/exposureWatchlist.test.js
 
 Expected: FAIL because `createWatchlistStore` and `runExposureSnapshot` are not exported.
 
-- [ ] **Step 3: Implement store and snapshot runner**
+- [x] **Step 3: Implement store and snapshot runner**
 
 Extend `server/exposureWatchlist.js`:
 
@@ -802,7 +802,7 @@ export async function runExposureSnapshot({ store, assetId, ownerId, now = new D
 }
 ```
 
-- [ ] **Step 4: Run tests to verify persistence passes**
+- [x] **Step 4: Run tests to verify persistence passes**
 
 Run:
 
@@ -812,7 +812,7 @@ node --test server/test/exposureWatchlist.test.js
 
 Expected: PASS for Task 1 and Task 2 tests.
 
-- [ ] **Step 5: Commit Task 2**
+- [x] **Step 5: Commit Task 2**
 
 ```bash
 git add server/exposureWatchlist.js server/test/exposureWatchlist.test.js docs/superpowers/plans/2026-07-13-exposure-watchlist-implementation.md
