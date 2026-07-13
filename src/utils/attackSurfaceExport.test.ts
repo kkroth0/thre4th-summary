@@ -48,7 +48,7 @@ class FakeWorksheet {
   addRow(values: Record<string, unknown> | unknown[]) {
     const row = this.getRow(this.rows.size + 1);
     if (Array.isArray(values)) {
-      row.values = [, ...values];
+      row.values = [undefined, ...values];
     } else {
       this.columns.forEach((column, index) => {
         row.getCell(index + 1).value = values[column.key];

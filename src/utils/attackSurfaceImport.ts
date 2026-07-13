@@ -19,7 +19,12 @@ const DOMAIN = /^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$/i;
 const ASN = /^(?:AS)?(\d{1,10})$/i;
 const QUERY_PREFIX = /^(?:shodan|query)\s*:\s*(.+)$/i;
 
-const clean = (value: string) => value.replace(/[\x00-\x1F\x7F]/g, " ").replace(/\s+/g, " ").trim();
+const withoutControlChars = (value: string) => Array.from(value, (char) => {
+  const code = char.charCodeAt(0);
+  return code <= 31 || code === 127 ? " " : char;
+}).join("");
+
+const clean = (value: string) => withoutControlChars(value).replace(/\s+/g, " ").trim();
 
 const normalizeLine = (line: string) => clean(line.replace(/^\uFEFF/, ""));
 

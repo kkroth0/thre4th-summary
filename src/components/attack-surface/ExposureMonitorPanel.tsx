@@ -157,7 +157,7 @@ export function ExposureMonitorPanel() {
     }
   };
 
-  const useDraft = (target: AttackSurfaceImportedTarget) => {
+  const applyDraft = (target: AttackSurfaceImportedTarget) => {
     const draft = targetToMonitorDraft(target);
     setForm((current) => ({ ...current, ...draft }));
   };
@@ -346,7 +346,7 @@ export function ExposureMonitorPanel() {
                     <button
                       key={`${target.kind}:${target.value}`}
                       type="button"
-                      onClick={() => useDraft(target)}
+                      onClick={() => applyDraft(target)}
                       className="flex min-w-0 items-center gap-2 rounded-md border border-border px-2 py-1.5 text-left text-xs hover:bg-secondary"
                     >
                       <Badge variant="secondary" className="shrink-0 px-1.5 py-0 text-[10px] uppercase">
