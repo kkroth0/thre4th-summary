@@ -36,9 +36,56 @@ test("declares the new favicon, manifest, and social metadata", async () => {
   assert.match(html, /href="\/apple-touch-icon\.png"/);
   assert.match(html, /href="\/safari-pinned-tab\.svg"/);
   assert.match(html, /href="\/site\.webmanifest"/);
-  assert.match(html, /property="og:image" content="\/threatsumm4ry-og-image-1200x630\.png"/);
+  assert.match(html, /property="og:image" content="https:\/\/threatsumm4ry\.app\/threatsumm4ry-og-image-1200x630\.png"/);
   assert.match(html, /name="twitter:card" content="summary_large_image"/);
   assert.doesNotMatch(html, /href="\/favicon\.png"/);
+});
+
+test("declares canonical production SEO metadata in the base HTML", async () => {
+  const html = await read("index.html");
+
+  assert.match(html, /<html lang="pt-BR">/);
+  assert.match(html, /<link rel="canonical" href="https:\/\/threatsumm4ry\.app\/" \/>/);
+  assert.match(html, /property="og:url" content="https:\/\/threatsumm4ry\.app\/"/);
+  assert.match(html, /property="og:image" content="https:\/\/threatsumm4ry\.app\/threatsumm4ry-og-image-1200x630\.png"/);
+  assert.match(html, /name="twitter:image" content="https:\/\/threatsumm4ry\.app\/threatsumm4ry-og-image-1200x630\.png"/);
+  assert.match(html, /name="language" content="pt-BR"/);
+});
+
+test("publishes robots sitemap discovery", async () => {
+  const robots = await read("public/robots.txt");
+
+  assert.match(robots, /User-agent: \*/);
+  assert.match(robots, /Allow: \//);
+  assert.match(robots, /Sitemap: https:\/\/threatsumm4ry\.app\/sitemap\.xml/);
+});
+
+test("publishes the approved static sitemap", async () => {
+  const sitemap = await read("public/sitemap.xml");
+  const expectedRoutes = [
+    "/",
+    "/analyzer",
+    "/cves",
+    "/atores",
+    "/advisories",
+    "/latam-threats",
+    "/threat-map",
+    "/patch-tuesday",
+    "/vendors",
+    "/dnsbl",
+    "/attack-surface",
+    "/phishing-analyzer",
+  ];
+
+  assert.match(sitemap, /<urlset xmlns="http:\/\/www\.sitemaps\.org\/schemas\/sitemap\/0\.9">/);
+  for (const route of expectedRoutes) {
+    const url = route === "/" ? "https://threatsumm4ry.app/" : `https://threatsumm4ry.app${route}`;
+    assert.match(sitemap, new RegExp(`<loc>${url.replace(/\//g, "\\/")}<\\/loc>`));
+  }
+
+  assert.doesNotMatch(sitemap, /\/login<\/loc>/);
+  assert.doesNotMatch(sitemap, /\/settings<\/loc>/);
+  assert.doesNotMatch(sitemap, /\/newsletter<\/loc>/);
 });
 
 test("uses the official mark in shared and public navigation", async () => {
