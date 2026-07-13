@@ -14,6 +14,7 @@ import {
   MapPinned,
   Menu,
   Megaphone,
+  Radar,
   RadioTower,
   Search,
   Settings as SettingsIcon,
@@ -85,6 +86,12 @@ export function Header({ actions, logoAddon, onLogoClick, showBackButton = false
           label: "DNSBL",
           description: pt ? "Blocklists por IP, dominio ou range." : "Blocklists by IP, domain or range.",
           icon: ShieldAlert,
+        },
+        {
+          path: "/attack-surface",
+          label: "Attack Surface",
+          description: pt ? "Shodan, Censys e validacao TCP controlada." : "Shodan, Censys and controlled TCP validation.",
+          icon: Radar,
         },
         {
           path: "/relatorios",
