@@ -89,7 +89,11 @@
     "zod": "^3.25.76"
   },
   "overrides": {
-    "uuid": "^11.1.1"
+    "uuid": "^11.1.1",
+    "d3-color": "^3.1.0",
+    "d3-interpolate": "^3.0.1",
+    "d3-transition": "^3.0.1",
+    "d3-zoom": "^3.0.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.32.0",

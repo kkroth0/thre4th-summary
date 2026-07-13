@@ -14,7 +14,27 @@ import compression from 'compression';
 import * as cheerio from 'cheerio';
 import { scoreArticle, localizeEnrichment, severityFromScore, extractIOCs, CTI_FEEDS } from './ctiIntel.js';
 
-dotenv.config({ path: '../.env' });
+// Load the root .env regardless of the process cwd (systemd runs from server/,
+// local dev may not).
+dotenv.config({ path: path.join(path.dirname(fileURLToPath(import.meta.url)), '../.env') });
+
+// Fail fast in production if the session secret is missing: signing with an
+// empty key would silently break every login (cookies issued but never valid).
+if (process.env.NODE_ENV === 'production' && !process.env.SESSION_SECRET) {
+    console.error('FATAL: SESSION_SECRET is required in production. Generate one with:');
+    console.error("  node -e \"console.log(require('crypto').randomBytes(64).toString('hex'))\"");
+    process.exit(1);
+}
+
+// Last-resort safety net: log and keep the process alive on stray rejections,
+// crash cleanly (systemd restarts us) on truly unrecoverable exceptions.
+process.on('unhandledRejection', (reason) => {
+    console.error('unhandledRejection:', reason instanceof Error ? reason.stack : reason);
+});
+process.on('uncaughtException', (err) => {
+    console.error('uncaughtException:', err.stack || err);
+    process.exit(1);
+});
 
 // Global safety net: cap every outbound request at 10s so a slow/hung upstream
 // provider can't tie up a connection indefinitely. Handlers that need a
@@ -38,6 +58,14 @@ app.use(helmet({
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+// Atomic JSON persistence: write to a sibling tmp file then rename, so a crash
+// mid-write can never truncate or corrupt the live store.
+function writeJsonAtomic(file, data) {
+    const tmp = `${file}.tmp`;
+    fs.writeFileSync(tmp, JSON.stringify(data, null, 2));
+    fs.renameSync(tmp, file);
+}
 
 // CORS Config
 const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',') || ['http://localhost:8080'];
@@ -1582,7 +1610,7 @@ function loadFeedOverrides() {
     } catch { return { disabled: [], custom: [] }; }
 }
 function saveFeedOverrides() {
-    try { fs.writeFileSync(FEED_SOURCES_PATH, JSON.stringify(feedOverrides, null, 2)); }
+    try { writeJsonAtomic(FEED_SOURCES_PATH, feedOverrides); }
     catch (e) { console.error('feed sources write failed:', e.message); }
 }
 let feedOverrides = loadFeedOverrides();
@@ -1983,7 +2011,7 @@ app.get('/api/admin/integrations', requireAdmin, (req, res) => {
 // cliente, que renderiza (react-markdown, sem HTML bruto, então sem risco de XSS).
 const POSTS_STORE_PATH = path.join(__dirname, '.posts.json');
 function loadPosts() { try { const a = JSON.parse(fs.readFileSync(POSTS_STORE_PATH, 'utf8')); return Array.isArray(a) ? a : []; } catch { return []; } }
-function savePosts() { try { fs.writeFileSync(POSTS_STORE_PATH, JSON.stringify(postsStore, null, 2)); } catch (e) { console.error('posts store write failed:', e.message); } }
+function savePosts() { try { writeJsonAtomic(POSTS_STORE_PATH, postsStore); } catch (e) { console.error('posts store write failed:', e.message); } }
 let postsStore = loadPosts();
 
 function slugify(s) {
@@ -2128,7 +2156,7 @@ ${items}
 // cap por usuário. Só a própria sessão lê/escreve os seus.
 const SCANS_STORE_PATH = path.join(__dirname, '.scans.json');
 function loadScansStore() { try { const o = JSON.parse(fs.readFileSync(SCANS_STORE_PATH, 'utf8')); return (o && typeof o === 'object') ? o : {}; } catch { return {}; } }
-function saveScansStore() { try { fs.writeFileSync(SCANS_STORE_PATH, JSON.stringify(scansStore, null, 2)); } catch (e) { console.error('scans store write failed:', e.message); } }
+function saveScansStore() { try { writeJsonAtomic(SCANS_STORE_PATH, scansStore); } catch (e) { console.error('scans store write failed:', e.message); } }
 let scansStore = loadScansStore();   // { userId: [ {id, query, queryType, threatLevel, score, detections, totalVendors, at} ] }
 const SCANS_CAP = 100;
 
@@ -2241,7 +2269,7 @@ function getCookie(req, name) {
 // (VirusTotal/Shodan/etc.) cifradas; a geração usa a chave OpenRouter do servidor.
 const USERS_STORE_PATH = path.join(__dirname, '.users.json');
 function loadUsers() { try { return JSON.parse(fs.readFileSync(USERS_STORE_PATH, 'utf8')); } catch { return {}; } }
-function saveUsers() { try { fs.writeFileSync(USERS_STORE_PATH, JSON.stringify(usersStore, null, 2)); } catch (e) { console.error('users store write failed:', e.message); } }
+function saveUsers() { try { writeJsonAtomic(USERS_STORE_PATH, usersStore); } catch (e) { console.error('users store write failed:', e.message); } }
 let usersStore = loadUsers();   // { githubId: { login, apiKeysEnc, createdAt, updatedAt } }
 
 // Premium allow-list: por login e/ou por org. Login no app é aberto; esta lista
@@ -2260,7 +2288,7 @@ function loadAllowlist() {
     } catch { return []; }
 }
 function saveAllowlist() {
-    try { fs.writeFileSync(ALLOWLIST_STORE_PATH, JSON.stringify(dynamicAllowlist, null, 2)); }
+    try { writeJsonAtomic(ALLOWLIST_STORE_PATH, dynamicAllowlist); }
     catch (e) { console.error('allowlist store write failed:', e.message); }
 }
 let dynamicAllowlist = loadAllowlist();
@@ -2444,7 +2472,7 @@ app.delete('/api/user/keys/:provider', requireAuth, (req, res) => {
 // job (GET job) e baixa o JSON quando pronto; o PPT é preenchido localmente.
 const JOBS_STORE_PATH = path.join(__dirname, '.feed-jobs.json');
 function loadJobs() { try { return JSON.parse(fs.readFileSync(JOBS_STORE_PATH, 'utf8')); } catch { return {}; } }
-function saveJobs() { try { fs.writeFileSync(JOBS_STORE_PATH, JSON.stringify(jobsStore, null, 2)); } catch (e) { console.error('jobs store write failed:', e.message); } }
+function saveJobs() { try { writeJsonAtomic(JOBS_STORE_PATH, jobsStore); } catch (e) { console.error('jobs store write failed:', e.message); } }
 let jobsStore = loadJobs();   // { id: { id,url,type,title,status,json,error,createdAt,updatedAt } }
 
 function pruneJobs(max = 100) {
