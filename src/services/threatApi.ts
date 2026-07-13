@@ -1080,53 +1080,52 @@ export interface CountItem {
     countryName?: string;
 }
 
-export interface DailyBriefFeedItem {
+export interface DailySummaryEvent {
     id: string;
     kind: "advisory" | "ransomware";
     title: string;
-    titlePt?: string;
-    link?: string;
+    titlePt?: string | null;
+    link?: string | null;
     source: string;
-    pubDate?: string | null;
-    score?: number;
-    severity?: string;
+    timestamp: string;
+    priority: "critical" | "high" | "context";
+    category: "vulnerability" | "active-exploitation" | "ransomware" | "news";
+    score: number;
+    severity?: string | null;
     cves: string[];
-    kev?: boolean;
+    kev: boolean;
     reasons: string[];
-    group?: string;
-    countryName?: string;
-    sector?: string;
+    group?: string | null;
+    countryName?: string | null;
+    sector?: string | null;
 }
 
-export interface DailyBriefFeedGroup {
-    key: "kev" | "critical" | "ransomware" | "other";
+export interface DailyNarrative {
     title: string;
-    description: string;
-    items: DailyBriefFeedItem[];
+    summary: string[];
+    attentionTopics: Array<{
+        title: string;
+        assessment: string;
+        eventIds: string[];
+        recommendedAction?: string;
+    }>;
 }
 
-export interface DailyBrief {
+export interface DailySummaryEdition {
+    date: string;
+    timezone: "America/Recife";
+    windowStart: string;
+    windowEnd: string;
     generatedAt: string;
-    windowHours: number;
-    title: string;
-    verdict: "hot" | "watch" | "calm";
-    executiveSummary: string[];
-    summary: {
-        totalAdvisories: number;
-        critical: number;
-        kev: number;
-        cves: number;
-        ransomwareVictims: number;
-        latamVictims: number;
-    };
-    highlights: DailyBriefFeedItem[];
-    ransomware: {
-        victims: RansomwareVictim[];
-        groups: CountItem[];
-        latam: RansomwareVictim[];
-    };
-    feedGroups: DailyBriefFeedGroup[];
+    narrativeSource: "openrouter" | "deterministic";
+    narrative: DailyNarrative;
+    events: DailySummaryEvent[];
     sources: string[];
+}
+
+export interface DailyBriefResponse {
+    edition: DailySummaryEdition;
+    availableDates: string[];
 }
 
 export interface LatamThreats {
@@ -1159,8 +1158,9 @@ const intelError = async (r: Response): Promise<never> => {
     throw new Error((e as { error?: string }).error || `Intel API error: ${r.status}`);
 };
 
-export const fetchDailyBrief = async (): Promise<DailyBrief> => {
-    const r = await fetch('/api/intel/daily-brief');
+export const fetchDailyBrief = async (date?: string): Promise<DailyBriefResponse> => {
+    const query = date ? `?${new URLSearchParams({ date })}` : '';
+    const r = await fetch(`/api/intel/daily-brief${query}`);
     if (!r.ok) return intelError(r);
     return r.json();
 };
