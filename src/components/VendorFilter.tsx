@@ -28,7 +28,7 @@ const VENDOR_OPTIONS: VendorConfig[] = [
     { name: "VirusTotal", free: false, supportsIP: true, supportsDomain: true, supportsHash: true },
     { name: "AbuseIPDB", free: false, supportsIP: true, supportsDomain: false, supportsHash: false },
     { name: "AlienVault OTX", free: true, supportsIP: true, supportsDomain: true, supportsHash: true },
-    { name: "Shodan", free: false, supportsIP: true, supportsDomain: false, supportsHash: false },
+    { name: "Shodan", free: false, supportsIP: true, supportsDomain: true, supportsHash: false },
     { name: "URLhaus", free: true, supportsIP: false, supportsDomain: true, supportsHash: false },
     { name: "ThreatFox", free: true, supportsIP: true, supportsDomain: true, supportsHash: true },
     { name: "MalwareBazaar", free: true, supportsIP: false, supportsDomain: false, supportsHash: true },
