@@ -12,6 +12,7 @@
     "ci": "npm run lint && npm run typecheck && npm run build",
     "ci:server": "npm --prefix server ci && node --check server/index.js && node --check server/ctiIntel.js",
     "test:server": "node --test server/test/*.test.js",
+    "test:unit": "esbuild src/**/*.test.ts --bundle --platform=node --format=esm --outdir=/tmp/threatsumm4ry-unit-tests && node --test /tmp/threatsumm4ry-unit-tests/**/*.test.js",
     "ci:hunt": "python3 -m py_compile hunt-service/*.py",
     "preview": "vite preview",
     "server": "cd server && npm run dev"

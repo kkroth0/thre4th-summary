@@ -35,7 +35,7 @@ import { ScanHistory } from "@/components/ScanHistory";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { SearchForm } from "@/components/SearchForm";
-import { extractIocsFromText, MAX_ANALYZER_TARGETS } from "@/utils/iocExtract";
+import { extractIocsFromText, isSupportedAnalyzerQuery, MAX_ANALYZER_TARGETS } from "@/utils/iocExtract";
 import { ThreatIntelligenceResult } from "@/types/threat-intelligence";
 import { cn } from "@/lib/utils";
 // jsPDF + autoTable are loaded lazily inside exportGlobalPDF (see below) so the
@@ -486,19 +486,11 @@ const Index = () => {
     // Extract IOCs by regex first. This handles pasted feeds with flags/emojis
     // attached to IPs, e.g. `118.122.147.49🇮🇳`.
     const extractedQueries = extractIocsFromText(rawQuery);
-    const ipPattern = /^(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.(?:25[0-5]|2[0-4]\d|[01]?\d\d?)$/;
-    const domainPattern = /^([a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$/;
-    const hashPattern = /^[a-fA-F0-9]{32}$|^[a-fA-F0-9]{40}$|^[a-fA-F0-9]{64}$/;
-    const urlPattern = /^(http|https):\/\/[^ "]+$/;
-    const cvePattern = /^CVE-\d{4}-\d{4,7}$/i;
-
     const tokens = rawQuery.split(/[\s,"'()\[\]{}|<>]+/).map(t => t.trim()).filter(t => t.length > 0);
     const uniqueTokens = Array.from(new Set(tokens));
 
     // Filter to only valid IOCs
-    let queries = extractedQueries.length > 0 ? extractedQueries : uniqueTokens.filter(q =>
-      ipPattern.test(q) || domainPattern.test(q) || hashPattern.test(q) || urlPattern.test(q) || cvePattern.test(q)
-    );
+    let queries = extractedQueries.length > 0 ? extractedQueries : uniqueTokens.filter(isSupportedAnalyzerQuery);
 
     // If no valid structured IOCs were found, fall back to the raw split tokens (to trigger type validation warnings properly)
     if (queries.length === 0) {
@@ -517,15 +509,7 @@ const Index = () => {
     }
 
     // Validation
-    const ipRegex = /^(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.(?:25[0-5]|2[0-4]\d|[01]?\d\d?)$/;
-    const domainRegex = /^([a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$/;
-    const hashRegex = /^[a-fA-F0-9]{32}$|^[a-fA-F0-9]{40}$|^[a-fA-F0-9]{64}$/;
-    const urlRegex = /^(http|https):\/\/[^ "]+$/;
-    const cveRegex = /^CVE-\d{4}-\d{4,7}$/i;
-
-    const invalidQueries = queries.filter(q =>
-      !ipRegex.test(q) && !domainRegex.test(q) && !hashRegex.test(q) && !urlRegex.test(q) && !cveRegex.test(q)
-    );
+    const invalidQueries = queries.filter(q => !isSupportedAnalyzerQuery(q));
 
     if (invalidQueries.length > 0) {
       toast({
