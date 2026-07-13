@@ -1,0 +1,125 @@
+name: Sync VPS env
+
+# Manual-only. Upserts selected runtime secrets into the VPS `.env` (which the
+# deploy workflow deliberately never overwrites) and restarts the API service.
+# Secret values travel over an encrypted scp of a temp file — never in argv or
+# workflow logs — and the temp file is removed on both ends.
+
+on:
+  workflow_dispatch:
+    inputs:
+      restart:
+        description: "Restart the systemd service after syncing"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-vps
+  cancel-in-progress: false
+
+jobs:
+  sync-env:
+    name: Upsert runtime secrets into VPS .env
+    runs-on: ubuntu-latest
+    environment: vps-production
+    if: ${{ vars.VPS_HOST != '' && vars.VPS_USER != '' && vars.VPS_APP_DIR != '' && vars.VPS_SERVICE != '' }}
+    env:
+      VPS_HOST: ${{ vars.VPS_HOST }}
+      VPS_USER: ${{ vars.VPS_USER }}
+      VPS_PORT: ${{ vars.VPS_PORT || '22' }}
+      VPS_APP_DIR: ${{ vars.VPS_APP_DIR }}
+      VPS_SERVICE: ${{ vars.VPS_SERVICE }}
+      RESTART: ${{ inputs.restart }}
+      SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+      SSH_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+      # Runtime secrets to push. Add new lines here (and set the GH secret) to
+      # extend. Empty/unset secrets are skipped, so partial rollout is safe.
+      SHODAN_API_KEY: ${{ secrets.SHODAN_API_KEY }}
+      SECRETS_ENCRYPTION_KEY: ${{ secrets.SECRETS_ENCRYPTION_KEY }}
+      CENSYS_API_KEY: ${{ secrets.CENSYS_API_KEY }}
+    steps:
+      - name: Prepare SSH
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${SSH_PRIVATE_KEY}" ]; then
+            echo "::error::Missing secret VPS_SSH_PRIVATE_KEY"
+            exit 1
+          fi
+          if [ -z "${SSH_KNOWN_HOSTS}" ]; then
+            echo "::error::Missing secret VPS_KNOWN_HOSTS. Add it with: ssh-keyscan -p <port> <host>"
+            exit 1
+          fi
+          install -m 700 -d ~/.ssh
+          install -m 600 /dev/null ~/.ssh/id_ed25519
+          printf '%s\n' "${SSH_PRIVATE_KEY}" > ~/.ssh/id_ed25519
+          install -m 600 /dev/null ~/.ssh/known_hosts
+          printf '%s\n' "${SSH_KNOWN_HOSTS}" > ~/.ssh/known_hosts
+
+      - name: Upsert secrets into VPS .env and restart
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          target="${VPS_USER}@${VPS_HOST}"
+
+          # Build the KEY=VALUE payload from only the secrets that are set.
+          payload="$(mktemp)"
+          for k in SHODAN_API_KEY SECRETS_ENCRYPTION_KEY CENSYS_API_KEY; do
+            v="${!k-}"
+            [ -n "$v" ] && printf '%s=%s\n' "$k" "$v" >> "$payload"
+          done
+          if [ ! -s "$payload" ]; then
+            echo "No runtime secrets configured — nothing to sync."
+            rm -f "$payload"
+            exit 0
+          fi
+          echo "Syncing $(cut -d= -f1 "$payload" | tr '\n' ' ')to VPS .env"
+
+          remote_tmp="/tmp/.env-sync.${GITHUB_RUN_ID}.$RANDOM"
+          scp -P "${VPS_PORT}" "$payload" "${target}:${remote_tmp}"
+          rm -f "$payload"
+
+          ssh -p "${VPS_PORT}" "${target}" \
+            "APP='${VPS_APP_DIR}' SVC='${VPS_SERVICE}' PAYLOAD='${remote_tmp}' RESTART='${RESTART}' bash -s" <<'REMOTE'
+          set -euo pipefail
+          cd "$APP"
+          umask 077
+          touch .env
+
+          # Upsert each KEY=VALUE from the payload: drop any existing line for the
+          # key, then append the new value. Preserves all other .env lines.
+          work="$(mktemp)"; cp .env "$work"
+          while IFS= read -r line || [ -n "$line" ]; do
+            [ -z "$line" ] && continue
+            key="${line%%=*}"
+            grep -v "^${key}=" "$work" > "$work.n" || true
+            mv "$work.n" "$work"
+            printf '%s\n' "$line" >> "$work"
+          done < "$PAYLOAD"
+          install -m 600 "$work" .env
+          rm -f "$work" "$PAYLOAD"
+          echo "wrote $(wc -l < .env) lines to .env"
+
+          if [ "$RESTART" != "true" ]; then
+            echo "restart skipped by input"
+            exit 0
+          fi
+
+          sudo systemctl restart "$SVC"
+          sleep 3
+          ok=0
+          for i in $(seq 1 6); do
+            if curl -fsS --max-time 5 http://localhost:3001/api/vendors/status >/dev/null 2>&1; then ok=1; break; fi
+            sleep 2
+          done
+          if [ "$ok" = 1 ]; then
+            echo "env synced + service healthy"
+          else
+            echo "::error::service unhealthy after env sync"
+            exit 1
+          fi
+          REMOTE
