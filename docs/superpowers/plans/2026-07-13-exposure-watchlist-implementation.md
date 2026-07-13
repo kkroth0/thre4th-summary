@@ -1086,7 +1086,7 @@ git commit -m "feat: add exposure watchlist api"
   - `fetchExposureSnapshots(id)`
   - `fetchExposureChanges(limit?)`
 
-- [ ] **Step 1: Add TypeScript types and API helpers**
+- [x] **Step 1: Add TypeScript types and API helpers**
 
 Append near the Attack Surface exports in `src/services/threatApi.ts`:
 
@@ -1229,7 +1229,7 @@ export const fetchExposureChanges = async (limit = 100): Promise<ExposureChange[
 };
 ```
 
-- [ ] **Step 2: Run TypeScript check**
+- [x] **Step 2: Run TypeScript check**
 
 Run:
 
@@ -1239,7 +1239,7 @@ npm run typecheck
 
 Expected: PASS.
 
-- [ ] **Step 3: Commit Task 4**
+- [x] **Step 3: Commit Task 4**
 
 ```bash
 git add src/services/threatApi.ts docs/superpowers/plans/2026-07-13-exposure-watchlist-implementation.md
