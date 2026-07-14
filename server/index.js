@@ -16,6 +16,7 @@ import { scoreArticle, localizeEnrichment, severityFromScore, extractIOCs, CTI_F
 import { runAttackSurfaceScan } from './attackSurface.js';
 import { createWatchlistStore, runDueExposureSnapshots, runExposureSnapshot } from './exposureWatchlist.js';
 import { detectQueryType, sanitizeQuery } from './iocValidation.js';
+import { isEarlyDoc, normalizeCvrf } from './patchTuesday.js';
 import {
     asArray,
     buildThreatMapResponse,
@@ -1375,7 +1376,10 @@ const memoryCache = {
     patchTuesdayMonths: {
         data: null,
         expiresAt: 0,
-        ttl: 6 * 60 * 60 * 1000 // 6 hours
+        // Doubles as the background refresh interval. The month list is a small
+        // document and is what detects a new Patch Tuesday (and the draft ->
+        // release swap), so this bounds how long a stale month can be served.
+        ttl: 60 * 60 * 1000 // 1 hour
     },
     // Per-month normalized Patch Tuesday summaries, keyed by id (e.g. "2026-Jun")
     patchTuesday: {
@@ -3018,140 +3022,6 @@ app.get('/api/cves/exploited', async (req, res) => {
 // ============================================================
 
 const MSRC_BASE = 'https://api.msrc.microsoft.com/cvrf/v3.0';
-const SEVERITY_RANK = { Critical: 4, Important: 3, Moderate: 2, Low: 1 };
-
-const stripHtml = (str) => (str || '').replace(/<[^>]*>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim();
-
-// Classify a vulnerability into a single product family using its title + affected product names
-const classifyFamily = (title, productNames) => {
-    const hay = `${title || ''} ${productNames.join(' ')}`.toLowerCase();
-    if (/azure|microsoft entra|defender for/.test(hay)) return 'Azure & Cloud';
-    if (/sharepoint/.test(hay)) return 'SharePoint';
-    if (/exchange/.test(hay)) return 'Exchange Server';
-    if (/sql server/.test(hay)) return 'SQL Server';
-    if (/\.net|visual studio|asp\.net|nuget|powershell/.test(hay)) return 'Developer Tools & .NET';
-    if (/office|word|excel|powerpoint|outlook|visio|onenote|\baccess\b|publisher/.test(hay)) return 'Microsoft Office';
-    if (/\bedge\b|chromium/.test(hay)) return 'Microsoft Edge';
-    if (/dynamics/.test(hay)) return 'Dynamics 365';
-    if (/system center/.test(hay)) return 'System Center';
-    if (/windows|win32|kernel|hyper-v|\brdp\b|smb|\bdns\b|tcp\/ip|active directory/.test(hay)) return 'Windows';
-    return 'Other Microsoft Products';
-};
-
-const parseExploitStatus = (str) => {
-    const s = str || '';
-    const m = (re) => (s.match(re)?.[1] || '').trim();
-    return {
-        exploited: /Exploited:\s*Yes/i.test(s),
-        publiclyDisclosed: /Publicly Disclosed:\s*Yes/i.test(s),
-        exploitability: m(/Latest Software Release:\s*([^;]+)/i) || 'N/A'
-    };
-};
-
-// Transform a raw CVRF document into a compact, presentation-ready summary
-const normalizeCvrf = (doc) => {
-    const productNameById = {};
-    for (const p of (doc.ProductTree?.FullProductName || [])) {
-        productNameById[p.ProductID] = p.Value;
-    }
-
-    const totals = { total: 0, critical: 0, important: 0, moderate: 0, low: 0, unknown: 0, exploited: 0, disclosed: 0, exploitMoreLikely: 0 };
-    const byImpact = {};
-    const byFamily = {};
-    const vulnerabilities = [];
-
-    for (const v of (doc.Vulnerability || [])) {
-        if (!v.CVE) continue;
-        const threats = v.Threats || [];
-
-        // Highest severity across products (Threat Type 3)
-        let severity = null, sevRank = 0;
-        for (const t of threats) {
-            if (t.Type !== 3) continue;
-            const val = t.Description?.Value;
-            if (val && SEVERITY_RANK[val] && SEVERITY_RANK[val] > sevRank) { severity = val; sevRank = SEVERITY_RANK[val]; }
-        }
-
-        // Impact / vulnerability category (Threat Type 0)
-        const impact = threats.find(t => t.Type === 0 && t.Description?.Value)?.Description?.Value || 'Other';
-
-        // Exploit status (Threat Type 1)
-        const ex = parseExploitStatus(threats.find(t => t.Type === 1)?.Description?.Value);
-
-        // Highest CVSS base score + its vector
-        let cvss = 0, vector = '';
-        for (const c of (v.CVSSScoreSets || [])) {
-            if ((c.BaseScore || 0) > cvss) { cvss = c.BaseScore; vector = c.Vector || ''; }
-        }
-
-        const affectedIds = (v.ProductStatuses || []).find(s => s.Type === 3)?.ProductID || [];
-        const productNames = affectedIds.map(id => productNameById[id]).filter(Boolean);
-        const family = classifyFamily(v.Title?.Value, productNames);
-
-        // KB / vendor fixes (Remediation Type 2)
-        const kbSet = new Map();
-        for (const r of (v.Remediations || [])) {
-            if (r.Type === 2 && r.Description?.Value) {
-                kbSet.set(r.Description.Value, r.URL || `https://catalog.update.microsoft.com/v7/site/Search.aspx?q=KB${r.Description.Value}`);
-            }
-        }
-
-        const description = stripHtml((v.Notes || []).find(n => n.Type === 2)?.Value).slice(0, 600);
-        const cwe = Array.isArray(v.CWE) ? (v.CWE[0]?.Value || '') : (v.CWE?.Value || '');
-
-        // Tallies
-        totals.total++;
-        if (severity === 'Critical') totals.critical++;
-        else if (severity === 'Important') totals.important++;
-        else if (severity === 'Moderate') totals.moderate++;
-        else if (severity === 'Low') totals.low++;
-        else totals.unknown++;
-        if (ex.exploited) totals.exploited++;
-        if (ex.publiclyDisclosed) totals.disclosed++;
-        if (/More Likely/i.test(ex.exploitability)) totals.exploitMoreLikely++;
-        byImpact[impact] = (byImpact[impact] || 0) + 1;
-        byFamily[family] = (byFamily[family] || 0) + 1;
-
-        vulnerabilities.push({
-            cve: v.CVE,
-            title: v.Title?.Value || '',
-            description,
-            cwe,
-            severity: severity || 'Unknown',
-            impact,
-            cvss: cvss || null,
-            vector,
-            exploited: ex.exploited,
-            publiclyDisclosed: ex.publiclyDisclosed,
-            exploitability: ex.exploitability,
-            family,
-            productCount: affectedIds.length,
-            kbs: [...kbSet.entries()].map(([kb, url]) => ({ kb, url })),
-            releaseDate: v.ReleaseDate || null
-        });
-    }
-
-    // Sort by exploited, then disclosed, then CVSS desc
-    vulnerabilities.sort((a, b) =>
-        (b.exploited - a.exploited) ||
-        (b.publiclyDisclosed - a.publiclyDisclosed) ||
-        ((b.cvss || 0) - (a.cvss || 0))
-    );
-
-    const sortEntries = (obj) => Object.entries(obj).sort((a, b) => b[1] - a[1]).map(([name, count]) => ({ name, count }));
-
-    return {
-        id: doc.DocumentTracking?.Identification?.ID?.Value || '',
-        title: doc.DocumentTitle?.Value || '',
-        initialReleaseDate: doc.DocumentTracking?.InitialReleaseDate || null,
-        currentReleaseDate: doc.DocumentTracking?.CurrentReleaseDate || null,
-        totals,
-        byImpact: sortEntries(byImpact),
-        byFamily: sortEntries(byFamily),
-        topCves: vulnerabilities.slice(0, 12),
-        vulnerabilities
-    };
-};
 
 // Fetch the live list of monthly "Security Updates" from MSRC and cache it
 async function fetchAndCacheMonths() {
@@ -3160,7 +3030,7 @@ async function fetchAndCacheMonths() {
         timeout: 12000
     });
     const months = (response.data?.value || [])
-        .filter(m => /Security Updates/i.test(m.DocumentTitle || ''))
+        .filter(m => /Security Updates/i.test(m.DocumentTitle || '') && !isEarlyDoc(m.DocumentTitle))
         .map(m => ({
             id: m.ID,
             title: m.DocumentTitle,
@@ -3174,14 +3044,24 @@ async function fetchAndCacheMonths() {
     return months;
 }
 
-// Fetch + normalize the CVRF document for one month and cache it
+// Fetch + normalize the CVRF document for one month and cache it.
+// Returns null when the month's document is still the pre-release "Early" draft,
+// which must never be cached or served — doing so lets it masquerade as the real
+// Patch Tuesday for a full TTL after Microsoft swaps in the final document.
+// The entry records currentReleaseDate so callers can detect that swap.
 async function fetchAndCacheSummary(id) {
     const response = await axios.get(`${MSRC_BASE}/cvrf/${id}`, {
         headers: { Accept: 'application/json' },
         timeout: 20000
     });
     const summary = normalizeCvrf(response.data);
-    cacheSet(memoryCache.patchTuesday.store, id, { data: summary, expiresAt: Date.now() + memoryCache.patchTuesday.ttl }, 36);
+    if (isEarlyDoc(summary.title)) return null;
+    cacheSet(
+        memoryCache.patchTuesday.store,
+        id,
+        { data: summary, currentReleaseDate: summary.currentReleaseDate, expiresAt: Date.now() + memoryCache.patchTuesday.ttl },
+        36
+    );
     return summary;
 }
 
@@ -3204,11 +3084,11 @@ async function refreshPatchTuesday() {
 app.get('/api/patch-tuesday/months', async (req, res) => {
     const now = Date.now();
     if (memoryCache.patchTuesdayMonths.data && memoryCache.patchTuesdayMonths.expiresAt > now) {
-        res.set('Cache-Control', 'public, max-age=21600');
+        res.set('Cache-Control', 'public, max-age=3600');
         return res.json(memoryCache.patchTuesdayMonths.data);
     }
     try {
-        res.set('Cache-Control', 'public, max-age=21600');
+        res.set('Cache-Control', 'public, max-age=3600');
         res.json(await fetchAndCacheMonths());
     } catch (error) {
         const { status, message } = sanitizeError(error);
@@ -3225,14 +3105,26 @@ app.get('/api/patch-tuesday/:id', async (req, res) => {
 
     const now = Date.now();
     const cached = memoryCache.patchTuesday.store.get(id);
-    if (cached && cached.expiresAt > now) {
+
+    // A CVRF document mutates in place behind a stable id (draft -> release, then
+    // mid-month revisions), so the id alone is not a sound cache key. The month
+    // list is cheap and carries CurrentReleaseDate: treat it as the validator and
+    // refetch whenever Microsoft has revised the document we cached.
+    const known = memoryCache.patchTuesdayMonths.data?.find(m => m.id === id);
+    const revised = cached && known && cached.currentReleaseDate !== known.currentReleaseDate;
+
+    if (cached && !revised && cached.expiresAt > now) {
         res.set('Cache-Control', 'public, max-age=3600');
         return res.json(cached.data);
     }
 
     try {
+        const summary = await fetchAndCacheSummary(id);
+        if (!summary) {
+            return res.status(404).json({ error: 'Security updates for this month have not been released yet.' });
+        }
         res.set('Cache-Control', 'public, max-age=3600');
-        res.json(await fetchAndCacheSummary(id));
+        res.json(summary);
     } catch (error) {
         const { status, message } = sanitizeError(error);
         res.status(status).json({ error: message });
