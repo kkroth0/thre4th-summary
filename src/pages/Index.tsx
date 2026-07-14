@@ -296,14 +296,6 @@ const Index = () => {
       group: "intel",
     },
     {
-      title: "Threat Hunting",
-      description: language === "pt" ? "Hipoteses e queries prontas por tecnica ATT&CK para SIEM/EDR." : "Ready hypotheses and queries by ATT&CK technique for SIEM/EDR.",
-      href: "/threat-hunting",
-      icon: Radar,
-      tags: ["SIGMA", "KQL", "SPL"],
-      group: "hunting",
-    },
-    {
       title: language === "pt" ? "Relatorio diario" : "Daily Report",
       description: language === "pt" ? "Resumo diario objetivo: TL;DR, campanhas ativas e acoes recomendadas." : "Focused daily report: TL;DR, active campaigns and recommended actions.",
       href: "/relatorios",
@@ -325,7 +317,6 @@ const Index = () => {
   const toolGroups = [
     { key: "analysis", title: language === "pt" ? "Analise" : "Analysis", description: language === "pt" ? "Investigar artefatos e mensagens" : "Investigate artifacts and messages" },
     { key: "intel", title: "Intel", description: language === "pt" ? "Vulnerabilidades, atores e advisories" : "Vulnerabilities, actors and advisories" },
-    { key: "hunting", title: "Hunting", description: language === "pt" ? "Hipoteses e queries prontas" : "Ready hypotheses and queries" },
     { key: "reports", title: language === "pt" ? "Relatorios" : "Reports", description: language === "pt" ? "Resumos objetivos e newsletter" : "Focused reports and newsletter" },
   ];
 

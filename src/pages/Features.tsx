@@ -69,7 +69,6 @@ const content = {
     ctaBrief: "Report Generator",
     ctaFeed: "Intel Collector",
     ctaCves: "CVE Dashboard",
-    ctaHunt: "Threat Hunting",
   },
   pt: {
     whyTitle: "Por que o",
@@ -132,7 +131,6 @@ const content = {
     ctaBrief: "Gerador de Relatórios",
     ctaFeed: "Coletor de Intel",
     ctaCves: "Painel de CVEs",
-    ctaHunt: "Threat Hunting",
   },
 };
 
@@ -332,7 +330,6 @@ export default function Features() {
             <Link to="/relatorios"><Button variant="outline" className="h-9 rounded-md font-bold text-xs">{t.ctaBrief}</Button></Link>
             <Link to="/newsletter"><Button variant="outline" className="h-9 rounded-md font-semibold text-xs">{t.ctaFeed}</Button></Link>
             <Link to="/cves"><Button variant="outline" className="h-9 rounded-md font-semibold text-xs">{t.ctaCves}</Button></Link>
-            <Link to="/threat-hunting"><Button variant="outline" className="h-9 rounded-md font-semibold text-xs">{t.ctaHunt}</Button></Link>
           </div>
         </section>
 

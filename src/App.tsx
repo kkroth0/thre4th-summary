@@ -22,7 +22,6 @@ const Newsletter = lazy(() => import("./pages/Newsletter"));
 const CveDashboard = lazy(() => import("./pages/CveDashboard"));
 const Actors = lazy(() => import("./pages/Actors"));
 const PhishingAnalyzer = lazy(() => import("./pages/PhishingAnalyzer"));
-const ThreatHunting = lazy(() => import("./pages/ThreatHunting"));
 const DailyBulletin = lazy(() => import("./pages/DailyBulletin"));
 const PatchTuesday = lazy(() => import("./pages/PatchTuesday"));
 const Advisories = lazy(() => import("./pages/Advisories"));
@@ -75,7 +74,6 @@ const App = () => (
                 <Route path="/reports" element={<Navigate to="/relatorios" replace />} />
                 <Route path="/threat-brief" element={<Navigate to="/relatorios" replace />} />
                 <Route path="/newsletter" element={<PremiumRoute feature="advisory-feed"><Newsletter /></PremiumRoute>} />
-                <Route path="/threat-hunting" element={<PremiumRoute feature="threat-hunting"><ThreatHunting /></PremiumRoute>} />
                 <Route path="/daily-bulletin" element={<Navigate to="/relatorios" replace />} />
 
                 {/* Auth */}

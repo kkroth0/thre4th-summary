@@ -5,7 +5,6 @@ import {
   CalendarCheck,
   ChevronLeft,
   ChevronRight,
-  Crosshair,
   Database,
   FileSearch,
   Github,
@@ -152,18 +151,6 @@ export function Header({ actions, logoAddon, onLogoClick, showBackButton = false
           label: pt ? "Fontes" : "Sources",
           description: pt ? "Fontes, integracoes e cobertura." : "Sources, integrations and coverage.",
           icon: BookOpen,
-        },
-      ],
-    },
-    {
-      label: "Hunting",
-      items: [
-        {
-          path: "/threat-hunting",
-          label: "Threat Hunting",
-          description: pt ? "Hipoteses e queries por tecnica." : "Hypotheses and queries by technique.",
-          icon: Crosshair,
-          premium: true,
         },
       ],
     },
