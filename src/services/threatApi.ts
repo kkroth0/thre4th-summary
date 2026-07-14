@@ -982,6 +982,7 @@ export interface BoletimReport {
         cvss?: string; severidade?: string; cwe?: string; kev?: boolean;
     }[];
     superficie_de_ataque?: { categoria?: string; tecnologia?: string; utilizacao?: string }[];
+    cyber_kill_chain?: { fase?: string; contexto?: string }[];
     ator?: {
         threat_actor?: string; tipo?: string; motivation?: string;
         sectors?: string[]; diferencial?: string; onion?: string[];

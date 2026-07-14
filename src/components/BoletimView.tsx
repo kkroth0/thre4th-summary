@@ -34,6 +34,7 @@ export const BoletimView: React.FC<{ report: BoletimReport }> = ({ report }) => 
   const refs = r.referencias_coletadas || [];
   const tech = r.tecnologias_afetadas || [];
   const surface = r.superficie_de_ataque || [];
+  const killChain = r.cyber_kill_chain || [];
 
   return (
     <div className="mt-4 text-sm">
@@ -66,6 +67,21 @@ export const BoletimView: React.FC<{ report: BoletimReport }> = ({ report }) => 
               </div>
             ))}
           </div>
+        </Section>
+      )}
+
+      {/* campaign: cyber kill chain (seções do template SRR) */}
+      {killChain.length > 0 && (
+        <Section title="Cyber Kill Chain">
+          <ol className="space-y-1">
+            {killChain.map((k, i) => (
+              <li key={i} className="text-muted-foreground">
+                <span className="font-mono text-xs text-primary mr-1.5">{String(i + 1).padStart(2, "0")}</span>
+                <span className="font-medium text-foreground">{k.fase}</span>
+                {k.contexto ? ` — ${k.contexto}` : ""}
+              </li>
+            ))}
+          </ol>
         </Section>
       )}
 

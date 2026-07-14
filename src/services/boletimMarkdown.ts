@@ -49,6 +49,11 @@ export function boletimToDraft(report: BoletimReport): Pick<PostInput, "title" |
         parts.push(`## Ator de ameaça\n\n${lines.join("\n")}`);
     }
 
+    if (r.cyber_kill_chain?.length) {
+        const rows = r.cyber_kill_chain.map((k, i) => [String(i + 1).padStart(2, "0"), k.fase || "—", k.contexto || "—"]);
+        parts.push(`## Cyber Kill Chain\n\n${table(["#", "Fase", "Contexto"], rows)}`);
+    }
+
     if (r.superficie_de_ataque?.length) {
         const rows = r.superficie_de_ataque.map((s) => [s.categoria || "—", s.tecnologia || "—", s.utilizacao || "—"]);
         parts.push(`## Superfície de ataque\n\n${table(["Categoria", "Tecnologia", "Uso"], rows)}`);
