@@ -27,7 +27,6 @@ const PatchTuesday = lazy(() => import("./pages/PatchTuesday"));
 const Advisories = lazy(() => import("./pages/Advisories"));
 const AdvisoryPost = lazy(() => import("./pages/AdvisoryPost"));
 const Admin = lazy(() => import("./pages/Admin"));
-const LatamThreats = lazy(() => import("./pages/LatamThreats"));
 const ThreatMap = lazy(() => import("./pages/ThreatMap"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
@@ -59,7 +58,7 @@ const App = () => (
                 <Route path="/patch-tuesday" element={<PatchTuesday />} />
                 <Route path="/advisories" element={<Advisories />} />
                 <Route path="/advisories/:slug" element={<AdvisoryPost />} />
-                <Route path="/latam-threats" element={<LatamThreats />} />
+                <Route path="/latam-threats" element={<Navigate to="/threat-map" replace />} />
                 <Route path="/threat-map" element={<ThreatMap />} />
 
                 {/* Tool Routes */}

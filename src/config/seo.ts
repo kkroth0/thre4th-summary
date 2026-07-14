@@ -118,23 +118,6 @@ export const PUBLIC_SEO_ROUTES: SeoRoute[] = [
     },
   },
   {
-    path: "/latam-threats",
-    priority: "0.75",
-    changefreq: "daily",
-    metadata: {
-      pt: {
-        title: "Ameacas na America Latina | ThreatSumm4ry",
-        description:
-          "Monitore ransomware, vitimas recentes, IOCs e sinais de atividade maliciosa relevantes para organizacoes na America Latina.",
-      },
-      en: {
-        title: "Latin America Threat Intelligence | ThreatSumm4ry",
-        description:
-          "Monitor ransomware, recent victims, IOCs, and malicious activity signals relevant to organizations across Latin America.",
-      },
-    },
-  },
-  {
     path: "/threat-map",
     priority: "0.7",
     changefreq: "daily",

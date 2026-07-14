@@ -14,7 +14,6 @@ const expectedRoutes = [
   "/cves",
   "/atores",
   "/advisories",
-  "/latam-threats",
   "/threat-map",
   "/patch-tuesday",
   "/vendors",

@@ -1112,20 +1112,6 @@ export interface DailyBriefResponse {
     availableDates: string[];
 }
 
-export interface LatamThreats {
-    generatedAt: string;
-    sources: string[];
-    victims: RansomwareVictim[];
-    groups: CountItem[];
-    sectors: CountItem[];
-    countries: CountItem[];
-    threatFox: {
-        count: number;
-        malware: CountItem[];
-        iocs: ThreatFoxRecentIoc[];
-    };
-}
-
 export interface ThreatMapData {
     generatedAt: string;
     windowDays: number;
@@ -1188,12 +1174,6 @@ const intelError = async (r: Response): Promise<never> => {
 export const fetchDailyBrief = async (date?: string): Promise<DailyBriefResponse> => {
     const query = date ? `?${new URLSearchParams({ date })}` : '';
     const r = await fetch(`/api/intel/daily-brief${query}`);
-    if (!r.ok) return intelError(r);
-    return r.json();
-};
-
-export const fetchLatamThreats = async (): Promise<LatamThreats> => {
-    const r = await fetch('/api/intel/latam-threats');
     if (!r.ok) return intelError(r);
     return r.json();
 };

@@ -14,7 +14,6 @@ import {
   Menu,
   Megaphone,
   Radar,
-  RadioTower,
   Search,
   Settings as SettingsIcon,
   Shield,
@@ -120,12 +119,6 @@ export function Header({ actions, logoAddon, onLogoClick, showBackButton = false
           label: "Advisories",
           description: pt ? "Boletim diario, KPIs e avisos normalizados." : "Daily brief, KPIs and normalized advisories.",
           icon: Megaphone,
-        },
-        {
-          path: "/latam-threats",
-          label: "Latam Threats",
-          description: pt ? "Ransomware e IOCs recentes na America Latina." : "Recent ransomware and IOCs across Latin America.",
-          icon: RadioTower,
         },
         {
           path: "/threat-map",

@@ -7,7 +7,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+  Select, SelectContent, SelectItem, SelectTrigger,
 } from "@/components/ui/select";
 import {
   AlertDialog, AlertDialogTrigger, AlertDialogContent, AlertDialogHeader,
@@ -288,28 +288,37 @@ const DailyBulletin: React.FC = () => {
           <section>
             {auth.authenticated ? (
               <div className="space-y-3">
-                <div className="flex flex-col gap-2 rounded-xl bg-muted/40 p-2">
+                <div
+                  data-testid="report-generator-command-bar"
+                  className="flex min-h-12 flex-row items-center gap-1 rounded-md border border-border bg-background p-1 shadow-sm sm:flex-row sm:items-center"
+                >
                   <Input
                     placeholder={pt ? "Cole uma URL…" : "Paste a URL…"}
                     value={pasteUrl}
                     onChange={(e) => setPasteUrl(e.target.value)}
                     onKeyDown={(e) => { if (e.key === "Enter" && pasteUrl.trim()) { generate(pasteUrl.trim(), pasteType, ""); setPasteUrl(""); } }}
-                    className="flex-1 border-0 bg-transparent shadow-none focus-visible:ring-0 px-2"
+                    className="h-10 min-w-0 flex-1 border-0 bg-transparent px-3 text-sm shadow-none focus-visible:ring-0"
                   />
-                  <div className="flex gap-2">
-                    <Select value={pasteType} onValueChange={(v) => setPasteType(v as DeckType)}>
-                      <SelectTrigger className="flex-1 min-w-0 border-0 bg-transparent shadow-none focus:ring-0"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="vuln">{pt ? "Vulnerabilidade" : "Vulnerability"}</SelectItem>
-                        <SelectItem value="campaign">{pt ? "Campanha" : "Campaign"}</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <Button onClick={() => { generate(pasteUrl.trim(), pasteType, ""); setPasteUrl(""); }} disabled={!pasteUrl.trim()} className="shrink-0 gap-2">
-                      <Sparkles className="h-4 w-4" /> {pt ? "Gerar" : "Generate"}
-                    </Button>
-                  </div>
+                  <Select value={pasteType} onValueChange={(v) => setPasteType(v as DeckType)}>
+                    <SelectTrigger
+                      data-testid="report-generator-type-trigger"
+                      aria-label={pt ? "Tipo do relatorio" : "Report type"}
+                      className="h-10 w-[6.9rem] shrink-0 justify-between rounded-sm border-0 bg-muted/60 px-2.5 text-xs font-medium shadow-none focus:ring-0 sm:w-[7.75rem]"
+                    >
+                      <span className="truncate">
+                        {pasteType === "vuln" ? (pt ? "Vuln." : "Vuln.") : (pt ? "Campanha" : "Campaign")}
+                      </span>
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="vuln">{pt ? "Vulnerabilidade" : "Vulnerability"}</SelectItem>
+                      <SelectItem value="campaign">{pt ? "Campanha" : "Campaign"}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Button onClick={() => { generate(pasteUrl.trim(), pasteType, ""); setPasteUrl(""); }} disabled={!pasteUrl.trim()} className="h-10 shrink-0 gap-2 rounded-sm px-3 sm:px-4">
+                    <Sparkles className="h-4 w-4" /> {pt ? "Gerar" : "Generate"}
+                  </Button>
                 </div>
-                <div className="flex items-center gap-1.5 px-1 text-xs text-muted-foreground">
+                <div data-testid="report-generator-status-row" className="flex items-center gap-1.5 px-1 text-xs text-muted-foreground">
                   <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
                   <span className="truncate">{auth.login} · {pt ? "pronto para gerar" : "ready to generate"}</span>
                   <Link to="/settings" className="ml-auto shrink-0 hover:text-foreground">{pt ? "Configurações" : "Settings"}</Link>

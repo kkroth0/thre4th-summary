@@ -68,7 +68,6 @@ test("publishes the approved static sitemap", async () => {
     "/cves",
     "/atores",
     "/advisories",
-    "/latam-threats",
     "/threat-map",
     "/patch-tuesday",
     "/vendors",

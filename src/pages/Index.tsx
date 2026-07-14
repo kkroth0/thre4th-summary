@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { getFieldCategory } from "@/components/VendorDataTable";
-import { Shield, AlertTriangle, Bug, FileSearch, Globe, Link as LinkIcon, Radar, Database, Eye, Search, LayoutGrid, Mail, ArrowRight, Upload, Copy, Check, Clock, Download, FileJson, FileCode, ChevronDown, Bookmark, MapPinned, RadioTower } from "lucide-react";
+import { Shield, AlertTriangle, Bug, FileSearch, Globe, Link as LinkIcon, Radar, Database, Eye, Search, LayoutGrid, Mail, ArrowRight, Upload, Copy, Check, Clock, Download, FileJson, FileCode, ChevronDown, Bookmark, MapPinned } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -269,14 +269,6 @@ const Index = () => {
       href: "/advisories",
       icon: Mail,
       tags: ["DAILY", "KEV", "EPSS"],
-      group: "intel",
-    },
-    {
-      title: "Latam Threats",
-      description: language === "pt" ? "Radar de ransomware e IOCs recentes com foco em America Latina." : "Recent ransomware and IOC radar focused on Latin America.",
-      href: "/latam-threats",
-      icon: RadioTower,
-      tags: ["LATAM", "ThreatFox", "Ransomware.live"],
       group: "intel",
     },
     {
