@@ -285,7 +285,7 @@ export function buildThreatMapResponse(rawVictims, {
         windowDays,
         source,
         totalVictims: current.totalVictims,
-        victims: currentVictims.slice(0, 80),
+        victims: currentVictims,
         countries,
         groups,
         sectors,

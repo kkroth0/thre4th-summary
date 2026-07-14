@@ -111,3 +111,30 @@ test('builds current threat-map windows, deltas, timeline, and insights', () => 
     assert.ok(response.insights.some((insight) => insight.kind === 'volume'));
     assert.ok(response.insights.some((insight) => insight.kind === 'top-group'));
 });
+
+test('includes victims for countries represented in threat-map aggregates beyond the first 80 rows', () => {
+    const victims = Array.from({ length: 80 }, (_, index) => normalizeVictim({
+        victim: `US Victim ${index + 1}`,
+        group: 'volume',
+        country: 'US',
+        activity: 'Business Services',
+        discovered: hoursAgo(index + 1),
+    }));
+    victims.push(normalizeVictim({
+        victim: 'Werken Quimica Brasil S.A.',
+        group: 'Deadlock',
+        country: 'BR',
+        activity: 'Manufacturing',
+        discovered: hoursAgo(82),
+    }));
+
+    const response = buildThreatMapResponse(victims, {
+        days: 7,
+        generatedAt: new Date(NOW).toISOString(),
+        now: NOW,
+        source: 'ransomware.live Pro',
+    });
+
+    assert.ok(response.countries.some((country) => country.name === 'BR'));
+    assert.ok(response.victims.some((victim) => victim.country === 'BR'));
+});
