@@ -12,7 +12,10 @@ import fs from 'fs';
 import crypto from 'crypto';
 import compression from 'compression';
 import * as cheerio from 'cheerio';
-import { scoreArticle, localizeEnrichment, severityFromScore, extractIOCs, CTI_FEEDS } from './ctiIntel.js';
+import {
+    scoreArticle, localizeEnrichment, severityFromScore, extractIOCs, CTI_FEEDS,
+    extractReadableText, collectArtifactLinks, githubArtifact, ARTIFACT_TEXT_FILE,
+} from './ctiIntel.js';
 import { runAttackSurfaceScan } from './attackSurface.js';
 import { createWatchlistStore, runDueExposureSnapshots, runExposureSnapshot } from './exposureWatchlist.js';
 import { detectQueryType, sanitizeQuery } from './iocValidation.js';
@@ -2524,50 +2527,81 @@ async function googleTranslate(text, targetLang) {
     return text || '';
 }
 
-// Advanced collection: fetch the full article and extract its readable body
-// text (paragraphs), mirroring the bot's deep-content step. Dependency-free
-// heuristic; returns '' if the page can't be fetched/parsed (then we fall back
-// to the RSS summary). Best-effort and tolerant of WAF/JS-heavy sites.
-const ARTICLE_BOILERPLATE = /^(advertisement|scroll to continue|related\s*:|written by|subscribe|sign up|sponsored|©|cookie|share this|read more|tags:|follow us|newsletter|sign up to)/i;
-
-function extractReadableText(html) {
-    try {
-        const $ = cheerio.load(html);
-        // Strip non-content chrome
-        $('script,style,noscript,nav,aside,footer,header,form,iframe,figure,figcaption,.ad,.ads,.advertisement,.related,.newsletter,.share,.social,[class*="promo"],[class*="sidebar"]').remove();
-        // Pick the densest content root (article/main, else body)
-        let root = $('article').first();
-        if (!root.length) root = $('main').first();
-        if (!root.length) root = $('body');
-        const paras = [];
-        root.find('p').each((_, el) => {
-            const t = $(el).text().replace(/\s+/g, ' ').trim();
-            if (t.length > 45 && !ARTICLE_BOILERPLATE.test(t) && !/\(@\w+\)\s+is\s+(a|the|senior|managing)/i.test(t)) {
-                paras.push(t);
-            }
-        });
-        return paras.join('\n\n');
-    } catch {
-        return '';
-    }
-}
+// Advanced collection: fetch the full article, extract its readable body (see
+// extractReadableText — paragraphs AND the IOC tables) plus any link to an
+// external indicator appendix. Best-effort: returns empty on WAF/JS-heavy sites,
+// and the caller falls back to the RSS summary.
+const BROWSER_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 
 async function fetchArticleText(url) {
     try {
         const resp = await axios.get(url, {
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                Accept: 'text/html,application/xhtml+xml',
-            },
+            headers: { 'User-Agent': BROWSER_UA, Accept: 'text/html,application/xhtml+xml' },
             timeout: 10000,
             maxRedirects: 3,
             responseType: 'text',
         });
-        return extractReadableText(resp.data).slice(0, 8000);
+        return {
+            text: extractReadableText(resp.data).slice(0, 8000),
+            artifactLinks: collectArtifactLinks(resp.data, url),
+        };
     } catch (err) {
         console.warn(`Article fetch failed for ${url}: ${err.message}`);
-        return '';
+        return { text: '', artifactLinks: [] };
     }
+}
+
+// One hop into the linked indicator appendix (GitHub repo, gist, pastebin).
+// Everything fetched here is untrusted, attacker-adjacent text: it feeds the
+// deterministic IOC regexes, is size-capped, and each URL — including the ones
+// GitHub's API hands back — passes the SSRF guard before any request goes out.
+const ARTIFACT_MAX_BYTES = 40_000;
+const ARTIFACT_MAX_FILES = 6;
+
+async function fetchArtifactFile(url) {
+    await assertSafePublicUrl(url);
+    const resp = await axios.get(url, {
+        headers: { 'User-Agent': BROWSER_UA, Accept: 'text/plain,*/*' },
+        timeout: 8000,
+        maxRedirects: 2,
+        maxContentLength: ARTIFACT_MAX_BYTES,
+        responseType: 'text',
+        transformResponse: (d) => d,
+    });
+    return String(resp.data || '').slice(0, ARTIFACT_MAX_BYTES);
+}
+
+// A GitHub folder link resolves to its text files; anything else is fetched as-is.
+async function resolveArtifactFiles(link) {
+    const gh = githubArtifact(link);
+    if (!gh) return [link];
+    if (gh.kind === 'raw') return [gh.url];
+
+    await assertSafePublicUrl(gh.url);
+    const resp = await axios.get(gh.url, {
+        headers: { 'User-Agent': BROWSER_UA, Accept: 'application/vnd.github+json' },
+        timeout: 8000,
+        maxRedirects: 2,
+    });
+    return (Array.isArray(resp.data) ? resp.data : [])
+        .filter((f) => f?.type === 'file' && f.download_url && f.size < ARTIFACT_MAX_BYTES && ARTIFACT_TEXT_FILE.test(f.name))
+        .slice(0, ARTIFACT_MAX_FILES)
+        .map((f) => f.download_url);
+}
+
+async function fetchIocArtifacts(links) {
+    const artifacts = [];
+    for (const link of links) {
+        try {
+            await assertSafePublicUrl(link);
+            for (const file of await resolveArtifactFiles(link)) {
+                artifacts.push({ origin: link, url: file, text: await fetchArtifactFile(file) });
+            }
+        } catch (err) {
+            console.warn(`IOC artifact fetch failed for ${link}: ${err.message}`);
+        }
+    }
+    return artifacts;
 }
 
 // Split readable text into clean sentences (>30 chars).
@@ -2643,7 +2677,7 @@ app.post('/api/newsletter/enrich', requirePremium, scanLimiter, async (req, res)
         if (cached && cached.expiresAt > now) return res.json(cached.data);
 
         // Advanced collection: pull the full article body; fall back to RSS summary.
-        const fullText = await fetchArticleText(item.link);
+        const { text: fullText, artifactLinks } = await fetchArticleText(item.link);
         const content = fullText || item.description || '';
 
         // Re-run deterministic enrichment over the FULL article so MITRE ATT&CK,
@@ -2658,9 +2692,17 @@ app.post('/api/newsletter/enrich', requirePremium, scanLimiter, async (req, res)
         const ai = await openRouterAnalyze(item.title, content, lang);
 
         // Deterministic IOC sweep over the FULL article (richer than the
-        // title+summary set computed at collection). High-precision: hashes +
-        // defanged network indicators + public IPv4.
-        const iocs = extractIOCs(content);
+        // title+summary set computed at collection) PLUS any linked indicator
+        // appendix. High-precision: hashes + defanged network indicators + public
+        // IPv4. iocSources is reported even when the fetch failed — a report whose
+        // indicators live in a GitHub repo should say so, not show a short list as
+        // if it were the whole set.
+        const artifacts = await fetchIocArtifacts(artifactLinks);
+        const iocs = extractIOCs([content, ...artifacts.map((a) => a.text)].join('\n'));
+        const iocSources = artifactLinks.map((url) => ({
+            url,
+            fetched: artifacts.some((a) => a.origin === url),
+        }));
 
         let payload;
         if (ai && ai.summary) {
@@ -2671,7 +2713,7 @@ app.post('/api/newsletter/enrich', requirePremium, scanLimiter, async (req, res)
                 title: ai.title || item.title,
                 executiveSummary: String(ai.summary).trim(),
                 impactMitigation: '',
-                iocs, ...enriched,
+                iocs, iocSources, ...enriched,
             };
         } else {
             // No LLM: concise Executive Summary (lead sentences) + a distinct
@@ -2686,12 +2728,12 @@ app.post('/api/newsletter/enrich', requirePremium, scanLimiter, async (req, res)
                 ]);
                 payload = {
                     available: false, source: 'translate', scraped: !!fullText,
-                    title: t || item.title, executiveSummary: ex || execRaw, impactMitigation: mit || '', iocs, ...enriched,
+                    title: t || item.title, executiveSummary: ex || execRaw, impactMitigation: mit || '', iocs, iocSources, ...enriched,
                 };
             } else {
                 payload = {
                     available: false, source: 'rss', scraped: !!fullText,
-                    title: item.title, executiveSummary: execRaw, impactMitigation: mitRaw || '', iocs, ...enriched,
+                    title: item.title, executiveSummary: execRaw, impactMitigation: mitRaw || '', iocs, iocSources, ...enriched,
                 };
             }
         }
