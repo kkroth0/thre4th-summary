@@ -52,9 +52,9 @@ PILAR B — A BIBLIOTECA DE CAÇA (inspirado/integrado ao HEARTH)
   com um "coverage heatmap" de cobertura. Vamos ingerir esse acervo (com
   atribuição), traduzir para PT, e ligar cada hunt ao motor de busca: ao
   investigar um IOC/técnica, o analista vê hipóteses de caça relacionadas e
-  o mapa de cobertura MITRE. Já temos um "hunt-service" próprio (Python +
-  OpenRouter/DeepSeek) que transforma a URL de um relatório de ameaça em um "Hunt
-  Pack" completo: ator, TTPs MITRE, IOCs, hipótese, KQL de Sentinel e Sigma.
+  o mapa de cobertura MITRE. A direção futura é transformar relatórios e IOCs
+  em hipóteses, TTPs, consultas KQL/Sigma e contexto operacional sem manter
+  uma superfície de serviço separada.
   >>> Esse é o nosso diferencial: o HEARTH para na hipótese; nós entregamos
   a QUERY pronta para rodar + enriquecimento ao vivo dos IOCs.
 
@@ -202,14 +202,13 @@ Itens que faltam para conseguir COBRAR (independente da feature-herói):
   - Billing com Pix/BRL.
 
 Base de código: novo repositório (greenfield) com arquitetura limpa,
-portando peças já provadas do repo atual (proxies de vendors, hunt-service)
-conforme necessário. Design inspirado no Hunt.io.
+portando peças já provadas do repo atual (proxies de vendors e componentes de
+enriquecimento) conforme necessário. Design inspirado no Hunt.io.
 
 --------------------------------------------------------------------------
 11. ATIVOS QUE JÁ EXISTEM HOJE (não começar do zero)
 --------------------------------------------------------------------------
 - Backend Node/Express com ~20-23 integrações de vendors funcionando.
-- Microsserviço Python de Hunt Pack (scrape -> LLM -> Sigma/KQL/IOCs).
 - Frontend React/Vite/shadcn com páginas: CVE Dashboard, Daily Bulletin/
   Newsletter, DNS Visualizer, DNSBL Check, Patch Tuesday, Phishing Analyzer,
   Threat Hunting, Vendor Directory.

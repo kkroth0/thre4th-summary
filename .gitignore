@@ -28,9 +28,6 @@ dist-ssr
 *.sln
 *.sw?
 
-# Local secrets (do not commit)
-hunt-service-env.txt
-
 # Boletim · store de jobs do Feed Generator
 server/.feed-jobs.json
 # Auth/BYOK · store de usuários (contém chaves OpenRouter CIFRADAS — nunca commitar)

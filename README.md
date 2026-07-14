@@ -1,8 +1,8 @@
 # ThreatSumm4ry
 
 Threat intelligence workspace for IOC enrichment, CVE tracking, ransomware
-tracking, advisory feeds, DNSBL checks, phishing analysis and guided threat
-hunting.
+tracking, advisory feeds, DNSBL checks, phishing analysis and exposure
+monitoring.
 
 The primary analyzer accepts public IPv4/IPv6 addresses, domains, HTTP/HTTPS
 URLs, and MD5, SHA-1, or SHA-256 hashes. CVE tracking remains available through
@@ -15,7 +15,6 @@ its dedicated pages and APIs.
 - Express backend proxy in `server/` (aggregates the upstream intel APIs and
   keeps their keys server-side)
 - Cloudflare Pages Functions in `functions/`
-- Optional FastAPI hunt microservice in `hunt-service/`
 
 ## Data sources
 
@@ -56,7 +55,6 @@ npm run typecheck
 npm run build
 npm run ci
 npm run ci:server
-npm run ci:hunt
 ```
 
 ## Deployment Model
@@ -73,7 +71,7 @@ Cloudflare:
 Everything keys off a push to `main`:
 
 ```txt
-push main ──▶ CI (lint · typecheck · build · node --check · py_compile)
+push main ──▶ CI (lint · typecheck · build · node --check)
                 └─ on success ─┬─▶ deploy-pages.yml  → wrangler → Cloudflare Pages (frontend)
                                └─▶ deploy-vps.yml     → rsync + systemd restart (API)
 ```

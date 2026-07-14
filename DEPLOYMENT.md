@@ -15,7 +15,6 @@ This repo is deployed as two surfaces:
 
 - frontend: `npm ci`, lint, typecheck and Vite build
 - backend: `npm --prefix server ci` and Node syntax checks
-- hunt-service: Python source compile check
 
 ### Security Scans
 

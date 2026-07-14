@@ -45,7 +45,6 @@ NEWSLETTER / ADVISORY FEED
 ====================================================================
   GET     /api/newsletter
   POST    /api/newsletter/enrich               [rl]
-  POST    /api/newsletter/hunt-pack            [rl]
 
 ====================================================================
 CVEs & PATCH TUESDAY
@@ -117,7 +116,6 @@ FRONTEND APP ROUTES (SPA, not HTTP endpoints)   * = premium/sign-in gated
   /attack-surface?mode=monitor * Attack Surface monitoring (legacy /exposure-watchlist redirects here)
   /threat-brief     *   Threat Brief
   /newsletter       *   Advisory Feed
-  /threat-hunting   *   Threat Hunting
   /login                Login
   /profile              Profile
   /settings             Settings
