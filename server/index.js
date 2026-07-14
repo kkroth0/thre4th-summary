@@ -1349,11 +1349,6 @@ const memoryCache = {
         store: new Map(),
         ttl: 7 * 24 * 60 * 60 * 1000 // 7 days
     },
-    // Guided Threat Hunting packs (from the Python hunt-service), keyed by `${lang}|${url}`.
-    huntPack: {
-        store: new Map(),
-        ttl: 7 * 24 * 60 * 60 * 1000 // 7 days
-    },
     recentCves: {
         data: null,
         expiresAt: 0,
@@ -2772,64 +2767,6 @@ const assertSafePublicUrl = async (raw) => {
         throw new Error('URL resolves to a non-public host');
     }
 };
-
-// Guided Threat Hunting: proxy to the Python hunt-service which scrapes the
-// report (Scrapling), runs OpenRouter + Pydantic validation/retry, and returns a
-// defanged structured Hunt Pack. Advisories from the live feed are trusted by
-// their allowlisted URL; any other pasted URL must pass the SSRF guard above so
-// this can't be used to scan internal infrastructure.
-app.post('/api/newsletter/hunt-pack', requirePremium, scanLimiter, async (req, res) => {
-    try {
-        const url = (req.body?.url || '').toString();
-        const lang = req.body?.lang === 'en' ? 'en' : 'pt';
-        if (!url) return res.status(400).json({ error: 'Missing advisory url' });
-
-        if (!process.env.HUNT_SERVICE_URL) {
-            return res.status(503).json({ error: 'Threat hunting service not configured' });
-        }
-
-        const feed = memoryCache.newsletter.data || [];
-        const item = feed.find((i) => i.link === url);
-
-        // Feed advisories carry a known-good title; pasted URLs are validated for
-        // SSRF before we let the scraper anywhere near them.
-        let title = '';
-        if (item) {
-            title = item.title;
-        } else {
-            try {
-                await assertSafePublicUrl(url);
-            } catch (e) {
-                return res.status(400).json({ error: e.message || 'URL rejected' });
-            }
-        }
-
-        const cacheKey = `${lang}|${url}`;
-        const now = Date.now();
-        const cached = memoryCache.huntPack.store.get(cacheKey);
-        if (cached && cached.expiresAt > now) return res.json(cached.data);
-
-        const response = await axios.post(
-            `${process.env.HUNT_SERVICE_URL.replace(/\/$/, '')}/hunt-pack`,
-            { url, lang, title },
-            {
-                headers: {
-                    'Content-Type': 'application/json',
-                    ...(process.env.HUNT_SERVICE_SECRET ? { 'X-Hunt-Secret': process.env.HUNT_SERVICE_SECRET } : {}),
-                },
-                // Browser scraping + LLM + validation retries can be slow, and a
-                // free host may be cold-starting; allow a generous budget.
-                timeout: 120000,
-            }
-        );
-
-        cacheSet(memoryCache.huntPack.store, cacheKey, { data: response.data, expiresAt: now + memoryCache.huntPack.ttl }, 200);
-        res.json(response.data);
-    } catch (error) {
-        const { status, message } = sanitizeError(error);
-        res.status(status).json({ error: message });
-    }
-});
 
 // Latest CVEs from CIRCL
 // NIST NVD 2.0 — recently published CVEs (last 10 days). Sending NVD_API_KEY

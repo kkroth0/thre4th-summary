@@ -1,7 +1,0 @@
-fastapi==0.137.1
-uvicorn[standard]==0.34.0
-scrapling==0.2.99
-pydantic==2.10.4
-openai==2.13.0
-httpx==0.28.1
-python-dotenv==1.2.2
