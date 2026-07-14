@@ -63,6 +63,15 @@ test('unknown API route yields 404, not a crash', async () => {
     assert.equal(r.status, 404);
 });
 
+test('removed hunt-pack endpoint yields 404', async () => {
+    const r = await fetch(`${BASE}/api/newsletter/hunt-pack`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: 'https://example.com/report', lang: 'en' }),
+    });
+    assert.equal(r.status, 404);
+});
+
 test('premium route rejects anonymous users', async () => {
     const r = await fetch(`${BASE}/api/feed/generate`, {
         method: 'POST',
