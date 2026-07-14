@@ -22,8 +22,8 @@ const COPY: Record<Feature, { pt: [string, string]; en: [string, string] }> = {
     en: ["Intel Collector", "A daily rundown of the security alerts that matter."],
   },
   "exposure-watchlist": {
-    pt: ["Exposure Watchlist", "Monitore ativos externos e acompanhe mudancas na superficie exposta."],
-    en: ["Exposure Watchlist", "Monitor external assets and track exposed-surface changes."],
+    pt: ["Attack Surface Monitor", "Monitore ativos externos e acompanhe drift na superficie exposta."],
+    en: ["Attack Surface Monitor", "Monitor external assets and track exposed-surface drift."],
   },
 };
 

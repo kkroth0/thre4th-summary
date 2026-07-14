@@ -1433,7 +1433,7 @@ export interface ExposureAssetInput {
 
 const exposureError = async (response: Response): Promise<never> => {
     const body = await response.json().catch(() => ({}));
-    throw new Error((body as { error?: string }).error || `Exposure Watchlist API error: ${response.status}`);
+    throw new Error((body as { error?: string }).error || `Attack Surface Monitor API error: ${response.status}`);
 };
 
 export const fetchExposureAssets = async (): Promise<ExposureAsset[]> => {

@@ -113,7 +113,7 @@ export function ExposureMonitorPanel() {
       setChanges(changeList);
       setSelectedAssetId((current) => current || assetList[0]?.id || null);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Exposure Watchlist API error");
+      toast.error(error instanceof Error ? error.message : "Attack Surface Monitor API error");
     } finally {
       setLoading(false);
     }
@@ -229,11 +229,11 @@ export function ExposureMonitorPanel() {
     return (
       <div className="soc-panel rounded-lg p-8 text-center">
         <Lock className="mx-auto h-9 w-9 text-muted-foreground/60" />
-        <h2 className="mt-4 text-lg font-semibold">{pt ? "Monitoramento premium" : "Premium monitoring"}</h2>
+        <h2 className="mt-4 text-lg font-semibold">{pt ? "Attack Surface Monitor premium" : "Premium Attack Surface Monitor"}</h2>
         <p className="mx-auto mt-2 max-w-xl text-sm text-muted-foreground">
           {pt
-            ? "O scan manual continua disponivel. Entre com uma conta premium para salvar ativos, rodar snapshots e acompanhar mudancas."
-            : "Manual scan remains available. Sign in with premium access to save assets, run snapshots, and track changes."}
+            ? "O scan manual continua disponivel. Entre com uma conta premium para salvar ativos, rodar snapshots e acompanhar drift de exposicao."
+            : "Manual scan remains available. Sign in with premium access to save assets, run snapshots, and track exposure drift."}
         </p>
       </div>
     );
@@ -243,11 +243,11 @@ export function ExposureMonitorPanel() {
     <div className="flex flex-col gap-5">
       <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
         <div>
-          <h2 className="text-xl font-semibold tracking-tight">{pt ? "Monitoramento de superficie" : "Exposure monitoring"}</h2>
+          <h2 className="text-xl font-semibold tracking-tight">Attack Surface Monitor</h2>
           <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
             {pt
-              ? "Salve ativos externos, rode snapshots e acompanhe mudancas de servicos, CVEs, risco e validacao TCP."
-              : "Save external assets, run snapshots, and track service, CVE, risk, and TCP validation changes."}
+              ? "Salve ativos externos, rode snapshots e acompanhe drift em servicos, CVEs, risco e validacao TCP."
+              : "Save external assets, run snapshots, and track drift in services, CVEs, risk, and TCP validation."}
           </p>
         </div>
         <Button type="button" variant="outline" onClick={() => void load()} disabled={loading} className="gap-2">
@@ -386,7 +386,7 @@ export function ExposureMonitorPanel() {
 
         <div className="soc-panel min-w-0 rounded-lg">
           <div className="border-b border-border p-4">
-            <h3 className="text-base font-semibold">Watchlist</h3>
+            <h3 className="text-base font-semibold">{pt ? "Ativos monitorados" : "Monitored assets"}</h3>
           </div>
           <div className="overflow-x-auto">
             <Table>

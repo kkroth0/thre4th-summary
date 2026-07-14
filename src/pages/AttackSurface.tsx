@@ -272,15 +272,16 @@ export default function AttackSurface() {
                 <Radar className="h-3.5 w-3.5" />
                 Attack Surface
               </Badge>
+              <Badge variant="outline">Scan + Monitor</Badge>
               <Badge variant="outline">Shodan</Badge>
             </div>
             <h1 className="mt-4 text-3xl font-semibold tracking-tight md:text-4xl">
-              {pt ? "Superficie exposta externa" : "External attack surface"}
+              {pt ? "Superficie de ataque externa" : "External attack surface"}
             </h1>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
               {pt
-                ? "Mapeie servicos expostos, importe alvos por TXT/JSON, exporte XLSX e acompanhe mudancas de ativos salvos."
-                : "Map exposed services, import TXT/JSON targets, export XLSX, and monitor changes for saved assets."}
+                ? "Enxergue seu perimetro como um atacante enxerga. Mapeie servicos expostos via Shodan, importe alvos em massa, exporte XLSX e monitore drift nos ativos salvos."
+                : "See your perimeter the way an attacker does. Map exposed services with Shodan, bulk-import targets, export XLSX, and monitor drift across saved assets."}
             </p>
           </div>
           {result && (

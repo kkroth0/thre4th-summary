@@ -208,14 +208,14 @@ export const PUBLIC_SEO_ROUTES: SeoRoute[] = [
     changefreq: "weekly",
     metadata: {
       pt: {
-        title: "Monitoramento de Superficie de Ataque | ThreatSumm4ry",
+        title: "Attack Surface e Monitoramento Externo | ThreatSumm4ry",
         description:
-          "Mapeie dominios, certificados, servicos expostos e riscos externos com exportacao XLSX e monitoramento de exposicao.",
+          "Mapeie servicos expostos via Shodan, importe alvos em massa, exporte XLSX e monitore drift em ativos externos salvos.",
       },
       en: {
-        title: "Attack Surface Monitoring | ThreatSumm4ry",
+        title: "Attack Surface and External Monitoring | ThreatSumm4ry",
         description:
-          "Map domains, certificates, exposed services, and external risks with XLSX export and exposure monitoring workflows.",
+          "Map exposed services with Shodan, bulk-import targets, export XLSX, and monitor drift across saved external assets.",
       },
     },
   },
