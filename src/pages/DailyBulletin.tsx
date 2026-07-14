@@ -298,13 +298,13 @@ const DailyBulletin: React.FC = () => {
                   />
                   <div className="flex gap-2">
                     <Select value={pasteType} onValueChange={(v) => setPasteType(v as DeckType)}>
-                      <SelectTrigger className="w-[140px] border-0 bg-transparent shadow-none focus:ring-0"><SelectValue /></SelectTrigger>
+                      <SelectTrigger className="flex-1 min-w-0 border-0 bg-transparent shadow-none focus:ring-0"><SelectValue /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="vuln">{pt ? "Vulnerabilidade" : "Vulnerability"}</SelectItem>
                         <SelectItem value="campaign">{pt ? "Campanha" : "Campaign"}</SelectItem>
                       </SelectContent>
                     </Select>
-                    <Button onClick={() => { generate(pasteUrl.trim(), pasteType, ""); setPasteUrl(""); }} disabled={!pasteUrl.trim()} className="ml-auto gap-2">
+                    <Button onClick={() => { generate(pasteUrl.trim(), pasteType, ""); setPasteUrl(""); }} disabled={!pasteUrl.trim()} className="shrink-0 gap-2">
                       <Sparkles className="h-4 w-4" /> {pt ? "Gerar" : "Generate"}
                     </Button>
                   </div>
