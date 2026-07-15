@@ -74,6 +74,30 @@ class FakeWorkbook {
 
 const FakeExcelLib = { Workbook: FakeWorkbook } as unknown as ExcelWorkbookFactory;
 
+function collectFakeArtifactText(pptx: FakePptx, workbook: FakeWorkbook) {
+    const presentationText = [
+        pptx.author, pptx.company, pptx.subject, pptx.title, pptx.lang,
+        ...pptx.slides.flatMap((slide) => [
+            ...slide.texts,
+            ...slide.tables.flatMap((table) => table.rows.flatMap((row) => row.map((cell) => cell.text))),
+        ]),
+    ];
+    const workbookText = [
+        workbook.creator, workbook.company, workbook.subject, workbook.title, workbook.language,
+        ...workbook.worksheets.flatMap((sheet) => [
+            sheet.name,
+            ...sheet.columns.flatMap((column) => [column.header, column.key]),
+            ...[...sheet.rows.values()].flatMap((row) => [...row.cells.values()].map((cell) => {
+                const value = cell.value;
+                return typeof value === "object" && value !== null && "text" in value
+                    ? String((value as { text: unknown }).text)
+                    : String(value ?? "");
+            })),
+        ]),
+    ];
+    return [...presentationText, ...workbookText].join("\n");
+}
+
 class FakeSlide {
     texts: string[] = [];
     textEntries: Array<{ text: string; options: Record<string, unknown> }> = [];
@@ -120,6 +144,31 @@ const sample: SapPatchSummary = {
     ],
     summary: { total: 3, byPriority: { "Hot News": 1, High: 1, Medium: 1 }, hotNews: 1, high: 1, maxCvss: 9.9, cveCount: 2 },
 };
+
+const julySummary: SapPatchSummary = {
+    url: "https://support.sap.example/security-patch-day/july-2026",
+    releaseDate: "2026-07-14",
+    notes: [
+        { note: "700001", noteUrl: "https://me.sap.example/notes/700001", title: "Remote code execution in SAP NetWeaver", cves: ["CVE-2026-7001"], priority: "Critical", cvss: 9.8, cvssVector: "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H", isUpdate: false },
+        { note: "700002", noteUrl: "https://me.sap.example/notes/700002", title: "Missing authorization check in SAP S/4HANA", cves: ["CVE-2026-7002"], priority: "High", cvss: 8.1, cvssVector: null, isUpdate: false },
+        { note: "700003", noteUrl: "https://me.sap.example/notes/700003", title: "Information disclosure in SAP UI5", cves: ["CVE-2026-7003"], priority: "Medium", cvss: 6.5, cvssVector: null, isUpdate: true },
+        { note: "700004", noteUrl: "https://me.sap.example/notes/700004", title: "Denial of service in SAP HANA", cves: [], priority: "Low", cvss: null, cvssVector: null, isUpdate: false },
+    ],
+    summary: { total: 4, byPriority: { Critical: 1, High: 1, Medium: 1, Low: 1 }, hotNews: 0, high: 1, maxCvss: 9.8, cveCount: 3 },
+};
+
+test("artefatos mantêm sequência, pt-BR e neutralidade", () => {
+    const pptx = buildSapPatchPresentation(julySummary, FakePptx as never) as unknown as FakePptx;
+    const workbook = buildSapPatchWorkbook(julySummary, FakeExcelLib) as unknown as FakeWorkbook;
+    const corpus = collectFakeArtifactText(pptx, workbook);
+
+    assert.equal(pptx.slides.length, 6);
+    assert.match(corpus, /Sumário executivo/);
+    assert.match(corpus, /Conclusão e recomendações/);
+    assert.match(corpus, /Visão executiva/);
+    assert.doesNotMatch(corpus, /customer|executive summary|security updates/i);
+    assert.doesNotMatch(corpus, /cliente|consultoria/i);
+});
 
 test("cria workbook executivo em pt-BR com duas abas", () => {
     const workbook = buildSapPatchWorkbook(sample, FakeExcelLib) as unknown as FakeWorkbook;
