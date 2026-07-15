@@ -24,7 +24,7 @@ const fmtDate = (iso: string | null): string => {
     return Number.isNaN(d.getTime()) ? iso : d.toLocaleDateString('en-US', { day: '2-digit', month: 'long', year: 'numeric', timeZone: 'UTC' });
 };
 
-const baseFilename = (s: SapPatchSummary) => {
+export const sapPatchBaseFilename = (s: SapPatchSummary) => {
     const month = s.releaseDate?.match(/^(\d{4})-(\d{2})/)?.slice(1).join('-');
     return `SAP-Security-Patch-Day-${month || 'mais-recente'}`;
 };
@@ -108,7 +108,7 @@ export async function exportSapPatchPDF(s: SapPatchSummary): Promise<void> {
         margin: { left: margin, right: margin },
     });
 
-    doc.save(`${baseFilename(s)}.pdf`);
+    doc.save(`${sapPatchBaseFilename(s)}.pdf`);
 }
 
 // ---- PPTX ----------------------------------------------------------------------
@@ -148,12 +148,15 @@ const addConsolidatedSlide = (pptx: PptxGenJS, _summary: SapPatchSummary, analys
 const displayTitle = (title: string) => title.length > 100 ? `${title.slice(0, 99)}…` : title;
 const addHighlightsSlide = (pptx: PptxGenJS, analysis: SapReportAnalysis): void => {
     const slide = pptx.addSlide({ masterName: 'EXECUTIVO' }); slideTitle(slide, 'Highlights de vulnerabilidades');
+    const rowCount = analysis.notes.length + 1;
+    const fontSize = analysis.notes.length <= 20 ? 8 : Math.max(6, 7 - Math.ceil(Math.max(0, analysis.notes.length - 40) / 10) * .5);
+    const rowH = Math.min(.27, 5.72 / rowCount);
     const cell = (text: string): PptxGenJS.TableCell => ({ text, options: {} });
     const rows: PptxGenJS.TableRow[] = [
         ['CVE', 'Título', 'CVSS', 'Produto/Componente'].map(cell),
         ...analysis.notes.map(note => [note.primaryCve, displayTitle(note.title), note.cvss == null ? 'Não informado' : note.cvss.toFixed(1), note.product].map(cell)),
     ];
-    slide.addTable(rows, { x: .45, y: 1.05, w: 12.45, colW: [2.05, 5.7, 1.05, 3.65], fontSize: analysis.notes.length <= 20 ? 8 : 7, border: { type: 'solid', color: COLORS.border, pt: .5 }, fill: { color: COLORS.white }, color: COLORS.navy, bold: false });
+    slide.addTable(rows, { x: .45, y: 1.05, w: 12.45, colW: [2.05, 5.7, 1.05, 3.65], fontSize, rowH, margin: .02, autoPage: false, breakLine: false, valign: 'middle', border: { type: 'solid', color: COLORS.border, pt: .5 }, fill: { color: COLORS.white }, color: COLORS.navy, bold: false });
 };
 const addRecommendationsSlide = (pptx: PptxGenJS, analysis: SapReportAnalysis): void => {
     const slide = pptx.addSlide({ masterName: 'EXECUTIVO' }); slideTitle(slide, 'Conclusão e recomendações');
@@ -167,8 +170,19 @@ const addReferencesSlide = (pptx: PptxGenJS, summary: SapPatchSummary, analysis:
     const slide = pptx.addSlide({ masterName: 'EXECUTIVO' }); slideTitle(slide, 'Referências');
     slide.addText('Fonte oficial SAP', { x: .7, y: 1.15, w: 11.8, h: .35, fontSize: 15, bold: true, color: COLORS.blue });
     const links = [...new Set([summary.url, ...analysis.notes.map(note => note.noteUrl)].filter(Boolean))];
-    links.forEach((link, index) => slide.addText(link, { x: .85, y: 1.7 + index * .42, w: 11.6, h: .3, fontSize: 10, color: COLORS.slate, hyperlink: { url: link } }));
-    slide.addText(`Gerado em ${new Date().toLocaleString('pt-BR')}`, { x: .7, y: 6.25, w: 11.8, h: .3, fontSize: 9, color: COLORS.slate });
+    const maxRows = 12;
+    const columns = Math.max(1, Math.ceil(links.length / maxRows));
+    const rows = Math.ceil(links.length / columns);
+    const gap = .22;
+    const columnW = (11.8 - gap * (columns - 1)) / columns;
+    const fontSize = Math.max(5.5, 10 - (columns - 1) * 1.25);
+    const step = rows <= 1 ? 0 : Math.min(.38, 4.35 / (rows - 1));
+    const textH = Math.min(.28, step || .28);
+    links.forEach((link, index) => {
+        const column = Math.floor(index / rows), row = index % rows;
+        slide.addText(link, { x: .7 + column * (columnW + gap), y: 1.7 + row * step, w: columnW, h: textH, fontSize, color: COLORS.slate, fit: 'shrink', breakLine: false, hyperlink: { url: link } });
+    });
+    slide.addText(`Gerado em ${new Date().toLocaleString('pt-BR')}`, { x: .7, y: 6.35, w: 11.8, h: .3, fontSize: 9, color: COLORS.slate });
 };
 
 export function buildSapPatchPresentation(summary: SapPatchSummary, PptxLib: PptxFactory): PptxGenJS {
@@ -190,7 +204,7 @@ export function buildSapPatchPresentation(summary: SapPatchSummary, PptxLib: Ppt
 export async function exportSapPatchPPTX(summary: SapPatchSummary): Promise<void> {
     const { default: PptxGenLib } = await import('pptxgenjs');
     const pptx = buildSapPatchPresentation(summary, PptxGenLib);
-    await pptx.writeFile({ fileName: `${baseFilename(summary)}.pptx` });
+    await pptx.writeFile({ fileName: `${sapPatchBaseFilename(summary)}.pptx` });
 }
 
 // ---- Excel ---------------------------------------------------------------------
@@ -245,5 +259,5 @@ export async function exportSapPatchExcel(s: SapPatchSummary): Promise<void> {
     ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: 8 } };
 
     const buf = await wb.xlsx.writeBuffer();
-    triggerDownload(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), `${baseFilename(s)}.xlsx`);
+    triggerDownload(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), `${sapPatchBaseFilename(s)}.xlsx`);
 }
