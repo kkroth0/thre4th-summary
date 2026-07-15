@@ -5,6 +5,7 @@ import type { jsPDF } from 'jspdf';
 import type PptxGenJS from 'pptxgenjs';
 import type ExcelJS from 'exceljs';
 import type { SapPatchSummary, SapNote } from '@/services/sapApi';
+import { buildSapReportAnalysis, type SapReportAnalysis } from './sapPatchAnalysis';
 
 const BRAND = '2563EB';
 const INK = '0F172A';
@@ -23,7 +24,10 @@ const fmtDate = (iso: string | null): string => {
     return Number.isNaN(d.getTime()) ? iso : d.toLocaleDateString('en-US', { day: '2-digit', month: 'long', year: 'numeric', timeZone: 'UTC' });
 };
 
-const baseFilename = (s: SapPatchSummary) => `SAP Security Patch Day - ${s.releaseDate || 'latest'}`;
+const baseFilename = (s: SapPatchSummary) => {
+    const month = s.releaseDate?.match(/^(\d{4})-(\d{2})/)?.slice(1).join('-');
+    return `SAP-Security-Patch-Day-${month || 'mais-recente'}`;
+};
 const rgb = (h: string): [number, number, number] => [0, 2, 4].map((o) => parseInt(h.substr(o, 2), 16)) as [number, number, number];
 
 const kpiList = (s: SapPatchSummary) => [
@@ -108,62 +112,85 @@ export async function exportSapPatchPDF(s: SapPatchSummary): Promise<void> {
 }
 
 // ---- PPTX ----------------------------------------------------------------------
-export async function exportSapPatchPPTX(s: SapPatchSummary): Promise<void> {
-    const { default: PptxGenLib } = await import('pptxgenjs');
-    const pptx = new PptxGenLib();
-    pptx.defineLayout({ name: 'WIDE', width: 13.333, height: 7.5 });
-    pptx.layout = 'WIDE';
-    pptx.title = 'SAP Security Patch Day';
-    const W = 13.333;
+const COLORS = { blue: '1565C0', navy: '172033', slate: '526274', pale: 'F3F6FA', border: 'DCE3EE', white: 'FFFFFF', critical: 'C62828', high: 'E66A21', medium: 'C58A00', low: '2E7D32' } as const;
+export type PptxFactory = new () => PptxGenJS;
 
-    pptx.defineSlideMaster({
-        title: 'BASE',
-        background: { color: 'FFFFFF' },
-        objects: [
-            { rect: { x: 0, y: 7.05, w: W, h: 0.45, fill: { color: 'F1F5F9' } } },
-            { text: { text: 'ThreatSumm4ry · SAP Security Patch Day', options: { x: 0.4, y: 7.05, w: 8, h: 0.45, fontSize: 9, color: MUTED, valign: 'middle' } } },
-        ],
-        slideNumber: { x: 12.4, y: 7.05, w: 0.6, h: 0.45, fontSize: 9, color: MUTED },
+const formatReportMonth = (date: string | null): string => {
+    if (!date) return 'Ciclo mais recente';
+    const value = new Date(`${date}T00:00:00Z`);
+    return Number.isNaN(value.getTime()) ? date : value.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+};
+const slideTitle = (slide: PptxGenJS.Slide, title: string) => slide.addText(title, { x: .55, y: .35, w: 12.2, h: .45, fontSize: 23, bold: true, color: COLORS.navy });
+const addCoverSlide = (pptx: PptxGenJS, summary: SapPatchSummary): void => {
+    const slide = pptx.addSlide(); slide.background = { color: COLORS.navy };
+    slide.addText('SAP Security Patch Day', { x: .7, y: 2.15, w: 12, h: .65, fontSize: 32, bold: true, color: COLORS.white });
+    slide.addText(formatReportMonth(summary.releaseDate), { x: .7, y: 2.9, w: 12, h: .55, fontSize: 22, color: COLORS.blue });
+    slide.addText(`${summary.summary.total} notas · CVSS máximo ${summary.summary.maxCvss.toFixed(1)}`, { x: .7, y: 3.65, w: 12, h: .45, fontSize: 15, color: 'DCE3EE' });
+    slide.addText('Fonte oficial SAP', { x: .7, y: 6.45, w: 12, h: .3, fontSize: 10, color: COLORS.slate });
+};
+const addExecutiveSummarySlide = (pptx: PptxGenJS, summary: SapPatchSummary, analysis: SapReportAnalysis): void => {
+    const slide = pptx.addSlide({ masterName: 'EXECUTIVO' }); slideTitle(slide, 'Sumário executivo');
+    slide.addText(analysis.executiveSummary, { x: .7, y: 1.15, w: 11.9, h: .8, fontSize: 18, color: COLORS.navy });
+    analysis.immediatePriorities.forEach((item, index) => slide.addText(`• ${item}`, { x: .9, y: 2.25 + index * .55, w: 11.4, h: .4, fontSize: 14, color: COLORS.slate }));
+    slide.addText(`Hot News/Critical: ${summary.summary.hotNews} · High: ${summary.summary.high}`, { x: .9, y: 4.6, w: 11.4, h: .4, fontSize: 16, bold: true, color: COLORS.critical });
+};
+const addConsolidatedSlide = (pptx: PptxGenJS, _summary: SapPatchSummary, analysis: SapReportAnalysis): void => {
+    const slide = pptx.addSlide({ masterName: 'EXECUTIVO' }); slideTitle(slide, 'Consolidado de vulnerabilidades');
+    slide.addChart(pptx.ChartType.bar, [{ name: 'Notas', labels: analysis.categoryCounts.map(x => x.category), values: analysis.categoryCounts.map(x => x.count) }], { x: .6, y: 1.15, w: 6.1, h: 4.9, catAxisLabelFontSize: 9, showLegend: false, showValue: true });
+    analysis.topThree.forEach((note, index) => {
+        const y = 1.15 + index * 1.65;
+        slide.addShape(pptx.ShapeType.roundRect, { x: 7, y, w: 5.7, h: 1.35, fill: { color: COLORS.pale }, line: { color: COLORS.border } });
+        slide.addText(`${note.note} · ${note.cvss == null ? 'Não informado' : note.cvss.toFixed(1)}`, { x: 7.2, y: y + .12, w: 5.2, h: .3, fontSize: 13, bold: true, color: priorityHex(note.priority) });
+        slide.addText(`${note.primaryCve || 'Não informada'} · ${note.product}`, { x: 7.2, y: y + .48, w: 5.2, h: .3, fontSize: 10, color: COLORS.slate });
+        slide.addText(note.title, { x: 7.2, y: y + .8, w: 5.2, h: .35, fontSize: 10, color: COLORS.navy });
     });
-
-    const s1 = pptx.addSlide();
-    s1.background = { color: INK };
-    s1.addShape(pptx.ShapeType.rect, { x: 0, y: 3.4, w: W, h: 0.08, fill: { color: BRAND } });
-    s1.addText('SAP SECURITY PATCH DAY', { x: 0.7, y: 2.1, w: 12, h: 0.5, fontSize: 18, color: '93C5FD', bold: true, charSpacing: 3 });
-    s1.addText(fmtDate(s.releaseDate), { x: 0.7, y: 2.6, w: 12, h: 1, fontSize: 40, color: 'FFFFFF', bold: true });
-    s1.addText(`${s.summary.total} security notes  ·  ${s.summary.hotNews} Hot News  ·  Max CVSS ${s.summary.maxCvss.toFixed(1)}`,
-        { x: 0.7, y: 3.7, w: 12, h: 1, fontSize: 16, color: 'CBD5E1' });
-    s1.addText('Source: support.sap.com (SAP Security Notes)', { x: 0.7, y: 6.4, w: 12, h: 0.4, fontSize: 11, color: '64748B' });
-
-    const s2 = pptx.addSlide({ masterName: 'BASE' });
-    s2.addText('Overview', { x: 0.5, y: 0.35, w: 12, h: 0.6, fontSize: 24, bold: true, color: INK });
-    const kpis = kpiList(s);
-    const cw = 2.3;
-    const gap = 0.2;
-    const totalW = kpis.length * cw + (kpis.length - 1) * gap;
-    kpis.forEach((k, i) => {
-        const x = (W - totalW) / 2 + i * (cw + gap);
-        s2.addShape(pptx.ShapeType.roundRect, { x, y: 2.4, w: cw, h: 1.6, fill: { color: 'F8FAFC' }, line: { color: 'E2E8F0', width: 1 }, rectRadius: 0.08 });
-        s2.addText(String(k.value), { x, y: 2.7, w: cw, h: 0.7, fontSize: 30, bold: true, color: k.color, align: 'center' });
-        s2.addText(k.label, { x, y: 3.45, w: cw, h: 0.4, fontSize: 12, color: MUTED, align: 'center' });
-    });
-
-    const s3 = pptx.addSlide({ masterName: 'BASE' });
-    s3.addText('Security notes', { x: 0.5, y: 0.35, w: 12, h: 0.6, fontSize: 24, bold: true, color: INK });
+};
+const displayTitle = (title: string) => title.length > 100 ? `${title.slice(0, 99)}…` : title;
+const addHighlightsSlide = (pptx: PptxGenJS, analysis: SapReportAnalysis): void => {
+    const slide = pptx.addSlide({ masterName: 'EXECUTIVO' }); slideTitle(slide, 'Highlights de vulnerabilidades');
+    const cell = (text: string): PptxGenJS.TableCell => ({ text, options: {} });
     const rows: PptxGenJS.TableRow[] = [
-        ['Note#', 'Title', 'Priority', 'CVSS'].map((h) => ({ text: h, options: { bold: true, color: 'FFFFFF', fill: { color: INK } } })),
+        ['CVE', 'Título', 'CVSS', 'Produto/Componente'].map(cell),
+        ...analysis.notes.map(note => [note.primaryCve, displayTitle(note.title), note.cvss == null ? 'Não informado' : note.cvss.toFixed(1), note.product].map(cell)),
     ];
-    for (const n of s.notes.slice(0, 18)) {
-        rows.push([
-            { text: n.note, options: {} },
-            { text: n.title.slice(0, 90), options: {} },
-            { text: n.priority, options: { color: priorityHex(n.priority), bold: true } },
-            { text: n.cvss == null ? '—' : String(n.cvss), options: { align: 'right' } },
-        ]);
-    }
-    s3.addTable(rows, { x: 0.4, y: 1.1, w: 12.5, colW: [1.4, 8.1, 1.6, 1.4], fontSize: 10, border: { type: 'solid', color: 'E2E8F0', pt: 0.5 }, valign: 'middle' });
+    slide.addTable(rows, { x: .45, y: 1.05, w: 12.45, colW: [2.05, 5.7, 1.05, 3.65], fontSize: analysis.notes.length <= 20 ? 8 : 7, border: { type: 'solid', color: COLORS.border, pt: .5 }, fill: { color: COLORS.white }, color: COLORS.navy, bold: false });
+};
+const addRecommendationsSlide = (pptx: PptxGenJS, analysis: SapReportAnalysis): void => {
+    const slide = pptx.addSlide({ masterName: 'EXECUTIVO' }); slideTitle(slide, 'Conclusão e recomendações');
+    analysis.recommendations.forEach((item, index) => {
+        const col = index % 2, row = Math.floor(index / 2), x = .65 + col * 6.15, y = 1.15 + row * 1.75;
+        slide.addText(item.title, { x, y, w: 5.75, h: .3, fontSize: 13, bold: true, color: COLORS.blue });
+        slide.addText(item.body, { x, y: y + .38, w: 5.75, h: .85, fontSize: 10, color: COLORS.slate, breakLine: false });
+    });
+};
+const addReferencesSlide = (pptx: PptxGenJS, summary: SapPatchSummary, analysis: SapReportAnalysis): void => {
+    const slide = pptx.addSlide({ masterName: 'EXECUTIVO' }); slideTitle(slide, 'Referências');
+    slide.addText('Fonte oficial SAP', { x: .7, y: 1.15, w: 11.8, h: .35, fontSize: 15, bold: true, color: COLORS.blue });
+    const links = [...new Set([summary.url, ...analysis.notes.map(note => note.noteUrl)].filter(Boolean))];
+    links.forEach((link, index) => slide.addText(link, { x: .85, y: 1.7 + index * .42, w: 11.6, h: .3, fontSize: 10, color: COLORS.slate, hyperlink: { url: link } }));
+    slide.addText(`Gerado em ${new Date().toLocaleString('pt-BR')}`, { x: .7, y: 6.25, w: 11.8, h: .3, fontSize: 9, color: COLORS.slate });
+};
 
-    await pptx.writeFile({ fileName: `${baseFilename(s)}.pptx` });
+export function buildSapPatchPresentation(summary: SapPatchSummary, PptxLib: PptxFactory): PptxGenJS {
+    const pptx = new PptxLib();
+    pptx.defineLayout({ name: 'SAP_EXECUTIVO', width: 13.333, height: 7.5 }); pptx.layout = 'SAP_EXECUTIVO';
+    pptx.author = 'ThreatSumm4ry'; pptx.company = ''; (pptx as PptxGenJS & { lang: string }).lang = 'pt-BR';
+    pptx.subject = 'Relatório automático do SAP Security Patch Day'; pptx.title = `SAP Security Patch Day — ${formatReportMonth(summary.releaseDate)}`;
+    pptx.defineSlideMaster({ title: 'EXECUTIVO', background: { color: COLORS.white }, objects: [
+        { rect: { x: 0, y: 0, w: 13.333, h: .08, fill: { color: COLORS.blue }, line: { color: COLORS.blue } } },
+        { text: { text: 'SAP Security Patch Day', options: { x: .45, y: 7.08, w: 4, h: .25, fontSize: 8, color: COLORS.slate } } },
+        { text: { text: summary.releaseDate || 'Ciclo mais recente', options: { x: 5, y: 7.08, w: 3.3, h: .25, fontSize: 8, color: COLORS.slate, align: 'center' } } },
+    ], slideNumber: { x: 12.35, y: 7.08, w: .5, h: .25, fontSize: 8, color: COLORS.slate } });
+    const analysis = buildSapReportAnalysis(summary);
+    addCoverSlide(pptx, summary); addExecutiveSummarySlide(pptx, summary, analysis); addConsolidatedSlide(pptx, summary, analysis);
+    addHighlightsSlide(pptx, analysis); addRecommendationsSlide(pptx, analysis); addReferencesSlide(pptx, summary, analysis);
+    return pptx;
+}
+
+export async function exportSapPatchPPTX(summary: SapPatchSummary): Promise<void> {
+    const { default: PptxGenLib } = await import('pptxgenjs');
+    const pptx = buildSapPatchPresentation(summary, PptxGenLib);
+    await pptx.writeFile({ fileName: `${baseFilename(summary)}.pptx` });
 }
 
 // ---- Excel ---------------------------------------------------------------------
