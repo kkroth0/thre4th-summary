@@ -133,4 +133,24 @@ test("produz resumo, prioridades e seis recomendações neutras mesmo sem notas"
         assert.ok(recommendation.body.length > 0);
         assert.doesNotMatch(recommendation.body, /foi identificad[ao]|há falha|vulnerabilidade presente/i);
     }
+    assert.doesNotMatch(
+        [...analysis.immediatePriorities, ...analysis.recommendations.map((item) => item.body)].join(" "),
+        /0 notas/,
+    );
+});
+
+test("usa concordância singular nos textos para uma nota", () => {
+    const analysis = buildSapReportAnalysis(summary([
+        noteWith({ title: "Credential issue in SAP HANA", priority: "High" }),
+    ]));
+    const text = [
+        analysis.executiveSummary,
+        ...analysis.immediatePriorities,
+        ...analysis.recommendations.map((item) => item.body),
+    ].join(" ");
+
+    assert.match(analysis.executiveSummary, /1 nota analisada/);
+    assert.match(text, /Priorizar a 1 nota de severidade/);
+    assert.match(text, /a 1 nota classificada nessa categoria/);
+    assert.doesNotMatch(text, /1 notas|as 1 nota/);
 });

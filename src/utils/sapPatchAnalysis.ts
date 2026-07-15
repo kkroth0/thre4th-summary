@@ -86,6 +86,11 @@ const compareNotes = (left: AnalyzedSapNote, right: AnalyzedSapNote): number =>
     || noteNumber(left.note) - noteNumber(right.note)
     || left.note.localeCompare(right.note);
 
+const noteCount = (count: number): string => `${count} ${count === 1 ? "nota" : "notas"}`;
+
+const noteCountWithArticle = (count: number): string =>
+    `${count === 1 ? "a" : "as"} ${noteCount(count)}`;
+
 export function classifySapNote(note: SapNote): SapRiskCategory {
     return CATEGORY_RULES.find((rule) => rule.terms.test(note.title))?.category ?? "Outras";
 }
@@ -105,12 +110,18 @@ const recommendationBodies = (analysis: {
         : "os componentes SAP inventariados";
 
     return [
-        `Priorizar as ${analysis.urgent} notas de severidade Hot News, Critical ou High e validar a aplicação das correções.`,
+        analysis.urgent > 0
+            ? `Priorizar ${noteCountWithArticle(analysis.urgent)} de severidade Hot News, Critical ou High e validar a aplicação das correções.`
+            : "Priorizar notas de severidade Hot News, Critical ou High quando publicadas e validar a aplicação das correções.",
         `Validar controles de integração e borda para ${products} e registrar os resultados.`,
-        `Validar credenciais e configurações para as ${analysis.configuration} notas classificadas nessa categoria.`,
+        analysis.configuration > 0
+            ? `Validar credenciais e configurações para ${noteCountWithArticle(analysis.configuration)} classificada${analysis.configuration === 1 ? "" : "s"} nessa categoria.`
+            : "Validar credenciais e configurações quando aplicável e registrar os resultados.",
         "Inventariar componentes descontinuados ou sem correção indicada e registrar o tratamento aplicável.",
         `Validar aplicações de negócio ABAP/Java entre ${products} e aplicar as correções indicadas.`,
-        `Inventariar as ${analysis.total} notas, priorizar a implantação e registrar as validações.`,
+        analysis.total > 0
+            ? `Inventariar ${noteCountWithArticle(analysis.total)}, priorizar a implantação e registrar as validações.`
+            : "Inventariar as notas publicadas, priorizar a implantação e registrar as validações.",
     ];
 };
 
@@ -137,9 +148,9 @@ export function buildSapReportAnalysis(summary: SapPatchSummary): SapReportAnaly
         topThree: notes.slice(0, 3),
         products,
         categoryCounts,
-        executiveSummary: `${notes.length} notas analisadas; ${urgent} com severidade Hot News, Critical ou High; produtos: ${productText}.`,
+        executiveSummary: `${noteCount(notes.length)} analisada${notes.length === 1 ? "" : "s"}; ${urgent} com severidade Hot News, Critical ou High; produtos: ${productText}.`,
         immediatePriorities: urgent > 0
-            ? [`Priorizar ${urgent} notas de severidade Hot News, Critical ou High.`, `Validar correções para ${productText}.`]
+            ? [`Priorizar ${noteCountWithArticle(urgent)} de severidade Hot News, Critical ou High.`, `Validar correções para ${productText}.`]
             : ["Inventariar as notas publicadas e validar as prioridades de aplicação."],
         recommendations: RECOMMENDATION_TITLES.map((title, index) => ({ title, body: bodies[index] })),
     };
