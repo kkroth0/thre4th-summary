@@ -158,7 +158,44 @@ export function Header({ actions, logoAddon, onLogoClick, showBackButton = false
     onLogoClick?.();
   };
 
+  // Rich card row (icon box + label + description) shared by the mobile drawer
+  // and the expanded desktop sidebar, so both read the same. The mobile list
+  // wraps this in <SheetClose> to dismiss the drawer on navigation.
+  const renderNavCard = (item: NavItem) => {
+    const Icon = item.icon;
+    const active = isRouteActive(item.path);
+    return (
+      <Link
+        key={item.path}
+        to={item.path}
+        className={cn(
+          "flex items-start gap-3 rounded-lg border border-transparent px-2.5 py-2.5 transition-colors hover:border-border hover:bg-secondary/70",
+          active && "border-border bg-secondary"
+        )}
+      >
+        <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border bg-background text-foreground">
+          <Icon className={cn("h-4 w-4", active && "text-primary")} />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="flex items-center gap-2 text-sm font-semibold text-foreground">
+            {item.label}
+            {item.premium && (
+              <span className="rounded border border-border bg-background px-1.5 py-0.5 text-[9px] font-bold leading-none text-muted-foreground">
+                PRO
+              </span>
+            )}
+          </span>
+          {item.description && <span className="mt-0.5 block text-xs text-muted-foreground">{item.description}</span>}
+        </span>
+      </Link>
+    );
+  };
+
   const renderDesktopItem = (item: NavItem) => {
+    // Expanded: the same rich card as the drawer.
+    if (!isCollapsed) return renderNavCard(item);
+
+    // Collapsed rail: icon only, description moves to a hover tooltip.
     const Icon = item.icon;
     const active = isRouteActive(item.path);
     const link = (
@@ -166,31 +203,16 @@ export function Header({ actions, logoAddon, onLogoClick, showBackButton = false
         key={item.path}
         to={item.path}
         className={cn(
-          "group relative flex items-center rounded-md text-[13px] font-medium transition-colors",
-          isCollapsed ? "h-10 w-10 justify-center px-0" : "h-9 gap-2.5 px-2.5",
+          "group relative flex h-10 w-10 items-center justify-center rounded-md text-[13px] font-medium transition-colors",
           active
             ? "bg-primary/10 text-foreground"
             : "text-muted-foreground hover:bg-secondary hover:text-foreground"
         )}
       >
-        {active && (
-          <span className={cn("absolute rounded-full bg-primary", isCollapsed ? "left-0 top-2 h-6 w-0.5" : "left-0 top-2 h-5 w-0.5")} />
-        )}
+        {active && <span className="absolute left-0 top-2 h-6 w-0.5 rounded-full bg-primary" />}
         <Icon className={cn("h-4 w-4 shrink-0", active ? "text-primary" : "text-muted-foreground group-hover:text-foreground")} />
-        {!isCollapsed && (
-          <>
-            <span className="min-w-0 flex-1 truncate">{item.label}</span>
-            {item.premium && (
-              <span className="rounded border border-border bg-background px-1.5 py-0.5 text-[9px] font-bold leading-none text-muted-foreground">
-                PRO
-              </span>
-            )}
-          </>
-        )}
       </Link>
     );
-
-    if (!isCollapsed) return link;
 
     return (
       <Tooltip key={item.path} delayDuration={100}>
@@ -216,37 +238,11 @@ export function Header({ actions, logoAddon, onLogoClick, showBackButton = false
     </div>
   );
 
-  const renderMobileItem = (item: NavItem) => {
-    const Icon = item.icon;
-    const active = isRouteActive(item.path);
-
-    return (
-      <SheetClose asChild key={item.path}>
-        <Link
-          to={item.path}
-          className={cn(
-            "flex items-start gap-3 rounded-lg border border-transparent px-2.5 py-2.5 transition-colors hover:border-border hover:bg-secondary/70",
-            active && "border-border bg-secondary"
-          )}
-        >
-          <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border bg-background text-foreground">
-            <Icon className={cn("h-4 w-4", active && "text-primary")} />
-          </span>
-          <span className="min-w-0 flex-1">
-            <span className="flex items-center gap-2 text-sm font-semibold text-foreground">
-              {item.label}
-              {item.premium && (
-                <span className="rounded border border-border bg-background px-1.5 py-0.5 text-[9px] font-bold text-muted-foreground">
-                  PRO
-                </span>
-              )}
-            </span>
-            {item.description && <span className="mt-0.5 block text-xs text-muted-foreground">{item.description}</span>}
-          </span>
-        </Link>
-      </SheetClose>
-    );
-  };
+  const renderMobileItem = (item: NavItem) => (
+    <SheetClose asChild key={item.path}>
+      {renderNavCard(item)}
+    </SheetClose>
+  );
 
   const renderMobileGroup = (group: NavGroup) => (
     <div key={group.label} className="space-y-2">
@@ -401,7 +397,7 @@ export function Header({ actions, logoAddon, onLogoClick, showBackButton = false
       <aside
         className={cn(
           "fixed inset-y-0 left-0 z-40 hidden border-r border-border bg-sidebar text-sidebar-foreground transition-[width] duration-200 lg:flex lg:flex-col",
-          isCollapsed ? "w-[72px]" : "w-[264px]"
+          isCollapsed ? "w-[72px]" : "w-72"
         )}
       >
         <div className="flex h-full min-h-0 flex-col">
