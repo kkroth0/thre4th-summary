@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import type { SapNote, SapPatchSummary } from "@/services/sapApi";
 import { canExportSapPatch } from "./SapPatch.tsx";
+import { readFileSync } from "node:fs";
 
 const note: SapNote = {
     note: "3747367",
@@ -35,4 +36,10 @@ test("só permite export quando existem notas", () => {
     assert.equal(canExportSapPatch(null), false);
     assert.equal(canExportSapPatch(emptySummary), false);
     assert.equal(canExportSapPatch(summaryWithOneNote), true);
+});
+
+test("carrega o módulo de exportação somente dentro de runExport", () => {
+    const source = readFileSync(`${process.cwd()}/src/pages/SapPatch.tsx`, "utf8");
+    assert.doesNotMatch(source, /from ["']@\/utils\/sapPatchExport["']/);
+    assert.match(source, /await import\(["']@\/utils\/sapPatchExport["']\)/);
 });

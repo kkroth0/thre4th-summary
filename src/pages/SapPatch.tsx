@@ -14,9 +14,6 @@ import { useToast } from "@/hooks/use-toast";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { cn } from "@/lib/utils";
 import { fetchSapPatch, type SapNote, type SapPatchSummary } from "@/services/sapApi";
-import {
-    exportSapPatchPDF, exportSapPatchPPTX, exportSapPatchExcel,
-} from "@/utils/sapPatchExport";
 
 const PRIORITY_RANK: Record<string, number> = { "Hot News": 4, Critical: 4, High: 3, Medium: 2, Low: 1 };
 
@@ -94,7 +91,8 @@ export default function SapPatch() {
         }
         setExporting(kind);
         try {
-            const fn = { pdf: exportSapPatchPDF, pptx: exportSapPatchPPTX, excel: exportSapPatchExcel }[kind];
+            const exports = await import("@/utils/sapPatchExport");
+            const fn = { pdf: exports.exportSapPatchPDF, pptx: exports.exportSapPatchPPTX, excel: exports.exportSapPatchExcel }[kind];
             await fn(data);
         } catch (e) {
             toast({ title: pt ? "Falha no export" : "Export failed", description: (e as Error).message, variant: "destructive" });
@@ -110,8 +108,8 @@ export default function SapPatch() {
 
     const kpis = data ? [
         { label: pt ? "Notas" : "Notes", value: data.summary.total },
-        { label: "Hot News", value: data.summary.hotNews, accent: "text-red-500" },
-        { label: "High", value: data.summary.high, accent: "text-orange-500" },
+        { label: pt ? "Críticas (Hot News)" : "Hot News", value: data.summary.hotNews, accent: "text-red-500" },
+        { label: pt ? "Altas" : "High", value: data.summary.high, accent: "text-orange-500" },
         { label: pt ? "CVSS máx." : "Max CVSS", value: data.summary.maxCvss.toFixed(1), accent: cvssClass(data.summary.maxCvss) },
         { label: "CVEs", value: data.summary.cveCount },
     ] : [];
@@ -227,15 +225,11 @@ export default function SapPatch() {
                                         </td>
                                         <td className="px-4 py-2.5 align-top max-w-[520px]">
                                             {n.title}
-                                            {n.isUpdate && <Badge variant="outline" className="ml-2 text-[10px] border-border/60">update</Badge>}
+                                                {n.isUpdate && <Badge variant="outline" className="ml-2 text-[10px] border-border/60">{pt ? "atualizada" : "updated"}</Badge>}
                                         </td>
                                         <td className="px-4 py-2.5 align-top">
                                             <div className="flex flex-wrap gap-1">
-                                                {n.cves.map((c) => (
-                                                    <a key={c} href={`https://www.cve.org/CVERecord?id=${c}`} target="_blank" rel="noopener noreferrer" className="font-mono text-xs text-muted-foreground hover:text-primary hover:underline">
-                                                        {c}
-                                                    </a>
-                                                ))}
+                                                    {n.cves.map((c) => <span key={c} className="font-mono text-xs text-muted-foreground">{c}</span>)}
                                             </div>
                                         </td>
                                         <td className="px-4 py-2.5 align-top">

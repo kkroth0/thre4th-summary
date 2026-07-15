@@ -111,8 +111,8 @@ const recommendationBodies = (analysis: {
 
     return [
         analysis.urgent > 0
-            ? `Priorizar ${noteCountWithArticle(analysis.urgent)} de severidade Hot News, Critical ou High e validar a aplicação das correções.`
-            : "Priorizar notas de severidade Hot News, Critical ou High quando publicadas e validar a aplicação das correções.",
+            ? `Priorizar ${noteCountWithArticle(analysis.urgent)} de severidade Crítica (Hot News/Critical) ou Alta (High) e validar a aplicação das correções.`
+            : "Priorizar notas de severidade Crítica (Hot News/Critical) ou Alta (High) quando publicadas e validar a aplicação das correções.",
         `Validar controles de integração e borda para ${products} e registrar os resultados.`,
         analysis.configuration > 0
             ? `Validar credenciais e configurações para ${noteCountWithArticle(analysis.configuration)} classificada${analysis.configuration === 1 ? "" : "s"} nessa categoria.`
@@ -148,10 +148,18 @@ export function buildSapReportAnalysis(summary: SapPatchSummary): SapReportAnaly
         topThree: notes.slice(0, 3),
         products,
         categoryCounts,
-        executiveSummary: `${noteCount(notes.length)} analisada${notes.length === 1 ? "" : "s"}; ${urgent} com severidade Hot News, Critical ou High; produtos: ${productText}.`,
-        immediatePriorities: urgent > 0
-            ? [`Priorizar ${noteCountWithArticle(urgent)} de severidade Hot News, Critical ou High.`, `Validar correções para ${productText}.`]
-            : ["Inventariar as notas publicadas e validar as prioridades de aplicação."],
+        executiveSummary: `${noteCount(notes.length)} analisada${notes.length === 1 ? "" : "s"}; ${urgent} com severidade Crítica (Hot News/Critical) ou Alta (High); produtos: ${productText}.`,
+        immediatePriorities: [
+            urgent > 0
+                ? `Priorizar ${noteCountWithArticle(urgent)} de severidade Crítica (Hot News/Critical) ou Alta (High).`
+                : "Validar a prioridade das notas publicadas e aplicar as correções oficiais conforme o risco.",
+            products.length > 0
+                ? `Validar correções para ${productText}.`
+                : "Confirmar os componentes afetados no inventário antes da implantação.",
+            notes.length > 0
+                ? "Registrar as validações, a implantação e as evidências do ciclo."
+                : "Registrar a avaliação do ciclo e monitorar a próxima publicação oficial.",
+        ],
         recommendations: RECOMMENDATION_TITLES.map((title, index) => ({ title, body: bodies[index] })),
     };
 }

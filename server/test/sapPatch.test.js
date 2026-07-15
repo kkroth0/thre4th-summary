@@ -38,6 +38,12 @@ test('parseSapNotes never throws on junk input', () => {
     assert.deepEqual(parseSapNotes('').notes, []);
 });
 
+test('parseSapNotes normalizes relative SAP Note URLs', () => {
+    const relative = `<table><tr><th>Note#</th><th>Title</th><th>Priority</th><th>CVSS</th></tr>
+      <tr><td><a href="/notes/1234567">1234567</a></td><td>[CVE-2026-1234] Issue</td><td>High</td><td>8.0</td></tr></table>`;
+    assert.equal(parseSapNotes(relative).notes[0].noteUrl, 'https://me.sap.com/notes/1234567');
+});
+
 test('latestPatchMonth picks current month on/after 2nd Tuesday, else previous', () => {
     // July 2026 Patch Day = 14 Jul. Before it -> June; on/after -> July.
     assert.equal(latestPatchMonth(new Date('2026-07-13T12:00:00Z')).monthName, 'june');

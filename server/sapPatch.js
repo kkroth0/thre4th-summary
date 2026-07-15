@@ -38,6 +38,14 @@ export const monthUrl = (year, month) =>
 
 const CVE_RE = /CVE-\d{4}-\d{4,}/gi;
 const clean = (s) => (s || '').replace(/\s+/g, ' ').trim();
+const normalizeNoteUrl = (href, note) => {
+    if (!href) return `https://me.sap.com/notes/${note}`;
+    try {
+        return new URL(href, 'https://me.sap.com').href;
+    } catch {
+        return `https://me.sap.com/notes/${note}`;
+    }
+};
 
 // "On 14th of July 2026, SAP security patch day ..." -> ISO date (or null).
 const parseReleaseDate = (text) => {
@@ -83,7 +91,7 @@ export function parseSapNotes(html) {
 
             notes.push({
                 note,
-                noteUrl: noteLink.attr('href') || `https://me.sap.com/notes/${note}`,
+                noteUrl: normalizeNoteUrl(noteLink.attr('href'), note),
                 title,
                 cves,
                 priority: clean($(cells[2]).text()) || 'N/A',

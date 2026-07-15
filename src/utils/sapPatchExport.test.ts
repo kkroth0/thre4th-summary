@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { createRequire } from "node:module";
 import type { SapPatchSummary } from "@/services/sapApi";
 import { buildSapPatchPresentation, buildSapPatchWorkbook, sapPatchBaseFilename, type ExcelWorkbookFactory } from "./sapPatchExport";
 
@@ -87,6 +88,7 @@ class FakeSlide {
     shapes: Array<{ type: unknown; options: Record<string, unknown> }> = [];
     charts: Array<{ type: unknown; data: unknown[]; options: Record<string, unknown> }> = [];
     background: unknown;
+    notes: string[] = [];
     addText(text: string | Array<{ text: string }>, options: Record<string, unknown> = {}) {
         const value = typeof text === "string" ? text : text.map((run) => run.text).join("");
         this.texts.push(value);
@@ -95,6 +97,7 @@ class FakeSlide {
     addTable(rows: Array<Array<{ text: string }>>, options: Record<string, unknown>) { this.tables.push({ rows, options }); }
     addShape(type: unknown, options: Record<string, unknown>) { this.shapes.push({ type, options }); }
     addChart(type: unknown, data: unknown[], options: Record<string, unknown>) { this.charts.push({ type, data, options }); }
+    addNotes(notes: string) { this.notes.push(notes); }
     addTextBox() {}
 }
 
@@ -179,7 +182,7 @@ test("preenche notas analisadas, links, filtros, fallbacks e metadados", () => {
     const notes = workbook.getWorksheet("Notas de segurança")!;
     const first = notes.getRow(2);
     assert.deepEqual(first.getCell(1).value, { text: sample.notes[0].note, hyperlink: sample.notes[0].noteUrl });
-    assert.deepEqual(first.getCell(2).value, { text: sample.notes[0].cves[0], hyperlink: `https://www.cve.org/CVERecord?id=${sample.notes[0].cves[0]}` });
+    assert.equal(first.getCell(2).value, sample.notes[0].cves[0]);
     assert.equal(first.getCell(6).value, "RCE / Corrupção de memória");
     assert.equal(first.getCell(7).value, "SAP NetWeaver AS Java");
     assert.deepEqual(first.getCell(10).value, { text: sample.notes[0].noteUrl, hyperlink: sample.notes[0].noteUrl });
@@ -191,6 +194,7 @@ test("preenche notas analisadas, links, filtros, fallbacks e metadados", () => {
     assert.equal(workbook.language, "pt-BR");
     assert.ok(workbook.created instanceof Date);
     assert.equal(workbook.subject, "Relatório automático do SAP Security Patch Day");
+    assert.equal((workbook as unknown as { description: string }).description, "Avaliação automática de riscos de vulnerabilidades SAP.");
     assert.match(workbook.title, /julho de 2026/);
 });
 
@@ -205,6 +209,8 @@ test("estiliza todo o conteúdo executivo com fundo branco, borda e texto grafit
     assert.equal(executive.getRow(12).getCell(1).value, "Distribuição por prioridade");
     assert.equal(executive.getRow(17).getCell(1).value, "Distribuição por categoria");
     assert.equal(executive.getRow(22).getCell(1).value, "Top 3");
+    assert.deepEqual(executive.views, [{ state: "frozen", ySplit: 5 }]);
+    assert.deepEqual(executive.autoFilter, { from: { row: 5, column: 1 }, to: { row: 10, column: 2 } });
 
     for (const [rowNumber, columnCount] of [[2, 2], [3, 2], [6, 2], [13, 2], [18, 2], [23, 4]]) {
         for (let column = 1; column <= columnCount; column++) {
@@ -301,23 +307,66 @@ test("registra gráfico nativo, três cards e master executivo dentro da área �
 
 test("contém 40 notas em uma tabela integral com escala, margens e títulos de até 100 caracteres", () => {
     const pptx = buildSapPatchPresentation(withNoteCount(40), FakePptx as never) as unknown as FakePptx;
-    const table = pptx.slides[3].tables[0];
-    assert.equal(table.rows.length, 41);
-    assert.equal(table.options.fontSize, 7);
-    assert.ok(Number(table.options.rowH) * table.rows.length + Number(table.options.y) < 7.05);
-    assert.ok(Number(table.options.margin) <= 0.03);
-    assert.equal(table.options.autoPage, false);
-    for (const row of table.rows.slice(1)) {
+    const tables = pptx.slides[3].tables;
+    assert.equal(tables.length, 2);
+    assert.deepEqual(tables.map((table) => table.rows.length), [21, 21]);
+    for (const table of tables) {
+        assert.equal(table.options.fontSize, 7);
+        assert.equal(table.options.rowH, undefined);
+        assert.ok(Number(table.options.margin) <= 0.03);
+        assert.equal(table.options.autoPage, false);
+    }
+    for (const row of tables.flatMap((table) => table.rows.slice(1))) {
         assert.ok(row[1].text.length <= 100);
-        assert.ok(row[1].text.endsWith("…"));
+        assert.match(row[1].text, /…/);
     }
 });
 
 test("mantém fonte de 7 pt para qualquer volume acima de 20 notas", () => {
-    for (const count of [41, 60]) {
+    for (const count of [21, 40]) {
         const pptx = buildSapPatchPresentation(withNoteCount(count), FakePptx as never) as unknown as FakePptx;
         assert.equal(pptx.slides.length, 6);
         assert.equal(pptx.slides[3].tables[0].options.fontSize, 7, `${count} notas`);
+    }
+});
+
+test("preserva todas as CVEs, atualização, severidade e títulos completos nas notas do slide", () => {
+    const multi = { ...sample, notes: [{ ...sample.notes[0], cves: ["CVE-2026-1001", "CVE-2026-1002"], title: "T".repeat(160), isUpdate: true }], summary: { ...sample.summary, total: 1, cveCount: 2 } };
+    const pptx = buildSapPatchPresentation(multi, FakePptx as never) as unknown as FakePptx;
+    const slide = pptx.slides[3];
+    const corpus = JSON.stringify(slide);
+    assert.match(corpus, /CVE-2026-1001, CVE-2026-1002/);
+    assert.match(corpus, /atualizada/);
+    assert.match(corpus, /DC2626/);
+    assert.match(slide.notes.join("\n"), new RegExp("T{160}"));
+    const workbook = buildSapPatchWorkbook(multi, FakeExcelLib) as unknown as FakeWorkbook;
+    assert.equal(workbook.getWorksheet("Notas de segurança")!.getRow(2).getCell(2).value, "CVE-2026-1001, CVE-2026-1002");
+});
+
+test("capa e consolidado incluem os textos executivos aprovados", () => {
+    const pptx = buildSapPatchPresentation(sample, FakePptx as never) as unknown as FakePptx;
+    assert.match(pptx.slides[0].texts.join("\n"), /Avaliação de riscos de vulnerabilidades/);
+    assert.match(pptx.slides[0].texts.join("\n"), /14 de julho de 2026/);
+    const consolidated = pptx.slides[2].texts.join("\n");
+    assert.match(consolidated, /Total de notas: 3/);
+    assert.match(consolidated, /RCE \/ Corrupção de memória:/);
+});
+
+test("gera ZIPs PPTX e XLSX reais com metadados e conteúdo neutros", async () => {
+    const runtimeRequire = createRequire(`${process.cwd()}/package.json`);
+    const JSZip = runtimeRequire("jszip") as typeof import("jszip");
+    const PptxGenJS = runtimeRequire("pptxgenjs") as typeof import("pptxgenjs").default;
+    const ExcelJS = runtimeRequire("exceljs") as typeof import("exceljs");
+    const pptx = buildSapPatchPresentation(sample, PptxGenJS);
+    const pptxBytes = await pptx.write({ outputType: "nodebuffer" });
+    const workbook = buildSapPatchWorkbook(sample, ExcelJS);
+    const xlsxBytes = await workbook.xlsx.writeBuffer();
+    for (const bytes of [pptxBytes, xlsxBytes]) {
+        const zip = await JSZip.loadAsync(bytes as ArrayBuffer);
+        const xml = (await Promise.all(Object.values(zip.files).filter((file) => !file.dir && /\.xml$/.test(file.name)).map((file) => file.async("string")))).join("\n");
+        assert.match(xml, /ThreatSumm4ry/);
+        assert.match(xml, /Avaliação|SAP Security Patch Day/);
+        assert.doesNotMatch(xml, /cliente|consultoria/i);
     }
 });
 

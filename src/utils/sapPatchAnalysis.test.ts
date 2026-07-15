@@ -154,3 +154,11 @@ test("usa concordância singular nos textos para uma nota", () => {
     assert.match(text, /a 1 nota classificada nessa categoria/);
     assert.doesNotMatch(text, /1 notas|as 1 nota/);
 });
+
+test("sempre produz exatamente três prioridades imediatas factuais", () => {
+    for (const notes of [[], [noteWith({ title: "Issue in unnamed component", priority: "Low" })]]) {
+        const analysis = buildSapReportAnalysis(summary(notes));
+        assert.equal(analysis.immediatePriorities.length, 3);
+        assert.ok(analysis.immediatePriorities.every(Boolean));
+    }
+});
