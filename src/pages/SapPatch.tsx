@@ -39,6 +39,9 @@ const cvssClass = (score: number | null) => {
 type ExportKind = "pdf" | "pptx" | "excel";
 const PAGE_SIZE = 25;
 
+export const canExportSapPatch = (data: SapPatchSummary | null): boolean =>
+    Boolean(data?.notes.length);
+
 export default function SapPatch() {
     const { language } = useLanguage();
     const pt = language === "pt";
@@ -82,7 +85,13 @@ export default function SapPatch() {
     const pageRows = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
     const runExport = async (kind: ExportKind) => {
-        if (!data) return;
+        if (!data || !canExportSapPatch(data)) {
+            toast({
+                title: "Não há notas SAP para exportar neste ciclo.",
+                variant: "destructive",
+            });
+            return;
+        }
         setExporting(kind);
         try {
             const fn = { pdf: exportSapPatchPDF, pptx: exportSapPatchPPTX, excel: exportSapPatchExcel }[kind];
@@ -134,9 +143,9 @@ export default function SapPatch() {
                     </Button>
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                            <Button size="sm" disabled={!data || !!exporting} className="rounded-xl">
+                            <Button size="sm" disabled={!canExportSapPatch(data) || !!exporting} className="rounded-xl">
                                 <Download className="h-4 w-4" />
-                                {exporting ? (pt ? "Exportando…" : "Exporting…") : "Export"}
+                                {exporting ? "Exportando…" : "Exportar"}
                             </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
