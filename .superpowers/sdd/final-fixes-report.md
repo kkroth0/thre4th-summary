@@ -37,3 +37,18 @@
 ## Limite conhecido
 
 O slide físico foi projetado e testado para até 40 notas, em duas tabelas de até 20 linhas. Volumes maiores continuam mantendo exatamente seis slides, mas não têm garantia equivalente de legibilidade física; o XLSX permanece a fonte integral para qualquer volume.
+
+## Re-review de segurança e localização
+
+### RED
+
+- O teste focado do scraper demonstrou que uma URL HTTPS em domínio externo era preservada indevidamente.
+- O teste unitário demonstrou que a prioridade do Top 3 executivo ainda usava o valor oficial bruto em vez do rótulo pt-BR.
+
+### GREEN
+
+- URLs de notas agora são aceitas somente com protocolo `https:` e hostname exato `me.sap.com`; qualquer outro destino é reconstruído pelo número validado da nota.
+- O Top 3 da visão executiva usa os mesmos rótulos localizados do restante do XLSX.
+- A denylist privada foi ampliada exclusivamente no teste e é aplicada separadamente ao XML real dos ZIPs PPTX e XLSX.
+- O helper de condensação sem uso foi removido.
+- Teste focado do scraper: 8/8; suíte unitária: 68/68; suíte de servidor: 75/75; typecheck e `git diff --check`: código 0.

@@ -209,6 +209,7 @@ test("estiliza todo o conteúdo executivo com fundo branco, borda e texto grafit
     assert.equal(executive.getRow(12).getCell(1).value, "Distribuição por prioridade");
     assert.equal(executive.getRow(17).getCell(1).value, "Distribuição por categoria");
     assert.equal(executive.getRow(22).getCell(1).value, "Top 3");
+    assert.equal(executive.getRow(23).getCell(3).value, "Crítica (Hot News)");
     assert.deepEqual(executive.views, [{ state: "frozen", ySplit: 5 }]);
     assert.deepEqual(executive.autoFilter, { from: { row: 5, column: 1 }, to: { row: 10, column: 2 } });
 
@@ -361,12 +362,13 @@ test("gera ZIPs PPTX e XLSX reais com metadados e conteúdo neutros", async () =
     const pptxBytes = await pptx.write({ outputType: "nodebuffer" });
     const workbook = buildSapPatchWorkbook(sample, ExcelJS);
     const xlsxBytes = await workbook.xlsx.writeBuffer();
-    for (const bytes of [pptxBytes, xlsxBytes]) {
+    const privateDenylist = [/\bEY\b/i, /Ernst\s*&\s*Young/i, /\bcliente\b/i, /\bclient\b/i, /\bconsultoria\b/i];
+    for (const [format, bytes] of [["PPTX", pptxBytes], ["XLSX", xlsxBytes]] as const) {
         const zip = await JSZip.loadAsync(bytes as ArrayBuffer);
         const xml = (await Promise.all(Object.values(zip.files).filter((file) => !file.dir && /\.xml$/.test(file.name)).map((file) => file.async("string")))).join("\n");
         assert.match(xml, /ThreatSumm4ry/);
         assert.match(xml, /Avaliação|SAP Security Patch Day/);
-        assert.doesNotMatch(xml, /cliente|consultoria/i);
+        for (const privateIdentifier of privateDenylist) assert.doesNotMatch(xml, privateIdentifier, `${format}: ${privateIdentifier}`);
     }
 });
 

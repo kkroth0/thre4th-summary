@@ -44,6 +44,14 @@ test('parseSapNotes normalizes relative SAP Note URLs', () => {
     assert.equal(parseSapNotes(relative).notes[0].noteUrl, 'https://me.sap.com/notes/1234567');
 });
 
+test('parseSapNotes rejects non-SAP and non-HTTPS absolute Note URLs', () => {
+    for (const href of ['https://example.invalid/?me.sap.com', 'http://me.sap.com/notes/1234567']) {
+        const unsafe = `<table><tr><th>Note#</th><th>Title</th><th>Priority</th><th>CVSS</th></tr>
+          <tr><td><a href="${href}">1234567</a></td><td>[CVE-2026-1234] Issue</td><td>High</td><td>8.0</td></tr></table>`;
+        assert.equal(parseSapNotes(unsafe).notes[0].noteUrl, 'https://me.sap.com/notes/1234567');
+    }
+});
+
 test('latestPatchMonth picks current month on/after 2nd Tuesday, else previous', () => {
     // July 2026 Patch Day = 14 Jul. Before it -> June; on/after -> July.
     assert.equal(latestPatchMonth(new Date('2026-07-13T12:00:00Z')).monthName, 'june');

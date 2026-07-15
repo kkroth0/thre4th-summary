@@ -171,7 +171,6 @@ const addConsolidatedSlide = (pptx: PptxGenJS, summary: SapPatchSummary, analysi
         slide.addText(note.title, { x: 7.2, y: y + .8, w: 5.2, h: .35, fontSize: 10, color: COLORS.navy });
     });
 };
-const displayTitle = (title: string) => title.length > 100 ? `${title.slice(0, 99)}…` : title;
 const displayHighlightTitle = (title: string, isUpdate: boolean): string => {
     const suffix = isUpdate ? ' · atualizada' : '';
     const maxTitle = 100 - suffix.length;
@@ -305,7 +304,7 @@ export function buildSapPatchWorkbook(summary: SapPatchSummary, ExcelLib: ExcelW
     analysis.categoryCounts.forEach(({ category, count }) => styleExcelDataRow(executive.addRow([category, count]), 2));
     executive.addRow([]);
     styleExcelHeader(executive.addRow(['Top 3', 'CVSS', 'Prioridade', 'Produto/Componente']), 4);
-    analysis.topThree.forEach((note) => styleExcelDataRow(executive.addRow([note.note, note.cvss == null ? 'Não informado' : note.cvss.toFixed(1), note.priority, note.product]), 4));
+    analysis.topThree.forEach((note) => styleExcelDataRow(executive.addRow([note.note, note.cvss == null ? 'Não informado' : note.cvss.toFixed(1), priorityLabel(note.priority), note.product]), 4));
     executive.autoFilter = { from: { row: 5, column: 1 }, to: { row: 10, column: 2 } };
     executive.getColumn(1).width = 34; executive.getColumn(2).width = 22; executive.getColumn(3).width = 18; executive.getColumn(4).width = 34;
 

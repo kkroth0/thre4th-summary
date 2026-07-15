@@ -39,11 +39,13 @@ export const monthUrl = (year, month) =>
 const CVE_RE = /CVE-\d{4}-\d{4,}/gi;
 const clean = (s) => (s || '').replace(/\s+/g, ' ').trim();
 const normalizeNoteUrl = (href, note) => {
+    const fallback = `https://me.sap.com/notes/${note}`;
     if (!href) return `https://me.sap.com/notes/${note}`;
     try {
-        return new URL(href, 'https://me.sap.com').href;
+        const url = new URL(href, 'https://me.sap.com');
+        return url.protocol === 'https:' && url.hostname === 'me.sap.com' ? url.href : fallback;
     } catch {
-        return `https://me.sap.com/notes/${note}`;
+        return fallback;
     }
 };
 
