@@ -75,27 +75,9 @@ class FakeWorkbook {
 const FakeExcelLib = { Workbook: FakeWorkbook } as unknown as ExcelWorkbookFactory;
 
 function collectFakeArtifactText(pptx: FakePptx, workbook: FakeWorkbook) {
-    const presentationText = [
-        pptx.author, pptx.company, pptx.subject, pptx.title, pptx.lang,
-        ...pptx.slides.flatMap((slide) => [
-            ...slide.texts,
-            ...slide.tables.flatMap((table) => table.rows.flatMap((row) => row.map((cell) => cell.text))),
-        ]),
-    ];
-    const workbookText = [
-        workbook.creator, workbook.company, workbook.subject, workbook.title, workbook.language,
-        ...workbook.worksheets.flatMap((sheet) => [
-            sheet.name,
-            ...sheet.columns.flatMap((column) => [column.header, column.key]),
-            ...[...sheet.rows.values()].flatMap((row) => [...row.cells.values()].map((cell) => {
-                const value = cell.value;
-                return typeof value === "object" && value !== null && "text" in value
-                    ? String((value as { text: unknown }).text)
-                    : String(value ?? "");
-            })),
-        ]),
-    ];
-    return [...presentationText, ...workbookText].join("\n");
+    return JSON.stringify([pptx, workbook], (_key, value) =>
+        value instanceof Map ? [...value.entries()] : value
+    );
 }
 
 class FakeSlide {
@@ -160,12 +142,25 @@ const julySummary: SapPatchSummary = {
 test("artefatos mantêm sequência, pt-BR e neutralidade", () => {
     const pptx = buildSapPatchPresentation(julySummary, FakePptx as never) as unknown as FakePptx;
     const workbook = buildSapPatchWorkbook(julySummary, FakeExcelLib) as unknown as FakeWorkbook;
+    pptx.masters.push({ reviewMarker: "metadado exclusivo do master" });
+    pptx.slides[2].charts[0].data.push({ name: "rótulo exclusivo do gráfico" });
+    pptx.slides[0].textEntries[0].options.hyperlink = { url: "https://metadata.example/pptx-option" };
     const corpus = collectFakeArtifactText(pptx, workbook);
 
-    assert.equal(pptx.slides.length, 6);
-    assert.match(corpus, /Sumário executivo/);
-    assert.match(corpus, /Conclusão e recomendações/);
+    assert.deepEqual(pptx.slides.map((slide) => slide.texts[0]), [
+        "SAP Security Patch Day",
+        "Sumário executivo",
+        "Consolidado de vulnerabilidades",
+        "Highlights de vulnerabilidades",
+        "Conclusão e recomendações",
+        "Referências",
+    ]);
+    assert.equal(pptx.lang, "pt-BR");
+    assert.equal(workbook.language, "pt-BR");
     assert.match(corpus, /Visão executiva/);
+    assert.match(corpus, /metadado exclusivo do master/);
+    assert.match(corpus, /rótulo exclusivo do gráfico/);
+    assert.match(corpus, /https:\/\/metadata\.example\/pptx-option/);
     assert.doesNotMatch(corpus, /customer|executive summary|security updates/i);
     assert.doesNotMatch(corpus, /cliente|consultoria/i);
 });
