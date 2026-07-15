@@ -1,29 +1,27 @@
-# Tarefa 3 — correção da revisão
+# Task 3 — Workbook executivo SAP em pt-BR
 
-## Resultado
+## Status
 
-O título de `GeographicNetworkOverview` agora usa `tr(...)` com variantes para todos os idiomas suportados pelo `LanguageContext`: português, inglês, espanhol e francês. O layout e o modelo de dados permanecem inalterados.
+Implementado `buildSapPatchWorkbook()` com duas abas, metadados pt-BR serializáveis por `workbook.language`, conteúdo executivo integralmente estilizado, análise de notas, fallbacks, hyperlinks, filtro, congelamento, bordas e cores nativas do ExcelJS. `exportSapPatchExcel()` preserva o import dinâmico e usa o mesmo nome-base do PPTX.
+
+## Evidência TDD
+
+- RED — `npm run test:unit`: exit 1 em `sapPatchExport.test.ts`, com `No matching export ... for import "buildSapPatchWorkbook"`.
+- GREEN focado — `npx esbuild src/utils/sapPatchExport.test.ts --bundle --platform=node --format=esm --outfile=/tmp/sapPatchExport.test.js && node --test /tmp/sapPatchExport.test.js`: 9 testes, 9 passaram, exit 0.
+- RED da revisão — o mesmo teste focado: 12 testes, 10 passaram e 2 falharam; `language` permaneceu `""` e o preenchimento branco executivo era `undefined`.
+- GREEN da revisão — teste focado: 12 testes, 12 passaram, exit 0. Cobertura adicionada para estilos, `created`, fallbacks, hyperlinks ausentes, Atualização/Vetor, seções executivas e `xlsx.writeBuffer()` injetado.
+- Typecheck — `npm run typecheck`: exit 0, sem diagnósticos.
+- Suíte global — `npm run test:unit`: 61 testes, 60 passaram e 1 falhou fora do escopo (`config/seo.test.ts`: expectativa não contém a rota `/sap-patch`, já presente no catálogo). Os 12 testes de export SAP passaram, incluindo os 7 de PPTX.
 
 ## Arquivos
 
-- `src/components/GeographicNetworkOverview.tsx`
-- `src/components/GeographicNetworkOverview.test.ts`
-- `.superpowers/sdd/task-3-report.md`
+- `src/utils/sapPatchExport.ts`
+- `src/utils/sapPatchExport.test.ts`
 
-## Verificação
+## Autocrítica e preocupações
 
-Comando:
-
-```sh
-npm run test:unit && npm run typecheck
-```
-
-Saída resumida:
-
-```text
-test:unit: 13 testes, 13 aprovados, 0 falhas
-typecheck: tsc -b --pretty false
-exit code: 0
-```
-
-O teste focado foi executado em ciclo vermelho/verde: antes da correção, falhou porque o componente extraía `language` e não chamava `tr`; depois da correção, passou.
+- A aba executiva usa somente células e estilos nativos, sem gráficos; todas as células com conteúdo em ciclo/fonte, KPIs, distribuições e Top 3 têm fundo branco, borda `DCE3EE` e texto grafite.
+- O link de CVE aponta para o registro público em `cve.org`, inferido do identificador porque o contrato de entrada não fornece URL própria.
+- O teste de integração usa `xlsx.writeBuffer()` injetado no factory, evitando inventar globais DOM em Node; o fluxo de download continua isolado no exportador de borda.
+- A falha global de SEO não foi alterada para evitar expandir o escopo desta task.
+- `.claude/` permaneceu intocado e fora do commit.

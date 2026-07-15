@@ -58,8 +58,10 @@ class FakeWorkbook {
     company = "";
     subject = "";
     title = "";
-    lang = "";
+    language = "";
     created: Date | null = null;
+    writeBufferCalls = 0;
+    xlsx = { writeBuffer: async () => { this.writeBufferCalls += 1; return new Uint8Array([1, 2, 3]); } };
     worksheets: FakeWorksheet[] = [];
     addWorksheet(name: string, options?: { views?: unknown[] }) {
         const sheet = new FakeWorksheet(name);
@@ -142,9 +144,55 @@ test("preenche notas analisadas, links, filtros, fallbacks e metadados", () => {
     assert.deepEqual(notes.autoFilter, { from: { row: 1, column: 1 }, to: { row: 1, column: 10 } });
     assert.deepEqual(notes.views, [{ state: "frozen", ySplit: 1 }]);
     assert.equal(workbook.company, "");
-    assert.equal(workbook.lang, "pt-BR");
+    assert.equal(workbook.language, "pt-BR");
+    assert.ok(workbook.created instanceof Date);
     assert.equal(workbook.subject, "Relatório automático do SAP Security Patch Day");
     assert.match(workbook.title, /julho de 2026/);
+});
+
+test("estiliza todo o conteúdo executivo com fundo branco, borda e texto grafite", () => {
+    const workbook = buildSapPatchWorkbook(sample, FakeExcelLib) as unknown as FakeWorkbook;
+    const executive = workbook.getWorksheet("Visão executiva")!;
+    assert.equal(executive.getCell("A2").value, "Data do ciclo");
+    assert.equal(executive.getCell("B2").value, sample.releaseDate);
+    assert.equal(executive.getCell("A3").value, "Fonte");
+    assert.deepEqual(executive.getCell("B3").value, { text: "Fonte oficial SAP", hyperlink: sample.url });
+    assert.equal(executive.getRow(6).getCell(1).value, "Total de notas");
+    assert.equal(executive.getRow(12).getCell(1).value, "Distribuição por prioridade");
+    assert.equal(executive.getRow(17).getCell(1).value, "Distribuição por categoria");
+    assert.equal(executive.getRow(22).getCell(1).value, "Top 3");
+
+    for (const [rowNumber, columnCount] of [[2, 2], [3, 2], [6, 2], [13, 2], [18, 2], [23, 4]]) {
+        for (let column = 1; column <= columnCount; column++) {
+            const cell = executive.getRow(rowNumber).getCell(column);
+            assert.deepEqual(cell.fill, { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFFFFF" } });
+            assert.equal((cell.font as { color: { argb: string } }).color.argb, "FF172033");
+            assert.equal((cell.border as { bottom: { color: { argb: string } } }).bottom.color.argb, "FFDCE3EE");
+        }
+    }
+});
+
+test("preserva fallbacks e campos operacionais sem criar links sem destino", () => {
+    const edgeSummary: SapPatchSummary = {
+        ...sample,
+        notes: [{ ...sample.notes[0], note: "200001", noteUrl: "", title: "Issue in unnamed component", cves: [], cvss: null, cvssVector: null, isUpdate: true }],
+        summary: { total: 1, byPriority: { High: 1 }, hotNews: 0, high: 1, maxCvss: 0, cveCount: 0 },
+    };
+    const workbook = buildSapPatchWorkbook(edgeSummary, FakeExcelLib) as unknown as FakeWorkbook;
+    const row = workbook.getWorksheet("Notas de segurança")!.getRow(2);
+    assert.equal(row.getCell(1).value, "200001");
+    assert.equal(row.getCell(2).value, "Não informada");
+    assert.equal(row.getCell(4).value, "Não informado");
+    assert.equal(row.getCell(7).value, "Componente SAP não especificado");
+    assert.equal(row.getCell(8).value, "Sim");
+    assert.equal(row.getCell(9).value, "Não informado");
+    assert.equal(row.getCell(10).value, "Não informada");
+});
+
+test("expõe writeBuffer no workbook construído", async () => {
+    const workbook = buildSapPatchWorkbook(sample, FakeExcelLib) as unknown as FakeWorkbook;
+    assert.deepEqual(await workbook.xlsx.writeBuffer(), new Uint8Array([1, 2, 3]));
+    assert.equal(workbook.writeBufferCalls, 1);
 });
 
 test("cria seis slides na sequência aprovada e com metadados neutros", () => {

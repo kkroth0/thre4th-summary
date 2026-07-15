@@ -227,6 +227,7 @@ const styleExcelDataRow = (row: ExcelJS.Row, columnCount: number): void => {
     for (let column = 1; column <= columnCount; column++) {
         const cell = row.getCell(column);
         cell.font = { ...cell.font, color: cell.font?.color ?? { argb: `FF${COLORS.navy}` } };
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: `FF${COLORS.white}` } };
         cell.alignment = { vertical: 'top', wrapText: true };
         cell.border = { top: excelBorder, left: excelBorder, bottom: excelBorder, right: excelBorder };
     }
@@ -238,7 +239,7 @@ export function buildSapPatchWorkbook(summary: SapPatchSummary, ExcelLib: ExcelW
     workbook.subject = 'Relatório automático do SAP Security Patch Day';
     workbook.title = `SAP Security Patch Day — ${formatReportMonth(summary.releaseDate)}`;
     workbook.created = new Date();
-    (workbook as ExcelJS.Workbook & { lang: string }).lang = 'pt-BR';
+    (workbook as ExcelJS.Workbook & Pick<ExcelJS.WorkbookModel, 'language'>).language = 'pt-BR';
     const analysis = buildSapReportAnalysis(summary);
 
     const executive = workbook.addWorksheet('Visão executiva');
@@ -249,17 +250,18 @@ export function buildSapPatchWorkbook(summary: SapPatchSummary, ExcelLib: ExcelW
     executive.getCell('A2').value = 'Data do ciclo'; executive.getCell('B2').value = summary.releaseDate || 'Ciclo mais recente';
     executive.getCell('A3').value = 'Fonte';
     executive.getCell('B3').value = summary.url ? { text: 'Fonte oficial SAP', hyperlink: summary.url } : 'Fonte oficial SAP';
+    styleExcelDataRow(executive.getRow(2), 2); styleExcelDataRow(executive.getRow(3), 2);
     executive.getRow(5).values = ['Indicador', 'Valor']; styleExcelHeader(executive.getRow(5), 2);
     [['Total de notas', summary.summary.total], ['Hot News / Critical', summary.summary.hotNews], ['High', summary.summary.high], ['CVSS máximo', summary.summary.maxCvss.toFixed(1)], ['CVEs', summary.summary.cveCount]]
-        .forEach((values) => executive.addRow(values));
+        .forEach((values) => styleExcelDataRow(executive.addRow(values), 2));
     executive.addRow([]); styleExcelHeader(executive.addRow(['Distribuição por prioridade', 'Quantidade']), 2);
-    Object.entries(summary.summary.byPriority).forEach(([priority, count]) => executive.addRow([priority, count]));
+    Object.entries(summary.summary.byPriority).forEach(([priority, count]) => styleExcelDataRow(executive.addRow([priority, count]), 2));
     executive.addRow([]);
     styleExcelHeader(executive.addRow(['Distribuição por categoria', 'Quantidade']), 2);
-    analysis.categoryCounts.forEach(({ category, count }) => executive.addRow([category, count]));
+    analysis.categoryCounts.forEach(({ category, count }) => styleExcelDataRow(executive.addRow([category, count]), 2));
     executive.addRow([]);
     styleExcelHeader(executive.addRow(['Top 3', 'CVSS', 'Prioridade', 'Produto/Componente']), 4);
-    analysis.topThree.forEach((note) => executive.addRow([note.note, note.cvss == null ? 'Não informado' : note.cvss.toFixed(1), note.priority, note.product]));
+    analysis.topThree.forEach((note) => styleExcelDataRow(executive.addRow([note.note, note.cvss == null ? 'Não informado' : note.cvss.toFixed(1), note.priority, note.product]), 4));
     executive.getColumn(1).width = 34; executive.getColumn(2).width = 22; executive.getColumn(3).width = 18; executive.getColumn(4).width = 34;
 
     const notes = workbook.addWorksheet('Notas de segurança', { views: [{ state: 'frozen', ySplit: 1 }] });
