@@ -152,6 +152,23 @@ export const PUBLIC_SEO_ROUTES: SeoRoute[] = [
     },
   },
   {
+    path: "/sap-patch",
+    priority: "0.7",
+    changefreq: "monthly",
+    metadata: {
+      pt: {
+        title: "SAP Security Patch Day e Notas de Seguranca | ThreatSumm4ry",
+        description:
+          "Acompanhe o SAP Security Patch Day mensal: notas de seguranca, CVEs, prioridade (Hot News) e CVSS com links oficiais da SAP.",
+      },
+      en: {
+        title: "SAP Security Patch Day and Security Notes | ThreatSumm4ry",
+        description:
+          "Track the monthly SAP Security Patch Day: security notes, CVEs, priority (Hot News) and CVSS with official SAP note links.",
+      },
+    },
+  },
+  {
     path: "/vendors",
     priority: "0.65",
     changefreq: "monthly",
