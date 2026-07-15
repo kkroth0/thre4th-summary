@@ -29,7 +29,7 @@
 - Modificar `src/pages/SapPatch.tsx`: bloquear export vazio com mensagem pt-BR e manter o carregamento sob demanda existente.
 - Criar `src/pages/sapPatchExportGuard.test.ts`: contrato textual do bloqueio e dos rótulos de export.
 
-### Tarefa 1: Motor determinístico de análise
+### Task 1: Motor determinístico de análise
 
 **Arquivos:**
 
@@ -202,7 +202,7 @@ git add src/utils/sapPatchAnalysis.ts src/utils/sapPatchAnalysis.test.ts
 git commit -m "feat(sap-patch): add deterministic pt-BR report analysis"
 ```
 
-### Tarefa 2: Builder do PowerPoint executivo de seis slides
+### Task 2: Builder do PowerPoint executivo de seis slides
 
 **Arquivos:**
 
@@ -379,7 +379,7 @@ git add src/utils/sapPatchExport.ts src/utils/sapPatchExport.test.ts
 git commit -m "feat(sap-patch): generate six-slide pt-BR executive deck"
 ```
 
-### Tarefa 3: Workbook executivo em pt-BR
+### Task 3: Workbook executivo em pt-BR
 
 **Arquivos:**
 
@@ -481,7 +481,7 @@ git add src/utils/sapPatchExport.ts src/utils/sapPatchExport.test.ts
 git commit -m "feat(sap-patch): add pt-BR executive Excel workbook"
 ```
 
-### Tarefa 4: Guardas da interface e cópia pt-BR
+### Task 4: Guardas da interface e cópia pt-BR
 
 **Arquivos:**
 
@@ -545,7 +545,7 @@ git commit -m "fix(sap-patch): guard exports and use pt-BR labels"
 
 Esperado: testes e typecheck passam antes do commit.
 
-### Tarefa 5: Validação integrada dos artefatos
+### Task 5: Validação integrada dos artefatos
 
 **Arquivos:**
 
