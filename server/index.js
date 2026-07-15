@@ -12,10 +12,14 @@ import fs from 'fs';
 import crypto from 'crypto';
 import compression from 'compression';
 import * as cheerio from 'cheerio';
-import { scoreArticle, localizeEnrichment, severityFromScore, extractIOCs, CTI_FEEDS } from './ctiIntel.js';
+import {
+    scoreArticle, localizeEnrichment, severityFromScore, extractIOCs, CTI_FEEDS,
+    extractReadableText, collectArtifactLinks, githubArtifact, ARTIFACT_TEXT_FILE,
+} from './ctiIntel.js';
 import { runAttackSurfaceScan } from './attackSurface.js';
 import { createWatchlistStore, runDueExposureSnapshots, runExposureSnapshot } from './exposureWatchlist.js';
 import { detectQueryType, sanitizeQuery } from './iocValidation.js';
+import { isEarlyDoc, normalizeCvrf } from './patchTuesday.js';
 import {
     asArray,
     buildThreatMapResponse,
@@ -1375,7 +1379,10 @@ const memoryCache = {
     patchTuesdayMonths: {
         data: null,
         expiresAt: 0,
-        ttl: 6 * 60 * 60 * 1000 // 6 hours
+        // Doubles as the background refresh interval. The month list is a small
+        // document and is what detects a new Patch Tuesday (and the draft ->
+        // release swap), so this bounds how long a stale month can be served.
+        ttl: 60 * 60 * 1000 // 1 hour
     },
     // Per-month normalized Patch Tuesday summaries, keyed by id (e.g. "2026-Jun")
     patchTuesday: {
@@ -2520,50 +2527,81 @@ async function googleTranslate(text, targetLang) {
     return text || '';
 }
 
-// Advanced collection: fetch the full article and extract its readable body
-// text (paragraphs), mirroring the bot's deep-content step. Dependency-free
-// heuristic; returns '' if the page can't be fetched/parsed (then we fall back
-// to the RSS summary). Best-effort and tolerant of WAF/JS-heavy sites.
-const ARTICLE_BOILERPLATE = /^(advertisement|scroll to continue|related\s*:|written by|subscribe|sign up|sponsored|©|cookie|share this|read more|tags:|follow us|newsletter|sign up to)/i;
-
-function extractReadableText(html) {
-    try {
-        const $ = cheerio.load(html);
-        // Strip non-content chrome
-        $('script,style,noscript,nav,aside,footer,header,form,iframe,figure,figcaption,.ad,.ads,.advertisement,.related,.newsletter,.share,.social,[class*="promo"],[class*="sidebar"]').remove();
-        // Pick the densest content root (article/main, else body)
-        let root = $('article').first();
-        if (!root.length) root = $('main').first();
-        if (!root.length) root = $('body');
-        const paras = [];
-        root.find('p').each((_, el) => {
-            const t = $(el).text().replace(/\s+/g, ' ').trim();
-            if (t.length > 45 && !ARTICLE_BOILERPLATE.test(t) && !/\(@\w+\)\s+is\s+(a|the|senior|managing)/i.test(t)) {
-                paras.push(t);
-            }
-        });
-        return paras.join('\n\n');
-    } catch {
-        return '';
-    }
-}
+// Advanced collection: fetch the full article, extract its readable body (see
+// extractReadableText — paragraphs AND the IOC tables) plus any link to an
+// external indicator appendix. Best-effort: returns empty on WAF/JS-heavy sites,
+// and the caller falls back to the RSS summary.
+const BROWSER_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 
 async function fetchArticleText(url) {
     try {
         const resp = await axios.get(url, {
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                Accept: 'text/html,application/xhtml+xml',
-            },
+            headers: { 'User-Agent': BROWSER_UA, Accept: 'text/html,application/xhtml+xml' },
             timeout: 10000,
             maxRedirects: 3,
             responseType: 'text',
         });
-        return extractReadableText(resp.data).slice(0, 8000);
+        return {
+            text: extractReadableText(resp.data).slice(0, 8000),
+            artifactLinks: collectArtifactLinks(resp.data, url),
+        };
     } catch (err) {
         console.warn(`Article fetch failed for ${url}: ${err.message}`);
-        return '';
+        return { text: '', artifactLinks: [] };
     }
+}
+
+// One hop into the linked indicator appendix (GitHub repo, gist, pastebin).
+// Everything fetched here is untrusted, attacker-adjacent text: it feeds the
+// deterministic IOC regexes, is size-capped, and each URL — including the ones
+// GitHub's API hands back — passes the SSRF guard before any request goes out.
+const ARTIFACT_MAX_BYTES = 40_000;
+const ARTIFACT_MAX_FILES = 6;
+
+async function fetchArtifactFile(url) {
+    await assertSafePublicUrl(url);
+    const resp = await axios.get(url, {
+        headers: { 'User-Agent': BROWSER_UA, Accept: 'text/plain,*/*' },
+        timeout: 8000,
+        maxRedirects: 2,
+        maxContentLength: ARTIFACT_MAX_BYTES,
+        responseType: 'text',
+        transformResponse: (d) => d,
+    });
+    return String(resp.data || '').slice(0, ARTIFACT_MAX_BYTES);
+}
+
+// A GitHub folder link resolves to its text files; anything else is fetched as-is.
+async function resolveArtifactFiles(link) {
+    const gh = githubArtifact(link);
+    if (!gh) return [link];
+    if (gh.kind === 'raw') return [gh.url];
+
+    await assertSafePublicUrl(gh.url);
+    const resp = await axios.get(gh.url, {
+        headers: { 'User-Agent': BROWSER_UA, Accept: 'application/vnd.github+json' },
+        timeout: 8000,
+        maxRedirects: 2,
+    });
+    return (Array.isArray(resp.data) ? resp.data : [])
+        .filter((f) => f?.type === 'file' && f.download_url && f.size < ARTIFACT_MAX_BYTES && ARTIFACT_TEXT_FILE.test(f.name))
+        .slice(0, ARTIFACT_MAX_FILES)
+        .map((f) => f.download_url);
+}
+
+async function fetchIocArtifacts(links) {
+    const artifacts = [];
+    for (const link of links) {
+        try {
+            await assertSafePublicUrl(link);
+            for (const file of await resolveArtifactFiles(link)) {
+                artifacts.push({ origin: link, url: file, text: await fetchArtifactFile(file) });
+            }
+        } catch (err) {
+            console.warn(`IOC artifact fetch failed for ${link}: ${err.message}`);
+        }
+    }
+    return artifacts;
 }
 
 // Split readable text into clean sentences (>30 chars).
@@ -2639,7 +2677,7 @@ app.post('/api/newsletter/enrich', requirePremium, scanLimiter, async (req, res)
         if (cached && cached.expiresAt > now) return res.json(cached.data);
 
         // Advanced collection: pull the full article body; fall back to RSS summary.
-        const fullText = await fetchArticleText(item.link);
+        const { text: fullText, artifactLinks } = await fetchArticleText(item.link);
         const content = fullText || item.description || '';
 
         // Re-run deterministic enrichment over the FULL article so MITRE ATT&CK,
@@ -2654,9 +2692,17 @@ app.post('/api/newsletter/enrich', requirePremium, scanLimiter, async (req, res)
         const ai = await openRouterAnalyze(item.title, content, lang);
 
         // Deterministic IOC sweep over the FULL article (richer than the
-        // title+summary set computed at collection). High-precision: hashes +
-        // defanged network indicators + public IPv4.
-        const iocs = extractIOCs(content);
+        // title+summary set computed at collection) PLUS any linked indicator
+        // appendix. High-precision: hashes + defanged network indicators + public
+        // IPv4. iocSources is reported even when the fetch failed — a report whose
+        // indicators live in a GitHub repo should say so, not show a short list as
+        // if it were the whole set.
+        const artifacts = await fetchIocArtifacts(artifactLinks);
+        const iocs = extractIOCs([content, ...artifacts.map((a) => a.text)].join('\n'));
+        const iocSources = artifactLinks.map((url) => ({
+            url,
+            fetched: artifacts.some((a) => a.origin === url),
+        }));
 
         let payload;
         if (ai && ai.summary) {
@@ -2667,7 +2713,7 @@ app.post('/api/newsletter/enrich', requirePremium, scanLimiter, async (req, res)
                 title: ai.title || item.title,
                 executiveSummary: String(ai.summary).trim(),
                 impactMitigation: '',
-                iocs, ...enriched,
+                iocs, iocSources, ...enriched,
             };
         } else {
             // No LLM: concise Executive Summary (lead sentences) + a distinct
@@ -2682,12 +2728,12 @@ app.post('/api/newsletter/enrich', requirePremium, scanLimiter, async (req, res)
                 ]);
                 payload = {
                     available: false, source: 'translate', scraped: !!fullText,
-                    title: t || item.title, executiveSummary: ex || execRaw, impactMitigation: mit || '', iocs, ...enriched,
+                    title: t || item.title, executiveSummary: ex || execRaw, impactMitigation: mit || '', iocs, iocSources, ...enriched,
                 };
             } else {
                 payload = {
                     available: false, source: 'rss', scraped: !!fullText,
-                    title: item.title, executiveSummary: execRaw, impactMitigation: mitRaw || '', iocs, ...enriched,
+                    title: item.title, executiveSummary: execRaw, impactMitigation: mitRaw || '', iocs, iocSources, ...enriched,
                 };
             }
         }
@@ -3018,140 +3064,6 @@ app.get('/api/cves/exploited', async (req, res) => {
 // ============================================================
 
 const MSRC_BASE = 'https://api.msrc.microsoft.com/cvrf/v3.0';
-const SEVERITY_RANK = { Critical: 4, Important: 3, Moderate: 2, Low: 1 };
-
-const stripHtml = (str) => (str || '').replace(/<[^>]*>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim();
-
-// Classify a vulnerability into a single product family using its title + affected product names
-const classifyFamily = (title, productNames) => {
-    const hay = `${title || ''} ${productNames.join(' ')}`.toLowerCase();
-    if (/azure|microsoft entra|defender for/.test(hay)) return 'Azure & Cloud';
-    if (/sharepoint/.test(hay)) return 'SharePoint';
-    if (/exchange/.test(hay)) return 'Exchange Server';
-    if (/sql server/.test(hay)) return 'SQL Server';
-    if (/\.net|visual studio|asp\.net|nuget|powershell/.test(hay)) return 'Developer Tools & .NET';
-    if (/office|word|excel|powerpoint|outlook|visio|onenote|\baccess\b|publisher/.test(hay)) return 'Microsoft Office';
-    if (/\bedge\b|chromium/.test(hay)) return 'Microsoft Edge';
-    if (/dynamics/.test(hay)) return 'Dynamics 365';
-    if (/system center/.test(hay)) return 'System Center';
-    if (/windows|win32|kernel|hyper-v|\brdp\b|smb|\bdns\b|tcp\/ip|active directory/.test(hay)) return 'Windows';
-    return 'Other Microsoft Products';
-};
-
-const parseExploitStatus = (str) => {
-    const s = str || '';
-    const m = (re) => (s.match(re)?.[1] || '').trim();
-    return {
-        exploited: /Exploited:\s*Yes/i.test(s),
-        publiclyDisclosed: /Publicly Disclosed:\s*Yes/i.test(s),
-        exploitability: m(/Latest Software Release:\s*([^;]+)/i) || 'N/A'
-    };
-};
-
-// Transform a raw CVRF document into a compact, presentation-ready summary
-const normalizeCvrf = (doc) => {
-    const productNameById = {};
-    for (const p of (doc.ProductTree?.FullProductName || [])) {
-        productNameById[p.ProductID] = p.Value;
-    }
-
-    const totals = { total: 0, critical: 0, important: 0, moderate: 0, low: 0, unknown: 0, exploited: 0, disclosed: 0, exploitMoreLikely: 0 };
-    const byImpact = {};
-    const byFamily = {};
-    const vulnerabilities = [];
-
-    for (const v of (doc.Vulnerability || [])) {
-        if (!v.CVE) continue;
-        const threats = v.Threats || [];
-
-        // Highest severity across products (Threat Type 3)
-        let severity = null, sevRank = 0;
-        for (const t of threats) {
-            if (t.Type !== 3) continue;
-            const val = t.Description?.Value;
-            if (val && SEVERITY_RANK[val] && SEVERITY_RANK[val] > sevRank) { severity = val; sevRank = SEVERITY_RANK[val]; }
-        }
-
-        // Impact / vulnerability category (Threat Type 0)
-        const impact = threats.find(t => t.Type === 0 && t.Description?.Value)?.Description?.Value || 'Other';
-
-        // Exploit status (Threat Type 1)
-        const ex = parseExploitStatus(threats.find(t => t.Type === 1)?.Description?.Value);
-
-        // Highest CVSS base score + its vector
-        let cvss = 0, vector = '';
-        for (const c of (v.CVSSScoreSets || [])) {
-            if ((c.BaseScore || 0) > cvss) { cvss = c.BaseScore; vector = c.Vector || ''; }
-        }
-
-        const affectedIds = (v.ProductStatuses || []).find(s => s.Type === 3)?.ProductID || [];
-        const productNames = affectedIds.map(id => productNameById[id]).filter(Boolean);
-        const family = classifyFamily(v.Title?.Value, productNames);
-
-        // KB / vendor fixes (Remediation Type 2)
-        const kbSet = new Map();
-        for (const r of (v.Remediations || [])) {
-            if (r.Type === 2 && r.Description?.Value) {
-                kbSet.set(r.Description.Value, r.URL || `https://catalog.update.microsoft.com/v7/site/Search.aspx?q=KB${r.Description.Value}`);
-            }
-        }
-
-        const description = stripHtml((v.Notes || []).find(n => n.Type === 2)?.Value).slice(0, 600);
-        const cwe = Array.isArray(v.CWE) ? (v.CWE[0]?.Value || '') : (v.CWE?.Value || '');
-
-        // Tallies
-        totals.total++;
-        if (severity === 'Critical') totals.critical++;
-        else if (severity === 'Important') totals.important++;
-        else if (severity === 'Moderate') totals.moderate++;
-        else if (severity === 'Low') totals.low++;
-        else totals.unknown++;
-        if (ex.exploited) totals.exploited++;
-        if (ex.publiclyDisclosed) totals.disclosed++;
-        if (/More Likely/i.test(ex.exploitability)) totals.exploitMoreLikely++;
-        byImpact[impact] = (byImpact[impact] || 0) + 1;
-        byFamily[family] = (byFamily[family] || 0) + 1;
-
-        vulnerabilities.push({
-            cve: v.CVE,
-            title: v.Title?.Value || '',
-            description,
-            cwe,
-            severity: severity || 'Unknown',
-            impact,
-            cvss: cvss || null,
-            vector,
-            exploited: ex.exploited,
-            publiclyDisclosed: ex.publiclyDisclosed,
-            exploitability: ex.exploitability,
-            family,
-            productCount: affectedIds.length,
-            kbs: [...kbSet.entries()].map(([kb, url]) => ({ kb, url })),
-            releaseDate: v.ReleaseDate || null
-        });
-    }
-
-    // Sort by exploited, then disclosed, then CVSS desc
-    vulnerabilities.sort((a, b) =>
-        (b.exploited - a.exploited) ||
-        (b.publiclyDisclosed - a.publiclyDisclosed) ||
-        ((b.cvss || 0) - (a.cvss || 0))
-    );
-
-    const sortEntries = (obj) => Object.entries(obj).sort((a, b) => b[1] - a[1]).map(([name, count]) => ({ name, count }));
-
-    return {
-        id: doc.DocumentTracking?.Identification?.ID?.Value || '',
-        title: doc.DocumentTitle?.Value || '',
-        initialReleaseDate: doc.DocumentTracking?.InitialReleaseDate || null,
-        currentReleaseDate: doc.DocumentTracking?.CurrentReleaseDate || null,
-        totals,
-        byImpact: sortEntries(byImpact),
-        byFamily: sortEntries(byFamily),
-        topCves: vulnerabilities.slice(0, 12),
-        vulnerabilities
-    };
-};
 
 // Fetch the live list of monthly "Security Updates" from MSRC and cache it
 async function fetchAndCacheMonths() {
@@ -3160,7 +3072,7 @@ async function fetchAndCacheMonths() {
         timeout: 12000
     });
     const months = (response.data?.value || [])
-        .filter(m => /Security Updates/i.test(m.DocumentTitle || ''))
+        .filter(m => /Security Updates/i.test(m.DocumentTitle || '') && !isEarlyDoc(m.DocumentTitle))
         .map(m => ({
             id: m.ID,
             title: m.DocumentTitle,
@@ -3174,14 +3086,24 @@ async function fetchAndCacheMonths() {
     return months;
 }
 
-// Fetch + normalize the CVRF document for one month and cache it
+// Fetch + normalize the CVRF document for one month and cache it.
+// Returns null when the month's document is still the pre-release "Early" draft,
+// which must never be cached or served — doing so lets it masquerade as the real
+// Patch Tuesday for a full TTL after Microsoft swaps in the final document.
+// The entry records currentReleaseDate so callers can detect that swap.
 async function fetchAndCacheSummary(id) {
     const response = await axios.get(`${MSRC_BASE}/cvrf/${id}`, {
         headers: { Accept: 'application/json' },
         timeout: 20000
     });
     const summary = normalizeCvrf(response.data);
-    cacheSet(memoryCache.patchTuesday.store, id, { data: summary, expiresAt: Date.now() + memoryCache.patchTuesday.ttl }, 36);
+    if (isEarlyDoc(summary.title)) return null;
+    cacheSet(
+        memoryCache.patchTuesday.store,
+        id,
+        { data: summary, currentReleaseDate: summary.currentReleaseDate, expiresAt: Date.now() + memoryCache.patchTuesday.ttl },
+        36
+    );
     return summary;
 }
 
@@ -3204,11 +3126,11 @@ async function refreshPatchTuesday() {
 app.get('/api/patch-tuesday/months', async (req, res) => {
     const now = Date.now();
     if (memoryCache.patchTuesdayMonths.data && memoryCache.patchTuesdayMonths.expiresAt > now) {
-        res.set('Cache-Control', 'public, max-age=21600');
+        res.set('Cache-Control', 'public, max-age=3600');
         return res.json(memoryCache.patchTuesdayMonths.data);
     }
     try {
-        res.set('Cache-Control', 'public, max-age=21600');
+        res.set('Cache-Control', 'public, max-age=3600');
         res.json(await fetchAndCacheMonths());
     } catch (error) {
         const { status, message } = sanitizeError(error);
@@ -3225,14 +3147,26 @@ app.get('/api/patch-tuesday/:id', async (req, res) => {
 
     const now = Date.now();
     const cached = memoryCache.patchTuesday.store.get(id);
-    if (cached && cached.expiresAt > now) {
+
+    // A CVRF document mutates in place behind a stable id (draft -> release, then
+    // mid-month revisions), so the id alone is not a sound cache key. The month
+    // list is cheap and carries CurrentReleaseDate: treat it as the validator and
+    // refetch whenever Microsoft has revised the document we cached.
+    const known = memoryCache.patchTuesdayMonths.data?.find(m => m.id === id);
+    const revised = cached && known && cached.currentReleaseDate !== known.currentReleaseDate;
+
+    if (cached && !revised && cached.expiresAt > now) {
         res.set('Cache-Control', 'public, max-age=3600');
         return res.json(cached.data);
     }
 
     try {
+        const summary = await fetchAndCacheSummary(id);
+        if (!summary) {
+            return res.status(404).json({ error: 'Security updates for this month have not been released yet.' });
+        }
         res.set('Cache-Control', 'public, max-age=3600');
-        res.json(await fetchAndCacheSummary(id));
+        res.json(summary);
     } catch (error) {
         const { status, message } = sanitizeError(error);
         res.status(status).json({ error: message });

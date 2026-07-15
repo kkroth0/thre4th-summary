@@ -43,7 +43,10 @@ function drawSeverityBar(doc: jsPDF, x: number, y: number, w: number, totals: Pa
         { label: 'Important', value: totals.important, hex: SEVERITY_HEX.Important },
         { label: 'Moderate', value: totals.moderate, hex: SEVERITY_HEX.Moderate },
         { label: 'Low', value: totals.low, hex: SEVERITY_HEX.Low },
-        { label: 'Unrated/Edge', value: totals.unknown, hex: SEVERITY_HEX.Unknown },
+        // Was "Unrated/Edge" back when unrated CVEs were overwhelmingly Chromium
+        // restatements. Those are now excluded from totals, so this is genuinely
+        // just Microsoft CVEs that MSRC left unrated.
+        { label: 'Unrated', value: totals.unknown, hex: SEVERITY_HEX.Unknown },
     ];
     const total = totals.total || 1;
     const h = 8;

@@ -35,6 +35,7 @@ export const BoletimView: React.FC<{ report: BoletimReport }> = ({ report }) => 
   const tech = r.tecnologias_afetadas || [];
   const surface = r.superficie_de_ataque || [];
   const killChain = r.cyber_kill_chain || [];
+  const iocSources = r.iocs_fontes || [];
 
   return (
     <div className="mt-4 text-sm">
@@ -107,8 +108,23 @@ export const BoletimView: React.FC<{ report: BoletimReport }> = ({ report }) => 
         </Section>
       )}
 
-      {iocs.length > 0 && (
+      {(iocs.length > 0 || iocSources.length > 0) && (
         <Section title="Indicadores de comprometimento" count={iocs.length}>
+          {iocSources.length > 0 && (
+            <p className="mb-1.5 text-xs text-muted-foreground">
+              IOCs coletados de{" "}
+              {iocSources.map((src, i) => (
+                <React.Fragment key={i}>
+                  {i > 0 && ", "}
+                  <a href={src} target="_blank" rel="noopener noreferrer"
+                     className="inline-flex items-center gap-1 hover:underline break-all">
+                    {src} <ExternalLink className="h-3 w-3 shrink-0" />
+                  </a>
+                </React.Fragment>
+              ))}
+            </p>
+          )}
+          {iocs.length > 0 && (
           <div className="overflow-hidden rounded-md border">
             <table className="w-full text-xs">
               <thead className="bg-muted/50 text-muted-foreground">
@@ -125,6 +141,7 @@ export const BoletimView: React.FC<{ report: BoletimReport }> = ({ report }) => 
               </tbody>
             </table>
           </div>
+          )}
         </Section>
       )}
 

@@ -7,6 +7,7 @@
  * (weight_boost) and noise penalties. Concrete signals (monitored CVSS,
  * CVE IDs) outweigh fuzzy keyword matches.
  */
+import * as cheerio from 'cheerio';
 
 // ─── Category taxonomy (ported from data/cti_categories.json) ──────────────
 export const CTI_CATEGORIES = {
@@ -241,6 +242,23 @@ const refang = (s) => String(s)
     .replace(/\bhxx(ps?)\b/gi, 'htt$1')
     .replace(/\bhxx(ps?):/gi, 'htt$1:');
 
+// An address' domain is not an IOC: evil@gmail[.]com would otherwise publish
+// gmail.com as a malicious domain. The schema has no e-mail field, so the whole
+// token goes.
+const RE_EMAIL = /[a-z0-9._%+-]+(?:@|\[@\]|\[at\])[a-z0-9.\[\](){}_-]+\.?[a-z]{2,}/gi;
+
+// Shared hosting/CDN suffixes: the bare apex is legit infrastructure (nobody
+// blocks github.io), so alone it's noise — e.g. a "<referrer>.github.io" template
+// in a CSV that refangs to a bare "github.io". The attacker SUBdomain
+// (evil.github.io) is a real indicator and is kept. Curated, not the full Public
+// Suffix List. ponytail: hand-list, add the PSL only if noise proves broader.
+const SHARED_PLATFORM_DOMAINS = new Set([
+    'github.io', 'workers.dev', 'pages.dev', 'web.app', 'firebaseapp.com',
+    'netlify.app', 'vercel.app', 'azurewebsites.net', 'herokuapp.com',
+    'cloudfront.net', 'amazonaws.com', 'blogspot.com', 'wordpress.com',
+    'r2.dev', 'b-cdn.net', 'glitch.me',
+]);
+
 export function extractIOCs(text) {
     const t = String(text || '');
     const hashes = new Set();
@@ -248,16 +266,17 @@ export function extractIOCs(text) {
 
     const urls = new Set();
     // Only DEFANGED URLs (hxxp:// or [.]/[:] markers) — avoids harvesting every
-    // benign link in the article body.
-    for (const m of t.matchAll(/\b(?:hxxps?|https?)(?::|\[:\])\/\/[^\s<>"')]+/gi)) {
+    // benign link in the article body. A comma ends the URL: it delimits the next
+    // column in a CSV appendix, and the next clause in prose.
+    for (const m of t.matchAll(/\b(?:hxxps?|https?)(?::|\[:\])\/\/[^\s<>"'),]+/gi)) {
         if (/\[\.\]|\(\.\)|\{\.\}|\[:\]|hxx/i.test(m[0])) urls.add(refang(m[0]).replace(/[.,;:]+$/, ''));
     }
 
     const domains = new Set();
     // Defanged domains: a token carrying [.] / (.) / {.}
-    for (const m of t.matchAll(/\b((?:[a-z0-9-]+(?:\[\.\]|\(\.\)|\{\.\}))+[a-z]{2,})\b/gi)) {
+    for (const m of t.replace(RE_EMAIL, ' ').matchAll(/\b((?:[a-z0-9-]+(?:\[\.\]|\(\.\)|\{\.\}))+[a-z]{2,})\b/gi)) {
         const d = refang(m[1]).toLowerCase();
-        if (/^[a-z0-9.-]+\.[a-z]{2,}$/.test(d)) domains.add(d);
+        if (/^[a-z0-9.-]+\.[a-z]{2,}$/.test(d) && !SHARED_PLATFORM_DOMAINS.has(d)) domains.add(d);
     }
 
     const ips = new Set();
@@ -398,3 +417,105 @@ export const CTI_FEEDS = [
     { url: 'https://www.cisoadvisor.com.br/feed/', source: 'CISO Advisor BR', layer: 4, weight_boost: 15 },
     { url: 'https://thehack.com.br/rss/', source: 'The Hack', layer: 4, weight_boost: 10 },
 ];
+
+// ─── Article body + IOC artifacts ──────────────────────────────────────────
+// Two ways a report hides its indicators from a <p>-only scraper:
+//   1. an inline IOC *table* (or code block / bullet list) — no <p> in sight;
+//   2. no list at all, just a link to an appendix elsewhere (Arctic Wolf ships
+//      its IOCs in a GitHub repo, linked as "our official public GitHub
+//      repository" — the word IOC appears nowhere in the anchor text).
+// So: read the tables too, and match candidate artifacts on the HREF.
+const ARTICLE_BOILERPLATE = /^(advertisement|scroll to continue|related\s*:|written by|subscribe|sign up|sponsored|©|cookie|share this|read more|tags:|follow us|newsletter|sign up to)/i;
+const ARTICLE_CHROME = 'script,style,noscript,nav,aside,footer,header,form,iframe,figure,figcaption,.ad,.ads,.advertisement,.related,.newsletter,.share,.social,[class*="promo"],[class*="sidebar"]';
+
+const contentRoot = ($) => {
+    for (const sel of ['article', 'main']) {
+        const el = $(sel).first();
+        if (el.length) return el;
+    }
+    return $('body');
+};
+
+export function extractReadableText(html) {
+    try {
+        const $ = cheerio.load(html);
+        $(ARTICLE_CHROME).remove();
+        const root = contentRoot($);
+        const blocks = new Set();
+        // Document order, so the narrative reaches the model in one piece. A <p>
+        // still needs to look like prose (45+ chars); a table cell holding
+        // "evil[.]com" or a hash does not.
+        root.find('p, li, td, th, pre, code').each((_, el) => {
+            const node = $(el);
+            if (el.tagName === 'code' && node.parents('pre').length) return;
+            const t = node.text().replace(/\s+/g, ' ').trim();
+            const min = el.tagName === 'p' ? 45 : 3;
+            if (t.length < min || t.length > 2000) return;
+            if (ARTICLE_BOILERPLATE.test(t)) return;
+            if (/\(@\w+\)\s+is\s+(a|the|senior|managing)/i.test(t)) return;
+            blocks.add(t);
+        });
+        return [...blocks].join('\n\n');
+    } catch {
+        return '';
+    }
+}
+
+// Hosts we are willing to follow one hop into. Anything else (including a .csv
+// on a random host) is left alone: an article-controlled URL is an SSRF and
+// prompt-injection vector, and these four cover where vendors actually park
+// their indicator files.
+const ARTIFACT_HOSTS = /^(?:www\.)?(?:github\.com|gist\.github\.com|raw\.githubusercontent\.com|gist\.githubusercontent\.com|pastebin\.com)$/i;
+const ARTIFACT_FILE = /\.(?:csv|txt|json|ioc|iocs|yara|yar|stix|misp)$/i;
+export const ARTIFACT_TEXT_FILE = /\.(?:csv|txt|json|md|ioc|iocs|yara|yar|stix|misp|ya?ml)$/i;
+
+/** Links in the article that plausibly carry its indicator list. */
+export function collectArtifactLinks(html, baseUrl, max = 3) {
+    const links = [];
+    try {
+        const $ = cheerio.load(html);
+        $(ARTICLE_CHROME).remove();
+        contentRoot($).find('a[href]').each((_, el) => {
+            if (links.length >= max) return false;
+            let u;
+            try { u = new URL($(el).attr('href'), baseUrl); } catch { return; }
+            if (u.protocol !== 'http:' && u.protocol !== 'https:') return;
+            if (!ARTIFACT_HOSTS.test(u.hostname)) return;
+            const segments = u.pathname.split('/').filter(Boolean);
+            // github.com/<org> alone is a profile link, not an appendix.
+            if (segments.length < 2 && !ARTIFACT_FILE.test(u.pathname)) return;
+            u.hash = '';
+            const href = u.toString();
+            if (!links.includes(href)) links.push(href);
+        });
+    } catch { /* unparseable page: no links, no crash */ }
+    return links;
+}
+
+/**
+ * Map a GitHub UI URL onto something fetchable as text.
+ *   blob/<ref>/<path>  → the raw file
+ *   tree/<ref>/<path>  → a directory listing (contents API), one call, no recursion
+ *   <org>/<repo>       → the repo root listing
+ * Returns null for non-GitHub URLs — fetch those as-is.
+ */
+export function githubArtifact(url) {
+    let u;
+    try { u = new URL(url); } catch { return null; }
+    if (!/^(?:www\.)?github\.com$/i.test(u.hostname)) return null;
+
+    const [owner, repo, kind, ref, ...rest] = u.pathname.split('/').filter(Boolean);
+    if (!owner || !repo) return null;
+    const path = rest.join('/');
+
+    if (kind === 'blob' && ref) {
+        return { kind: 'raw', url: `https://raw.githubusercontent.com/${owner}/${repo}/${ref}/${path}` };
+    }
+    if (kind === 'tree' && ref) {
+        return { kind: 'dir', url: `https://api.github.com/repos/${owner}/${repo}/contents/${path}?ref=${encodeURIComponent(ref)}` };
+    }
+    if (!kind) {
+        return { kind: 'dir', url: `https://api.github.com/repos/${owner}/${repo}/contents/` };
+    }
+    return null;
+}

@@ -989,6 +989,7 @@ export interface BoletimReport {
     };
     recomendacoes?: { titulo?: string; itens?: string[] }[];
     iocs?: { categoria?: string; tipo?: string; valor?: string }[];
+    iocs_fontes?: string[];   // apêndices externos (repo/gist) de onde os IOCs foram coletados
     mitre_ttps?: { id?: string; nome?: string; tatica?: string; descricao?: string; contexto?: string; url?: string }[];
     referencias_coletadas?: { titulo?: string; url?: string }[];
 }

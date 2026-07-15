@@ -17,6 +17,9 @@ import {
     ChevronRight,
     X,
     ExternalLink,
+    Flame,
+    Copy,
+    Chrome,
 } from "lucide-react";
 import { PageLayout } from "@/components/PageLayout";
 import { Button } from "@/components/ui/button";
@@ -74,6 +77,9 @@ const PatchTuesday = () => {
     const [fCvss, setFCvss] = useState("0"); // minimum base score threshold
     const [search, setSearch] = useState("");
     const [page, setPage] = useState(1);
+    // Chromium entries are restated Chrome CVEs, not Microsoft bugs. They are ~40%
+    // of a document and drown the real patch set, so the table hides them by default.
+    const [showChromium, setShowChromium] = useState(false);
     const PAGE_SIZE = 25;
 
     // Load available Patch Tuesday months once
@@ -127,7 +133,7 @@ const PatchTuesday = () => {
     // Reset to first page whenever filters or the loaded month change
     useEffect(() => {
         setPage(1);
-    }, [fSeverity, fImpact, fStatus, fCvss, search, selectedId]);
+    }, [fSeverity, fImpact, fStatus, fCvss, search, selectedId, showChromium]);
 
     // Apply all active filters to the full vulnerability catalog
     const filtered = useMemo(() => {
@@ -135,6 +141,7 @@ const PatchTuesday = () => {
         const q = search.trim().toLowerCase();
         const minCvss = parseFloat(fCvss);
         return summary.vulnerabilities.filter((v) => {
+            if (v.chromium && !showChromium) return false;
             if (fSeverity !== "ALL" && v.severity !== fSeverity) return false;
             if (fImpact !== "ALL" && v.impact !== fImpact) return false;
             if (minCvss > 0 && (v.cvss ?? 0) < minCvss) return false;
@@ -146,7 +153,14 @@ const PatchTuesday = () => {
             if (q && !(v.cve.toLowerCase().includes(q) || v.title.toLowerCase().includes(q))) return false;
             return true;
         });
-    }, [summary, fSeverity, fImpact, fStatus, fCvss, search]);
+    }, [summary, fSeverity, fImpact, fStatus, fCvss, search, showChromium]);
+
+    // The month's actual news: what Microsoft says is already being exploited or is
+    // public. Everything else in the document is scheduled maintenance.
+    const actionNow = useMemo(
+        () => (summary ? summary.vulnerabilities.filter((v) => v.exploited || v.publiclyDisclosed) : []),
+        [summary]
+    );
 
     const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
     const pageClamped = Math.min(page, totalPages);
@@ -187,15 +201,59 @@ const PatchTuesday = () => {
 
     const t = summary?.totals;
 
+    // Every figure here is Microsoft-only; Chromium restatements are reported apart.
     const kpis = t
         ? [
-              { label: isPt ? "Total de CVEs" : "Total CVEs", value: t.total, icon: Bug, color: "text-primary" },
+              { label: isPt ? "CVEs Microsoft" : "Microsoft CVEs", value: t.total, icon: Bug, color: "text-primary" },
               { label: "Critical", value: t.critical, icon: ShieldAlert, color: "text-red-500" },
               { label: "Important", value: t.important, icon: AlertCircle, color: "text-orange-500" },
               { label: isPt ? "Explorados" : "Exploited", value: t.exploited, icon: TrendingUp, color: "text-red-600" },
               { label: isPt ? "Divulgados" : "Disclosed", value: t.disclosed, icon: Megaphone, color: "text-violet-500" },
+              {
+                  label: isPt ? "Exploração provável" : "Exploit likely",
+                  value: t.exploitMoreLikely,
+                  icon: Flame,
+                  color: "text-amber-500",
+              },
           ]
         : [];
+
+    // A paste-ready digest for Slack or the daily bulletin, built from the same
+    // numbers on screen so the two can never disagree.
+    const copySummary = async () => {
+        if (!summary || !t) return;
+        const lines = [
+            `**${summary.title}** — ${t.total} ${isPt ? "CVEs da Microsoft" : "Microsoft CVEs"}`,
+            `${t.critical} Critical · ${t.important} Important · ${t.moderate} Moderate · ${t.low} Low`,
+            `${t.exploited} ${isPt ? "explorado(s)" : "exploited"} · ${t.disclosed} ${isPt ? "divulgado(s)" : "publicly disclosed"} · ${t.exploitMoreLikely} ${isPt ? "com exploração provável" : "exploitation more likely"}`,
+            ...(actionNow.length
+                ? [
+                      "",
+                      isPt ? "Ação imediata:" : "Act now:",
+                      ...actionNow.map(
+                          (v) =>
+                              `- ${v.cve} (${v.severity}${v.cvss ? `, CVSS ${v.cvss}` : ""}) — ${v.title}${v.exploited ? (isPt ? " [EXPLORADO]" : " [EXPLOITED]") : isPt ? " [DIVULGADO]" : " [DISCLOSED]"}`
+                      ),
+                  ]
+                : []),
+            "",
+            `${t.chromium} ${isPt ? "CVEs de Chromium/Edge republicados pela Microsoft (não contabilizados acima)" : "Chromium/Edge CVEs restated by Microsoft (not counted above)"}`,
+        ];
+
+        try {
+            await navigator.clipboard.writeText(lines.join("\n"));
+            toast({
+                title: isPt ? "Resumo copiado" : "Summary copied",
+                description: isPt ? "Cole no Slack ou no boletim." : "Paste it into Slack or the bulletin.",
+            });
+        } catch {
+            toast({
+                variant: "destructive",
+                title: isPt ? "Não foi possível copiar" : "Copy failed",
+                description: isPt ? "Seu navegador bloqueou o acesso à área de transferência." : "The browser blocked clipboard access.",
+            });
+        }
+    };
 
     const exportButtons: { kind: ExportKind; label: string; icon: typeof FileText; cls: string }[] = [
         { kind: "pdf", label: "PDF", icon: FileText, cls: "bg-red-500/10 text-red-500 hover:bg-red-500/20 border-red-500/20" },
@@ -319,7 +377,7 @@ const PatchTuesday = () => {
                             </div>
 
                             {/* KPI cards */}
-                            <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
                                 {kpis.map((k) => {
                                     const Icon = k.icon;
                                     return (
@@ -338,6 +396,77 @@ const PatchTuesday = () => {
                                     );
                                 })}
                             </div>
+
+                            {/* Chromium noise, reported apart from the headline numbers */}
+                            {t && t.chromium > 0 && (
+                                <div className="flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl border border-border/50 bg-muted/30 text-xs text-muted-foreground">
+                                    <Chrome className="h-4 w-4 shrink-0 text-muted-foreground/70" />
+                                    <span>
+                                        {isPt
+                                            ? `Mais ${t.chromium} CVEs de Chromium/Edge que a Microsoft apenas republica do Google. Não entram nos números acima.`
+                                            : `A further ${t.chromium} Chromium/Edge CVEs that Microsoft merely restates from Google. Not counted above.`}
+                                    </span>
+                                </div>
+                            )}
+
+                            {/* What actually needs attention today */}
+                            {actionNow.length > 0 && (
+                                <div className="rounded-xl border border-red-500/25 bg-red-500/[0.04] overflow-hidden">
+                                    <div className="px-5 py-3.5 border-b border-red-500/20 flex flex-wrap items-center gap-2">
+                                        <Flame className="h-4 w-4 text-red-500" />
+                                        <h2 className="text-sm font-bold">{isPt ? "Ação imediata" : "Act now"}</h2>
+                                        <span className="text-[11px] text-muted-foreground">
+                                            {isPt
+                                                ? `${actionNow.length} CVE(s) explorados ou publicamente divulgados`
+                                                : `${actionNow.length} CVE(s) exploited or publicly disclosed`}
+                                        </span>
+                                        <Button
+                                            variant="outline"
+                                            onClick={copySummary}
+                                            className="ml-auto h-8 rounded-lg text-xs font-semibold gap-2"
+                                        >
+                                            <Copy className="h-3.5 w-3.5" />
+                                            {isPt ? "Copiar resumo" : "Copy summary"}
+                                        </Button>
+                                    </div>
+                                    <div className="divide-y divide-border/40">
+                                        {actionNow.map((v) => (
+                                            <div key={v.cve} className="px-5 py-3 flex flex-wrap items-center gap-x-3 gap-y-1.5">
+                                                <a
+                                                    href={`https://msrc.microsoft.com/update-guide/vulnerability/${v.cve}`}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="font-mono text-xs font-bold text-primary hover:underline shrink-0"
+                                                >
+                                                    {v.cve}
+                                                </a>
+                                                <Badge
+                                                    variant="outline"
+                                                    className={cn("h-5 rounded-md px-1.5 text-[10px] font-bold shrink-0", SEV_STYLES[v.severity])}
+                                                >
+                                                    {v.severity}
+                                                </Badge>
+                                                {v.exploited && (
+                                                    <Badge className="h-5 rounded-md px-1.5 text-[10px] font-bold shrink-0 bg-red-500/15 text-red-500 border-red-500/25 hover:bg-red-500/15">
+                                                        {isPt ? "EXPLORADO" : "EXPLOITED"}
+                                                    </Badge>
+                                                )}
+                                                {v.publiclyDisclosed && (
+                                                    <Badge className="h-5 rounded-md px-1.5 text-[10px] font-bold shrink-0 bg-violet-500/15 text-violet-500 border-violet-500/25 hover:bg-violet-500/15">
+                                                        {isPt ? "DIVULGADO" : "DISCLOSED"}
+                                                    </Badge>
+                                                )}
+                                                {v.cvss && (
+                                                    <span className="text-[11px] font-mono text-muted-foreground shrink-0">CVSS {v.cvss}</span>
+                                                )}
+                                                <span className="text-xs text-muted-foreground min-w-0 basis-full md:basis-auto md:flex-1 truncate">
+                                                    {v.title}
+                                                </span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
 
                             {/* Distribution panels */}
                             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -362,9 +491,28 @@ const PatchTuesday = () => {
                                     <h2 className="text-sm font-bold">{isPt ? "Explorador de CVEs" : "CVE Explorer"}</h2>
                                     <span className="text-[11px] text-muted-foreground">
                                         {isPt
-                                            ? `${filtered.length} de ${summary.vulnerabilities.length} CVEs`
-                                            : `${filtered.length} of ${summary.vulnerabilities.length} CVEs`}
+                                            ? `${filtered.length} de ${showChromium ? summary.vulnerabilities.length : summary.totals.total} CVEs`
+                                            : `${filtered.length} of ${showChromium ? summary.vulnerabilities.length : summary.totals.total} CVEs`}
                                     </span>
+                                    {summary.totals.chromium > 0 && (
+                                        <Button
+                                            variant="outline"
+                                            onClick={() => setShowChromium((v) => !v)}
+                                            className={cn(
+                                                "ml-auto h-8 rounded-lg text-xs font-semibold gap-2",
+                                                showChromium && "bg-muted"
+                                            )}
+                                        >
+                                            <Chrome className="h-3.5 w-3.5" />
+                                            {showChromium
+                                                ? isPt
+                                                    ? "Ocultar Chromium"
+                                                    : "Hide Chromium"
+                                                : isPt
+                                                  ? `Incluir Chromium (${summary.totals.chromium})`
+                                                  : `Include Chromium (${summary.totals.chromium})`}
+                                        </Button>
+                                    )}
                                 </div>
 
                                 {/* Filter bar */}
