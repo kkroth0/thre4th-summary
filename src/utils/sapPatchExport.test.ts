@@ -124,6 +124,14 @@ test("contém 40 notas em uma tabela integral com escala, margens e títulos de 
     }
 });
 
+test("mantém fonte de 7 pt para qualquer volume acima de 20 notas", () => {
+    for (const count of [41, 60]) {
+        const pptx = buildSapPatchPresentation(withNoteCount(count), FakePptx as never) as unknown as FakePptx;
+        assert.equal(pptx.slides.length, 6);
+        assert.equal(pptx.slides[3].tables[0].options.fontSize, 7, `${count} notas`);
+    }
+});
+
 test("distribui referências deduplicadas em colunas sem colidir com geração ou rodapé", () => {
     const summary = withNoteCount(30);
     summary.notes[29].noteUrl = summary.notes[0].noteUrl;

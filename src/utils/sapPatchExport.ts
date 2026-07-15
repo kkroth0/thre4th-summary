@@ -149,7 +149,7 @@ const displayTitle = (title: string) => title.length > 100 ? `${title.slice(0, 9
 const addHighlightsSlide = (pptx: PptxGenJS, analysis: SapReportAnalysis): void => {
     const slide = pptx.addSlide({ masterName: 'EXECUTIVO' }); slideTitle(slide, 'Highlights de vulnerabilidades');
     const rowCount = analysis.notes.length + 1;
-    const fontSize = analysis.notes.length <= 20 ? 8 : Math.max(6, 7 - Math.ceil(Math.max(0, analysis.notes.length - 40) / 10) * .5);
+    const fontSize = analysis.notes.length <= 20 ? 8 : 7;
     const rowH = Math.min(.27, 5.72 / rowCount);
     const cell = (text: string): PptxGenJS.TableCell => ({ text, options: {} });
     const rows: PptxGenJS.TableRow[] = [
