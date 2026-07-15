@@ -18,6 +18,7 @@ import {
   Settings as SettingsIcon,
   Shield,
   ShieldAlert,
+  ShieldCheck,
   User,
   Users,
 } from "lucide-react";
@@ -131,6 +132,12 @@ export function Header({ actions, logoAddon, onLogoClick, showBackButton = false
           label: "Patch Tuesday",
           description: pt ? "Timeline mensal Microsoft." : "Monthly Microsoft timeline.",
           icon: CalendarCheck,
+        },
+        {
+          path: "/sap-patch",
+          label: "SAP Patch",
+          description: pt ? "Notas de seguranca mensais SAP." : "Monthly SAP security notes.",
+          icon: ShieldCheck,
         },
         {
           path: "/newsletter",
