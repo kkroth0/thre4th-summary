@@ -1,7 +1,76 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { SapPatchSummary } from "@/services/sapApi";
-import { buildSapPatchPresentation, sapPatchBaseFilename } from "./sapPatchExport";
+import { buildSapPatchPresentation, buildSapPatchWorkbook, sapPatchBaseFilename, type ExcelWorkbookFactory } from "./sapPatchExport";
+
+class FakeCell {
+    value: unknown;
+    font: unknown;
+    fill: unknown;
+    alignment: unknown;
+    border: unknown;
+}
+
+class FakeRow {
+    cells = new Map<number | string, FakeCell>();
+    height = 0;
+
+    set values(values: unknown[]) {
+        values.forEach((value, index) => { this.getCell(index + 1).value = value; });
+    }
+
+    getCell(key: number | string) {
+        if (!this.cells.has(key)) this.cells.set(key, new FakeCell());
+        return this.cells.get(key)!;
+    }
+}
+
+class FakeWorksheet {
+    columns: Array<{ header: string; key: string; width: number }> = [];
+    rows = new Map<number, FakeRow>();
+    views: unknown[] = [];
+    autoFilter: unknown;
+    merges: string[] = [];
+
+    constructor(public name: string) {}
+    mergeCells(range: string) { this.merges.push(range); }
+    getCell(address: string) {
+        const match = /^([A-Z]+)(\d+)$/.exec(address);
+        if (!match) return this.getRow(1).getCell(address);
+        const column = match[1].split("").reduce((value, letter) => value * 26 + letter.charCodeAt(0) - 64, 0);
+        return this.getRow(Number(match[2])).getCell(column);
+    }
+    getRow(rowNumber: number) {
+        if (!this.rows.has(rowNumber)) this.rows.set(rowNumber, new FakeRow());
+        return this.rows.get(rowNumber)!;
+    }
+    addRow(values: Record<string, unknown> | unknown[]) {
+        const row = this.getRow(Math.max(0, ...this.rows.keys()) + 1);
+        if (Array.isArray(values)) row.values = values;
+        else this.columns.forEach((column, index) => { row.getCell(index + 1).value = values[column.key]; });
+        return row;
+    }
+    getColumn(index: number) { return this.columns[index - 1] ?? { width: 0 }; }
+}
+
+class FakeWorkbook {
+    creator = "";
+    company = "";
+    subject = "";
+    title = "";
+    lang = "";
+    created: Date | null = null;
+    worksheets: FakeWorksheet[] = [];
+    addWorksheet(name: string, options?: { views?: unknown[] }) {
+        const sheet = new FakeWorksheet(name);
+        sheet.views = options?.views ?? [];
+        this.worksheets.push(sheet);
+        return sheet;
+    }
+    getWorksheet(name: string) { return this.worksheets.find((sheet) => sheet.name === name); }
+}
+
+const FakeExcelLib = { Workbook: FakeWorkbook } as unknown as ExcelWorkbookFactory;
 
 class FakeSlide {
     texts: string[] = [];
@@ -49,6 +118,34 @@ const sample: SapPatchSummary = {
     ],
     summary: { total: 3, byPriority: { "Hot News": 1, High: 1, Medium: 1 }, hotNews: 1, high: 1, maxCvss: 9.9, cveCount: 2 },
 };
+
+test("cria workbook executivo em pt-BR com duas abas", () => {
+    const workbook = buildSapPatchWorkbook(sample, FakeExcelLib) as unknown as FakeWorkbook;
+    assert.deepEqual(workbook.worksheets.map((sheet) => sheet.name), ["Visão executiva", "Notas de segurança"]);
+    assert.equal(workbook.creator, "ThreatSumm4ry");
+    assert.deepEqual(workbook.getWorksheet("Notas de segurança")?.columns.map((column) => column.header), [
+        "Nota", "CVE", "Título", "CVSS", "Prioridade", "Categoria", "Produto/Componente", "Atualização", "Vetor CVSS", "URL da SAP Note",
+    ]);
+});
+
+test("preenche notas analisadas, links, filtros, fallbacks e metadados", () => {
+    const workbook = buildSapPatchWorkbook(sample, FakeExcelLib) as unknown as FakeWorkbook;
+    const notes = workbook.getWorksheet("Notas de segurança")!;
+    const first = notes.getRow(2);
+    assert.deepEqual(first.getCell(1).value, { text: sample.notes[0].note, hyperlink: sample.notes[0].noteUrl });
+    assert.deepEqual(first.getCell(2).value, { text: sample.notes[0].cves[0], hyperlink: `https://www.cve.org/CVERecord?id=${sample.notes[0].cves[0]}` });
+    assert.equal(first.getCell(6).value, "RCE / Corrupção de memória");
+    assert.equal(first.getCell(7).value, "SAP NetWeaver AS Java");
+    assert.deepEqual(first.getCell(10).value, { text: sample.notes[0].noteUrl, hyperlink: sample.notes[0].noteUrl });
+    assert.equal(notes.getRow(4).getCell(2).value, "Não informada");
+    assert.equal(notes.getRow(4).getCell(4).value, "Não informado");
+    assert.deepEqual(notes.autoFilter, { from: { row: 1, column: 1 }, to: { row: 1, column: 10 } });
+    assert.deepEqual(notes.views, [{ state: "frozen", ySplit: 1 }]);
+    assert.equal(workbook.company, "");
+    assert.equal(workbook.lang, "pt-BR");
+    assert.equal(workbook.subject, "Relatório automático do SAP Security Patch Day");
+    assert.match(workbook.title, /julho de 2026/);
+});
 
 test("cria seis slides na sequência aprovada e com metadados neutros", () => {
     const pptx = buildSapPatchPresentation(sample, FakePptx as never) as unknown as FakePptx;

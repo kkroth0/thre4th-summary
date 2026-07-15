@@ -4,7 +4,7 @@
 import type { jsPDF } from 'jspdf';
 import type PptxGenJS from 'pptxgenjs';
 import type ExcelJS from 'exceljs';
-import type { SapPatchSummary, SapNote } from '@/services/sapApi';
+import type { SapPatchSummary } from '@/services/sapApi';
 import { buildSapReportAnalysis, type SapReportAnalysis } from './sapPatchAnalysis';
 
 const BRAND = '2563EB';
@@ -208,56 +208,91 @@ export async function exportSapPatchPPTX(summary: SapPatchSummary): Promise<void
 }
 
 // ---- Excel ---------------------------------------------------------------------
-export async function exportSapPatchExcel(s: SapPatchSummary): Promise<void> {
-    const { default: ExcelLib } = await import('exceljs');
-    const wb = new ExcelLib.Workbook();
-    wb.creator = 'ThreatSumm4ry';
-    wb.created = new Date();
+export interface ExcelWorkbookFactory {
+    Workbook: new () => ExcelJS.Workbook;
+}
 
-    const headerFill = (ws: ExcelJS.Worksheet, row: number, lastCol: number, color = INK) => {
-        const r = ws.getRow(row);
-        for (let c = 1; c <= lastCol; c++) {
-            const cell = r.getCell(c);
-            cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
-            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: `FF${color}` } };
-            cell.alignment = { vertical: 'middle' };
-        }
-        r.height = 20;
-    };
-
-    const ov = wb.addWorksheet('Overview', { properties: { tabColor: { argb: 'FF2563EB' } } });
-    ov.mergeCells('A1:B1');
-    ov.getCell('A1').value = `SAP Security Patch Day — ${fmtDate(s.releaseDate)}`;
-    ov.getCell('A1').font = { bold: true, size: 16, color: { argb: 'FF0F172A' } };
-    ov.mergeCells('A2:B2');
-    ov.getCell('A2').value = `Source: support.sap.com  ·  Generated ${new Date().toLocaleString('en-US')}`;
-    ov.getCell('A2').font = { size: 10, color: { argb: 'FF64748B' } };
-    ov.getRow(4).values = ['Metric', 'Value'];
-    headerFill(ov, 4, 2);
-    for (const k of kpiList(s)) ov.addRow([k.label, k.value]);
-    ov.getColumn(1).width = 24;
-    ov.getColumn(2).width = 14;
-
-    const ws = wb.addWorksheet('Notes', { views: [{ state: 'frozen', ySplit: 1 }] });
-    ws.columns = [
-        { header: 'Note#', key: 'note', width: 12 },
-        { header: 'Title', key: 'title', width: 70 },
-        { header: 'CVE', key: 'cves', width: 22 },
-        { header: 'Priority', key: 'priority', width: 12 },
-        { header: 'CVSS', key: 'cvss', width: 8 },
-        { header: 'CVSS Vector', key: 'cvssVector', width: 40 },
-        { header: 'Update', key: 'isUpdate', width: 9 },
-        { header: 'SAP Note URL', key: 'noteUrl', width: 40 },
-    ];
-    headerFill(ws, 1, 8, '2563EB');
-    for (const n of s.notes) {
-        ws.addRow({
-            note: n.note, title: n.title, cves: n.cves.join(', '), priority: n.priority,
-            cvss: n.cvss ?? '', cvssVector: n.cvssVector || '', isUpdate: n.isUpdate ? 'yes' : '', noteUrl: n.noteUrl,
-        });
+const excelBorder = { style: 'thin', color: { argb: `FF${COLORS.border}` } } as const;
+const styleExcelHeader = (row: ExcelJS.Row, columnCount: number): void => {
+    for (let column = 1; column <= columnCount; column++) {
+        const cell = row.getCell(column);
+        cell.font = { bold: true, color: { argb: `FF${COLORS.white}` } };
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: `FF${COLORS.blue}` } };
+        cell.alignment = { vertical: 'middle', wrapText: true };
+        cell.border = { top: excelBorder, left: excelBorder, bottom: excelBorder, right: excelBorder };
     }
-    ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: 8 } };
+    row.height = 22;
+};
+const styleExcelDataRow = (row: ExcelJS.Row, columnCount: number): void => {
+    for (let column = 1; column <= columnCount; column++) {
+        const cell = row.getCell(column);
+        cell.font = { ...cell.font, color: cell.font?.color ?? { argb: `FF${COLORS.navy}` } };
+        cell.alignment = { vertical: 'top', wrapText: true };
+        cell.border = { top: excelBorder, left: excelBorder, bottom: excelBorder, right: excelBorder };
+    }
+};
 
-    const buf = await wb.xlsx.writeBuffer();
-    triggerDownload(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), `${sapPatchBaseFilename(s)}.xlsx`);
+export function buildSapPatchWorkbook(summary: SapPatchSummary, ExcelLib: ExcelWorkbookFactory): ExcelJS.Workbook {
+    const workbook = new ExcelLib.Workbook();
+    workbook.creator = 'ThreatSumm4ry'; workbook.company = '';
+    workbook.subject = 'Relatório automático do SAP Security Patch Day';
+    workbook.title = `SAP Security Patch Day — ${formatReportMonth(summary.releaseDate)}`;
+    workbook.created = new Date();
+    (workbook as ExcelJS.Workbook & { lang: string }).lang = 'pt-BR';
+    const analysis = buildSapReportAnalysis(summary);
+
+    const executive = workbook.addWorksheet('Visão executiva');
+    executive.mergeCells('A1:D1');
+    executive.getCell('A1').value = `SAP Security Patch Day — ${formatReportMonth(summary.releaseDate)}`;
+    executive.getCell('A1').font = { bold: true, size: 18, color: { argb: `FF${COLORS.white}` } };
+    executive.getCell('A1').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: `FF${COLORS.blue}` } };
+    executive.getCell('A2').value = 'Data do ciclo'; executive.getCell('B2').value = summary.releaseDate || 'Ciclo mais recente';
+    executive.getCell('A3').value = 'Fonte';
+    executive.getCell('B3').value = summary.url ? { text: 'Fonte oficial SAP', hyperlink: summary.url } : 'Fonte oficial SAP';
+    executive.getRow(5).values = ['Indicador', 'Valor']; styleExcelHeader(executive.getRow(5), 2);
+    [['Total de notas', summary.summary.total], ['Hot News / Critical', summary.summary.hotNews], ['High', summary.summary.high], ['CVSS máximo', summary.summary.maxCvss.toFixed(1)], ['CVEs', summary.summary.cveCount]]
+        .forEach((values) => executive.addRow(values));
+    executive.addRow([]); styleExcelHeader(executive.addRow(['Distribuição por prioridade', 'Quantidade']), 2);
+    Object.entries(summary.summary.byPriority).forEach(([priority, count]) => executive.addRow([priority, count]));
+    executive.addRow([]);
+    styleExcelHeader(executive.addRow(['Distribuição por categoria', 'Quantidade']), 2);
+    analysis.categoryCounts.forEach(({ category, count }) => executive.addRow([category, count]));
+    executive.addRow([]);
+    styleExcelHeader(executive.addRow(['Top 3', 'CVSS', 'Prioridade', 'Produto/Componente']), 4);
+    analysis.topThree.forEach((note) => executive.addRow([note.note, note.cvss == null ? 'Não informado' : note.cvss.toFixed(1), note.priority, note.product]));
+    executive.getColumn(1).width = 34; executive.getColumn(2).width = 22; executive.getColumn(3).width = 18; executive.getColumn(4).width = 34;
+
+    const notes = workbook.addWorksheet('Notas de segurança', { views: [{ state: 'frozen', ySplit: 1 }] });
+    notes.columns = [
+        { header: 'Nota', key: 'note', width: 14 }, { header: 'CVE', key: 'cve', width: 20 },
+        { header: 'Título', key: 'title', width: 65 }, { header: 'CVSS', key: 'cvss', width: 12 },
+        { header: 'Prioridade', key: 'priority', width: 14 }, { header: 'Categoria', key: 'category', width: 30 },
+        { header: 'Produto/Componente', key: 'product', width: 32 }, { header: 'Atualização', key: 'update', width: 13 },
+        { header: 'Vetor CVSS', key: 'vector', width: 42 }, { header: 'URL da SAP Note', key: 'url', width: 45 },
+    ];
+    styleExcelHeader(notes.getRow(1), 10);
+    analysis.notes.forEach((note) => {
+        const cve = note.primaryCve;
+        const row = notes.addRow({
+            note: note.noteUrl ? { text: note.note, hyperlink: note.noteUrl } : note.note,
+            cve: cve === 'Não informada' ? cve : { text: cve, hyperlink: `https://www.cve.org/CVERecord?id=${cve}` },
+            title: note.title, cvss: note.cvss == null ? 'Não informado' : note.cvss,
+            priority: note.priority, category: note.category, product: note.product,
+            update: note.isUpdate ? 'Sim' : 'Não', vector: note.cvssVector || 'Não informado',
+            url: note.noteUrl ? { text: note.noteUrl, hyperlink: note.noteUrl } : 'Não informada',
+        });
+        const color = priorityHex(note.priority);
+        row.getCell(4).font = { bold: true, color: { argb: `FF${color}` } };
+        row.getCell(5).font = { bold: true, color: { argb: `FF${color}` } };
+        styleExcelDataRow(row, 10);
+    });
+    notes.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: 10 } };
+    return workbook;
+}
+
+export async function exportSapPatchExcel(summary: SapPatchSummary): Promise<void> {
+    const { default: ExcelLib } = await import('exceljs');
+    const workbook = buildSapPatchWorkbook(summary, ExcelLib);
+    const buffer = await workbook.xlsx.writeBuffer();
+    triggerDownload(new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), `${sapPatchBaseFilename(summary)}.xlsx`);
 }
