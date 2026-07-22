@@ -14,6 +14,26 @@ const SEVERITY_STYLES: Record<string, string> = {
   Low: "bg-slate-500/10 text-slate-400 border-slate-500/20",
 };
 
+// Auto-link CVE (-> NVD) and ATT&CK ids (-> attack.mitre) inside prose, so the
+// analyst never adds a link by hand. One combined regex; keep the delimiters.
+const REF_RE = /(CVE-\d{4}-\d{4,}|T\d{4}(?:\.\d{3})?)/gi;
+const refHref = (token: string) =>
+  /^cve/i.test(token)
+    ? `https://nvd.nist.gov/vuln/detail/${token.toUpperCase()}`
+    : `https://attack.mitre.org/techniques/${token.toUpperCase().replace(".", "/")}/`;
+
+const linkifyRefs = (text?: string): React.ReactNode => {
+  if (!text) return text;
+  // split() with a capture group puts the CVE/TTP tokens at odd indices.
+  return text.split(REF_RE).map((part, i) =>
+    i % 2 === 1 ? (
+      <a key={i} href={refHref(part)} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">{part}</a>
+    ) : (
+      <React.Fragment key={i}>{part}</React.Fragment>
+    ),
+  );
+};
+
 const Section: React.FC<{ title: string; count?: number; children: React.ReactNode }> = ({ title, count, children }) => (
   <div className="mt-4 first:mt-0">
     <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1.5">
@@ -43,20 +63,20 @@ export const BoletimView: React.FC<{ report: BoletimReport }> = ({ report }) => 
     <div className="mt-4 text-sm">
       {r.sumario_executivo && (
         <Section title="Sumário executivo">
-          <p className="text-muted-foreground leading-relaxed">{r.sumario_executivo}</p>
+          <p className="text-muted-foreground leading-relaxed">{linkifyRefs(r.sumario_executivo)}</p>
         </Section>
       )}
 
       {/* campaign: objetivo da campanha */}
       {r.objetivo && (
         <Section title="Objetivo da campanha">
-          <p className="text-muted-foreground leading-relaxed">{r.objetivo}</p>
+          <p className="text-muted-foreground leading-relaxed">{linkifyRefs(r.objetivo)}</p>
         </Section>
       )}
 
       {r.descricao && (
         <Section title="Descrição">
-          <p className="text-muted-foreground leading-relaxed whitespace-pre-line">{r.descricao}</p>
+          <p className="text-muted-foreground leading-relaxed whitespace-pre-line">{linkifyRefs(r.descricao)}</p>
         </Section>
       )}
 
@@ -94,7 +114,11 @@ export const BoletimView: React.FC<{ report: BoletimReport }> = ({ report }) => 
               <div key={i} className="flex flex-wrap items-center gap-1.5">
                 <span className="font-medium">{[t.fabricante, t.software].filter(Boolean).join(" ")}</span>
                 {t.versao && <span className="text-muted-foreground">{t.versao}</span>}
-                {t.cve && t.cve !== "N/A" && <Badge variant="secondary" className="text-[10px]">{t.cve}</Badge>}
+                {t.cve && t.cve !== "N/A" && (
+                  <a href={refHref(t.cve)} target="_blank" rel="noopener noreferrer">
+                    <Badge variant="secondary" className="text-[10px] hover:bg-secondary/80">{t.cve}</Badge>
+                  </a>
+                )}
                 {t.cvss && t.cvss !== "N/A" && (
                   <Badge variant="outline" className={SEVERITY_STYLES[t.severidade || ""] || SEVERITY_STYLES.Low}>
                     CVSS {t.cvss}{t.severidade ? ` · ${t.severidade}` : ""}
@@ -120,7 +144,7 @@ export const BoletimView: React.FC<{ report: BoletimReport }> = ({ report }) => 
               <li key={i} className="text-muted-foreground">
                 <span className="font-mono text-xs text-primary mr-1.5">{String(i + 1).padStart(2, "0")}</span>
                 <span className="font-medium text-foreground">{k.fase}</span>
-                {k.contexto ? ` — ${k.contexto}` : ""}
+                {k.contexto ? <> — {linkifyRefs(k.contexto)}</> : ""}
               </li>
             ))}
           </ol>
@@ -145,7 +169,7 @@ export const BoletimView: React.FC<{ report: BoletimReport }> = ({ report }) => 
       {Array.isArray(r.pre_requisitos) && r.pre_requisitos.length > 0 && (
         <Section title="Pré-requisitos de exploração" count={r.pre_requisitos.length}>
           <ul className="list-disc pl-5 space-y-0.5 text-muted-foreground">
-            {r.pre_requisitos.map((p, i) => <li key={i}>{p}</li>)}
+            {r.pre_requisitos.map((p, i) => <li key={i}>{linkifyRefs(p)}</li>)}
           </ul>
         </Section>
       )}
@@ -153,7 +177,7 @@ export const BoletimView: React.FC<{ report: BoletimReport }> = ({ report }) => 
       {Array.isArray(r.impactos) && r.impactos.length > 0 && (
         <Section title="Impactos" count={r.impactos.length}>
           <ul className="list-disc pl-5 space-y-0.5 text-muted-foreground">
-            {r.impactos.map((im, i) => <li key={i}>{im}</li>)}
+            {r.impactos.map((im, i) => <li key={i}>{linkifyRefs(im)}</li>)}
           </ul>
         </Section>
       )}
@@ -165,7 +189,7 @@ export const BoletimView: React.FC<{ report: BoletimReport }> = ({ report }) => 
               <div key={i}>
                 {g.titulo && <div className="font-medium text-foreground mb-0.5">{g.titulo}</div>}
                 <ul className="list-disc pl-5 space-y-0.5 text-muted-foreground">
-                  {(g.itens || []).map((it, j) => <li key={j}>{it}</li>)}
+                  {(g.itens || []).map((it, j) => <li key={j}>{linkifyRefs(it)}</li>)}
                 </ul>
               </div>
             ))}
