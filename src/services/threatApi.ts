@@ -974,7 +974,9 @@ export interface BoletimReport {
     tlp?: string;
     titulo?: string;
     sumario_executivo?: string;
+    objetivo?: string;            // campaign: "Objetivo da Campanha"
     descricao?: string;
+    pre_requisitos?: string[];    // vuln: "Pré-requisitos de Exploração"
     impactos?: string[];
     cve_id?: string;
     tecnologias_afetadas?: {

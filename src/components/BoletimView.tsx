@@ -36,12 +36,53 @@ export const BoletimView: React.FC<{ report: BoletimReport }> = ({ report }) => 
   const surface = r.superficie_de_ataque || [];
   const killChain = r.cyber_kill_chain || [];
   const iocSources = r.iocs_fontes || [];
+  const ator = r.ator;
+  const recomendacoes = r.recomendacoes || [];
 
   return (
     <div className="mt-4 text-sm">
       {r.sumario_executivo && (
         <Section title="Sumário executivo">
           <p className="text-muted-foreground leading-relaxed">{r.sumario_executivo}</p>
+        </Section>
+      )}
+
+      {/* campaign: objetivo da campanha */}
+      {r.objetivo && (
+        <Section title="Objetivo da campanha">
+          <p className="text-muted-foreground leading-relaxed">{r.objetivo}</p>
+        </Section>
+      )}
+
+      {r.descricao && (
+        <Section title="Descrição">
+          <p className="text-muted-foreground leading-relaxed whitespace-pre-line">{r.descricao}</p>
+        </Section>
+      )}
+
+      {/* campaign: bloco do ator */}
+      {ator && (ator.threat_actor || ator.tipo || ator.motivation || (ator.sectors && ator.sectors.length) || ator.diferencial) && (
+        <Section title="Ator da ameaça">
+          <div className="space-y-0.5 text-muted-foreground">
+            {ator.threat_actor && ator.threat_actor !== "N/A" && (
+              <div><span className="text-foreground font-medium">Ator:</span> {ator.threat_actor}</div>
+            )}
+            {ator.tipo && ator.tipo !== "N/A" && (
+              <div><span className="text-foreground font-medium">Tipo:</span> {ator.tipo}</div>
+            )}
+            {ator.motivation && ator.motivation !== "N/A" && (
+              <div><span className="text-foreground font-medium">Motivação:</span> {ator.motivation}</div>
+            )}
+            {ator.sectors && ator.sectors.length > 0 && (
+              <div><span className="text-foreground font-medium">Setores:</span> {ator.sectors.join(", ")}</div>
+            )}
+            {ator.diferencial && ator.diferencial !== "N/A" && (
+              <div><span className="text-foreground font-medium">Diferencial:</span> {ator.diferencial}</div>
+            )}
+            {ator.onion && ator.onion.length > 0 && (
+              <div className="font-mono text-xs break-all"><span className="font-sans text-foreground font-medium">Onion:</span> {ator.onion.join(", ")}</div>
+            )}
+          </div>
         </Section>
       )}
 
@@ -100,11 +141,35 @@ export const BoletimView: React.FC<{ report: BoletimReport }> = ({ report }) => 
         </Section>
       )}
 
+      {/* vuln: pré-requisitos de exploração */}
+      {Array.isArray(r.pre_requisitos) && r.pre_requisitos.length > 0 && (
+        <Section title="Pré-requisitos de exploração" count={r.pre_requisitos.length}>
+          <ul className="list-disc pl-5 space-y-0.5 text-muted-foreground">
+            {r.pre_requisitos.map((p, i) => <li key={i}>{p}</li>)}
+          </ul>
+        </Section>
+      )}
+
       {Array.isArray(r.impactos) && r.impactos.length > 0 && (
         <Section title="Impactos" count={r.impactos.length}>
           <ul className="list-disc pl-5 space-y-0.5 text-muted-foreground">
             {r.impactos.map((im, i) => <li key={i}>{im}</li>)}
           </ul>
+        </Section>
+      )}
+
+      {recomendacoes.length > 0 && (
+        <Section title="Recomendações">
+          <div className="space-y-2.5">
+            {recomendacoes.map((g, i) => (
+              <div key={i}>
+                {g.titulo && <div className="font-medium text-foreground mb-0.5">{g.titulo}</div>}
+                <ul className="list-disc pl-5 space-y-0.5 text-muted-foreground">
+                  {(g.itens || []).map((it, j) => <li key={j}>{it}</li>)}
+                </ul>
+              </div>
+            ))}
+          </div>
         </Section>
       )}
 
