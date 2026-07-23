@@ -862,11 +862,12 @@ app.post('/api/ipgeo', scanLimiter, async (req, res) => {
             countryCode: data.country_code,
             regionName: data.region,
             city: data.city,
+            timezone: data.timezone,
             isp: data.isp,
             org: data.org,
             as: data.asn,
-            proxy: false,
-            hosting: false,
+            // ipwhois.app free returns no proxy/hosting/mobile signal — leave them
+            // undefined so the UI shows "Unknown", not a fabricated "No".
             lat: parseFloat(data.latitude || 0),
             lon: parseFloat(data.longitude || 0),
             reverseHostname
@@ -2705,7 +2706,13 @@ app.post('/api/newsletter/enrich', requirePremium, scanLimiter, async (req, res)
         // indicators live in a GitHub repo should say so, not show a short list as
         // if it were the whole set.
         const artifacts = await fetchIocArtifacts(artifactLinks);
-        const iocs = extractIOCs([content, ...artifacts.map((a) => a.text)].join('\n'));
+        // Prose stays defanged-only (low noise); each fetched appendix is a plain
+        // indicator list, so allow plain domains/URLs there. Merge + dedupe.
+        const iocs = [extractIOCs(content), ...artifacts.map((a) => extractIOCs(a.text, { plaintext: true }))]
+            .reduce((acc, cur) => {
+                for (const k of Object.keys(acc)) acc[k] = [...new Set([...acc[k], ...cur[k]])];
+                return acc;
+            }, { ips: [], domains: [], hashes: [], urls: [] });
         const iocSources = artifactLinks.map((url) => ({
             url,
             fetched: artifacts.some((a) => a.origin === url),

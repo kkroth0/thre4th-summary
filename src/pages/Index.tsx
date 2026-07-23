@@ -9,7 +9,7 @@ import {
   DropdownMenuItem,
 } from "@/components/ui/dropdown-menu";
 import { exportResultsJSON, exportResultsNDJSON, exportResultsSTIX } from "@/utils/threatExport";
-import { defangList } from "@/utils/defang";
+import { defangList, refang } from "@/utils/defang";
 import { Badge } from "@/components/ui/badge";
 import { ThreatSummary } from "@/components/ThreatSummary";
 import { VendorCard } from "@/components/VendorCard";
@@ -448,7 +448,11 @@ const Index = () => {
   const handleSearch = async (e?: React.FormEvent, override?: string) => {
     if (e) e.preventDefault();
 
-    const rawQuery = (typeof override === "string" ? override : query).trim();
+    // Refang first: analysts paste defanged IOCs (evil[.]com, hxxp://x, 1.2.3[.]4)
+    // and the extractor/validator below only understand live indicators. Without
+    // this, a single defanged IOC is rejected as "Invalid format" and the whole
+    // search aborts.
+    const rawQuery = refang((typeof override === "string" ? override : query).trim());
 
     if (!rawQuery) {
       toast({

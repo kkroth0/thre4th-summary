@@ -60,7 +60,7 @@ export const resolveVendorsForQuery = (query: string, selectedVendors: string[])
 };
 
 // Formatting logic moved from individual fetch functions
-const formatVendorData = (vendorName: string, data: any, query: string): any => {
+export const formatVendorData = (vendorName: string, data: any, query: string): any => {
     if (data.error) throw new Error(data.error);
     if (data.data?.Status && (data.data.Status.includes("only") || data.data.Status === "No data")) return data.data;
 
@@ -481,15 +481,42 @@ const formatVendorData = (vendorName: string, data: any, query: string): any => 
                     "ISP": data.isp || "Unknown",
                     "Organization": data.org || "Unknown",
                     "AS": data.as || "Unknown",
-                    "Proxy/VPN": data.proxy ? "Yes ⚠️" : "No",
-                    "Hosting": data.hosting ? "Yes" : "No",
-                    "Mobile": data.mobile ? "Yes" : "No",
+                    "Proxy/VPN": data.proxy === undefined ? "Unknown" : (data.proxy ? "Yes ⚠️" : "No"),
+                    "Hosting": data.hosting === undefined ? "Unknown" : (data.hosting ? "Yes" : "No"),
+                    "Mobile": data.mobile === undefined ? "Unknown" : (data.mobile ? "Yes" : "No"),
                     "Reverse Hostname": data.reverseHostname || "Unknown",
                     "Latitude": data.lat !== undefined ? String(data.lat) : "Unknown",
                     "Longitude": data.lon !== undefined ? String(data.lon) : "Unknown"
                 };
             }
             return { "Status": data.message || "No geolocation data available" };
+        case "OpenPhish":
+            // Server returns { listed, status }. Surface a capital-S "Status" so the
+            // verdict aggregator (which reads data["Status"]) actually counts the hit.
+            return {
+                "Status": data.listed ? "Phishing" : "Clean",
+                "Listed": data.listed ? "Yes" : "No",
+            };
+        case "Team Cymru":
+            // Hash → Malware Hash Registry lookup (a real malicious verdict).
+            if (typeof data.listed === "boolean") {
+                return {
+                    "Status": data.listed ? "Malicious" : "Clean",
+                    "Last Seen": data.last_seen || "Unknown",
+                };
+            }
+            // IP → ASN/BGP origin mapping: enrichment, not a verdict, so no "Status"
+            // key (keeps it out of the malicious/clean vote, like IP Geolocation).
+            if (data.asn) {
+                return {
+                    "ASN": data.asn,
+                    "BGP Prefix": data.bgp_prefix || "Unknown",
+                    "Country": data.country || "Unknown",
+                    "Registry": data.registry || "Unknown",
+                    "Allocated": data.allocated || "Unknown",
+                };
+            }
+            return { "Status": "No data" };
         default:
             return data;
     }
