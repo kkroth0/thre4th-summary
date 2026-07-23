@@ -39,8 +39,8 @@ export const QuickActions = ({ data, onRefresh, isLoading, onCopyLinks }: QuickA
     const country = geoData?.["Country"] || abuseData?.["Country"] || "—";
     const isp = geoData?.["ISP"] || abuseData?.["ISP"] || "—";
     const asn = geoData?.["AS"] || vtData?.["ASN"] || "—";
-    const proxyVpn = geoData?.["Proxy/VPN"] || "No";
-    const hosting = geoData?.["Hosting"] || "No";
+    const proxyVpn = geoData?.["Proxy/VPN"] || "Unknown";
+    const hosting = geoData?.["Hosting"] || "Unknown";
 
     // Key Indicators
     const indicators: string[] = [];

@@ -259,24 +259,46 @@ const SHARED_PLATFORM_DOMAINS = new Set([
     'r2.dev', 'b-cdn.net', 'glitch.me',
 ]);
 
-export function extractIOCs(text) {
+// A bare filename (malware.exe) matches the domain shape but is not a domain.
+const RE_FILE_EXT = /\.(exe|dll|sys|bin|dat|dmp|zip|rar|tar|gz|7z|png|jpe?g|gif|svg|css|js|html?|txt|log|json|xml|pdf|docx?|xlsx?|pptx?|csv|ya?ml|md|ps1|sh|py)$/i;
+
+const addDomain = (set, raw) => {
+    const d = String(raw).toLowerCase();
+    if (!/^[a-z0-9.-]+\.[a-z]{2,}$/.test(d)) return;
+    if (SHARED_PLATFORM_DOMAINS.has(d) || RE_FILE_EXT.test(d)) return;
+    set.add(d);
+};
+
+// plaintext=false (default): article prose. Only DEFANGED network indicators are
+// kept, so benign links/domains in the body aren't harvested — low noise.
+// plaintext=true: a dedicated indicator appendix (CSV/txt/gist), where every
+// listed domain/URL IS an indicator and is usually NOT defanged. Hashes and
+// public IPv4 are always taken (unambiguous in either source).
+// ponytail: plaintext mode over a prose-y .md appendix can pull a few benign
+// domains; bounded by the 40KB fetch cap. Restrict by file type only if it bites.
+export function extractIOCs(text, { plaintext = false } = {}) {
     const t = String(text || '');
     const hashes = new Set();
     for (const re of RE_HASHES) for (const m of t.matchAll(re)) hashes.add(m[0].toLowerCase());
 
     const urls = new Set();
-    // Only DEFANGED URLs (hxxp:// or [.]/[:] markers) — avoids harvesting every
-    // benign link in the article body. A comma ends the URL: it delimits the next
-    // column in a CSV appendix, and the next clause in prose.
+    // A comma ends the URL: it delimits the next column in a CSV appendix, and the
+    // next clause in prose.
     for (const m of t.matchAll(/\b(?:hxxps?|https?)(?::|\[:\])\/\/[^\s<>"'),]+/gi)) {
-        if (/\[\.\]|\(\.\)|\{\.\}|\[:\]|hxx/i.test(m[0])) urls.add(refang(m[0]).replace(/[.,;:]+$/, ''));
+        if (plaintext || /\[\.\]|\(\.\)|\{\.\}|\[:\]|hxx/i.test(m[0])) urls.add(refang(m[0]).replace(/[.,;:]+$/, ''));
     }
 
     const domains = new Set();
-    // Defanged domains: a token carrying [.] / (.) / {.}
-    for (const m of t.replace(RE_EMAIL, ' ').matchAll(/\b((?:[a-z0-9-]+(?:\[\.\]|\(\.\)|\{\.\}))+[a-z]{2,})\b/gi)) {
-        const d = refang(m[1]).toLowerCase();
-        if (/^[a-z0-9.-]+\.[a-z]{2,}$/.test(d) && !SHARED_PLATFORM_DOMAINS.has(d)) domains.add(d);
+    const domainSrc = t.replace(RE_EMAIL, ' ');
+    // Defanged domains (any mode): a token carrying [.] / (.) / {.}
+    for (const m of domainSrc.matchAll(/\b((?:[a-z0-9-]+(?:\[\.\]|\(\.\)|\{\.\}))+[a-z]{2,})\b/gi)) {
+        addDomain(domains, refang(m[1]));
+    }
+    // Plaintext appendix: also accept plain domains (evil.com, sub.evil.com), after
+    // stripping URLs so a URL's host isn't double-counted through a different path.
+    if (plaintext) {
+        const noUrls = refang(domainSrc).replace(/\bhttps?:\/\/\S+/gi, ' ');
+        for (const m of noUrls.matchAll(/\b((?:[a-z0-9-]+\.)+[a-z]{2,})\b/gi)) addDomain(domains, m[1]);
     }
 
     const ips = new Set();

@@ -103,6 +103,33 @@ test('extractIOCs harvests the fetched appendix (real CSV shape) and skips e-mai
   assert.deepEqual(iocs.domains, ['furiesniffer.com']);   // gmail.com is not an IOC
 });
 
+test('extractIOCs plaintext mode harvests non-defanged appendix indicators; default does not', () => {
+  // A real GitHub/MISP appendix lists indicators in plain form, one per line.
+  const csv = [
+    'type,value',
+    'domain,evil-c2.com',
+    'domain,login.evil-c2.com',
+    'url,https://evil-c2.com/gate.php',
+    'ip,193.143.1.131',
+    'sha256,1c854a6aa415f4be964e8a4be49c06e092156bf66d71f9c79995b3e6b156e778',
+    'file,payload.exe',                 // filename, not a domain
+  ].join('\n');
+
+  const plain = extractIOCs(csv, { plaintext: true });
+  assert.ok(plain.domains.includes('evil-c2.com'));
+  assert.ok(plain.domains.includes('login.evil-c2.com'));
+  assert.ok(!plain.domains.includes('payload.exe'));       // extension guard
+  assert.deepEqual(plain.urls, ['https://evil-c2.com/gate.php']);
+  assert.ok(plain.ips.includes('193.143.1.131'));
+
+  // Default (prose) mode: plain domains/URLs are noise and stay out; only the
+  // unambiguous hash + public IP survive.
+  const prose = extractIOCs(csv);
+  assert.deepEqual(prose.domains, []);
+  assert.deepEqual(prose.urls, []);
+  assert.ok(prose.ips.includes('193.143.1.131'));
+});
+
 test('extractIOCs keeps attacker subdomains but drops the bare shared-platform apex', () => {
   const iocs = extractIOCs('redirector bentleyvazquezpvey[.]github[.]io and template <ref>[.]github[.]io');
 
