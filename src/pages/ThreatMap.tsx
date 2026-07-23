@@ -1,35 +1,42 @@
-import { useCallback, useEffect, useMemo, useState, type ElementType } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  Activity,
   AlertTriangle,
-  BarChart3,
   Building2,
   Clock3,
   Crosshair,
   ExternalLink,
+  Factory,
   Globe2,
+  Layers,
   Loader2,
   MapPinned,
   RadioTower,
   Search,
   ShieldAlert,
-  SlidersHorizontal,
   Target,
   TrendingDown,
   TrendingUp,
-  Users,
-  Zap,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { PageLayout } from "@/components/PageLayout";
 import { ThreatWorldMap } from "@/components/ThreatWorldMap";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { fetchThreatMap, type CountItem, type RansomwareVictim, type ThreatMapData } from "@/services/threatApi";
+import {
+  fetchThreatMap,
+  fetchThreatSectors,
+  type RansomwareVictim,
+  type RegionOption,
+  type SectorOption,
+  type ThreatMapData,
+} from "@/services/threatApi";
 import { toast } from "sonner";
 
 const WINDOW_OPTIONS = [
@@ -48,12 +55,6 @@ const fmtDate = (iso?: string | null) => {
 };
 
 const compact = (value: number) => new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(value);
-
-const windowLabel = (days: number) => {
-  if (days === 1) return "24h";
-  if (days === 3) return "72h";
-  return `${days}d`;
-};
 
 const uniqueValues = (values: Array<string | undefined | null>) =>
   Array.from(new Set(values.map((value) => value?.trim()).filter(Boolean) as string[])).sort((a, b) =>
@@ -77,74 +78,8 @@ const matchesVictimSearch = (victim: RansomwareVictim, query: string) => {
 const hasEvidence = (victim: RansomwareVictim) =>
   Boolean(victim.screenshot || victim.press?.length || victim.infostealer || victim.permalink);
 
-type ThreatInsight = ThreatMapData["insights"][number];
 type SignalState = { label: string; tone: string; copy: string };
 type PriorityItem = { label: string; value: string; tone?: string };
-type RankingRow = CountItem & { countryName?: string };
-
-const insightText = (insight: ThreatInsight, pt: boolean) => {
-  switch (insight.kind) {
-    case "volume":
-      return {
-        title: pt ? "Ritmo da janela" : "Window pace",
-        detail: pt
-          ? `${compact(insight.value || 0)} reivindicacoes, ${insight.delta && insight.delta > 0 ? "+" : ""}${compact(insight.delta || 0)} vs. janela anterior.`
-          : `${compact(insight.value || 0)} claims, ${insight.delta && insight.delta > 0 ? "+" : ""}${compact(insight.delta || 0)} vs. previous window.`,
-        icon: insight.delta && insight.delta < 0 ? TrendingDown : TrendingUp,
-      };
-    case "top-group":
-      return {
-        title: pt ? "Grupo lider" : "Leading crew",
-        detail: pt
-          ? `${insight.name || "-"} concentra ${compact(insight.count || 0)} reivindicacoes no recorte.`
-          : `${insight.name || "-"} accounts for ${compact(insight.count || 0)} claims in this window.`,
-        icon: Crosshair,
-      };
-    case "sector":
-      return {
-        title: pt ? "Setor pressionado" : "Sector under pressure",
-        detail: pt
-          ? `${insight.name || "-"} aparece em ${compact(insight.count || 0)} reivindicacoes recentes.`
-          : `${insight.name || "-"} appears in ${compact(insight.count || 0)} recent claims.`,
-        icon: Building2,
-      };
-    case "new-countries":
-      return {
-        title: pt ? "Novos paises no recorte" : "New countries in window",
-        detail: (insight.countries || []).map((c) => c.countryName || c.name).join(", "),
-        icon: Globe2,
-      };
-    case "latam":
-      return {
-        title: pt ? "Sinal LATAM" : "LATAM signal",
-        detail: pt
-          ? `${compact(insight.count || 0)} reivindicacoes em ${compact(insight.countries?.length || 0)} paises da regiao.`
-          : `${compact(insight.count || 0)} claims across ${compact(insight.countries?.length || 0)} regional countries.`,
-        icon: RadioTower,
-      };
-    case "evidence":
-      return {
-        title: pt ? "Evidencia enriquecida" : "Enriched evidence",
-        detail: pt
-          ? `${compact(insight.count || 0)} vitimas com link, screenshot, press ou infostealer.`
-          : `${compact(insight.count || 0)} victims include link, screenshot, press, or infostealer evidence.`,
-        icon: Zap,
-      };
-    default:
-      return {
-        title: pt ? "Insight" : "Insight",
-        detail: "",
-        icon: Activity,
-      };
-  }
-};
-
-const severityClass = (severity: string) => ({
-  high: "border-red-500/30 bg-red-500/10 text-red-600 dark:text-red-300",
-  medium: "border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-300",
-  low: "border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-300",
-  context: "border-sky-500/30 bg-sky-500/10 text-sky-600 dark:text-sky-300",
-}[severity] || "border-border bg-muted text-muted-foreground");
 
 function EvidenceBadges({ victim }: { victim: RansomwareVictim }) {
   const badges = [
@@ -486,103 +421,201 @@ function ContextMapPanel({ data, pt }: { data: ThreatMapData; pt: boolean }) {
   );
 }
 
-function RankingList({
-  icon: Icon,
-  title,
-  rows,
+// Keywords used to pre-select the user's priority sectors from whatever exact
+// names the API taxonomy exposes (matched case-insensitively as substrings).
+const PRIORITY_SECTOR_KEYWORDS = [
+  "energy", "power", "utilit", "oil", "gas",
+  "cement", "construction", "building",
+  "digital", "web", "platform", "internet", "online", "software", "technolog", "information technology",
+  "industr", "manufactur",
+  "mining", "metal",
+];
+
+const autoMatchSectors = (catalog: SectorOption[]): string[] =>
+  catalog
+    .filter((sector) => {
+      const name = sector.name.toLowerCase();
+      return PRIORITY_SECTOR_KEYWORDS.some((keyword) => name.includes(keyword));
+    })
+    .map((sector) => sector.name);
+
+const LS = {
+  scope: "threatmap.scope",
+  sectors: "threatmap.sectors",
+  regions: "threatmap.regions",
+};
+
+const readList = (key: string): string[] | null => {
+  try {
+    const value = JSON.parse(localStorage.getItem(key) || "null");
+    return Array.isArray(value) ? (value as string[]) : null;
+  } catch {
+    return null;
+  }
+};
+
+type Scope = "focus" | "global";
+
+const readScope = (): Scope => (localStorage.getItem(LS.scope) === "global" ? "global" : "focus");
+
+function SectorPicker({
+  catalog,
+  selected,
+  onApply,
+  pt,
 }: {
-  icon: ElementType;
-  title: string;
-  rows: RankingRow[];
+  catalog: SectorOption[];
+  selected: string[];
+  onApply: (next: string[]) => void;
+  pt: boolean;
 }) {
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState<string[]>(selected);
+
+  useEffect(() => {
+    if (open) setDraft(selected);
+  }, [open, selected]);
+
+  const toggle = (name: string) =>
+    setDraft((prev) => (prev.includes(name) ? prev.filter((s) => s !== name) : [...prev, name]));
+
   return (
-    <Card>
-      <CardContent className="p-5">
-        <div className="mb-4 flex items-center gap-2">
-          <Icon className="h-5 w-5 text-primary" />
-          <h2 className="text-lg font-black tracking-tight">{title}</h2>
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button variant="outline" size="sm" className="h-9 gap-2 font-semibold">
+          <Factory className="h-4 w-4" />
+          {pt ? "Setores" : "Sectors"}
+          <Badge variant="secondary" className="ml-1">{selected.length}</Badge>
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-80 p-0">
+        <div className="flex items-center justify-between gap-2 border-b border-border p-3">
+          <span className="text-xs font-black uppercase tracking-wide text-muted-foreground">
+            {pt ? "Setores prioritários" : "Priority sectors"}
+          </span>
+          <div className="flex gap-1">
+            <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => setDraft(autoMatchSectors(catalog))}>
+              {pt ? "Padrão" : "Default"}
+            </Button>
+            <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => setDraft([])}>
+              {pt ? "Limpar" : "Clear"}
+            </Button>
+          </div>
         </div>
-        <div className="space-y-2">
-          {rows.map((row) => (
-            <div key={`${row.name}-${row.countryName || ""}`} className="flex items-center justify-between gap-3 rounded-md border border-border bg-background px-3 py-2">
-              <span className="min-w-0 truncate font-semibold text-foreground">{row.countryName || row.name}</span>
-              <span className="shrink-0 font-mono text-sm font-black text-primary">{compact(row.count)}</span>
-            </div>
-          ))}
+        <ScrollArea className="h-72">
+          <div className="p-2">
+            {catalog.length === 0 ? (
+              <div className="p-4 text-center text-xs text-muted-foreground">
+                {pt ? "Lista de setores indisponível (requer API Pro)." : "Sector list unavailable (requires Pro API)."}
+              </div>
+            ) : (
+              catalog.map((sector) => (
+                <label
+                  key={sector.name}
+                  className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 hover:bg-muted/60"
+                >
+                  <Checkbox checked={draft.includes(sector.name)} onCheckedChange={() => toggle(sector.name)} />
+                  <span className="min-w-0 flex-1 truncate text-sm">{sector.name}</span>
+                  <span className="shrink-0 font-mono text-[11px] text-muted-foreground">{compact(sector.count)}</span>
+                </label>
+              ))
+            )}
+          </div>
+        </ScrollArea>
+        <div className="flex items-center justify-between gap-2 border-t border-border p-3">
+          <span className="text-xs text-muted-foreground">{compact(draft.length)} {pt ? "selecionados" : "selected"}</span>
+          <Button
+            size="sm"
+            className="h-8"
+            onClick={() => {
+              onApply(draft);
+              setOpen(false);
+            }}
+          >
+            {pt ? "Aplicar" : "Apply"}
+          </Button>
         </div>
-      </CardContent>
-    </Card>
+      </PopoverContent>
+    </Popover>
   );
 }
 
-function TimelinePanel({
-  data,
-  maxTimeline,
+function FocusControls({
+  scope,
+  setScope,
+  regionCatalog,
+  selectedRegions,
+  toggleRegion,
+  sectorCatalog,
+  selectedSectors,
+  setSelectedSectors,
   pt,
 }: {
-  data: ThreatMapData;
-  maxTimeline: number;
+  scope: Scope;
+  setScope: (scope: Scope) => void;
+  regionCatalog: RegionOption[];
+  selectedRegions: string[];
+  toggleRegion: (key: string) => void;
+  sectorCatalog: SectorOption[];
+  selectedSectors: string[];
+  setSelectedSectors: (next: string[]) => void;
   pt: boolean;
 }) {
   return (
     <Card>
-      <CardContent className="p-5">
-        <div className="mb-4 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <BarChart3 className="h-5 w-5 text-primary" />
-            <h2 className="text-lg font-black tracking-tight">{pt ? "Evolucao recente" : "Recent evolution"}</h2>
+      <CardContent className="flex flex-col gap-4 p-4 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex items-center gap-3">
+          <div className="flex rounded-md border border-border bg-background p-1">
+            <Button
+              size="sm"
+              variant={scope === "focus" ? "secondary" : "ghost"}
+              className="h-8 gap-1.5 px-3 text-xs font-bold"
+              onClick={() => setScope("focus")}
+            >
+              <Target className="h-3.5 w-3.5" />
+              {pt ? "Prioridades" : "Priorities"}
+            </Button>
+            <Button
+              size="sm"
+              variant={scope === "global" ? "secondary" : "ghost"}
+              className="h-8 gap-1.5 px-3 text-xs font-bold"
+              onClick={() => setScope("global")}
+            >
+              <Globe2 className="h-3.5 w-3.5" />
+              {pt ? "Global" : "Global"}
+            </Button>
           </div>
-          <Badge variant="outline">{windowLabel(data.windowDays)}</Badge>
+          {scope === "focus" && (
+            <SectorPicker catalog={sectorCatalog} selected={selectedSectors} onApply={setSelectedSectors} pt={pt} />
+          )}
         </div>
-        <div className="flex h-36 items-end gap-2">
-          {(data.timeline || []).map((bucket, index) => (
-            <div key={bucket.from} className="flex min-w-0 flex-1 flex-col items-center gap-2">
-              <div className="flex h-28 w-full items-end rounded-md bg-muted/45 px-1">
-                <div
-                  className="w-full rounded-t-sm bg-primary transition-all"
-                  style={{ height: `${Math.max(8, (bucket.count / maxTimeline) * 100)}%` }}
-                  title={`${bucket.label}: ${bucket.count}`}
-                />
-              </div>
-              <div className="w-full truncate text-center font-mono text-[10px] text-muted-foreground">
-                {index % 2 === 0 || index === data.timeline.length - 1 ? bucket.label : ""}
-              </div>
-            </div>
-          ))}
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
 
-function InsightsPanel({ insights, pt }: { insights: ThreatInsight[]; pt: boolean }) {
-  return (
-    <Card>
-      <CardContent className="p-5">
-        <div className="mb-4 flex items-center gap-2">
-          <Activity className="h-5 w-5 text-primary" />
-          <h2 className="text-lg font-black tracking-tight">{pt ? "Sinais" : "Signals"}</h2>
-        </div>
-        <div className="space-y-3">
-          {insights.slice(0, 5).map((insight) => {
-            const rendered = insightText(insight, pt);
-            const Icon = rendered.icon;
-            return (
-              <div
-                key={`${insight.kind}-${insight.name || insight.count || insight.value || 0}`}
-                className={`rounded-md border px-3 py-3 ${severityClass(insight.severity)}`}
-              >
-                <div className="flex items-start gap-3">
-                  <Icon className="mt-0.5 h-4 w-4 shrink-0" />
-                  <div className="min-w-0">
-                    <div className="text-sm font-black text-foreground">{rendered.title}</div>
-                    <div className="mt-1 text-xs font-medium leading-5 text-muted-foreground">{rendered.detail}</div>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
+        {scope === "focus" ? (
+          <div className="flex flex-wrap items-center gap-2">
+            <Layers className="h-4 w-4 text-muted-foreground" />
+            {regionCatalog.map((region) => {
+              const active = selectedRegions.includes(region.key);
+              return (
+                <button
+                  key={region.key}
+                  type="button"
+                  onClick={() => toggleRegion(region.key)}
+                  className={`rounded-full border px-3 py-1 text-xs font-bold transition-colors ${
+                    active
+                      ? "border-primary/40 bg-primary/15 text-primary"
+                      : "border-border bg-background text-muted-foreground hover:bg-muted/60"
+                  }`}
+                >
+                  {region.label}
+                </button>
+              );
+            })}
+          </div>
+        ) : (
+          <p className="text-xs font-medium text-muted-foreground">
+            {pt ? "Visão global — 100 claims mais recentes." : "Global view — 100 most recent claims."}
+          </p>
+        )}
       </CardContent>
     </Card>
   );
@@ -599,25 +632,76 @@ const ThreatMap = () => {
   const [countryFilter, setCountryFilter] = useState("all");
   const [sectorFilter, setSectorFilter] = useState("all");
 
-  const loadWindow = useCallback(async (days: number) => {
-    setLoading(true);
-    try {
-      setData(await fetchThreatMap(days));
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to load threat map");
-    } finally {
-      setLoading(false);
-    }
+  const [scope, setScopeState] = useState<Scope>(readScope);
+  const [sectorCatalog, setSectorCatalog] = useState<SectorOption[]>([]);
+  const [regionCatalog, setRegionCatalog] = useState<RegionOption[]>([]);
+  const [selectedSectors, setSelectedSectors] = useState<string[]>([]);
+  const [selectedRegions, setSelectedRegions] = useState<string[]>([]);
+  const [catalogLoaded, setCatalogLoaded] = useState(false);
+
+  // Load the sector/region catalog once and seed selections from localStorage,
+  // falling back to keyword-matched sector defaults and the server's default
+  // region set. On failure, still let global scope work.
+  useEffect(() => {
+    let cancelled = false;
+    fetchThreatSectors()
+      .then((catalog) => {
+        if (cancelled) return;
+        setSectorCatalog(catalog.sectors);
+        setRegionCatalog(catalog.regions);
+        setSelectedSectors(readList(LS.sectors) ?? autoMatchSectors(catalog.sectors));
+        setSelectedRegions(readList(LS.regions) ?? catalog.defaultRegions);
+      })
+      .catch(() => {
+        /* focus mode degrades to global on the backend; nothing to surface here */
+      })
+      .finally(() => {
+        if (!cancelled) setCatalogLoaded(true);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  useEffect(() => {
-    void loadWindow(windowDays);
-  }, [loadWindow, windowDays]);
+  const setScope = useCallback((next: Scope) => {
+    setScopeState(next);
+    localStorage.setItem(LS.scope, next);
+  }, []);
 
-  const maxTimeline = useMemo(
-    () => Math.max(1, ...(data?.timeline || []).map((bucket) => bucket.count)),
-    [data?.timeline],
+  const applySectors = useCallback((next: string[]) => {
+    setSelectedSectors(next);
+    localStorage.setItem(LS.sectors, JSON.stringify(next));
+  }, []);
+
+  const toggleRegion = useCallback((key: string) => {
+    setSelectedRegions((prev) => {
+      const next = prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key];
+      localStorage.setItem(LS.regions, JSON.stringify(next));
+      return next;
+    });
+  }, []);
+
+  const loadWindow = useCallback(
+    async (days: number, currentScope: Scope, sectors: string[], regions: string[]) => {
+      setLoading(true);
+      try {
+        const focus = currentScope === "focus" ? { sectors, regions } : undefined;
+        setData(await fetchThreatMap(days, focus));
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "Failed to load threat map");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [],
   );
+
+  // Refetch whenever the window or the focus selection changes. Focus scope waits
+  // for the catalog so it queries with the real sector selection, not an empty one.
+  useEffect(() => {
+    if (scope === "focus" && !catalogLoaded) return;
+    void loadWindow(windowDays, scope, selectedSectors, selectedRegions);
+  }, [loadWindow, windowDays, scope, catalogLoaded, selectedSectors, selectedRegions]);
 
   const filteredVictims = useMemo(() => {
     return (data?.victims || []).filter((victim) => (
@@ -693,16 +777,6 @@ const ThreatMap = () => {
     { label: pt ? "Ultima vitima" : "Latest victim", value: latestVictim?.name || "-" },
   ] : [];
 
-  const lists = data ? [
-    {
-      icon: Globe2,
-      title: pt ? "Paises mais atingidos" : "Most affected countries",
-      rows: data.countries.slice(0, 8).map((country) => ({ ...country, name: country.countryName || country.name })),
-    },
-    { icon: Users, title: pt ? "Grupos ativos" : "Active crews", rows: data.groups.slice(0, 8) },
-    { icon: Building2, title: pt ? "Setores impactados" : "Impacted sectors", rows: (data.sectors || []).slice(0, 8) },
-  ] : [];
-
   return (
     <PageLayout width="max-w-7xl" showBackButton={false}>
       <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
@@ -734,7 +808,11 @@ const ThreatMap = () => {
               </Button>
             ))}
           </div>
-          <Button variant="outline" onClick={() => loadWindow(windowDays)} disabled={loading}>
+          <Button
+            variant="outline"
+            onClick={() => loadWindow(windowDays, scope, selectedSectors, selectedRegions)}
+            disabled={loading}
+          >
             {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             {pt ? "Atualizar" : "Refresh"}
           </Button>
@@ -747,6 +825,18 @@ const ThreatMap = () => {
         </div>
       ) : data && signal && delta ? (
         <div className="space-y-5">
+          <FocusControls
+            scope={scope}
+            setScope={setScope}
+            regionCatalog={regionCatalog}
+            selectedRegions={selectedRegions}
+            toggleRegion={toggleRegion}
+            sectorCatalog={sectorCatalog}
+            selectedSectors={selectedSectors}
+            setSelectedSectors={applySectors}
+            pt={pt}
+          />
+
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
             {kpis.map(({ label, value, icon: Icon, tone }) => (
               <Card key={label}>
@@ -791,19 +881,6 @@ const ThreatMap = () => {
               />
               <ContextMapPanel data={data} pt={pt} />
             </div>
-          </div>
-
-          <div className="grid gap-5 lg:grid-cols-3 lg:items-start">
-            <div className="lg:col-span-2">
-              <TimelinePanel data={data} maxTimeline={maxTimeline} pt={pt} />
-            </div>
-            <InsightsPanel insights={data.insights || []} pt={pt} />
-          </div>
-
-          <div className="grid gap-5 md:grid-cols-3">
-            {lists.map(({ icon, title, rows }) => (
-              <RankingList key={title} icon={icon} title={title} rows={rows} />
-            ))}
           </div>
         </div>
       ) : (

@@ -24,15 +24,62 @@ export const COUNTRY_NAMES = {
     IR: 'Iran', AU: 'Australia', NZ: 'New Zealand',
 };
 
+export const AFRICA_COUNTRIES = new Set([
+    'MA', 'DZ', 'TN', 'LY', 'EG', 'SD', 'ZA', 'NG', 'GH', 'KE', 'ET', 'AO',
+    'CI', 'CM', 'SN', 'TZ', 'UG', 'ZM', 'ZW', 'MZ', 'BW', 'NA', 'RW', 'ML',
+    'BF', 'BJ', 'NE', 'TD', 'MG', 'MU', 'MW', 'GA', 'CD', 'CG', 'SO', 'LR',
+    'SL', 'TG', 'GN', 'MR', 'GM',
+]);
+
+const EUROPE_COUNTRIES = new Set([
+    'ES', 'IT', 'PL', 'DE', 'FR', 'GB', 'PT', 'IE', 'NL', 'BE', 'CH', 'AT',
+    'CZ', 'SK', 'HU', 'RO', 'BG', 'GR', 'SE', 'NO', 'FI', 'DK', 'UA', 'RU',
+    'BY', 'RS', 'HR',
+]);
+
+const ASIA_COUNTRIES = new Set([
+    'IN', 'CN', 'JP', 'KR', 'TW', 'HK', 'SG', 'ID', 'MY', 'TH', 'VN', 'PH',
+    'PK', 'BD',
+]);
+
+const MIDDLE_EAST_COUNTRIES = new Set(['SA', 'AE', 'IL', 'QA', 'KW', 'IR', 'TR']);
+
+// Focus regions for the priority threat map. Keys are the stable ids the UI
+// sends; each maps to the ISO alpha-2 set used to tag/filter victims. Overlaps
+// (Brazil inside LATAM, Morocco inside Africa) are fine — a selection is a set
+// union, so a victim is only ever counted once per region key.
+export const REGIONS = {
+    latam: { label: 'LATAM', countries: LATAM_COUNTRIES },
+    brazil: { label: 'Brasil', countries: new Set(['BR']) },
+    us: { label: 'EUA', countries: new Set(['US']) },
+    africa: { label: 'África', countries: AFRICA_COUNTRIES },
+    europe: { label: 'Europa', countries: EUROPE_COUNTRIES },
+    asia: { label: 'Ásia', countries: ASIA_COUNTRIES },
+    middle_east: { label: 'Oriente Médio', countries: MIDDLE_EAST_COUNTRIES },
+};
+
+// Pre-selected in the UI on first load — the user's current priority regions.
+export const DEFAULT_FOCUS_REGIONS = ['latam', 'brazil', 'us', 'africa'];
+
+export const regionCodes = (keys = []) => {
+    const set = new Set();
+    for (const key of keys) {
+        const region = REGIONS[key];
+        if (region) for (const code of region.countries) set.add(code);
+    }
+    return set;
+};
+
+// Keep only victims located in the selected regions. Empty selection = no
+// region constraint (used by the global scope).
+export const filterByRegions = (victims, keys = []) => {
+    const codes = regionCodes(keys);
+    if (!codes.size) return victims;
+    return victims.filter((victim) => codes.has(victim.country));
+};
+
 const DAY_MS = 24 * 60 * 60 * 1000;
 const HOUR_MS = 60 * 60 * 1000;
-
-export const THREAT_MAP_WINDOWS = [
-    { key: '24h', label: '24h', days: 1 },
-    { key: '72h', label: '72h', days: 3 },
-    { key: '7d', label: '7d', days: 7 },
-    { key: '30d', label: '30d', days: 30 },
-];
 
 export const asArray = (value) => (
     Array.isArray(value) ? value
@@ -115,6 +162,40 @@ export function ransomwareLiveRequestOptions(apiKey = '') {
     };
 }
 
+// Server-side sector filter — Pro-only (`/victims/` 401s without a key). Returns
+// null when no key so callers can degrade to the global recent feed. `/victims/`
+// requires at least one filter and returns the sector's full history, which the
+// map then windows down; this is what surfaces niche sectors the 100-item recent
+// feed never shows.
+export function sectorVictimsRequestOptions(apiKey, sector) {
+    const key = String(apiKey || '').trim();
+    if (!key || !sector) return null;
+    return {
+        url: 'https://api-pro.ransomware.live/victims/',
+        options: {
+            headers: { 'X-API-KEY': key },
+            params: { sector, order: 'discovered' },
+            timeout: 15000,
+            maxRedirects: 3,
+        },
+    };
+}
+
+// Pro `/listsectors`: every sector value plus a victim count, used to populate
+// the UI sector picker with the exact strings the `sector` filter expects.
+export function sectorListRequestOptions(apiKey) {
+    const key = String(apiKey || '').trim();
+    if (!key) return null;
+    return {
+        url: 'https://api-pro.ransomware.live/listsectors',
+        options: {
+            headers: { 'X-API-KEY': key },
+            timeout: 12000,
+            maxRedirects: 3,
+        },
+    };
+}
+
 export const victimTimestamp = (victim) => {
     const time = Date.parse(victim?.discovered || victim?.published || '');
     return Number.isNaN(time) ? null : time;
@@ -165,102 +246,6 @@ function summarizeWindow(victims, days, now, key = `${days}d`, label = `${days}d
     );
 }
 
-function buildTimeline(victims, days, now) {
-    const bucketMs = days <= 3 ? 6 * HOUR_MS : DAY_MS;
-    const bucketCount = Math.max(1, Math.ceil((days * DAY_MS) / bucketMs));
-    const start = now - bucketCount * bucketMs;
-    const buckets = Array.from({ length: bucketCount }, (_, index) => {
-        const from = start + index * bucketMs;
-        const to = from + bucketMs;
-        const fromDate = new Date(from);
-        return {
-            from: fromDate.toISOString(),
-            to: new Date(to).toISOString(),
-            label: bucketMs < DAY_MS
-                ? fromDate.toISOString().slice(5, 16).replace('T', ' ')
-                : fromDate.toISOString().slice(5, 10),
-            count: 0,
-            countries: [],
-            groups: [],
-        };
-    });
-    const countrySets = buckets.map(() => new Set());
-    const groupSets = buckets.map(() => new Set());
-    for (const victim of victims) {
-        const time = victimTimestamp(victim);
-        if (!time || time < start || time > now + HOUR_MS) continue;
-        const index = Math.min(bucketCount - 1, Math.max(0, Math.floor((time - start) / bucketMs)));
-        buckets[index].count += 1;
-        if (victim.country) countrySets[index].add(victim.country);
-        if (victim.group) groupSets[index].add(victim.group);
-    }
-    return buckets.map((bucket, index) => ({
-        ...bucket,
-        countries: [...countrySets[index]],
-        groups: [...groupSets[index]],
-    }));
-}
-
-function buildInsights(current, previous, currentVictims) {
-    const delta = current.totalVictims - previous.totalVictims;
-    const latamVictims = currentVictims.filter((victim) => LATAM_COUNTRIES.has(victim.country));
-    const previousCountries = new Set(previous.countries.map((country) => country.name));
-    const newCountries = current.countries
-        .filter((country) => !previousCountries.has(country.name))
-        .slice(0, 5);
-    const evidenceCount = currentVictims.filter((victim) => (
-        victim.screenshot || victim.permalink || victim.infostealer || victim.press?.length
-    )).length;
-
-    const insights = [{
-        kind: 'volume',
-        severity: delta > 5 ? 'high' : delta > 0 ? 'medium' : 'low',
-        value: current.totalVictims,
-        previous: previous.totalVictims,
-        delta,
-    }];
-    if (current.groups[0]) {
-        insights.push({
-            kind: 'top-group',
-            severity: current.groups[0].count >= 5 ? 'high' : 'medium',
-            name: current.groups[0].name,
-            count: current.groups[0].count,
-        });
-    }
-    if (current.sectors[0]) {
-        insights.push({
-            kind: 'sector',
-            severity: current.sectors[0].count >= 5 ? 'high' : 'medium',
-            name: current.sectors[0].name,
-            count: current.sectors[0].count,
-        });
-    }
-    if (newCountries.length > 0) {
-        insights.push({
-            kind: 'new-countries',
-            severity: newCountries.length >= 3 ? 'high' : 'medium',
-            countries: newCountries,
-            count: newCountries.length,
-        });
-    }
-    if (latamVictims.length > 0) {
-        insights.push({
-            kind: 'latam',
-            severity: latamVictims.length >= 3 ? 'high' : 'medium',
-            count: latamVictims.length,
-            countries: countryCounts(latamVictims),
-        });
-    }
-    if (evidenceCount > 0) {
-        insights.push({
-            kind: 'evidence',
-            severity: 'context',
-            count: evidenceCount,
-        });
-    }
-    return insights;
-}
-
 export function buildThreatMapResponse(rawVictims, {
     days = 3,
     generatedAt = new Date().toISOString(),
@@ -273,7 +258,6 @@ export function buildThreatMapResponse(rawVictims, {
     const previousVictims = victims.filter((victim) => inPreviousWindow(victim, windowDays, now));
     const current = summarizeWindow(victims, windowDays, now, `${windowDays}d`, `${windowDays}d`);
     const previous = summarizeVictimSet(previousVictims, windowDays, 'previous', 'previous');
-    const windows = THREAT_MAP_WINDOWS.map((window) => summarizeWindow(victims, window.days, now, window.key, window.label));
     const countries = current.countries;
     const groups = current.groups;
     const sectors = current.sectors;
@@ -291,8 +275,6 @@ export function buildThreatMapResponse(rawVictims, {
         sectors,
         topCountry: countries[0] || null,
         activeGroups: groups.length,
-        windows,
-        timeline: buildTimeline(currentVictims, windowDays, now),
         delta: {
             victims: deltaVictims,
             previousVictims: previous.totalVictims,
@@ -304,6 +286,5 @@ export function buildThreatMapResponse(rawVictims, {
             countries: countryCounts(latamVictims),
             groups: countBy(latamVictims, (v) => v.group).slice(0, 8),
         },
-        insights: buildInsights(current, previous, currentVictims),
     };
 }

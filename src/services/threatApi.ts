@@ -1143,6 +1143,22 @@ export interface DailyBriefResponse {
     availableDates: string[];
 }
 
+export interface SectorOption {
+    name: string;
+    count: number;
+}
+
+export interface RegionOption {
+    key: string;
+    label: string;
+}
+
+export interface ThreatSectorsResponse {
+    sectors: SectorOption[];
+    regions: RegionOption[];
+    defaultRegions: string[];
+}
+
 export interface ThreatMapData {
     generatedAt: string;
     windowDays: number;
@@ -1154,26 +1170,6 @@ export interface ThreatMapData {
     sectors: CountItem[];
     topCountry: CountItem | null;
     activeGroups: number;
-    windows: Array<{
-        key: string;
-        label: string;
-        days: number;
-        totalVictims: number;
-        countries: CountItem[];
-        groups: CountItem[];
-        sectors: CountItem[];
-        topCountry: CountItem | null;
-        activeGroups: number;
-        latestVictim?: RansomwareVictim | null;
-    }>;
-    timeline: Array<{
-        from: string;
-        to: string;
-        label: string;
-        count: number;
-        countries: string[];
-        groups: string[];
-    }>;
     delta: {
         victims: number;
         previousVictims: number;
@@ -1185,16 +1181,6 @@ export interface ThreatMapData {
         countries: CountItem[];
         groups: CountItem[];
     };
-    insights: Array<{
-        kind: "volume" | "top-group" | "sector" | "new-countries" | "latam" | "evidence";
-        severity: "high" | "medium" | "low" | "context" | string;
-        value?: number;
-        previous?: number;
-        delta?: number;
-        name?: string;
-        count?: number;
-        countries?: CountItem[];
-    }>;
 }
 
 const intelError = async (r: Response): Promise<never> => {
@@ -1209,8 +1195,22 @@ export const fetchDailyBrief = async (date?: string): Promise<DailyBriefResponse
     return r.json();
 };
 
-export const fetchThreatMap = async (days = 3): Promise<ThreatMapData> => {
-    const r = await fetch(`/api/intel/threat-map?days=${days}`);
+export const fetchThreatMap = async (
+    days = 3,
+    focus?: { sectors: string[]; regions: string[] },
+): Promise<ThreatMapData> => {
+    const params = new URLSearchParams({ days: String(days) });
+    if (focus?.sectors.length) {
+        params.set("sectors", focus.sectors.join(","));
+        if (focus.regions.length) params.set("regions", focus.regions.join(","));
+    }
+    const r = await fetch(`/api/intel/threat-map?${params}`);
+    if (!r.ok) return intelError(r);
+    return r.json();
+};
+
+export const fetchThreatSectors = async (): Promise<ThreatSectorsResponse> => {
+    const r = await fetch(`/api/intel/sectors`);
     if (!r.ok) return intelError(r);
     return r.json();
 };

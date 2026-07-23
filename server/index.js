@@ -26,9 +26,14 @@ import {
     buildThreatMapResponse,
     countBy,
     COUNTRY_NAMES,
+    DEFAULT_FOCUS_REGIONS,
+    filterByRegions,
     LATAM_COUNTRIES,
     normalizeVictim,
     ransomwareLiveRequestOptions,
+    REGIONS,
+    sectorListRequestOptions,
+    sectorVictimsRequestOptions,
 } from './ransomwareLive.js';
 import {
     createEditionGenerator,
@@ -763,10 +768,75 @@ async function getRecentThreatFoxIocs(days = 7) {
     return iocs;
 }
 
+// Server-side sector pull (Pro only). Cached per sector so an 8-sector focus
+// selection costs at most 8 upstream calls, and overlapping selections are free.
+// Returns [] when there's no Pro key (the /victims/ filter is Pro-only) so focus
+// mode degrades to the global recent feed instead of erroring.
+async function getSectorVictims(sector) {
+    const request = sectorVictimsRequestOptions(process.env.RANSOMWARE_LIVE_API_KEY, sector);
+    if (!request) return [];
+    const now = Date.now();
+    const key = sector.toLowerCase();
+    const cached = memoryCache.sectorVictims.store.get(key);
+    if (cached && cached.expiresAt > now) return cached.data;
+    try {
+        const response = await axios.get(request.url, request.options);
+        const victims = asArray(response.data).map((v) => normalizeVictim(v, 'ransomware.live Pro'));
+        memoryCache.sectorVictims.store.set(key, { data: victims, expiresAt: now + memoryCache.sectorVictims.ttl });
+        return victims;
+    } catch (error) {
+        console.warn(`Ransomware.live sector "${sector}" fetch failed: ${error.message}`);
+        return cached?.data || [];
+    }
+}
+
+// Fan out across the selected sectors and dedupe (a victim can be double-listed
+// if a group re-posts). Falls back to the global recent feed when the Pro key is
+// absent so the map is never empty.
+async function getPriorityVictims(sectors) {
+    const batches = await Promise.all(sectors.map((sector) => getSectorVictims(sector)));
+    const flat = batches.flat();
+    if (!flat.length) return getRecentRansomwareVictims();
+    const seen = new Map();
+    for (const victim of flat) {
+        const id = victim.id || `${victim.name}@@${victim.group}@@${victim.discovered || victim.published || ''}`;
+        if (!seen.has(id)) seen.set(id, victim);
+    }
+    return [...seen.values()];
+}
+
+async function getSectorList() {
+    const request = sectorListRequestOptions(process.env.RANSOMWARE_LIVE_API_KEY);
+    if (!request) return [];
+    const now = Date.now();
+    if (memoryCache.sectorList.data && memoryCache.sectorList.expiresAt > now) return memoryCache.sectorList.data;
+    const response = await axios.get(request.url, request.options);
+    // /listsectors shape varies (array of {sector,count} or a {sector:count} map);
+    // normalize to [{ name, count }] sorted by name.
+    const raw = response.data;
+    const list = Array.isArray(raw)
+        ? raw.map((s) => ({ name: String(s.sector ?? s.name ?? s).trim(), count: Number(s.count ?? s.victims ?? 0) }))
+        : Object.entries(raw || {}).map(([name, count]) => ({ name: String(name).trim(), count: Number(count) || 0 }));
+    const sectors = list.filter((s) => s.name).sort((a, b) => a.name.localeCompare(b.name));
+    memoryCache.sectorList.data = sectors;
+    memoryCache.sectorList.expiresAt = now + memoryCache.sectorList.ttl;
+    return sectors;
+}
+
+const parseCsvParam = (value) => String(value || '')
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
+
 app.get('/api/intel/threat-map', async (req, res) => {
     try {
         const days = Math.max(1, Math.min(30, Number(req.query.days) || 3));
-        const victims = await getRecentRansomwareVictims();
+        const sectors = parseCsvParam(req.query.sectors);
+        const regions = parseCsvParam(req.query.regions).filter((key) => REGIONS[key]);
+        const focus = sectors.length > 0;
+
+        const rawVictims = focus ? await getPriorityVictims(sectors) : await getRecentRansomwareVictims();
+        const victims = focus ? filterByRegions(rawVictims, regions) : rawVictims;
         const source = victims.some((victim) => victim.source === 'ransomware.live Pro')
             ? 'ransomware.live Pro'
             : 'ransomware.live';
@@ -775,6 +845,24 @@ app.get('/api/intel/threat-map', async (req, res) => {
             days,
             source,
         }));
+    } catch (error) {
+        const { status, message } = sanitizeError(error);
+        res.status(status).json({ error: message });
+    }
+});
+
+// Sector names (for the picker) + the fixed region catalog the focus map accepts.
+app.get('/api/intel/sectors', async (_req, res) => {
+    try {
+        const sectors = await getSectorList().catch((err) => {
+            console.warn(`Ransomware.live sector list fetch failed: ${err.message}`);
+            return [];
+        });
+        res.json({
+            sectors,
+            regions: Object.entries(REGIONS).map(([key, region]) => ({ key, label: region.label })),
+            defaultRegions: DEFAULT_FOCUS_REGIONS,
+        });
     } catch (error) {
         const { status, message } = sanitizeError(error);
         res.status(status).json({ error: message });
@@ -1406,6 +1494,18 @@ const memoryCache = {
         data: null,
         expiresAt: 0,
         ttl: 30 * 60 * 1000 // 30 minutes
+    },
+    // Server-side sector-filtered victim pulls (Pro /victims/?sector=), keyed by
+    // lowercased sector name so different focus selections reuse each other's data.
+    sectorVictims: {
+        store: new Map(), // sector -> { data, expiresAt }
+        ttl: 30 * 60 * 1000 // 30 minutes
+    },
+    // Pro /listsectors — sector names + counts for the UI picker.
+    sectorList: {
+        data: null,
+        expiresAt: 0,
+        ttl: 6 * 60 * 60 * 1000 // 6 hours (the taxonomy barely changes)
     }
 };
 

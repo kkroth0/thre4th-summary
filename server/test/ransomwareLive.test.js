@@ -3,8 +3,10 @@ import assert from 'node:assert/strict';
 import {
     asArray,
     buildThreatMapResponse,
+    filterByRegions,
     normalizeVictim,
     ransomwareLiveRequestOptions,
+    sectorVictimsRequestOptions,
 } from '../ransomwareLive.js';
 
 const NOW = Date.parse('2026-07-13T12:00:00.000Z');
@@ -80,7 +82,7 @@ test('accepts the Ransomware.live Pro victims envelope', () => {
     assert.equal(response.victims[0].source, 'ransomware.live Pro');
 });
 
-test('builds current threat-map windows, deltas, timeline, and insights', () => {
+test('builds current threat-map window aggregates and deltas', () => {
     const victims = [
         normalizeVictim({ victim: 'BR Bank', group: 'qilin', country: 'BR', activity: 'Financial Services', discovered: hoursAgo(4) }),
         normalizeVictim({ victim: 'US Hospital', group: 'dragonforce', country: 'US', activity: 'Healthcare', discovered: hoursAgo(30) }),
@@ -104,12 +106,6 @@ test('builds current threat-map windows, deltas, timeline, and insights', () => 
     assert.equal(response.delta.previousVictims, 1);
     assert.equal(response.delta.victims, 1);
     assert.equal(response.latam.victims, 1);
-    assert.equal(response.windows.find((w) => w.key === '24h').totalVictims, 1);
-    assert.equal(response.windows.find((w) => w.key === '7d').totalVictims, 3);
-    assert.ok(response.timeline.length > 0);
-    assert.ok(response.timeline.some((bucket) => bucket.count > 0));
-    assert.ok(response.insights.some((insight) => insight.kind === 'volume'));
-    assert.ok(response.insights.some((insight) => insight.kind === 'top-group'));
 });
 
 test('includes victims for countries represented in threat-map aggregates beyond the first 80 rows', () => {
@@ -137,4 +133,31 @@ test('includes victims for countries represented in threat-map aggregates beyond
 
     assert.ok(response.countries.some((country) => country.name === 'BR'));
     assert.ok(response.victims.some((victim) => victim.country === 'BR'));
+});
+
+test('filterByRegions keeps only victims inside the selected focus regions', () => {
+    const victims = [
+        { country: 'BR' }, // LATAM + Brazil
+        { country: 'US' }, // US
+        { country: 'MA' }, // Africa (Morocco)
+        { country: 'DE' }, // Europe — not a focus region here
+        { country: 'JP' }, // Asia
+    ];
+
+    const latamOnly = filterByRegions(victims, ['latam']);
+    assert.deepEqual(latamOnly.map((v) => v.country), ['BR']);
+
+    const focus = filterByRegions(victims, ['latam', 'us', 'africa']);
+    assert.deepEqual(focus.map((v) => v.country).sort(), ['BR', 'MA', 'US']);
+
+    // Empty selection imposes no region constraint.
+    assert.equal(filterByRegions(victims, []).length, victims.length);
+});
+
+test('sectorVictimsRequestOptions requires a Pro key and passes the sector filter', () => {
+    assert.equal(sectorVictimsRequestOptions('', 'Energy'), null);
+    const req = sectorVictimsRequestOptions('secret', 'Energy');
+    assert.match(req.url, /api-pro\.ransomware\.live\/victims\/$/);
+    assert.equal(req.options.params.sector, 'Energy');
+    assert.equal(req.options.headers['X-API-KEY'], 'secret');
 });
