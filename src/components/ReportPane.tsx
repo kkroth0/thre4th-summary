@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { BrandMark } from "@/components/BrandMark";
 import { BoletimView } from "@/components/BoletimView";
 import { useLanguage } from "@/contexts/LanguageContext";
-import type { BoletimJob } from "@/services/threatApi";
+import type { BoletimJob, BoletimReport } from "@/services/threatApi";
 
 // Host da URL pra exibição compacta ("fortiguard.com" em vez do link inteiro).
 export const hostOf = (url?: string): string => {
@@ -16,6 +16,35 @@ const fmtDate = (iso: string | undefined, pt: boolean) => {
   if (!iso) return "";
   const d = new Date(iso);
   return isNaN(+d) ? "" : d.toLocaleDateString(pt ? "pt-BR" : "en-US");
+};
+
+// Modelo e custo de LLM da geração, discretos na toolbar. Os valores são de
+// centésimos de centavo, então 4 casas; abaixo disso mostra "<$0.0001".
+// Boletins gerados antes deste campo (ou em --dry-run) não mostram nada.
+const usageTag = (c: BoletimReport["consumo"], pt: boolean): React.ReactNode => {
+  const usd = c?.custo_usd;
+  const models = c?.modelos || [];
+  if (!models.length && !(typeof usd === "number" && usd > 0)) return null;
+  // O id vem "provedor/modelo"; o provedor é ruído na toolbar e fica no title.
+  // Mais de um modelo = a cadeia caiu pro fallback no meio do boletim — mostra
+  // todos, senão o custo parece vir de um modelo que não foi o único usado.
+  const label = models.map((m) => m.split("/").pop()).join(" + ");
+  const detail = [
+    models.join(", "),
+    c?.chamadas ? `${c.chamadas} ${pt ? "chamadas" : "calls"}` : "",
+    c?.tokens_in ? `${c.tokens_in.toLocaleString()} tokens in` : "",
+    c?.tokens_out ? `${c.tokens_out.toLocaleString()} out` : "",
+  ].filter(Boolean).join(" · ");
+  return (
+    <span className="font-mono text-xs text-muted-foreground" title={detail}>
+      {label}
+      {typeof usd === "number" && usd > 0 && (
+        <span className="ml-1.5 text-foreground/70">
+          {usd < 0.0001 ? "<$0.0001" : `$${usd.toFixed(4)}`}
+        </span>
+      )}
+    </span>
+  );
 };
 
 // Painel de leitura da workstation: toolbar com meta/ações + BoletimView.
@@ -44,6 +73,7 @@ export function ReportPane({ job, onDownload }: {
   }
 
   const r = job.json;
+  const usage = usageTag(r.consumo, pt);
   return (
     <div className="rounded-xl border bg-card/40 p-5 lg:p-6">
       {/* toolbar: meta à esquerda, ações à direita */}
@@ -64,6 +94,7 @@ export function ReportPane({ job, onDownload }: {
           </a>
         )}
         <div className="ml-auto flex items-center gap-2">
+          {usage}
           <Button variant="outline" size="sm" className="gap-1.5" onClick={() => onDownload(job)}>
             <Download className="h-3.5 w-3.5" /> JSON
           </Button>

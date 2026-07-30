@@ -1026,6 +1026,11 @@ export interface BoletimReport {
     iocs_fontes?: string[];   // apêndices externos (repo/gist) de onde os IOCs foram coletados
     mitre_ttps?: { id?: string; nome?: string; tatica?: string; descricao?: string; contexto?: string; url?: string }[];
     referencias_coletadas?: { titulo?: string; url?: string }[];
+    // Consumo de LLM da geração deste boletim (custo real cobrado pela OpenRouter).
+    consumo?: {
+        modelos?: string[]; chamadas?: number;
+        tokens_in?: number; tokens_out?: number; custo_usd?: number;
+    };
 }
 
 // 1 URL = 1 boletim: o front pede a geração de uma URL; o worker na VPS gera o
