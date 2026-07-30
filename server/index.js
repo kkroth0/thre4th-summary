@@ -2574,7 +2574,10 @@ app.get('/api/feed/jobs/pending', (req, res) => {
     if (!requireFeedSecret(req, res)) return;
     expireStaleJobs();
     // Sem BYOK: todo job pending vai pro worker. A chave OpenRouter é do servidor
-    // (no .env do worker), não viaja no payload. Só encaminhamos o modelo.
+    // (no .env do worker), não viaja no payload. Só encaminhamos o modelo — e
+    // apenas quando este servidor pinar um: o --model do worker sobrescreve a
+    // cadeia do motor, então um default aqui viraria um segundo lugar pra
+    // atualizar (e silenciosamente venceria o motor, que é quem sabe o assunto).
     const pending = Object.values(jobsStore)
         .filter((j) => j.status === 'pending')
         .map((j) => ({
@@ -2582,7 +2585,7 @@ app.get('/api/feed/jobs/pending', (req, res) => {
             url: j.url,
             type: j.type,
             title: j.title,
-            model: process.env.OPENROUTER_MODEL || 'deepseek/deepseek-chat-v3.1',
+            ...(process.env.OPENROUTER_MODEL ? { model: process.env.OPENROUTER_MODEL } : {}),
         }));
     res.json({ pending });
 });
@@ -2602,7 +2605,7 @@ app.post('/api/feed/job/result', (req, res) => {
 
 // ─── OpenRouter-powered on-demand advisory analysis ───────────────────────
 const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1';
-const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL || 'deepseek/deepseek-chat-v3.1';
+const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL || 'deepseek/deepseek-v4-flash';
 
 const newsIntelPrompt = (lang) => (
     'You are a senior Cyber Threat Intelligence analyst. ' +
