@@ -1010,10 +1010,16 @@ export interface BoletimReport {
         fabricante?: string; software?: string; versao?: string; cve?: string;
         cvss?: string; severidade?: string; cwe?: string; kev?: boolean;
     }[];
-    superficie_de_ataque?: { categoria?: string; tecnologia?: string; utilizacao?: string }[];
+    // campaign: box "Superfície de Ataque Alvo". Objeto no motor atual; sidecars
+    // antigos traziam uma tabela de tecnologias — os dois formatos são aceitos.
+    superficie_de_ataque?:
+        | { vetor_inicial?: string; superficie?: string; ativos_alvo?: string;
+            ttps_principais?: string; perfil_vitimas?: string }
+        | { categoria?: string; tecnologia?: string; utilizacao?: string }[];
     ator?: {
         threat_actor?: string; tipo?: string; motivation?: string;
-        sectors?: string[]; diferencial?: string; onion?: string[];
+        sectors?: string[]; origem?: string; nivel_atividade?: string;
+        diferencial?: string; onion?: string[];
     };
     recomendacoes?: { titulo?: string; itens?: string[] }[];
     iocs?: { categoria?: string; tipo?: string; valor?: string }[];

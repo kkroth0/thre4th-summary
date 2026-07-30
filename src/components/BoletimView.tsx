@@ -43,6 +43,28 @@ const Section: React.FC<{ title: string; count?: number; children: React.ReactNo
   </div>
 );
 
+// A superfície de ataque vem como objeto (motor atual) ou como tabela de
+// tecnologias (sidecar antigo). Normaliza os dois em pares label/valor.
+const SURFACE_FIELDS: [string, string][] = [
+  ["vetor_inicial", "Vetor inicial"],
+  ["superficie", "Superfície"],
+  ["ativos_alvo", "Ativos-alvo"],
+  ["ttps_principais", "TTPs principais"],
+  ["perfil_vitimas", "Perfil das vítimas"],
+];
+
+const surfaceRows = (s: BoletimReport["superficie_de_ataque"]): [string, string][] => {
+  if (Array.isArray(s)) {
+    return s
+      .filter((row) => row.tecnologia)
+      .map((row) => [row.tecnologia!, [row.categoria, row.utilizacao].filter(Boolean).join(" — ")]);
+  }
+  const obj = (s || {}) as Record<string, string | undefined>;
+  return SURFACE_FIELDS
+    .map(([key, label]) => [label, (obj[key] || "").trim()] as [string, string])
+    .filter(([, value]) => value && value !== "N/A");
+};
+
 // Visualizador inline do JSON do boletim — mostra o que foi coletado (sumário,
 // produto/CVE, IOCs por Pirâmide da Dor, TTPs MITRE, referências). O meta
 // (TLP/data/fonte) fica com quem embute (ReportPane). Tolerante a campos
@@ -53,7 +75,7 @@ export const BoletimView: React.FC<{ report: BoletimReport }> = ({ report }) => 
   const ttps = r.mitre_ttps || [];
   const refs = r.referencias_coletadas || [];
   const tech = r.tecnologias_afetadas || [];
-  const surface = r.superficie_de_ataque || [];
+  const surface = surfaceRows(r.superficie_de_ataque);
   const iocSources = r.iocs_fontes || [];
   const ator = r.ator;
   const recomendacoes = r.recomendacoes || [];
@@ -80,7 +102,7 @@ export const BoletimView: React.FC<{ report: BoletimReport }> = ({ report }) => 
       )}
 
       {/* campaign: bloco do ator */}
-      {ator && (ator.threat_actor || ator.tipo || ator.motivation || (ator.sectors && ator.sectors.length) || ator.diferencial) && (
+      {ator && (ator.threat_actor || ator.tipo || ator.motivation || (ator.sectors && ator.sectors.length) || ator.origem || ator.nivel_atividade || ator.diferencial) && (
         <Section title="Ator da ameaça">
           <div className="space-y-0.5 text-muted-foreground">
             {ator.threat_actor && ator.threat_actor !== "N/A" && (
@@ -94,6 +116,12 @@ export const BoletimView: React.FC<{ report: BoletimReport }> = ({ report }) => 
             )}
             {ator.sectors && ator.sectors.length > 0 && (
               <div><span className="text-foreground font-medium">Setores:</span> {ator.sectors.join(", ")}</div>
+            )}
+            {ator.origem && ator.origem !== "N/A" && (
+              <div><span className="text-foreground font-medium">Origem:</span> {ator.origem}</div>
+            )}
+            {ator.nivel_atividade && ator.nivel_atividade !== "N/A" && (
+              <div><span className="text-foreground font-medium">Nível de atividade:</span> {ator.nivel_atividade}</div>
             )}
             {ator.diferencial && ator.diferencial !== "N/A" && (
               <div><span className="text-foreground font-medium">Diferencial:</span> {ator.diferencial}</div>
@@ -137,12 +165,11 @@ export const BoletimView: React.FC<{ report: BoletimReport }> = ({ report }) => 
 
       {/* campaign: superfície de ataque */}
       {surface.length > 0 && (
-        <Section title="Superfície de ataque" count={surface.length}>
-          <div className="space-y-1">
-            {surface.map((s, i) => (
-              <div key={i} className="text-muted-foreground">
-                <span className="font-medium text-foreground">{s.tecnologia}</span>
-                {s.categoria ? ` · ${s.categoria}` : ""}{s.utilizacao ? ` — ${s.utilizacao}` : ""}
+        <Section title="Superfície de ataque">
+          <div className="space-y-0.5 text-muted-foreground">
+            {surface.map(([label, value], i) => (
+              <div key={i}>
+                <span className="text-foreground font-medium">{label}:</span> {linkifyRefs(value)}
               </div>
             ))}
           </div>
