@@ -997,6 +997,7 @@ export const fetchDailySuggestions = async (
 export interface BoletimReport {
     deck_type?: DeckType;
     source_url?: string;
+    source_published?: string;    // publicação da fonte (≠ geração do boletim)
     generated_at?: string;
     tlp?: string;
     titulo?: string;
@@ -1006,9 +1007,13 @@ export interface BoletimReport {
     pre_requisitos?: string[];    // vuln: "Pré-requisitos de Exploração"
     impactos?: string[];
     cve_id?: string;
+    estado_exploracao?: string;   // vuln: "Explorada ativamente", "PoC público"…
+    // vuln: referências de PoC público — o deck de vulnerabilidade está congelado,
+    // então o site é a única saída onde isto aparece.
+    pocs?: { cve_id?: string; fonte?: string; titulo?: string; url?: string }[];
     tecnologias_afetadas?: {
-        fabricante?: string; software?: string; versao?: string; cve?: string;
-        cvss?: string; severidade?: string; cwe?: string; kev?: boolean;
+        fabricante?: string; software?: string; versao?: string; versao_corrigida?: string;
+        cve?: string; cvss?: string; severidade?: string; cwe?: string; kev?: boolean;
     }[];
     // campaign: box "Superfície de Ataque Alvo". Objeto no motor atual; sidecars
     // antigos traziam uma tabela de tecnologias — os dois formatos são aceitos.

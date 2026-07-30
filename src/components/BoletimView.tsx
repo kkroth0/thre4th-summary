@@ -16,6 +16,9 @@ const SEVERITY_STYLES: Record<string, string> = {
 
 // Auto-link CVE (-> NVD) and ATT&CK ids (-> attack.mitre) inside prose, so the
 // analyst never adds a link by hand. One combined regex; keep the delimiters.
+// Exploração em curso pinta o selo de vermelho; "PoC público" ou similar fica neutro.
+const ACTIVE_EXPLOIT_RE = /ativa|explorad|in the wild|kev|weaponiz/i;
+
 const REF_RE = /(CVE-\d{4}-\d{4,}|T\d{4}(?:\.\d{3})?)/gi;
 const refHref = (token: string) =>
   /^cve/i.test(token)
@@ -77,6 +80,7 @@ export const BoletimView: React.FC<{ report: BoletimReport }> = ({ report }) => 
   const tech = r.tecnologias_afetadas || [];
   const surface = surfaceRows(r.superficie_de_ataque);
   const iocSources = r.iocs_fontes || [];
+  const pocs = (r.pocs || []).filter((p) => p.url);
   const ator = r.ator;
   const recomendacoes = r.recomendacoes || [];
 
@@ -85,6 +89,21 @@ export const BoletimView: React.FC<{ report: BoletimReport }> = ({ report }) => 
       {r.sumario_executivo && (
         <Section title="Sumário executivo">
           <p className="text-muted-foreground leading-relaxed">{linkifyRefs(r.sumario_executivo)}</p>
+        </Section>
+      )}
+
+      {/* vuln: estado de exploração — sinal de urgência, vem antes do resto.
+          O motor usa "Não informado" como default, que não vale um bloco. */}
+      {r.estado_exploracao && r.estado_exploracao !== "Não informado" && (
+        <Section title="Estado de exploração">
+          <Badge
+            variant="outline"
+            className={ACTIVE_EXPLOIT_RE.test(r.estado_exploracao)
+              ? "bg-red-500/10 text-red-500 border-red-500/20"
+              : "bg-slate-500/10 text-slate-400 border-slate-500/20"}
+          >
+            {r.estado_exploracao}
+          </Badge>
         </Section>
       )}
 
@@ -141,6 +160,11 @@ export const BoletimView: React.FC<{ report: BoletimReport }> = ({ report }) => 
               <div key={i} className="flex flex-wrap items-center gap-1.5">
                 <span className="font-medium">{[t.fabricante, t.software].filter(Boolean).join(" ")}</span>
                 {t.versao && <span className="text-muted-foreground">{t.versao}</span>}
+                {t.versao_corrigida && t.versao_corrigida !== "N/A" && (
+                  <span className="text-emerald-500" title="Versão corrigida">
+                    → {t.versao_corrigida}
+                  </span>
+                )}
                 {t.cve && t.cve !== "N/A" && (
                   <a href={refHref(t.cve)} target="_blank" rel="noopener noreferrer">
                     <Badge variant="secondary" className="text-[10px] hover:bg-secondary/80">{t.cve}</Badge>
@@ -258,6 +282,26 @@ export const BoletimView: React.FC<{ report: BoletimReport }> = ({ report }) => 
               </a>
             ))}
           </div>
+        </Section>
+      )}
+
+      {/* vuln: PoCs públicos. Separados das referências de propósito — "existe
+          exploit público" é sinal de priorização, não leitura complementar. */}
+      {pocs.length > 0 && (
+        <Section title="Exploits públicos (PoC)" count={pocs.length}>
+          <ul className="space-y-0.5">
+            {pocs.map((p, i) => (
+              <li key={i} className="truncate">
+                <a href={p.url} target="_blank" rel="noopener noreferrer"
+                   className="inline-flex items-center gap-1 text-amber-500 hover:underline"
+                   title={p.url}>
+                  {p.cve_id && <span className="font-mono text-xs">{p.cve_id}</span>}
+                  {p.titulo || p.fonte || p.url}
+                  <ExternalLink className="h-3 w-3 shrink-0" />
+                </a>
+              </li>
+            ))}
+          </ul>
         </Section>
       )}
 

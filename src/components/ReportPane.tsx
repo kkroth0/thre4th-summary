@@ -84,7 +84,18 @@ export function ReportPane({ job, onDownload }: {
           </Badge>
         )}
         <Badge variant="secondary" className="font-mono text-[10px] uppercase">{job.type}</Badge>
-        {r.generated_at && <span className="text-xs text-muted-foreground">{fmtDate(r.generated_at, pt)}</span>}
+        {r.generated_at && (
+          <span className="text-xs text-muted-foreground" title={pt ? "Geração do boletim" : "Report generated"}>
+            {fmtDate(r.generated_at, pt)}
+          </span>
+        )}
+        {/* Publicação da FONTE. Rotulada porque sem isso vira sósia da data acima —
+            e um advisory de dois anos passaria por novidade. */}
+        {r.source_published && fmtDate(r.source_published, pt) && (
+          <span className="text-xs text-muted-foreground" title={pt ? "Publicação da fonte" : "Source published"}>
+            {pt ? "fonte" : "source"} {fmtDate(r.source_published, pt)}
+          </span>
+        )}
         {r.source_url && (
           <a
             href={r.source_url} target="_blank" rel="noopener noreferrer"
