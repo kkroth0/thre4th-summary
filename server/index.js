@@ -148,7 +148,16 @@ const skipRateLimit = (req) => {
     // is relative under the '/api/' mount ('/dnsbl') and absolute on the
     // per-route scanLimiter ('/api/dnsbl'); accept both exact forms.
     const p = req.path || '';
-    return p === '/dnsbl' || p === '/dnsbl/batch' || p === '/api/dnsbl' || p === '/api/dnsbl/batch';
+    if (p === '/dnsbl' || p === '/dnsbl/batch' || p === '/api/dnsbl' || p === '/api/dnsbl/batch') {
+        return true;
+    }
+    // Rotas worker<->site: o worker na VPS faz poll a cada 10s, o que sozinho
+    // consome 90 das 150 requisições da janela de 15 min e derruba o próprio
+    // pipeline de geração. Não são superfície pública — requireFeedSecret já
+    // barra quem não tem o FEED_AGENT_SECRET, e é ele que faz o rate limiting
+    // de verdade aqui.
+    return p === '/feed/jobs/pending' || p === '/feed/job/result'
+        || p === '/api/feed/jobs/pending' || p === '/api/feed/job/result';
 };
 
 const limiter = rateLimit({

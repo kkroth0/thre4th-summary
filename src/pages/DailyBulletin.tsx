@@ -212,7 +212,10 @@ const DailyBulletin: React.FC = () => {
       }));
     };
     if (jobs.some((j) => j.status === "pending")) {
-      pollRef.current = setInterval(tick, 3000);
+      // 10s, não 3s: a geração leva ~2 min, e a 3s o poll estoura o rate limit
+      // do próprio site (150 req / 15 min) em 7min30 de espera — daí em diante
+      // fetchJob só devolve 429, a tela congela e o boletim PARECE travado.
+      pollRef.current = setInterval(tick, 10000);
       return () => { if (pollRef.current) clearInterval(pollRef.current); };
     }
   }, [jobs]);
