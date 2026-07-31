@@ -1008,9 +1008,6 @@ export interface BoletimReport {
     impactos?: string[];
     cve_id?: string;
     estado_exploracao?: string;   // vuln: "Explorada ativamente", "PoC público"…
-    // vuln: referências de PoC público — o deck de vulnerabilidade está congelado,
-    // então o site é a única saída onde isto aparece.
-    pocs?: { cve_id?: string; fonte?: string; titulo?: string; url?: string }[];
     tecnologias_afetadas?: {
         fabricante?: string; software?: string; versao?: string; versao_corrigida?: string;
         cve?: string; cvss?: string; severidade?: string; cwe?: string; kev?: boolean;

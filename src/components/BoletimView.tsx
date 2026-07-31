@@ -80,7 +80,6 @@ export const BoletimView: React.FC<{ report: BoletimReport }> = ({ report }) => 
   const tech = r.tecnologias_afetadas || [];
   const surface = surfaceRows(r.superficie_de_ataque);
   const iocSources = r.iocs_fontes || [];
-  const pocs = (r.pocs || []).filter((p) => p.url);
   const ator = r.ator;
   const recomendacoes = r.recomendacoes || [];
 
@@ -282,26 +281,6 @@ export const BoletimView: React.FC<{ report: BoletimReport }> = ({ report }) => 
               </a>
             ))}
           </div>
-        </Section>
-      )}
-
-      {/* vuln: PoCs públicos. Separados das referências de propósito — "existe
-          exploit público" é sinal de priorização, não leitura complementar. */}
-      {pocs.length > 0 && (
-        <Section title="Exploits públicos (PoC)" count={pocs.length}>
-          <ul className="space-y-0.5">
-            {pocs.map((p, i) => (
-              <li key={i} className="truncate">
-                <a href={p.url} target="_blank" rel="noopener noreferrer"
-                   className="inline-flex items-center gap-1 text-amber-500 hover:underline"
-                   title={p.url}>
-                  {p.cve_id && <span className="font-mono text-xs">{p.cve_id}</span>}
-                  {p.titulo || p.fonte || p.url}
-                  <ExternalLink className="h-3 w-3 shrink-0" />
-                </a>
-              </li>
-            ))}
-          </ul>
         </Section>
       )}
 
