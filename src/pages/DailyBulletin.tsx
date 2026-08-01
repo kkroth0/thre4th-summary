@@ -22,7 +22,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import {
-  fetchDailySuggestions, generateBoletim, fetchJob,
+  fetchDailySuggestions, generateBoletim, fetchJob, fetchJobList, deleteJob,
   type DailySuggestion, type BoletimJob, type DeckType,
 } from "@/services/threatApi";
 
@@ -32,11 +32,6 @@ const slug = (s: string) => (s || "boletim").normalize("NFKD").replace(/[^\w\s-]
 // backend reiniciou e perdeu o job -> 404). Evita "gerando…" eterno. Casado com
 // o JOB_TTL_MS do servidor (25 min) pra não expirar antes dele numa fila cheia.
 const CLIENT_TIMEOUT_MS = 25 * 60 * 1000;
-
-// Histórico dos relatórios gerados, persistido no navegador (sobrevive a sair da
-// página / recarregar) — assim você não regenera nem gasta API ao voltar.
-const STORAGE_KEY = "ts-bulletins-v1";
-const MAX_HISTORY = 40;
 
 // Fases estimadas pelo tempo decorrido (mapeiam o pipeline real: coleta ~10-15s,
 // análise LLM ~15-30s). Não é progresso real, mas dá feedback agradável.
@@ -155,12 +150,7 @@ const DailyBulletin: React.FC = () => {
   const [searchParams] = useSearchParams();
   const [pasteUrl, setPasteUrl] = useState(() => searchParams.get("url") || "");
   const [pasteType, setPasteType] = useState<DeckType>("vuln");
-  const [jobs, setJobs] = useState<BoletimJob[]>(() => {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      return raw ? (JSON.parse(raw) as BoletimJob[]) : [];
-    } catch { return []; }
-  });
+  const [jobs, setJobs] = useState<BoletimJob[]>([]);
   const [nowMs, setNowMs] = useState(Date.now());
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -184,11 +174,15 @@ const DailyBulletin: React.FC = () => {
 
   useEffect(() => { loadSuggestions(); }, [loadSuggestions]);
 
-  // Persiste o histórico no navegador a cada mudança (guarda só os mais recentes).
+  // A lista vem do servidor — antes vivia só no localStorage, então o histórico
+  // era por navegador e sumia. Chega sem o JSON do boletim; o corpo é buscado
+  // sob demanda ao abrir um relatório.
   useEffect(() => {
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(jobs.slice(0, MAX_HISTORY))); }
-    catch { /* quota cheia: ignora */ }
-  }, [jobs]);
+    if (!auth?.authenticated) return;
+    fetchJobList()
+      .then(setJobs)
+      .catch(() => toast.error(pt ? "Falha ao carregar seus relatórios" : "Failed to load your reports"));
+  }, [auth?.authenticated, pt]);
 
   // Poll dos jobs não-terminais a cada 3s. Quando um job termina e nada está
   // aberto no painel, ele é selecionado sozinho (você estava esperando ele).
@@ -256,18 +250,36 @@ const DailyBulletin: React.FC = () => {
     URL.revokeObjectURL(url);
   };
 
-  // Apaga o histórico de relatórios (estado + localStorage, via efeito de persistência).
-  const clearHistory = () => {
+  // Apaga o histórico no servidor. Antes era só estado local, porque o
+  // histórico morava no navegador.
+  const clearHistory = async () => {
+    const alvo = jobs;
     setJobs([]);
     setSelectedId(null);
-    toast.success(pt ? "Histórico apagado" : "History cleared");
+    const falhas = await Promise.all(alvo.map((j) => deleteJob(j.id).then(() => 0).catch(() => 1)));
+    const erros = falhas.reduce((a: number, b) => a + b, 0);
+    if (erros) {
+      setJobs(await fetchJobList().catch(() => alvo));
+      toast.error(pt ? `Falha ao apagar ${erros} relatório(s)` : `Failed to delete ${erros} report(s)`);
+    } else {
+      toast.success(pt ? "Histórico apagado" : "History cleared");
+    }
   };
 
-  // Abre/fecha um relatório no painel. Em telas menores (colunas empilhadas) o
-  // painel fica abaixo da lista, então rola até ele ao abrir.
-  const selectJob = (j: BoletimJob) => {
+  // Abre/fecha um relatório no painel. A lista vem sem o boletim, então na
+  // primeira abertura busca o JSON e guarda no estado. Em telas menores
+  // (colunas empilhadas) o painel fica abaixo da lista, então rola até ele.
+  const selectJob = async (j: BoletimJob) => {
     const next = selectedId === j.id ? null : j.id;
     setSelectedId(next);
+    if (next && !j.json && j.hasReport) {
+      try {
+        const full = await fetchJob(j.id);
+        setJobs((prev) => prev.map((x) => (x.id === j.id ? { ...x, json: full.json } : x)));
+      } catch {
+        toast.error(pt ? "Falha ao abrir o relatório" : "Failed to open the report");
+      }
+    }
     if (next && typeof window !== "undefined" && window.innerWidth < 1024) {
       setTimeout(() => paneRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
     }
@@ -362,8 +374,8 @@ const DailyBulletin: React.FC = () => {
                       <AlertDialogTitle>{pt ? "Limpar histórico de relatorios?" : "Clear report history?"}</AlertDialogTitle>
                       <AlertDialogDescription>
                         {pt
-                          ? "Isso apaga todos os relatórios desta lista (incluindo os JSON gerados) deste navegador. Não dá pra desfazer."
-                          : "This removes all reports from this list (including the generated JSON) on this browser. This can't be undone."}
+                          ? "Isso apaga todos os relatórios da sua conta, no servidor, incluindo os JSON gerados. Não dá pra desfazer."
+                          : "This deletes every report on your account, on the server, including the generated JSON. This can't be undone."}
                       </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>

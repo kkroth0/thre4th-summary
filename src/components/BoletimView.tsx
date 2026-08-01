@@ -37,14 +37,52 @@ const linkifyRefs = (text?: string): React.ReactNode => {
   );
 };
 
+// Âncora estável a partir do título, pro índice de seções conseguir apontar.
+const anchorOf = (title: string) =>
+  `sec-${title.normalize("NFKD").replace(/[^\w\s-]/g, "").trim().toLowerCase().replace(/[\s_-]+/g, "-")}`;
+
 const Section: React.FC<{ title: string; count?: number; children: React.ReactNode }> = ({ title, count, children }) => (
-  <div className="mt-4 first:mt-0">
+  // data-section é o que o índice lê: seção nova entra nele sem precisar mexer
+  // em lista nenhuma. scroll-mt compensa o cabeçalho ao pular pra cá.
+  <div id={anchorOf(title)} data-section={title} className="mt-4 scroll-mt-24 first:mt-0">
     <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1.5">
       {title}{typeof count === "number" ? ` (${count})` : ""}
     </h4>
     {children}
   </div>
 );
+
+/**
+ * Índice das seções que realmente renderizaram. As seções do boletim são todas
+ * condicionais (variam por deck_type e por campo ausente), então listar à mão
+ * duplicaria as condições e sairia do ar na primeira seção nova — daí ler do
+ * DOM depois da renderização.
+ */
+const SectionIndex: React.FC<{ containerRef: React.RefObject<HTMLDivElement>; report: BoletimReport }> = ({ containerRef, report }) => {
+  const [titles, setTitles] = React.useState<string[]>([]);
+
+  React.useEffect(() => {
+    const found = containerRef.current?.querySelectorAll<HTMLElement>("[data-section]");
+    setTitles([...(found || [])].map((el) => el.dataset.section || "").filter(Boolean));
+  }, [containerRef, report]);
+
+  if (titles.length < 3) return null;
+
+  return (
+    <nav className="mb-4 flex flex-wrap gap-1.5 border-b border-border/60 pb-3">
+      {titles.map((title) => (
+        <button
+          key={title}
+          type="button"
+          onClick={() => document.getElementById(anchorOf(title))?.scrollIntoView({ behavior: "smooth", block: "start" })}
+          className="rounded-full border border-border/60 px-2.5 py-1 text-[11px] font-medium text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
+        >
+          {title}
+        </button>
+      ))}
+    </nav>
+  );
+};
 
 // A superfície de ataque vem como objeto (motor atual) ou como tabela de
 // tecnologias (sidecar antigo). Normaliza os dois em pares label/valor.
@@ -82,9 +120,11 @@ export const BoletimView: React.FC<{ report: BoletimReport }> = ({ report }) => 
   const iocSources = r.iocs_fontes || [];
   const ator = r.ator;
   const recomendacoes = r.recomendacoes || [];
+  const containerRef = React.useRef<HTMLDivElement>(null);
 
   return (
-    <div className="mt-4 text-sm">
+    <div ref={containerRef} className="mt-4 text-sm">
+      <SectionIndex containerRef={containerRef} report={report} />
       {r.sumario_executivo && (
         <Section title="Sumário executivo">
           <p className="text-muted-foreground leading-relaxed">{linkifyRefs(r.sumario_executivo)}</p>

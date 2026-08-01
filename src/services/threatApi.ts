@@ -1048,7 +1048,25 @@ export interface BoletimJob {
     createdAt: string;
     updatedAt: string;
     queuePosition?: number;   // quantos jobs pending estão à frente deste (0 = próximo)
+    // Só na listagem (GET /api/feed/jobs), que não carrega o boletim: diz se
+    // vale a pena buscar o JSON completo ao abrir.
+    hasReport?: boolean;
+    // Indexados na entrega do worker — ligam o boletim a hunts e outros reports.
+    techniques?: string[];
+    cves?: string[];
 }
+
+// Lista de boletins do usuário, sem o JSON. O detalhe vem de fetchJob(id).
+export const fetchJobList = async (): Promise<BoletimJob[]> => {
+    const r = await fetch('/api/feed/jobs');
+    if (!r.ok) throw new Error(`Feed API error: ${r.status}`);
+    return (await r.json()).jobs || [];
+};
+
+export const deleteJob = async (id: string): Promise<void> => {
+    const r = await fetch(`/api/feed/job/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    if (!r.ok) throw new Error(`Feed API error: ${r.status}`);
+};
 
 export const generateBoletim = async (url: string, type: DeckType, title = ''): Promise<{ id: string; status: string }> => {
     const r = await fetch('/api/feed/generate', {

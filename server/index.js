@@ -17,6 +17,8 @@ import {
     extractReadableText, collectArtifactLinks, githubArtifact, ARTIFACT_TEXT_FILE,
 } from './ctiIntel.js';
 import { runAttackSurfaceScan } from './attackSurface.js';
+import { refsOfReport } from './attackIndex.js';
+import { jobSummary, pruneJobsMap } from './feedJobs.js';
 import { addKnowledgeItem, normalizeKnowledgeInput } from './knowledge.js';
 import { createWatchlistStore, runDueExposureSnapshots, runExposureSnapshot } from './exposureWatchlist.js';
 import { detectQueryType, sanitizeQuery } from './iocValidation.js';
@@ -2530,9 +2532,11 @@ function loadJobs() { try { return JSON.parse(fs.readFileSync(JOBS_STORE_PATH, '
 function saveJobs() { try { writeJsonAtomic(JOBS_STORE_PATH, jobsStore); } catch (e) { console.error('jobs store write failed:', e.message); } }
 let jobsStore = loadJobs();   // { id: { id,url,type,title,status,json,error,createdAt,updatedAt } }
 
-function pruneJobs(max = 100) {
-    const ids = Object.keys(jobsStore).sort((a, b) => (jobsStore[a].createdAt || '').localeCompare(jobsStore[b].createdAt || ''));
-    while (ids.length > max) { const id = ids.shift(); delete jobsStore[id]; }
+// Boletim entregue não é lixo de fila: fica guardado por dono (ver feedJobs.js).
+// Só pending/error têm teto global.
+const REPORTS_PER_OWNER = parseInt(process.env.FEED_REPORTS_PER_OWNER, 10) || 200;
+function pruneJobs() {
+    pruneJobsMap(jobsStore, { maxTransient: 100, keptPerOwner: REPORTS_PER_OWNER });
 }
 
 // Expira jobs presos em 'pending' além do TTL (worker caiu / geração longa demais),
@@ -2615,6 +2619,27 @@ app.get('/api/feed/job', requirePremium, (req, res) => {
     res.json({ ...job, queuePosition });
 });
 
+// Boletins do usuário, sem o JSON — é a lista de consulta do /relatorios.
+// GET /api/feed/jobs
+app.get('/api/feed/jobs', requirePremium, (req, res) => {
+    expireStaleJobs();
+    const jobs = Object.values(jobsStore)
+        .filter((j) => j.ownerSub === req.user.sub)
+        .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''))
+        .map(jobSummary);
+    res.json({ jobs });
+});
+
+// Apaga um boletim do usuário.   DELETE /api/feed/job/:id
+app.delete('/api/feed/job/:id', requirePremium, (req, res) => {
+    const job = jobsStore[req.params.id];
+    if (!job) return res.status(404).json({ error: 'job não encontrado' });
+    if (job.ownerSub !== req.user.sub) return res.status(403).json({ error: 'job pertence a outro usuário' });
+    delete jobsStore[req.params.id];
+    saveJobs();
+    res.json({ id: req.params.id, deleted: true });
+});
+
 // Worker (VPS) lê os jobs pendentes. 🔒   GET /api/feed/jobs/pending
 app.get('/api/feed/jobs/pending', (req, res) => {
     if (!requireFeedSecret(req, res)) return;
@@ -2642,9 +2667,16 @@ app.post('/api/feed/job/result', (req, res) => {
     const job = jobsStore[(req.body?.id || '').toString()];
     if (!job) return res.status(404).json({ error: 'job não encontrado' });
     if (req.body?.error) { job.status = 'error'; job.error = String(req.body.error).slice(0, 500); }
-    else if (req.body?.json && typeof req.body.json === 'object') { job.status = 'done'; job.json = req.body.json; }
+    else if (req.body?.json && typeof req.body.json === 'object') {
+        job.status = 'done';
+        job.json = req.body.json;
+        // Indexa na entrega: é o único momento em que o boletim chega. Guardar
+        // techniques/cves no job evita varrer o JSON inteiro a cada listagem.
+        Object.assign(job, refsOfReport(job.json));
+    }
     else return res.status(400).json({ error: 'json ou error obrigatório' });
     job.updatedAt = new Date().toISOString();
+    pruneJobs();
     saveJobs();
     res.json({ id: job.id, status: job.status });
 });
