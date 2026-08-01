@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 /**
- * Build the threat-actor catalog served at /api/actors.
+ * Build the threat-actor catalog served at /api/actors, plus the ATT&CK
+ * taxonomy that attackIndex.js uses as the coverage denominator.
  *
  * Sources (both free, no auth):
  *   - MITRE ATT&CK Groups: the `intrusion-set` objects in the enterprise ATT&CK
@@ -10,7 +11,12 @@
  *   - MISP galaxy `threat-actor.json`: enriches with country, motivation and
  *     extra synonyms, and adds actors that aren't in ATT&CK.
  *
- * Writes server/data/actors.json. Run manually / on build:
+ * The same STIX bundle also carries every `attack-pattern` and `x-mitre-tactic`,
+ * so we emit server/data/attack.json here instead of downloading 35 MB twice
+ * from a second script. actors.json only sees the ~490 techniques some group
+ * uses; the matrix needs all of them, with their tactic.
+ *
+ * Writes server/data/actors.json and server/data/attack.json. Run manually:
  *     node server/scripts/build-actors.mjs
  */
 import { writeFileSync, mkdirSync } from "node:fs";
@@ -19,6 +25,7 @@ import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const OUT_PATH = join(__dirname, "..", "data", "actors.json");
+const ATTACK_OUT_PATH = join(__dirname, "..", "data", "attack.json");
 
 const ATTACK_URL =
   "https://raw.githubusercontent.com/mitre-attack/attack-stix-data/master/" +
@@ -143,7 +150,43 @@ async function buildAttack() {
       return true;
     });
   }
-  return [...groups.values()];
+  return { groups: [...groups.values()], taxonomy: buildTaxonomy(objects) };
+}
+
+/**
+ * The full ATT&CK matrix from the same STIX objects: every live attack-pattern
+ * with the tactics it belongs to. `parent` and "is a sub-technique" are both
+ * derivable from the id ("T1566.002" -> "T1566"), so we don't store them.
+ */
+function buildTaxonomy(objects) {
+  const tacticByStixId = new Map();
+  const techniques = [];
+  for (const o of objects) {
+    if (o.revoked || o.x_mitre_deprecated) continue;
+    const { id } = attackId(o);
+    if (!id) continue;
+    if (o.type === "x-mitre-tactic") {
+      tacticByStixId.set(o.id, { id, name: o.name || "", shortname: o.x_mitre_shortname || "" });
+    } else if (o.type === "attack-pattern") {
+      techniques.push({
+        id,
+        name: o.name || "",
+        tactics: (o.kill_chain_phases || [])
+          .filter((p) => p.kill_chain_name === "mitre-attack")
+          .map((p) => p.phase_name),
+      });
+    }
+  }
+  techniques.sort((a, b) => a.id.localeCompare(b.id, undefined, { numeric: true }));
+
+  // The matrix object carries the canonical left-to-right tactic order
+  // (Reconnaissance … Impact). Bundle order is arbitrary, so use tactic_refs and
+  // fall back to whatever is left over if the matrix ever drops one.
+  const matrix = objects.find((o) => o.type === "x-mitre-matrix" && !o.revoked);
+  const ordered = (matrix?.tactic_refs || []).map((ref) => tacticByStixId.get(ref)).filter(Boolean);
+  const seen = new Set(ordered.map((t) => t.id));
+  const tactics = [...ordered, ...[...tacticByStixId.values()].filter((t) => !seen.has(t.id))];
+  return { tactics, techniques };
 }
 
 async function buildMisp() {
@@ -174,7 +217,7 @@ function mergedKey(names) {
 }
 
 async function main() {
-  const [attack, misp] = await Promise.all([buildAttack(), buildMisp()]);
+  const [{ groups: attack, taxonomy }, misp] = await Promise.all([buildAttack(), buildMisp()]);
 
   // Index MISP actors by every normalized name/alias for enrichment lookup.
   const mispByKey = new Map();
@@ -235,13 +278,19 @@ async function main() {
 
   actors.sort((a, b) => a.name.localeCompare(b.name));
 
+  const generated_at = new Date().toISOString();
   mkdirSync(dirname(OUT_PATH), { recursive: true });
-  writeFileSync(OUT_PATH, JSON.stringify({ generated_at: new Date().toISOString(), actors }, null, 0), "utf8");
+  writeFileSync(OUT_PATH, JSON.stringify({ generated_at, actors }, null, 0), "utf8");
+  writeFileSync(ATTACK_OUT_PATH, JSON.stringify({ generated_at, ...taxonomy }, null, 0), "utf8");
 
   const withAttack = actors.filter((a) => a.attack_id).length;
   process.stderr.write(
     `Wrote ${actors.length} actors (${withAttack} from ATT&CK, ` +
     `${actors.length - withAttack} MISP-only) to ${OUT_PATH}\n`,
+  );
+  process.stderr.write(
+    `Wrote ${taxonomy.tactics.length} tactics / ${taxonomy.techniques.length} techniques ` +
+    `to ${ATTACK_OUT_PATH}\n`,
   );
 }
 
