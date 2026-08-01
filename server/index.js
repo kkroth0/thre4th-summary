@@ -17,6 +17,7 @@ import {
     extractReadableText, collectArtifactLinks, githubArtifact, ARTIFACT_TEXT_FILE,
 } from './ctiIntel.js';
 import { runAttackSurfaceScan } from './attackSurface.js';
+import { addKnowledgeItem, normalizeKnowledgeInput } from './knowledge.js';
 import { createWatchlistStore, runDueExposureSnapshots, runExposureSnapshot } from './exposureWatchlist.js';
 import { detectQueryType, sanitizeQuery } from './iocValidation.js';
 import { isEarlyDoc, normalizeCvrf } from './patchTuesday.js';
@@ -2175,6 +2176,42 @@ app.delete('/api/user/scans/:id', requireAuth, (req, res) => {
     scansStore[req.user.sub] = (scansStore[req.user.sub] || []).filter((s) => s.id !== req.params.id);
     saveScansStore();
     res.json({ scans: scansStore[req.user.sub] });
+});
+
+// ─── Knowledge: fontes curadas por usuário ─────────────────────────────────
+// O feed é um fluxo e some; aqui fica só o que o usuário marcou pra guardar,
+// já indexado por técnica/CVE (ver knowledge.js e attackIndex.js). Mesmo
+// formato do store de scans: flat por usuário, de-dup por URL, cap, e só a
+// própria sessão lê/escreve os seus.
+const KNOWLEDGE_STORE_PATH = path.join(__dirname, '.knowledge.json');
+function loadKnowledgeStore() { try { const o = JSON.parse(fs.readFileSync(KNOWLEDGE_STORE_PATH, 'utf8')); return (o && typeof o === 'object') ? o : {}; } catch { return {}; } }
+function saveKnowledgeStore() { try { writeJsonAtomic(KNOWLEDGE_STORE_PATH, knowledgeStore); } catch (e) { console.error('knowledge store write failed:', e.message); } }
+let knowledgeStore = loadKnowledgeStore();   // { userId: [ {id,title,url,host,source,publishedAt,savedAt,techniques,cves} ] }
+
+app.get('/api/knowledge', requirePremium, (req, res) => {
+    res.json({ items: knowledgeStore[req.user.sub] || [] });
+});
+
+app.post('/api/knowledge', requirePremium, async (req, res) => {
+    let item;
+    try {
+        item = normalizeKnowledgeInput(req.body || {});
+    } catch (e) {
+        return res.status(400).json({ error: e.message });
+    }
+    // Mesmo guard do /api/feed/generate: a URL salva vira alvo de geração de
+    // boletim depois, então não pode apontar para a rede interna.
+    try { await assertSafePublicUrl(item.url); } catch (e) { return res.status(400).json({ error: e.message || 'URL rejeitada' }); }
+
+    knowledgeStore[req.user.sub] = addKnowledgeItem(knowledgeStore[req.user.sub] || [], item);
+    saveKnowledgeStore();
+    res.status(201).json({ items: knowledgeStore[req.user.sub] });
+});
+
+app.delete('/api/knowledge/:id', requirePremium, (req, res) => {
+    knowledgeStore[req.user.sub] = (knowledgeStore[req.user.sub] || []).filter((k) => k.id !== req.params.id);
+    saveKnowledgeStore();
+    res.json({ items: knowledgeStore[req.user.sub] });
 });
 
 // Segredo compartilhado p/ as rotas servidor-a-servidor (worker).

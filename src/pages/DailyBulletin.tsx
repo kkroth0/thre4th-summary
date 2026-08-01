@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import {
   RefreshCw, ShieldAlert, Loader2, Sparkles, Trash2, KeyRound,
   CheckCircle2, ArrowRight, RotateCcw,
@@ -150,7 +150,10 @@ const DailyBulletin: React.FC = () => {
 
   const [suggestions, setSuggestions] = useState<DailySuggestion[]>([]);
   const [loading, setLoading] = useState(false);
-  const [pasteUrl, setPasteUrl] = useState("");
+  // Knowledge manda a fonte pra cá via ?url=… — só preenche o campo, quem
+  // dispara a geração continua sendo o usuário.
+  const [searchParams] = useSearchParams();
+  const [pasteUrl, setPasteUrl] = useState(() => searchParams.get("url") || "");
   const [pasteType, setPasteType] = useState<DeckType>("vuln");
   const [jobs, setJobs] = useState<BoletimJob[]>(() => {
     try {

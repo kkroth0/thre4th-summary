@@ -8,6 +8,7 @@ import {
   Database,
   FileSearch,
   Github,
+  Lightbulb,
   LogIn,
   Mail,
   MapPinned,
@@ -90,6 +91,15 @@ export function Header({ actions, logoAddon, onLogoClick, showBackButton = false
             ? "Scan externo, XLSX e monitoramento de exposicao."
             : "External scan, XLSX export, and exposure monitoring.",
           icon: Radar,
+        },
+        {
+          path: "/knowledge",
+          label: "Knowledge",
+          description: pt
+            ? "As fontes que voce guardou para gerar inteligencia."
+            : "The sources you saved to build intel from.",
+          icon: Lightbulb,
+          premium: true,
         },
         {
           path: "/relatorios",

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { Link } from "react-router-dom";
-import { ArrowLeft, Globe, BookOpen, AlertTriangle, Search, Mail, Eye, Sparkles, Filter, CheckCircle2, ChevronRight, ChevronDown, RefreshCw, Calendar, Share2, Loader2 } from "lucide-react";
+import { ArrowLeft, Globe, BookOpen, AlertTriangle, Search, Mail, Eye, Sparkles, Filter, CheckCircle2, ChevronRight, ChevronDown, RefreshCw, Calendar, Share2, Loader2, Bookmark } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -18,6 +18,7 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Separator } from "@/components/ui/separator";
 import { filterNewsletterAdvisories, formatNewsletterDate } from "./newsletterView";
+import { saveKnowledge } from "@/services/threatApi";
 
 interface IocSet {
   ips?: string[];
@@ -188,6 +189,9 @@ const Newsletter = () => {
   const [selectedSeverity, setSelectedSeverity] = useState<string>("all");
   const [sortByRelevance, setSortByRelevance] = useState<boolean>(false);
   const [kevOnly, setKevOnly] = useState<boolean>(false);
+  // Links já guardados no Knowledge — só pra desabilitar o botão. A verdade
+  // continua no servidor, que de-dup por URL de qualquer jeito.
+  const [savedLinks, setSavedLinks] = useState<Set<string>>(new Set());
 
   // Background Polling / Last Updated States
   const [lastUpdatedNews, setLastUpdatedNews] = useState<Date | null>(null);
@@ -420,6 +424,24 @@ const Newsletter = () => {
       }
     } catch {
       /* user dismissed the share sheet — no-op */
+    }
+  };
+
+  // Guarda a fonte no Knowledge. O servidor extrai as técnicas do título e une
+  // com os CVEs que o coletor já tinha achado, então o item já nasce indexado.
+  const keepAdvisory = async (item: Advisory) => {
+    try {
+      await saveKnowledge({
+        title: language === "pt" ? (item.titlePt || item.title) : item.title,
+        url: item.link,
+        source: item.source,
+        publishedAt: item.pubDate,
+        cves: item.cves || [],
+      });
+      setSavedLinks((prev) => new Set(prev).add(item.link));
+      toast.success(language === "pt" ? "Guardado no Knowledge" : "Saved to Knowledge");
+    } catch (e) {
+      toast.error((e as Error).message);
     }
   };
 
@@ -827,6 +849,18 @@ const Newsletter = () => {
                             >
                               <Share2 className="h-3.5 w-3.5" />
                               {language === "pt" ? "Compartilhar" : "Share"}
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => keepAdvisory(item)}
+                              disabled={savedLinks.has(item.link)}
+                              className="h-7 text-xs gap-1.5 px-2.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                            >
+                              <Bookmark className={`h-3.5 w-3.5 ${savedLinks.has(item.link) ? "fill-current" : ""}`} />
+                              {savedLinks.has(item.link)
+                                ? (language === "pt" ? "Guardado" : "Saved")
+                                : (language === "pt" ? "Guardar" : "Keep")}
                             </Button>
                             <a
                               href={item.link}

@@ -93,6 +93,19 @@ test('exposure watchlist requires authentication', async () => {
     assert.equal(body.needAuth, true);
 });
 
+test('knowledge routes exist and require authentication', async () => {
+    // 401 e não 404: prova que as três rotas estão montadas e que o gate roda
+    // antes de qualquer escrita no store.
+    const get = await fetch(`${BASE}/api/knowledge`);
+    const post = await fetch(`${BASE}/api/knowledge`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: 'https://example.com/a', title: 'x' }),
+    });
+    const del = await fetch(`${BASE}/api/knowledge/abc`, { method: 'DELETE' });
+    assert.deepEqual([get.status, post.status, del.status], [401, 401, 401]);
+});
+
 test('daily edition route rejects malformed and unavailable historical dates', async () => {
     const malformed = await fetch(`${BASE}/api/intel/daily-brief?date=not-a-date`);
     assert.equal(malformed.status, 400);

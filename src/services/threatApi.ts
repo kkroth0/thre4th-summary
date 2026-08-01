@@ -1616,3 +1616,53 @@ export const saveApiKey = async (provider: string, key: string): Promise<void> =
 export const deleteApiKey = async (provider: string): Promise<void> => {
     await fetch(`/api/user/keys/${encodeURIComponent(provider)}`, { method: 'DELETE' }).catch(() => {});
 };
+
+// ─── Knowledge: fontes curadas ─────────────────────────────────────────────
+// O feed é fluxo e some; aqui fica só o que o usuário marcou pra guardar. Cada
+// item nasce indexado por técnica/CVE, o que liga a fonte a hunts e reports.
+export interface KnowledgeItem {
+    id: string;
+    title: string;
+    url: string;
+    host: string;
+    source: string;
+    publishedAt: string;
+    savedAt: string;
+    techniques: string[];
+    cves: string[];
+}
+
+// O que a tela de origem manda: o servidor normaliza, extrai as técnicas do
+// título e une com os CVEs que a origem já conhecia.
+export interface KnowledgeInput {
+    title: string;
+    url: string;
+    source?: string;
+    publishedAt?: string;
+    cves?: string[];
+}
+
+export const fetchKnowledge = async (): Promise<KnowledgeItem[]> => {
+    const r = await fetch('/api/knowledge');
+    if (!r.ok) throw new Error(`Knowledge API error: ${r.status}`);
+    return (await r.json()).items || [];
+};
+
+export const saveKnowledge = async (input: KnowledgeInput): Promise<KnowledgeItem[]> => {
+    const r = await fetch('/api/knowledge', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(input),
+    });
+    if (!r.ok) {
+        const e = await r.json().catch(() => ({}));
+        throw new Error(e.error || `Knowledge API error: ${r.status}`);
+    }
+    return (await r.json()).items || [];
+};
+
+export const deleteKnowledge = async (id: string): Promise<KnowledgeItem[]> => {
+    const r = await fetch(`/api/knowledge/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    if (!r.ok) throw new Error(`Knowledge API error: ${r.status}`);
+    return (await r.json()).items || [];
+};
