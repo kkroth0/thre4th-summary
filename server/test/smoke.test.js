@@ -4,12 +4,22 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
+import crypto from 'node:crypto';
+import { mkdirSync, rmSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = 3900 + Math.floor(Math.random() * 100);
 const BASE = `http://127.0.0.1:${PORT}`;
+const HUNTS_STORE_PATH = `/tmp/threatsumm4ry-smoke-hunts-${PORT}.json`;
+const SESSION_SECRET = 'test-secret';
+const sessionBody = Buffer.from(JSON.stringify({ sub: 'smoke-user', login: 'tester', exp: Math.floor(Date.now() / 1000) + 3600 })).toString('base64url');
+const sessionSig = crypto.createHmac('sha256', SESSION_SECRET).update(sessionBody).digest('base64url');
+const AUTH_HEADERS = { Cookie: `ts_session=${sessionBody}.${sessionSig}` };
+const otherSessionBody = Buffer.from(JSON.stringify({ sub: 'other-user', login: 'tester', exp: Math.floor(Date.now() / 1000) + 3600 })).toString('base64url');
+const otherSessionSig = crypto.createHmac('sha256', SESSION_SECRET).update(otherSessionBody).digest('base64url');
+const OTHER_AUTH_HEADERS = { Cookie: `ts_session=${otherSessionBody}.${otherSessionSig}` };
 let proc;
 
 async function waitForBoot(timeoutMs = 15000) {
@@ -27,13 +37,21 @@ async function waitForBoot(timeoutMs = 15000) {
 before(async () => {
     proc = spawn(process.execPath, ['index.js'], {
         cwd: path.join(__dirname, '..'),
-        env: { ...process.env, PORT: String(PORT), NODE_ENV: 'test', SESSION_SECRET: 'test-secret' },
+        env: {
+            ...process.env,
+            PORT: String(PORT), NODE_ENV: 'test', SESSION_SECRET,
+            GITHUB_ALLOWED_LOGINS: 'tester', HUNTS_STORE_PATH,
+        },
         stdio: 'ignore',
     });
     await waitForBoot();
 });
 
-after(() => { proc?.kill('SIGKILL'); });
+after(() => {
+    proc?.kill('SIGKILL');
+    rmSync(HUNTS_STORE_PATH, { force: true, recursive: true });
+    rmSync(`${HUNTS_STORE_PATH}.tmp`, { force: true });
+});
 
 test('GET /api/vendors/status returns vendor map', async () => {
     const r = await fetch(`${BASE}/api/vendors/status`);
@@ -104,6 +122,84 @@ test('knowledge routes exist and require authentication', async () => {
     });
     const del = await fetch(`${BASE}/api/knowledge/abc`, { method: 'DELETE' });
     assert.deepEqual([get.status, post.status, del.status], [401, 401, 401]);
+});
+
+test('hunting routes exist and require authentication', async () => {
+    const requests = await Promise.all([
+        fetch(`${BASE}/api/hearth`),
+        fetch(`${BASE}/api/hunts`),
+        fetch(`${BASE}/api/hunts/coverage?axis=technique`),
+        fetch(`${BASE}/api/hunts`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ title: 'x', hypothesis: 'y' }),
+        }),
+        fetch(`${BASE}/api/hunts/abc`, { method: 'PATCH' }),
+        fetch(`${BASE}/api/hunts/abc`, { method: 'DELETE' }),
+        fetch(`${BASE}/api/feed/job/abc/related`),
+    ]);
+    assert.deepEqual(requests.map((response) => response.status), [401, 401, 401, 401, 401, 401, 401]);
+});
+
+test('private hunt changes its own ATT&CK and field coverage', async () => {
+    const createdResponse = await fetch(`${BASE}/api/hunts`, {
+        method: 'POST',
+        headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            title: 'Logon de alto risco', hypothesis: 'Conta comprometida', status: 'ready',
+            techniques: ['T1078'], technologies: ['Microsoft Sentinel'], dataSources: ['SigninLogs'],
+            query: 'SigninLogs\n| where RiskLevelDuringSignIn == "high"',
+        }),
+    });
+    assert.equal(createdResponse.status, 201);
+    const created = await createdResponse.json();
+
+    const [technique, technology, dataSource] = await Promise.all([
+        fetch(`${BASE}/api/hunts/coverage?axis=technique`, { headers: AUTH_HEADERS }).then((r) => r.json()),
+        fetch(`${BASE}/api/hunts/coverage?axis=technology`, { headers: AUTH_HEADERS }).then((r) => r.json()),
+        fetch(`${BASE}/api/hunts/coverage?axis=dataSource`, { headers: AUTH_HEADERS }).then((r) => r.json()),
+    ]);
+    assert.equal(technique.covered, 1);
+    assert.equal(technique.total, 697);
+    assert.deepEqual(technology.values, [{ value: 'Microsoft Sentinel', count: 1 }]);
+    assert.deepEqual(dataSource.values, [{ value: 'SigninLogs', count: 1 }]);
+
+    const otherList = await fetch(`${BASE}/api/hunts`, { headers: OTHER_AUTH_HEADERS }).then((r) => r.json());
+    assert.deepEqual(otherList.items, []);
+    const [otherPatch, otherDelete] = await Promise.all([
+        fetch(`${BASE}/api/hunts/${created.hunt.id}`, { method: 'PATCH', headers: OTHER_AUTH_HEADERS }),
+        fetch(`${BASE}/api/hunts/${created.hunt.id}`, { method: 'DELETE', headers: OTHER_AUTH_HEADERS }),
+    ]);
+    assert.deepEqual([otherPatch.status, otherDelete.status], [404, 404]);
+
+    const patched = await fetch(`${BASE}/api/hunts/${created.hunt.id}`, {
+        method: 'PATCH', headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: 'Logon de alto risco atualizado' }),
+    });
+    assert.equal(patched.status, 200);
+    assert.equal((await patched.json()).hunt.title, 'Logon de alto risco atualizado');
+
+    const deleted = await fetch(`${BASE}/api/hunts/${created.hunt.id}`, { method: 'DELETE', headers: AUTH_HEADERS });
+    assert.equal(deleted.status, 200);
+    assert.deepEqual((await deleted.json()).items, []);
+});
+
+test('persistence failure does not report a hunt as saved', async () => {
+    rmSync(HUNTS_STORE_PATH, { force: true });
+    mkdirSync(HUNTS_STORE_PATH);
+    try {
+        const response = await fetch(`${BASE}/api/hunts`, {
+            method: 'POST',
+            headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ title: 'Não pode sumir', hypothesis: 'Falha de disco' }),
+        });
+        assert.equal(response.status, 500);
+        const own = await fetch(`${BASE}/api/hunts`, { headers: AUTH_HEADERS }).then((r) => r.json());
+        assert.deepEqual(own.items, []);
+    } finally {
+        rmSync(HUNTS_STORE_PATH, { force: true, recursive: true });
+        rmSync(`${HUNTS_STORE_PATH}.tmp`, { force: true });
+    }
 });
 
 test('daily edition route rejects malformed and unavailable historical dates', async () => {

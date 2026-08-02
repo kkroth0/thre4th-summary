@@ -1684,3 +1684,94 @@ export const deleteKnowledge = async (id: string): Promise<KnowledgeItem[]> => {
     if (!r.ok) throw new Error(`Knowledge API error: ${r.status}`);
     return (await r.json()).items || [];
 };
+
+// ─── Hunting ───────────────────────────────────────────────────────────────
+export interface HearthHunt {
+    id: string;
+    origin: 'hearth';
+    category: string;
+    title: string;
+    tactics: string[];
+    techniques: string[];
+    tags: string[];
+    submitter: { name: string; link: string };
+    notes: string;
+    why: string;
+    references: string;
+    status: string;
+    created: string;
+    sourceUrl: string;
+}
+
+export type HuntStatus = 'draft' | 'ready' | 'archived';
+
+export interface PrivateHunt {
+    id: string;
+    ownerSub: string;
+    title: string;
+    hypothesis: string;
+    tactics: string[];
+    techniques: string[];
+    cves: string[];
+    technologies: string[];
+    dataSources: string[];
+    query: string;
+    queryLang: 'kql';
+    notes: string;
+    falsePositives: string;
+    status: HuntStatus;
+    sourceReportId: string;
+    hearthId: string;
+    createdAt: string;
+    updatedAt: string;
+}
+
+export type HuntingItem = HearthHunt | PrivateHunt;
+export type HuntInput = Omit<PrivateHunt, 'id' | 'ownerSub' | 'queryLang' | 'createdAt' | 'updatedAt'>;
+
+export interface TechniqueCoverageNode {
+    id: string;
+    name: string;
+    count: number;
+    state: 'covered' | 'partial' | 'none';
+    subs: Omit<TechniqueCoverageNode, 'subs'>[];
+}
+
+export interface TechniqueCoverage {
+    axis: 'technique';
+    covered: number;
+    total: number;
+    tactics: { id: string; name: string; shortname: string; covered: number; total: number; techniques: TechniqueCoverageNode[] }[];
+}
+
+export interface FieldCoverage {
+    axis: 'technology' | 'dataSource';
+    values: { value: string; count: number }[];
+}
+
+export const fetchHearth = async (): Promise<{ hunts: HearthHunt[]; total: number; source: string; license: string }> =>
+    handleResponse(await fetch('/api/hearth'), 'Hunting');
+
+export const fetchHunts = async (): Promise<PrivateHunt[]> =>
+    ((await handleResponse(await fetch('/api/hunts'), 'Hunting')).items || []);
+
+export const createHunt = async (input: HuntInput): Promise<{ hunt: PrivateHunt; items: PrivateHunt[] }> =>
+    handleResponse(await fetch('/api/hunts', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input),
+    }), 'Hunting');
+
+export const updateHunt = async (id: string, input: HuntInput): Promise<{ hunt: PrivateHunt; items: PrivateHunt[] }> =>
+    handleResponse(await fetch(`/api/hunts/${encodeURIComponent(id)}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input),
+    }), 'Hunting');
+
+export const deleteHunt = async (id: string): Promise<PrivateHunt[]> =>
+    ((await handleResponse(await fetch(`/api/hunts/${encodeURIComponent(id)}`, { method: 'DELETE' }), 'Hunting')).items || []);
+
+export const fetchHuntCoverage = async (axis: 'technique'): Promise<TechniqueCoverage> =>
+    handleResponse(await fetch(`/api/hunts/coverage?axis=${axis}`), 'Hunting');
+export const fetchHuntFieldCoverage = async (axis: 'technology' | 'dataSource'): Promise<FieldCoverage> =>
+    handleResponse(await fetch(`/api/hunts/coverage?axis=${axis}`), 'Hunting');
+
+export const fetchJobRelated = async (id: string): Promise<{ hunts: PrivateHunt[]; reports: BoletimJob[] }> =>
+    handleResponse(await fetch(`/api/feed/job/${encodeURIComponent(id)}/related`), 'Hunting');

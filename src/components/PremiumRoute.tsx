@@ -10,7 +10,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useSidebar } from "@/contexts/SidebarContext";
 import { cn } from "@/lib/utils";
 
-type Feature = "threat-brief" | "advisory-feed" | "exposure-watchlist" | "knowledge";
+type Feature = "threat-brief" | "advisory-feed" | "exposure-watchlist" | "knowledge" | "hunting";
 
 const COPY: Record<Feature, { pt: [string, string]; en: [string, string] }> = {
   "threat-brief": {
@@ -28,6 +28,10 @@ const COPY: Record<Feature, { pt: [string, string]; en: [string, string] }> = {
   knowledge: {
     pt: ["Knowledge", "Guarde as fontes que importam e transforme cada uma em relatório."],
     en: ["Knowledge", "Keep the sources that matter and turn each one into a report."],
+  },
+  hunting: {
+    pt: ["Hunting", "Explore hipóteses, mantenha consultas KQL e acompanhe sua cobertura ATT&CK."],
+    en: ["Hunting", "Explore hypotheses, keep KQL queries, and track your ATT&CK coverage."],
   },
 };
 

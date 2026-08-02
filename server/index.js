@@ -17,8 +17,10 @@ import {
     extractReadableText, collectArtifactLinks, githubArtifact, ARTIFACT_TEXT_FILE,
 } from './ctiIntel.js';
 import { runAttackSurfaceScan } from './attackSurface.js';
-import { refsOfReport } from './attackIndex.js';
+import { groupByField, refsOfReport, relatedTo, techniqueCoverage } from './attackIndex.js';
 import { jobSummary, pruneJobsMap } from './feedJobs.js';
+import { parseHearthData } from './hearth.js';
+import { normalizeHuntInput, upsertHunt } from './hunts.js';
 import { addKnowledgeItem, normalizeKnowledgeInput } from './knowledge.js';
 import { createWatchlistStore, runDueExposureSnapshots, runExposureSnapshot } from './exposureWatchlist.js';
 import { detectQueryType, sanitizeQuery } from './iocValidation.js';
@@ -208,18 +210,6 @@ const loadDnsblProviders = () => {
     }
 };
 loadDnsblProviders();
-
-// Security middleware to validate query format on requests
-const validateRequest = (req, res, next) => {
-    if (req.method === 'POST' && req.body?.query) {
-        const type = detectQueryType(req.body.query);
-        if (type === "unknown") {
-            return res.status(400).json({ error: "Invalid query format. Must be a valid IP, Domain, Hash, or URL." });
-        }
-    }
-    next();
-};
-app.use(validateRequest);
 
 // Error Sanitization Utility
 const sanitizeError = (error) => {
@@ -1445,6 +1435,11 @@ function cacheSet(store, key, value, max) {
 
 // Simple in-memory cache for external feeds & APIs
 const memoryCache = {
+    hearth: {
+        data: null,
+        expiresAt: 0,
+        ttl: 24 * 60 * 60 * 1000 // 24 hours
+    },
     newsletter: {
         data: null,
         expiresAt: 0,
@@ -2216,6 +2211,13 @@ app.delete('/api/knowledge/:id', requirePremium, (req, res) => {
     res.json({ items: knowledgeStore[req.user.sub] });
 });
 
+// ─── Hunting: consultas KQL privadas por usuário ────────────────────────────
+// ponytail: store JSON de processo único; migrar por usuário ao operar múltiplas instâncias.
+const HUNTS_STORE_PATH = process.env.HUNTS_STORE_PATH || path.join(__dirname, '.hunts.json');
+function loadHuntsStore() { try { const o = JSON.parse(fs.readFileSync(HUNTS_STORE_PATH, 'utf8')); return (o && typeof o === 'object') ? o : {}; } catch { return {}; } }
+function saveHuntsStore(nextStore) { writeJsonAtomic(HUNTS_STORE_PATH, nextStore); huntsStore = nextStore; }
+let huntsStore = loadHuntsStore();
+
 // Segredo compartilhado p/ as rotas servidor-a-servidor (worker).
 // Sem FEED_AGENT_SECRET definido, as rotas protegidas ficam desabilitadas (503),
 // pra não exporem leitura/escrita de boletim sem auth.
@@ -2640,6 +2642,21 @@ app.delete('/api/feed/job/:id', requirePremium, (req, res) => {
     res.json({ id: req.params.id, deleted: true });
 });
 
+app.get('/api/feed/job/:id/related', requirePremium, (req, res) => {
+    const job = jobsStore[req.params.id];
+    if (!job) return res.status(404).json({ error: 'job não encontrado' });
+    if (job.ownerSub !== req.user.sub) return res.status(403).json({ error: 'job pertence a outro usuário' });
+
+    const refs = (job.techniques?.length || job.cves?.length) ? job : refsOfReport(job.json);
+    const reports = Object.values(jobsStore)
+        .filter((candidate) => candidate.id !== job.id && candidate.ownerSub === req.user.sub && candidate.status === 'done')
+        .map((candidate) => ({
+            ...jobSummary(candidate),
+            ...((candidate.techniques?.length || candidate.cves?.length) ? {} : refsOfReport(candidate.json)),
+        }));
+    res.json(relatedTo(refs, { hunts: huntsStore[req.user.sub] || [], reports }));
+});
+
 // Worker (VPS) lê os jobs pendentes. 🔒   GET /api/feed/jobs/pending
 app.get('/api/feed/jobs/pending', (req, res) => {
     if (!requireFeedSecret(req, res)) return;
@@ -3008,6 +3025,104 @@ const assertSafePublicUrl = async (raw) => {
         throw new Error('URL resolves to a non-public host');
     }
 };
+
+const HEARTH_DATA_URL = 'https://raw.githubusercontent.com/THORCollective/HEARTH/main/hunts-data.js';
+let ATTACK_TAXONOMY = null;
+function loadAttackTaxonomy() {
+    if (!ATTACK_TAXONOMY) ATTACK_TAXONOMY = JSON.parse(fs.readFileSync(path.join(__dirname, 'data', 'attack.json'), 'utf8'));
+    return ATTACK_TAXONOMY;
+}
+
+async function getHearthCatalog() {
+    const cache = memoryCache.hearth;
+    if (cache.data && cache.expiresAt > Date.now()) return cache.data;
+    try {
+        await assertSafePublicUrl(HEARTH_DATA_URL);
+        const response = await axios.get(HEARTH_DATA_URL, { responseType: 'text', maxContentLength: 2_000_000, timeout: 12000 });
+        cache.data = parseHearthData(response.data);
+        cache.expiresAt = Date.now() + cache.ttl;
+        return cache.data;
+    } catch (error) {
+        if (cache.data) return cache.data;
+        throw error;
+    }
+}
+
+app.get('/api/hearth', requirePremium, async (req, res) => {
+    try {
+        const hunts = await getHearthCatalog();
+        res.json({ hunts, total: hunts.length, source: HEARTH_DATA_URL, license: 'MIT' });
+    } catch (error) {
+        console.error('HEARTH catalog fetch failed:', error.message);
+        res.status(502).json({ error: 'catálogo HEARTH indisponível' });
+    }
+});
+
+app.get('/api/hunts', requirePremium, (req, res) => {
+    res.json({ items: huntsStore[req.user.sub] || [] });
+});
+
+app.get('/api/hunts/coverage', requirePremium, (req, res) => {
+    const items = huntsStore[req.user.sub] || [];
+    const axis = String(req.query.axis || 'technique');
+    if (axis === 'technique') return res.json({ axis, ...techniqueCoverage(items, loadAttackTaxonomy()) });
+    const field = axis === 'technology' ? 'technologies' : axis === 'dataSource' ? 'dataSources' : '';
+    if (!field) return res.status(400).json({ error: 'eixo de cobertura inválido' });
+    res.json({ axis, values: groupByField(items, field) });
+});
+
+app.post('/api/hunts', requirePremium, (req, res) => {
+    let hunt;
+    try {
+        hunt = normalizeHuntInput(req.body || {}, { ownerSub: req.user.sub });
+    } catch (error) {
+        return res.status(400).json({ error: error.message });
+    }
+    const items = upsertHunt(huntsStore[req.user.sub] || [], hunt);
+    try {
+        saveHuntsStore({ ...huntsStore, [req.user.sub]: items });
+    } catch (error) {
+        console.error('hunts store write failed:', error.message);
+        return res.status(500).json({ error: 'não foi possível salvar a hunt' });
+    }
+    res.status(201).json({ hunt, items });
+});
+
+app.patch('/api/hunts/:id', requirePremium, (req, res) => {
+    const current = (huntsStore[req.user.sub] || []).find((hunt) => hunt.id === req.params.id);
+    if (!current) return res.status(404).json({ error: 'hunt não encontrado' });
+    let hunt;
+    try {
+        hunt = normalizeHuntInput({ ...current, ...(req.body || {}) }, {
+            ownerSub: req.user.sub,
+            id: current.id,
+            createdAt: current.createdAt,
+        });
+    } catch (error) {
+        return res.status(400).json({ error: error.message });
+    }
+    const items = upsertHunt(huntsStore[req.user.sub], hunt);
+    try {
+        saveHuntsStore({ ...huntsStore, [req.user.sub]: items });
+    } catch (error) {
+        console.error('hunts store write failed:', error.message);
+        return res.status(500).json({ error: 'não foi possível salvar a hunt' });
+    }
+    res.json({ hunt, items });
+});
+
+app.delete('/api/hunts/:id', requirePremium, (req, res) => {
+    const items = huntsStore[req.user.sub] || [];
+    if (!items.some((hunt) => hunt.id === req.params.id)) return res.status(404).json({ error: 'hunt não encontrado' });
+    const nextItems = items.filter((hunt) => hunt.id !== req.params.id);
+    try {
+        saveHuntsStore({ ...huntsStore, [req.user.sub]: nextItems });
+    } catch (error) {
+        console.error('hunts store write failed:', error.message);
+        return res.status(500).json({ error: 'não foi possível apagar a hunt' });
+    }
+    res.json({ id: req.params.id, deleted: true, items: nextItems });
+});
 
 // Latest CVEs from CIRCL
 // NIST NVD 2.0 — recently published CVEs (last 10 days). Sending NVD_API_KEY

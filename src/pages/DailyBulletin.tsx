@@ -25,6 +25,7 @@ import {
   fetchDailySuggestions, generateBoletim, fetchJob, fetchJobList, deleteJob,
   type DailySuggestion, type BoletimJob, type DeckType,
 } from "@/services/threatApi";
+import { canOpenReport } from "./dailyBulletinView";
 
 const slug = (s: string) => (s || "boletim").normalize("NFKD").replace(/[^\w\s-]/g, "").trim().toLowerCase().replace(/[\s_-]+/g, "-").slice(0, 50) || "boletim";
 
@@ -81,7 +82,7 @@ const JobListItem: React.FC<{
 }> = ({ job: j, selected, nowMs, pt, onSelect, onRetry }) => {
   const st = JOB_STATUS[j.status] || JOB_STATUS.pending;
   const elapsed = Math.max(0, nowMs - new Date(j.createdAt).getTime());
-  const clickable = j.status === "done" && !!j.json;
+  const clickable = canOpenReport(j);
   return (
     <div
       role={clickable ? "button" : undefined}
@@ -148,6 +149,7 @@ const DailyBulletin: React.FC = () => {
   // Knowledge manda a fonte pra cá via ?url=… — só preenche o campo, quem
   // dispara a geração continua sendo o usuário.
   const [searchParams] = useSearchParams();
+  const requestedJobId = searchParams.get("job") || "";
   const [pasteUrl, setPasteUrl] = useState(() => searchParams.get("url") || "");
   const [pasteType, setPasteType] = useState<DeckType>("vuln");
   const [jobs, setJobs] = useState<BoletimJob[]>([]);
@@ -180,9 +182,16 @@ const DailyBulletin: React.FC = () => {
   useEffect(() => {
     if (!auth?.authenticated) return;
     fetchJobList()
-      .then(setJobs)
+      .then(async (list) => {
+        if (requestedJobId && list.some((job) => job.id === requestedJobId && job.hasReport)) {
+          const full = await fetchJob(requestedJobId);
+          list = list.map((job) => job.id === requestedJobId ? { ...job, json: full.json } : job);
+          setSelectedId(requestedJobId);
+        }
+        setJobs(list);
+      })
       .catch(() => toast.error(pt ? "Falha ao carregar seus relatórios" : "Failed to load your reports"));
-  }, [auth?.authenticated, pt]);
+  }, [auth?.authenticated, pt, requestedJobId]);
 
   // Poll dos jobs não-terminais a cada 3s. Quando um job termina e nada está
   // aberto no painel, ele é selecionado sozinho (você estava esperando ele).
