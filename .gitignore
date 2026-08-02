@@ -28,14 +28,12 @@ dist-ssr
 *.sln
 *.sw?
 
-# Boletim · store de jobs do Feed Generator
-server/.feed-jobs.json
-# Auth/BYOK · store de usuários (contém chaves OpenRouter CIFRADAS — nunca commitar)
-server/.users.json
-# Allow-list dinâmica · logins adicionados pelo admin na UI
-server/.allowlist.json
-# Catálogo de feeds RSS · overrides do dono (desativados + custom)
-server/.feed-sources.json
+# Stores em disco do backend — TODOS os dotfiles .json de server/.
+# Guardam dado de usuário: chaves OpenRouter cifradas (.users.json), histórico
+# de scans, watchlist de exposição, boletins, posts e a allow-list. Glob em vez
+# de lista nominal porque a lista já ficou desatualizada uma vez: .scans.json,
+# .posts.json, .exposure-*.json e .daily-summaries.json rodavam sem ignore.
+server/.*.json
 
 # Sessões do visual companion (brainstorming) · mockups locais
 .superpowers/

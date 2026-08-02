@@ -1,11 +1,13 @@
-import React from "react";
-import { Download, ExternalLink } from "lucide-react";
+import React, { useEffect, useMemo, useState } from "react";
+import { Crosshair, Download, ExternalLink, FileText } from "lucide-react";
+import { Link } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { BrandMark } from "@/components/BrandMark";
 import { BoletimView } from "@/components/BoletimView";
 import { useLanguage } from "@/contexts/LanguageContext";
-import type { BoletimJob, BoletimReport } from "@/services/threatApi";
+import { fetchJobRelated, type BoletimJob, type BoletimReport, type PrivateHunt } from "@/services/threatApi";
+import { buildHuntLink } from "@/pages/dailyBulletinView";
 
 // Host da URL pra exibição compacta ("fortiguard.com" em vez do link inteiro).
 export const hostOf = (url?: string): string => {
@@ -46,6 +48,49 @@ const usageTag = (c: BoletimReport["consumo"], pt: boolean): React.ReactNode => 
     </span>
   );
 };
+
+function ReportRelations({ job, pt }: { job: BoletimJob; pt: boolean }) {
+  const [related, setRelated] = useState<{ hunts: PrivateHunt[]; reports: BoletimJob[] } | null>(null);
+  useEffect(() => {
+    let live = true;
+    fetchJobRelated(job.id).then((value) => { if (live) setRelated(value); }).catch(() => {});
+    return () => { live = false; };
+  }, [job.id]);
+
+  const huntLink = useMemo(() => {
+    const report = job.json;
+    const techniques = job.techniques?.length
+      ? job.techniques
+      : (report?.mitre_ttps || []).map((item) => item.id || "").filter(Boolean);
+    const cves = job.cves?.length
+      ? job.cves
+      : [report?.cve_id, ...(report?.tecnologias_afetadas || []).map((item) => item.cve)].filter(Boolean) as string[];
+    return buildHuntLink({ id: job.id, title: report?.titulo || job.title, techniques, cves });
+  }, [job]);
+
+  return (
+    <section className="mt-8 border-t pt-5">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div><h3 className="text-sm font-semibold">{pt ? "Desdobramentos" : "Follow-ups"}</h3><p className="text-xs text-muted-foreground">{pt ? "Hunts e relatórios ligados por técnica ou CVE." : "Hunts and reports linked by technique or CVE."}</p></div>
+        <Button asChild size="sm"><Link to={huntLink}><Crosshair className="mr-2 h-4 w-4" /> {pt ? "Criar hunt" : "Create hunt"}</Link></Button>
+      </div>
+      {!!(related?.hunts.length || related?.reports.length) && (
+        <div className="mt-4 grid gap-2 sm:grid-cols-2">
+          {related?.hunts.slice(0, 4).map((hunt) => (
+            <Link key={hunt.id} to={`/hunting?query=${encodeURIComponent(hunt.title)}`} className="rounded-md border p-3 text-sm hover:border-primary/40 hover:bg-muted/40">
+              <Crosshair className="mb-2 h-4 w-4 text-primary" /><span className="line-clamp-2 font-medium">{hunt.title}</span>
+            </Link>
+          ))}
+          {related?.reports.slice(0, 4).map((report) => (
+            <Link key={report.id} to={`/relatorios?job=${encodeURIComponent(report.id)}`} className="rounded-md border p-3 text-sm hover:border-primary/40 hover:bg-muted/40">
+              <FileText className="mb-2 h-4 w-4 text-primary" /><span className="line-clamp-2 font-medium">{report.title || report.url}</span>
+            </Link>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
 
 // Painel de leitura da workstation: toolbar com meta/ações + BoletimView.
 // `job === null` (ou sem JSON) mostra o estado vazio.
@@ -117,6 +162,7 @@ export function ReportPane({ job, onDownload }: {
       </h2>
 
       <BoletimView report={r} />
+      <ReportRelations job={job} pt={pt} />
     </div>
   );
 }

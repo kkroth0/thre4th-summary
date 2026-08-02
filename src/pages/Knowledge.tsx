@@ -1,0 +1,185 @@
+import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
+import { ExternalLink, FileSearch, Loader2, Trash2 } from "lucide-react";
+import { toast } from "sonner";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { PageHeader } from "@/components/PageHeader";
+import { PageLayout } from "@/components/PageLayout";
+import { useLanguage } from "@/contexts/LanguageContext";
+import { deleteKnowledge, fetchKnowledge, type KnowledgeItem } from "@/services/threatApi";
+
+const LOCALE: Record<string, string> = { pt: "pt-BR", en: "en-US", es: "es-ES", fr: "fr-FR" };
+
+const shortDate = (value: string, language: string) =>
+    value ? new Date(value).toLocaleDateString(LOCALE[language] || "pt-BR", { day: "2-digit", month: "short" }) : "—";
+
+const Knowledge = () => {
+    const { language } = useLanguage();
+    const pt = language === "pt";
+    const [items, setItems] = useState<KnowledgeItem[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [query, setQuery] = useState("");
+    const [source, setSource] = useState("all");
+
+    useEffect(() => {
+        fetchKnowledge()
+            .then(setItems)
+            .catch((e) => toast.error(e.message))
+            .finally(() => setLoading(false));
+    }, []);
+
+    const sources = useMemo(
+        () => [...new Set(items.map((i) => i.source).filter(Boolean))].sort(),
+        [items],
+    );
+
+    // Busca casa título, fonte e também os IDs indexados, pra achar "tudo que eu
+    // guardei sobre T1566" sem precisar de filtro dedicado.
+    const shown = useMemo(() => {
+        const q = query.trim().toLowerCase();
+        return items.filter((item) => {
+            if (source !== "all" && item.source !== source) return false;
+            if (!q) return true;
+            return [item.title, item.source, item.host, ...item.techniques, ...item.cves]
+                .join(" ")
+                .toLowerCase()
+                .includes(q);
+        });
+    }, [items, query, source]);
+
+    const remove = async (item: KnowledgeItem) => {
+        try {
+            setItems(await deleteKnowledge(item.id));
+        } catch (e) {
+            toast.error((e as Error).message);
+        }
+    };
+
+    return (
+        <PageLayout width="max-w-6xl">
+            <PageHeader
+                title="Knowledge"
+                subtitle={pt
+                    ? "As fontes que você guardou para gerar inteligência. Só entra o que você marcar — o feed continua sendo fluxo."
+                    : "The sources you saved to build intel from. Only what you mark lands here — the feed stays a stream."}
+            />
+
+            <div className="mb-4 flex flex-wrap items-center gap-2">
+                <Input
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    placeholder={pt ? "Buscar por título, fonte, técnica ou CVE…" : "Search title, source, technique or CVE…"}
+                    className="max-w-md"
+                />
+                <select
+                    value={source}
+                    onChange={(e) => setSource(e.target.value)}
+                    className="h-10 rounded-md border border-input bg-background px-3 text-sm"
+                >
+                    <option value="all">{pt ? "Todas as fontes" : "All sources"}</option>
+                    {sources.map((s) => <option key={s} value={s}>{s}</option>)}
+                </select>
+                <span className="ml-auto text-sm text-muted-foreground">
+                    {shown.length === items.length
+                        ? `${items.length} ${pt ? "itens" : "items"}`
+                        : `${shown.length} / ${items.length}`}
+                </span>
+            </div>
+
+            {loading ? (
+                <div className="flex items-center gap-2 py-16 text-muted-foreground">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    {pt ? "Carregando…" : "Loading…"}
+                </div>
+            ) : items.length === 0 ? (
+                <div className="rounded-lg border border-dashed border-border py-16 text-center">
+                    <p className="font-semibold">{pt ? "Nada guardado ainda" : "Nothing saved yet"}</p>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                        {pt
+                            ? "Use o botão de salvar no Newsletter ou nos Advisories para trazer uma fonte para cá."
+                            : "Use the save button on Newsletter or Advisories to bring a source here."}
+                    </p>
+                </div>
+            ) : (
+                <div className="overflow-x-auto rounded-lg border border-border">
+                    <Table>
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead>{pt ? "Fonte" : "Source"}</TableHead>
+                                <TableHead>{pt ? "Técnicas" : "Techniques"}</TableHead>
+                                <TableHead>CVEs</TableHead>
+                                <TableHead>{pt ? "Salvo" : "Saved"}</TableHead>
+                                <TableHead className="text-right">{pt ? "Ações" : "Actions"}</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {shown.map((item) => (
+                                <TableRow key={item.id}>
+                                    <TableCell className="max-w-xl">
+                                        <a
+                                            href={item.url}
+                                            target="_blank"
+                                            rel="noreferrer"
+                                            className="inline-flex items-start gap-1.5 font-medium leading-snug hover:text-primary"
+                                        >
+                                            <span className="line-clamp-2">{item.title}</span>
+                                            <ExternalLink className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                                        </a>
+                                        <p className="mt-1 text-xs text-muted-foreground">
+                                            {[item.source || item.host, shortDate(item.publishedAt, language)]
+                                                .filter((v) => v && v !== "—")
+                                                .join(" · ")}
+                                        </p>
+                                    </TableCell>
+                                    <TableCell>
+                                        <div className="flex flex-wrap gap-1">
+                                            {item.techniques.length
+                                                ? item.techniques.map((t) => (
+                                                    <Badge key={t} variant="outline" className="font-mono text-[11px]">{t}</Badge>
+                                                ))
+                                                : <span className="text-xs text-muted-foreground">—</span>}
+                                        </div>
+                                    </TableCell>
+                                    <TableCell>
+                                        <div className="flex flex-wrap gap-1">
+                                            {item.cves.length
+                                                ? item.cves.map((c) => (
+                                                    <Badge key={c} variant="secondary" className="font-mono text-[11px]">{c}</Badge>
+                                                ))
+                                                : <span className="text-xs text-muted-foreground">—</span>}
+                                        </div>
+                                    </TableCell>
+                                    <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
+                                        {shortDate(item.savedAt, language)}
+                                    </TableCell>
+                                    <TableCell className="text-right">
+                                        <div className="flex justify-end gap-1">
+                                            <Button asChild variant="ghost" size="icon" title={pt ? "Gerar relatório" : "Generate report"}>
+                                                <Link to={`/relatorios?url=${encodeURIComponent(item.url)}`}>
+                                                    <FileSearch className="h-4 w-4" />
+                                                </Link>
+                                            </Button>
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                onClick={() => remove(item)}
+                                                title={pt ? "Remover" : "Remove"}
+                                            >
+                                                <Trash2 className="h-4 w-4" />
+                                            </Button>
+                                        </div>
+                                    </TableCell>
+                                </TableRow>
+                            ))}
+                        </TableBody>
+                    </Table>
+                </div>
+            )}
+        </PageLayout>
+    );
+};
+
+export default Knowledge;

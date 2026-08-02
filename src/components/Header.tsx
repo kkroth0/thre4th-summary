@@ -5,9 +5,11 @@ import {
   CalendarCheck,
   ChevronLeft,
   ChevronRight,
+  Crosshair,
   Database,
   FileSearch,
   Github,
+  Lightbulb,
   LogIn,
   Mail,
   MapPinned,
@@ -92,10 +94,26 @@ export function Header({ actions, logoAddon, onLogoClick, showBackButton = false
           icon: Radar,
         },
         {
+          path: "/knowledge",
+          label: "Knowledge",
+          description: pt
+            ? "As fontes que voce guardou para gerar inteligencia."
+            : "The sources you saved to build intel from.",
+          icon: Lightbulb,
+          premium: true,
+        },
+        {
           path: "/relatorios",
           label: pt ? "Gerador de Relatorios" : "Report Generator",
           description: pt ? "URL, PDF ou relatorio em uma analise CTI." : "URL, PDF or report into CTI analysis.",
           icon: FileSearch,
+          premium: true,
+        },
+        {
+          path: "/hunting",
+          label: "Hunting",
+          description: pt ? "Hipóteses, KQL e cobertura ATT&CK." : "Hypotheses, KQL, and ATT&CK coverage.",
+          icon: Crosshair,
           premium: true,
         },
       ],

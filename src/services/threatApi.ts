@@ -1048,7 +1048,25 @@ export interface BoletimJob {
     createdAt: string;
     updatedAt: string;
     queuePosition?: number;   // quantos jobs pending estão à frente deste (0 = próximo)
+    // Só na listagem (GET /api/feed/jobs), que não carrega o boletim: diz se
+    // vale a pena buscar o JSON completo ao abrir.
+    hasReport?: boolean;
+    // Indexados na entrega do worker — ligam o boletim a hunts e outros reports.
+    techniques?: string[];
+    cves?: string[];
 }
+
+// Lista de boletins do usuário, sem o JSON. O detalhe vem de fetchJob(id).
+export const fetchJobList = async (): Promise<BoletimJob[]> => {
+    const r = await fetch('/api/feed/jobs');
+    if (!r.ok) throw new Error(`Feed API error: ${r.status}`);
+    return (await r.json()).jobs || [];
+};
+
+export const deleteJob = async (id: string): Promise<void> => {
+    const r = await fetch(`/api/feed/job/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    if (!r.ok) throw new Error(`Feed API error: ${r.status}`);
+};
 
 export const generateBoletim = async (url: string, type: DeckType, title = ''): Promise<{ id: string; status: string }> => {
     const r = await fetch('/api/feed/generate', {
@@ -1616,3 +1634,144 @@ export const saveApiKey = async (provider: string, key: string): Promise<void> =
 export const deleteApiKey = async (provider: string): Promise<void> => {
     await fetch(`/api/user/keys/${encodeURIComponent(provider)}`, { method: 'DELETE' }).catch(() => {});
 };
+
+// ─── Knowledge: fontes curadas ─────────────────────────────────────────────
+// O feed é fluxo e some; aqui fica só o que o usuário marcou pra guardar. Cada
+// item nasce indexado por técnica/CVE, o que liga a fonte a hunts e reports.
+export interface KnowledgeItem {
+    id: string;
+    title: string;
+    url: string;
+    host: string;
+    source: string;
+    publishedAt: string;
+    savedAt: string;
+    techniques: string[];
+    cves: string[];
+}
+
+// O que a tela de origem manda: o servidor normaliza, extrai as técnicas do
+// título e une com os CVEs que a origem já conhecia.
+export interface KnowledgeInput {
+    title: string;
+    url: string;
+    source?: string;
+    publishedAt?: string;
+    cves?: string[];
+}
+
+export const fetchKnowledge = async (): Promise<KnowledgeItem[]> => {
+    const r = await fetch('/api/knowledge');
+    if (!r.ok) throw new Error(`Knowledge API error: ${r.status}`);
+    return (await r.json()).items || [];
+};
+
+export const saveKnowledge = async (input: KnowledgeInput): Promise<KnowledgeItem[]> => {
+    const r = await fetch('/api/knowledge', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(input),
+    });
+    if (!r.ok) {
+        const e = await r.json().catch(() => ({}));
+        throw new Error(e.error || `Knowledge API error: ${r.status}`);
+    }
+    return (await r.json()).items || [];
+};
+
+export const deleteKnowledge = async (id: string): Promise<KnowledgeItem[]> => {
+    const r = await fetch(`/api/knowledge/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    if (!r.ok) throw new Error(`Knowledge API error: ${r.status}`);
+    return (await r.json()).items || [];
+};
+
+// ─── Hunting ───────────────────────────────────────────────────────────────
+export interface HearthHunt {
+    id: string;
+    origin: 'hearth';
+    category: string;
+    title: string;
+    tactics: string[];
+    techniques: string[];
+    tags: string[];
+    submitter: { name: string; link: string };
+    notes: string;
+    why: string;
+    references: string;
+    status: string;
+    created: string;
+    sourceUrl: string;
+}
+
+export type HuntStatus = 'draft' | 'ready' | 'archived';
+
+export interface PrivateHunt {
+    id: string;
+    ownerSub: string;
+    title: string;
+    hypothesis: string;
+    tactics: string[];
+    techniques: string[];
+    cves: string[];
+    technologies: string[];
+    dataSources: string[];
+    query: string;
+    queryLang: 'kql';
+    notes: string;
+    falsePositives: string;
+    status: HuntStatus;
+    sourceReportId: string;
+    hearthId: string;
+    createdAt: string;
+    updatedAt: string;
+}
+
+export type HuntingItem = HearthHunt | PrivateHunt;
+export type HuntInput = Omit<PrivateHunt, 'id' | 'ownerSub' | 'queryLang' | 'createdAt' | 'updatedAt'>;
+
+export interface TechniqueCoverageNode {
+    id: string;
+    name: string;
+    count: number;
+    state: 'covered' | 'partial' | 'none';
+    subs: Omit<TechniqueCoverageNode, 'subs'>[];
+}
+
+export interface TechniqueCoverage {
+    axis: 'technique';
+    covered: number;
+    total: number;
+    tactics: { id: string; name: string; shortname: string; covered: number; total: number; techniques: TechniqueCoverageNode[] }[];
+}
+
+export interface FieldCoverage {
+    axis: 'technology' | 'dataSource';
+    values: { value: string; count: number }[];
+}
+
+export const fetchHearth = async (): Promise<{ hunts: HearthHunt[]; total: number; source: string; license: string }> =>
+    handleResponse(await fetch('/api/hearth'), 'Hunting');
+
+export const fetchHunts = async (): Promise<PrivateHunt[]> =>
+    ((await handleResponse(await fetch('/api/hunts'), 'Hunting')).items || []);
+
+export const createHunt = async (input: HuntInput): Promise<{ hunt: PrivateHunt; items: PrivateHunt[] }> =>
+    handleResponse(await fetch('/api/hunts', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input),
+    }), 'Hunting');
+
+export const updateHunt = async (id: string, input: HuntInput): Promise<{ hunt: PrivateHunt; items: PrivateHunt[] }> =>
+    handleResponse(await fetch(`/api/hunts/${encodeURIComponent(id)}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input),
+    }), 'Hunting');
+
+export const deleteHunt = async (id: string): Promise<PrivateHunt[]> =>
+    ((await handleResponse(await fetch(`/api/hunts/${encodeURIComponent(id)}`, { method: 'DELETE' }), 'Hunting')).items || []);
+
+export const fetchHuntCoverage = async (axis: 'technique'): Promise<TechniqueCoverage> =>
+    handleResponse(await fetch(`/api/hunts/coverage?axis=${axis}`), 'Hunting');
+export const fetchHuntFieldCoverage = async (axis: 'technology' | 'dataSource'): Promise<FieldCoverage> =>
+    handleResponse(await fetch(`/api/hunts/coverage?axis=${axis}`), 'Hunting');
+
+export const fetchJobRelated = async (id: string): Promise<{ hunts: PrivateHunt[]; reports: BoletimJob[] }> =>
+    handleResponse(await fetch(`/api/feed/job/${encodeURIComponent(id)}/related`), 'Hunting');
