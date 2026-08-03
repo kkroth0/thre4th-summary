@@ -61,6 +61,16 @@ test('GET /api/vendors/status returns vendor map', async () => {
     assert.ok(Object.keys(body).length > 0, 'expected at least one vendor entry');
 });
 
+test('actor list exposes slim technique ids for local correlation', async () => {
+    const response = await fetch(`${BASE}/api/actors`);
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    const mapped = body.actors.find((actor) => actor.technique_count > 0);
+    assert.ok(mapped);
+    assert.equal(mapped.techniques.length, mapped.technique_count);
+    assert.match(mapped.techniques[0], /^T\d{4}(?:\.\d{3})?$/);
+});
+
 test('GET /api/auth/me unauthenticated', async () => {
     const r = await fetch(`${BASE}/api/auth/me`);
     assert.equal(r.status, 200);

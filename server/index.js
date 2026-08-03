@@ -3573,6 +3573,7 @@ app.get('/api/actors', (req, res) => {
             id: a.id, name: a.name, aliases: a.aliases || [], country: a.country || '',
             motivation: a.motivation || '', source: a.source,
             technique_count: (a.techniques || []).length,
+            techniques: (a.techniques || []).map((technique) => technique.id).filter(Boolean),
         })),
     });
 });
