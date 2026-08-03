@@ -224,7 +224,7 @@ export function Header({ actions, logoAddon, onLogoClick, showBackButton = false
         to={item.path}
         className={cn(
           "group relative flex items-center rounded-md text-[13px] font-medium transition-colors",
-          isCollapsed ? "h-10 w-10 justify-center" : "h-9 w-full gap-2.5 px-2.5",
+          isCollapsed ? "h-10 w-10 justify-center" : "h-9 w-full gap-2 px-2",
           active
             ? "bg-primary/10 text-foreground"
             : "text-muted-foreground hover:bg-secondary hover:text-foreground"
@@ -236,7 +236,7 @@ export function Header({ actions, logoAddon, onLogoClick, showBackButton = false
           <>
             <span className="min-w-0 flex-1 truncate">{item.label}</span>
             {item.premium && (
-              <span className="shrink-0 rounded border border-border px-1.5 py-0.5 text-[9px] font-bold leading-none text-muted-foreground">
+              <span className="shrink-0 rounded border border-border px-1 py-0.5 text-[9px] font-bold leading-none text-muted-foreground">
                 PRO
               </span>
             )}
@@ -428,7 +428,7 @@ export function Header({ actions, logoAddon, onLogoClick, showBackButton = false
       <aside
         className={cn(
           "fixed inset-y-0 left-0 z-40 hidden border-r border-border bg-sidebar text-sidebar-foreground transition-[width] duration-200 lg:flex lg:flex-col",
-          isCollapsed ? "w-[72px]" : "w-72"
+          isCollapsed ? "w-[72px]" : "w-64"
         )}
       >
         <div className="flex h-full min-h-0 flex-col">

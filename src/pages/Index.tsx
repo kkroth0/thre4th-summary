@@ -317,7 +317,7 @@ const Index = () => {
     : toolCards;
   const shellClassName = cn(
     "soc-shell relative flex min-h-screen flex-col overflow-hidden transition-[padding] duration-200",
-    isCollapsed ? "lg:pl-[72px]" : "lg:pl-[264px]"
+    isCollapsed ? "lg:pl-[72px]" : "lg:pl-64"
   );
 
 

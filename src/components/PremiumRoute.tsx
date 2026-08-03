@@ -52,7 +52,7 @@ export function PremiumRoute({ children, feature }: { children: React.ReactNode;
     <div
       className={cn(
         "soc-shell relative min-h-screen bg-background flex flex-col transition-[padding] duration-200",
-        isCollapsed ? "lg:pl-[72px]" : "lg:pl-[264px]"
+        isCollapsed ? "lg:pl-[72px]" : "lg:pl-64"
       )}
     >
       <div className="soc-grid pointer-events-none absolute inset-0 z-0" />
