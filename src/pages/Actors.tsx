@@ -187,7 +187,7 @@ function ActorRow({
     <TableRow data-state={selected ? "selected" : undefined}>
       <TableCell className="min-w-0 px-2 py-2">
         <div className="flex min-w-0 items-center gap-2">
-          <Avatar className="size-8">
+          <Avatar className="size-8" aria-hidden="true">
             <AvatarFallback className="text-[10px] font-semibold">
               {actor.name.split(/\s+/).map((part) => part[0]).slice(0, 2).join("").toUpperCase()}
             </AvatarFallback>
@@ -220,7 +220,13 @@ function ActorRow({
         </div>
       </TableCell>
       <TableCell className="px-2 py-2 text-right">
-        <Button variant="outline" size="sm" className="h-8 px-2 text-xs" onClick={() => onOpen(actor.id)}>
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-8 px-2 text-xs"
+          aria-label={pt ? `Abrir ${actor.name}` : `Open ${actor.name}`}
+          onClick={() => onOpen(actor.id)}
+        >
           {pt ? "Abrir" : "Open"}
         </Button>
       </TableCell>
@@ -743,7 +749,9 @@ const Actors = () => {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="techniques">{pt ? "Mais TTPs primeiro" : "Most TTPs first"}</SelectItem>
-                    <SelectItem value="hunts">{pt ? "Mais hunts primeiro" : "Most hunts first"}</SelectItem>
+                    <SelectItem value="hunts" disabled={privateHunts === null}>
+                      {pt ? "Mais hunts primeiro" : "Most hunts first"}
+                    </SelectItem>
                     <SelectItem value="name">{pt ? "Nome A-Z" : "Name A-Z"}</SelectItem>
                     <SelectItem value="country">{pt ? "Origem A-Z" : "Origin A-Z"}</SelectItem>
                   </SelectContent>
@@ -826,6 +834,7 @@ const Actors = () => {
                           size="sm"
                           className="h-8 px-2 text-[10px] font-semibold uppercase tracking-wide"
                           aria-pressed={sortMode === "hunts"}
+                          disabled={privateHunts === null}
                           onClick={() => setSortMode("hunts")}
                         >
                           Hunts
