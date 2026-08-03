@@ -1556,57 +1556,6 @@ export const deleteScan = async (id: string): Promise<SavedScan[]> => {
     return (await r.json()).scans;
 };
 
-// ─── Publicações / Advisories (blog) ───────────────────────────────────────
-export interface Post {
-    id: string; slug: string; title: string; summary: string; body: string;
-    tags: string[]; author: string; published: boolean;
-    createdAt: string; updatedAt: string; publishedAt: string | null;
-}
-export type PostCard = Omit<Post, "body">;
-export interface PostInput { title: string; summary?: string; body?: string; tags?: string[]; published?: boolean; slug?: string; }
-
-const postError = async (r: Response): Promise<never> => {
-    const e = await r.json().catch(() => ({}));
-    throw new Error((e as { error?: string }).error || `Posts API error: ${r.status}`);
-};
-
-export const fetchPosts = async (): Promise<{ posts: PostCard[]; isAdmin: boolean }> => {
-    const r = await fetch('/api/posts');
-    if (!r.ok) return postError(r);
-    return r.json();
-};
-
-export const fetchPost = async (slug: string): Promise<{ post: Post; isAdmin: boolean }> => {
-    const r = await fetch(`/api/posts/${encodeURIComponent(slug)}`);
-    if (!r.ok) return postError(r);
-    return r.json();
-};
-
-export const createPost = async (input: PostInput): Promise<Post> => {
-    const r = await fetch('/api/posts', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(input),
-    });
-    if (!r.ok) return postError(r);
-    return (await r.json()).post;
-};
-
-export const updatePost = async (id: string, input: Partial<PostInput>): Promise<Post> => {
-    const r = await fetch(`/api/posts/${encodeURIComponent(id)}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(input),
-    });
-    if (!r.ok) return postError(r);
-    return (await r.json()).post;
-};
-
-export const deletePost = async (id: string): Promise<void> => {
-    const r = await fetch(`/api/posts/${encodeURIComponent(id)}`, { method: 'DELETE' });
-    if (!r.ok) return postError(r);
-};
-
 // BYOK genérico: quais providers têm chave configurada (booleans, nunca os valores).
 export type ApiKeysState = Record<string, boolean>;
 

@@ -17,6 +17,7 @@ import {
   UsersRound,
 } from "lucide-react";
 import { PageLayout } from "@/components/PageLayout";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,8 +28,18 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { cn } from "@/lib/utils";
+import { fetchHunts, type PrivateHunt } from "@/services/threatApi";
+import { actorHuntCoverage, sortActors } from "./actorsView";
 
 interface ActorListItem {
   id: string;
@@ -38,6 +49,7 @@ interface ActorListItem {
   motivation: string;
   source: string;
   technique_count: number;
+  techniques: string[];
 }
 
 interface Ref {
@@ -57,7 +69,7 @@ interface Software {
   url: string;
 }
 
-interface ActorDetail extends ActorListItem {
+interface ActorDetail extends Omit<ActorListItem, "techniques"> {
   description: string;
   attack_id: string;
   attack_url: string;
@@ -67,7 +79,7 @@ interface ActorDetail extends ActorListItem {
 }
 
 type SourceFilter = "all" | "attack" | "misp";
-type SortMode = "techniques" | "name" | "country";
+type SortMode = "techniques" | "name" | "country" | "hunts";
 
 const ALL_COUNTRIES = "__all__";
 const MAX_RESULTS = 180;
@@ -158,11 +170,13 @@ function SourceBadge({ source }: { source?: string }) {
 
 function ActorRow({
   actor,
+  huntCount,
   selected,
   onOpen,
   pt,
 }: {
   actor: ActorListItem;
+  huntCount: number | null;
   selected: boolean;
   onOpen: (id: string) => void;
   pt: boolean;
@@ -170,52 +184,53 @@ function ActorRow({
   const aliases = actor.aliases.slice(0, 4);
 
   return (
-    <button
-      type="button"
-      onClick={() => onOpen(actor.id)}
-      className={cn(
-        "group w-full rounded-lg border p-3 text-left transition-colors",
-        "grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(150px,210px)_96px]",
-        selected
-          ? "border-primary/45 bg-primary/5"
-          : "border-border/80 bg-card hover:border-primary/30 hover:bg-muted/40",
-      )}
-    >
-      <div className="min-w-0">
-        <div className="flex min-w-0 flex-wrap items-center gap-2">
-          <span className="truncate text-sm font-semibold text-foreground">{actor.name}</span>
-          {hasAttackMapping(actor.source) && (
-            <Badge variant="secondary" className="h-5 rounded-md px-1.5 text-[10px] font-semibold">
-              {actor.technique_count || 0} TTP
-            </Badge>
-          )}
+    <TableRow data-state={selected ? "selected" : undefined}>
+      <TableCell className="min-w-0 px-2 py-2">
+        <div className="flex min-w-0 items-center gap-2">
+          <Avatar className="size-8" aria-hidden="true">
+            <AvatarFallback className="text-[10px] font-semibold">
+              {actor.name.split(/\s+/).map((part) => part[0]).slice(0, 2).join("").toUpperCase()}
+            </AvatarFallback>
+          </Avatar>
+          <div className="min-w-0">
+            <div className="truncate text-sm font-semibold text-foreground">{actor.name}</div>
+            <p className="truncate text-xs text-muted-foreground">
+              {aliases.length > 0
+                ? `${aliases.join(", ")}${actor.aliases.length > aliases.length ? ` +${actor.aliases.length - aliases.length}` : ""}`
+                : pt ? "Sem aliases conhecidos" : "No known aliases"}
+            </p>
+          </div>
         </div>
-        {aliases.length > 0 ? (
-          <p className="mt-1 truncate text-xs text-muted-foreground">
-            {pt ? "Alias: " : "Aliases: "}
-            {aliases.join(", ")}
-            {actor.aliases.length > aliases.length ? ` +${actor.aliases.length - aliases.length}` : ""}
-          </p>
-        ) : (
-          <p className="mt-1 text-xs text-muted-foreground">{pt ? "Sem aliases conhecidos" : "No known aliases"}</p>
-        )}
-      </div>
-
-      <div className="min-w-0 space-y-1">
-        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-          <MapPin className="h-3.5 w-3.5 shrink-0" />
-          <span className="truncate">{actor.country || (pt ? "Origem não atribuída" : "Unattributed origin")}</span>
+      </TableCell>
+      <TableCell className="hidden truncate px-2 py-2 text-xs text-muted-foreground sm:table-cell">
+        {actor.country || "—"}
+      </TableCell>
+      <TableCell className="hidden truncate px-2 py-2 text-xs text-muted-foreground lg:table-cell">
+        {actor.motivation || "—"}
+      </TableCell>
+      <TableCell className="px-2 py-2 text-right font-mono text-xs font-semibold">
+        {actor.technique_count || 0}
+      </TableCell>
+      <TableCell className="hidden px-2 py-2 text-right font-mono text-xs font-semibold sm:table-cell">
+        {huntCount === null ? "—" : huntCount}
+      </TableCell>
+      <TableCell className="hidden px-2 py-2 lg:table-cell">
+        <div className="whitespace-nowrap">
+          <SourceBadge source={actor.source} />
         </div>
-        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-          <Target className="h-3.5 w-3.5 shrink-0" />
-          <span className="truncate">{actor.motivation || (pt ? "Motivação não classificada" : "Unclassified motivation")}</span>
-        </div>
-      </div>
-
-      <div className="flex items-center justify-start gap-2 sm:justify-end">
-        <SourceBadge source={actor.source} />
-      </div>
-    </button>
+      </TableCell>
+      <TableCell className="px-2 py-2 text-right">
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-8 px-2 text-xs"
+          aria-label={pt ? `Abrir ${actor.name}` : `Open ${actor.name}`}
+          onClick={() => onOpen(actor.id)}
+        >
+          {pt ? "Abrir" : "Open"}
+        </Button>
+      </TableCell>
+    </TableRow>
   );
 }
 
@@ -504,6 +519,7 @@ const Actors = () => {
 
   const [list, setList] = useState<ActorListItem[]>([]);
   const [countries, setCountries] = useState<string[]>([]);
+  const [privateHunts, setPrivateHunts] = useState<PrivateHunt[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
 
@@ -522,15 +538,22 @@ const Actors = () => {
 
     (async () => {
       try {
-        const response = await fetch("/api/actors");
-        if (!response.ok) throw new Error(String(response.status));
-        const data = await response.json();
+        const [actorsResult, huntsResult] = await Promise.allSettled([
+          fetch("/api/actors").then(async (response) => {
+            if (!response.ok) throw new Error(String(response.status));
+            return response.json();
+          }),
+          fetchHunts(),
+        ]);
         if (!alive) return;
-        setList(data.actors || []);
-        setCountries(data.countries || []);
+        setPrivateHunts(huntsResult.status === "fulfilled" ? huntsResult.value : null);
+        if (actorsResult.status === "rejected") {
+          setError(true);
+          return;
+        }
+        setList(actorsResult.value.actors || []);
+        setCountries(actorsResult.value.countries || []);
         setError(false);
-      } catch {
-        if (alive) setError(true);
       } finally {
         if (alive) setLoading(false);
       }
@@ -540,6 +563,11 @@ const Actors = () => {
       alive = false;
     };
   }, []);
+
+  const coverage = useMemo(
+    () => privateHunts === null ? {} : actorHuntCoverage(list, privateHunts),
+    [list, privateHunts],
+  );
 
   const openActor = useCallback(async (id: string) => {
     setSelectedId(id);
@@ -580,18 +608,8 @@ const Actors = () => {
         .includes(needle);
     });
 
-    return matches.sort((a, b) => {
-      if (sortMode === "name") return a.name.localeCompare(b.name);
-      if (sortMode === "country") {
-        return (
-          (a.country || "zz").localeCompare(b.country || "zz") ||
-          b.technique_count - a.technique_count ||
-          a.name.localeCompare(b.name)
-        );
-      }
-      return b.technique_count - a.technique_count || a.name.localeCompare(b.name);
-    });
-  }, [country, list, query, sortMode, sourceFilter]);
+    return sortActors(matches, sortMode, coverage);
+  }, [country, coverage, list, query, sortMode, sourceFilter]);
 
   const shown = filtered.slice(0, MAX_RESULTS);
   const selectedSummary = useMemo(() => list.find((actor) => actor.id === selectedId), [list, selectedId]);
@@ -731,6 +749,9 @@ const Actors = () => {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="techniques">{pt ? "Mais TTPs primeiro" : "Most TTPs first"}</SelectItem>
+                    <SelectItem value="hunts" disabled={privateHunts === null}>
+                      {pt ? "Mais hunts primeiro" : "Most hunts first"}
+                    </SelectItem>
                     <SelectItem value="name">{pt ? "Nome A-Z" : "Name A-Z"}</SelectItem>
                     <SelectItem value="country">{pt ? "Origem A-Z" : "Origin A-Z"}</SelectItem>
                   </SelectContent>
@@ -781,16 +802,65 @@ const Actors = () => {
                 {pt ? "Nenhum ator encontrado com estes filtros." : "No actor matches these filters."}
               </div>
             ) : (
-              <div className="space-y-2">
-                {shown.map((actor) => (
-                  <ActorRow
-                    key={actor.id}
-                    actor={actor}
-                    selected={actor.id === selectedId}
-                    onOpen={openActor}
-                    pt={pt}
-                  />
-                ))}
+              <div className="overflow-hidden rounded-lg border border-border">
+                <Table className="table-fixed">
+                  <TableHeader>
+                    <TableRow className="hover:bg-transparent">
+                      <TableHead className="h-9 w-[34%] px-2 text-[10px] font-semibold uppercase tracking-wide">
+                        {pt ? "Ator" : "Actor"}
+                      </TableHead>
+                      <TableHead className="hidden h-9 w-[17%] px-2 text-[10px] font-semibold uppercase tracking-wide sm:table-cell">
+                        {pt ? "País" : "Country"}
+                      </TableHead>
+                      <TableHead className="hidden h-9 w-[17%] px-2 text-[10px] font-semibold uppercase tracking-wide lg:table-cell">
+                        {pt ? "Motivação" : "Motivation"}
+                      </TableHead>
+                      <TableHead className="h-9 w-[9%] px-0 text-right">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 px-2 text-[10px] font-semibold uppercase tracking-wide"
+                          aria-pressed={sortMode === "techniques"}
+                          onClick={() => setSortMode("techniques")}
+                        >
+                          TTPs
+                        </Button>
+                      </TableHead>
+                      <TableHead className="hidden h-9 w-[9%] px-0 text-right sm:table-cell">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 px-2 text-[10px] font-semibold uppercase tracking-wide"
+                          aria-pressed={sortMode === "hunts"}
+                          disabled={privateHunts === null}
+                          onClick={() => setSortMode("hunts")}
+                        >
+                          Hunts
+                        </Button>
+                      </TableHead>
+                      <TableHead className="hidden h-9 w-[14%] px-2 text-[10px] font-semibold uppercase tracking-wide lg:table-cell">
+                        {pt ? "Fonte" : "Source"}
+                      </TableHead>
+                      <TableHead className="h-9 w-[11%] px-2 text-right text-[10px] font-semibold uppercase tracking-wide">
+                        {pt ? "Ação" : "Action"}
+                      </TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {shown.map((actor) => (
+                      <ActorRow
+                        key={actor.id}
+                        actor={actor}
+                        huntCount={privateHunts === null ? null : coverage[actor.id] || 0}
+                        selected={actor.id === selectedId}
+                        onOpen={openActor}
+                        pt={pt}
+                      />
+                    ))}
+                  </TableBody>
+                </Table>
               </div>
             )}
           </div>

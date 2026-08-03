@@ -273,7 +273,7 @@ const PatchTuesday = () => {
                                     <span className="grid place-items-center h-9 w-9 rounded-xl bg-primary/10 text-primary">
                                         <CalendarDays className="h-5 w-5" />
                                     </span>
-                                    {isPt ? "Resumo do Patch Tuesday" : "Patch Tuesday Summary"}
+                                    "Microsoft Patch Tuesday"
                                 </h1>
                                 <Badge variant="secondary" className="bg-primary/10 text-primary border-border/50">
                                     MSRC

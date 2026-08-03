@@ -238,7 +238,7 @@ const Index = () => {
       group: "analysis",
     },
     {
-      title: language === "pt" ? "Gerador de Relatorios" : "Report Generator",
+      title: "Threat Feed Generator",
       description: language === "pt" ? "Cole uma URL, PDF ou relatorio de vendor e receba uma analise de CTI/Hunting." : "Paste a URL, PDF or vendor report and receive CTI/Hunting analysis.",
       href: "/relatorios",
       icon: FileSearch,
@@ -264,14 +264,6 @@ const Index = () => {
       group: "intel",
     },
     {
-      title: "Advisories",
-      description: language === "pt" ? "Boletim diario com veredito, KPIs, destaques criticos e ransomware do dia." : "Daily brief with verdict, KPIs, critical highlights and ransomware of the day.",
-      href: "/advisories",
-      icon: Mail,
-      tags: ["DAILY", "KEV", "EPSS"],
-      group: "intel",
-    },
-    {
       title: language === "pt" ? "Mapa de Ameacas" : "Threat Map",
       description: language === "pt" ? "Mapa global de vitimas de ransomware por pais nos ultimos 90 dias." : "Global ransomware victim map by country over the last 90 days.",
       href: "/threat-map",
@@ -280,7 +272,7 @@ const Index = () => {
       group: "intel",
     },
     {
-      title: "Patch Tuesday",
+      title: "Microsoft Patch Tuesday",
       description: language === "pt" ? "Timeline mensal Microsoft com severidade, exploitability e produto afetado." : "Monthly Microsoft timeline with severity, exploitability and affected products.",
       href: "/patch-tuesday",
       icon: Bug,
@@ -297,7 +289,7 @@ const Index = () => {
       featured: true,
     },
     {
-      title: "Newsletter",
+      title: "Intel Scrapping",
       description: language === "pt" ? "Recorte semanal curado por analistas. Sem clickbait, sem vendor pitch." : "Weekly analyst-curated digest. No clickbait, no vendor pitch.",
       href: "/newsletter",
       icon: Database,
@@ -1512,7 +1504,7 @@ const Index = () => {
               {[
                 { href: "#sobre", label: language === "pt" ? "Sobre" : "About" },
                 { href: "#tools", label: language === "pt" ? "Ferramentas" : "Tools" },
-                { href: "#newsletter", label: "Newsletter" },
+                { href: "#newsletter", label: "Intel Scrapping" },
                 { href: contactUrl, label: language === "pt" ? "Contato" : "Contact", external: true },
               ].map((item) => (
                 item.href.startsWith("#") ? (
@@ -1768,7 +1760,7 @@ const Index = () => {
           <section id="newsletter" className="mx-auto max-w-6xl scroll-mt-28 px-4 pb-20 md:px-8">
             <div className="flex flex-col gap-6 rounded-lg border border-border bg-card p-8 md:flex-row md:items-center md:justify-between">
               <div>
-                <p className="text-xs font-black uppercase tracking-wide text-primary">Newsletter</p>
+                <p className="text-xs font-black uppercase tracking-wide text-primary">Intel Scrapping</p>
                 <h2 className="mt-3 text-2xl font-black tracking-tight text-foreground">
                   {language === "pt" ? "Recorte semanal, direto ao ponto." : "Weekly digest, straight to the point."}
                 </h2>
@@ -1781,7 +1773,7 @@ const Index = () => {
                   {language === "pt" ? "Premium via allow-list" : "Premium via allow-list"}
                 </span>
                 <Button asChild className="h-11 shrink-0">
-                  <Link to="/newsletter">{language === "pt" ? "Abrir newsletter" : "Open newsletter"}</Link>
+                  <Link to="/newsletter">{language === "pt" ? "Abrir Intel Scrapping" : "Open Intel Scrapping"}</Link>
                 </Button>
               </div>
             </div>

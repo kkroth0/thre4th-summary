@@ -14,8 +14,8 @@ type Feature = "threat-brief" | "advisory-feed" | "exposure-watchlist" | "knowle
 
 const COPY: Record<Feature, { pt: [string, string]; en: [string, string] }> = {
   "threat-brief": {
-    pt: ["Gerador de Relatórios", "Cole o link de um relatório ou notícia e receba uma análise organizada."],
-    en: ["Report Generator", "Paste a link to a report or news post and get an organized analysis."],
+    pt: ["Threat Feed Generator", "Cole o link de um relatório ou notícia e receba uma análise organizada."],
+    en: ["Threat Feed Generator", "Paste a link to a report or news post and get an organized analysis."],
   },
   "advisory-feed": {
     pt: ["Coletor de Intel", "Um resumo diário dos avisos de segurança que importam."],

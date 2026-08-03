@@ -101,23 +101,6 @@ export const PUBLIC_SEO_ROUTES: SeoRoute[] = [
     },
   },
   {
-    path: "/advisories",
-    priority: "0.85",
-    changefreq: "daily",
-    metadata: {
-      pt: {
-        title: "Advisories e Boletim Diario de Seguranca | ThreatSumm4ry",
-        description:
-          "Leia advisories normalizados, boletins diarios, KPIs e alertas de fornecedores para acompanhar riscos relevantes de seguranca.",
-      },
-      en: {
-        title: "Security Advisories and Daily Brief | ThreatSumm4ry",
-        description:
-          "Read normalized advisories, daily briefs, KPIs, and vendor alerts to track relevant security risks in one operational feed.",
-      },
-    },
-  },
-  {
     path: "/threat-map",
     priority: "0.7",
     changefreq: "daily",
