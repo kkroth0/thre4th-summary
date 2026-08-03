@@ -99,8 +99,8 @@ const Knowledge = () => {
                     <p className="font-semibold">{pt ? "Nada guardado ainda" : "Nothing saved yet"}</p>
                     <p className="mt-1 text-sm text-muted-foreground">
                         {pt
-                            ? "Use o botão de salvar no Newsletter ou nos Advisories para trazer uma fonte para cá."
-                            : "Use the save button on Newsletter or Advisories to bring a source here."}
+                            ? "Use o botão de salvar no Intel Scrapping para trazer uma fonte para cá."
+                            : "Use the save button on Intel Scrapping to bring a source here."}
                     </p>
                 </div>
             ) : (

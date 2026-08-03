@@ -302,7 +302,7 @@ const DailyBulletin: React.FC = () => {
   return (
     <PageLayout width="max-w-7xl">
       <PageHeader
-        title={pt ? "Gerador de Relatorios" : "Report Generator"}
+        title="Threat Feed Generator"
         subtitle={pt
           ? "Cole o link de um relatório ou notícia de segurança. Ele é resumido sozinho e você baixa o JSON pronto pro seu slide."
           : "Paste a link to a security report or news post. It gets summarized on its own and you download the JSON for your slide."}
