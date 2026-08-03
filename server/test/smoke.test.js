@@ -13,6 +13,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = 3900 + Math.floor(Math.random() * 100);
 const BASE = `http://127.0.0.1:${PORT}`;
 const HUNTS_STORE_PATH = `/tmp/threatsumm4ry-smoke-hunts-${PORT}.json`;
+const PREMIUM_OPEN_PATH = `/tmp/threatsumm4ry-smoke-premium-${PORT}.json`;
 const SESSION_SECRET = 'test-secret';
 const sessionBody = Buffer.from(JSON.stringify({ sub: 'smoke-user', login: 'tester', exp: Math.floor(Date.now() / 1000) + 3600 })).toString('base64url');
 const sessionSig = crypto.createHmac('sha256', SESSION_SECRET).update(sessionBody).digest('base64url');
@@ -20,6 +21,9 @@ const AUTH_HEADERS = { Cookie: `ts_session=${sessionBody}.${sessionSig}` };
 const otherSessionBody = Buffer.from(JSON.stringify({ sub: 'other-user', login: 'tester', exp: Math.floor(Date.now() / 1000) + 3600 })).toString('base64url');
 const otherSessionSig = crypto.createHmac('sha256', SESSION_SECRET).update(otherSessionBody).digest('base64url');
 const OTHER_AUTH_HEADERS = { Cookie: `ts_session=${otherSessionBody}.${otherSessionSig}` };
+const outsiderBody = Buffer.from(JSON.stringify({ sub: 'outsider', login: 'outsider', exp: Math.floor(Date.now() / 1000) + 3600 })).toString('base64url');
+const outsiderSig = crypto.createHmac('sha256', SESSION_SECRET).update(outsiderBody).digest('base64url');
+const OUTSIDER_HEADERS = { Cookie: `ts_session=${outsiderBody}.${outsiderSig}` };
 let proc;
 
 async function waitForBoot(timeoutMs = 15000) {
@@ -40,7 +44,7 @@ before(async () => {
         env: {
             ...process.env,
             PORT: String(PORT), NODE_ENV: 'test', SESSION_SECRET,
-            GITHUB_ALLOWED_LOGINS: 'tester', HUNTS_STORE_PATH,
+            GITHUB_ALLOWED_LOGINS: 'tester', HUNTS_STORE_PATH, PREMIUM_OPEN_PATH,
         },
         stdio: 'ignore',
     });
@@ -51,6 +55,8 @@ after(() => {
     proc?.kill('SIGKILL');
     rmSync(HUNTS_STORE_PATH, { force: true, recursive: true });
     rmSync(`${HUNTS_STORE_PATH}.tmp`, { force: true });
+    rmSync(PREMIUM_OPEN_PATH, { force: true });
+    rmSync(`${PREMIUM_OPEN_PATH}.tmp`, { force: true });
 });
 
 test('GET /api/vendors/status returns vendor map', async () => {
@@ -220,4 +226,36 @@ test('daily edition route rejects malformed and unavailable historical dates', a
     assert.equal(unavailable.status, 404);
     const body = await unavailable.json();
     assert.match(body.error, /not found/i);
+});
+
+test('gate premium aberto libera quem está fora da allow-list, e fechar volta a barrar', async () => {
+    const gate = (premiumOpen) => fetch(`${BASE}/api/admin/premium-open`, {
+        method: 'PUT',
+        headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ premiumOpen }),
+    });
+
+    const initial = await fetch(`${BASE}/api/admin/premium-open`, { headers: AUTH_HEADERS });
+    assert.equal(initial.status, 200);
+    assert.equal((await initial.json()).premiumOpen, false, 'o padrão precisa ser fechado');
+
+    const blocked = await fetch(`${BASE}/api/knowledge`, { headers: OUTSIDER_HEADERS });
+    assert.equal(blocked.status, 403);
+
+    assert.equal((await (await gate(true)).json()).premiumOpen, true);
+    const allowed = await fetch(`${BASE}/api/knowledge`, { headers: OUTSIDER_HEADERS });
+    assert.equal(allowed.status, 200);
+
+    assert.equal((await (await gate(false)).json()).premiumOpen, false);
+    const blockedAgain = await fetch(`${BASE}/api/knowledge`, { headers: OUTSIDER_HEADERS });
+    assert.equal(blockedAgain.status, 403);
+});
+
+test('gate premium não aceita sessão anônima', async () => {
+    const r = await fetch(`${BASE}/api/admin/premium-open`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ premiumOpen: true }),
+    });
+    assert.equal(r.status, 401);
 });

@@ -1355,6 +1355,23 @@ export const fetchIntegrationStatus = async (): Promise<IntegrationsResponse> =>
     return r.json();
 };
 
+// ─── Gate premium aberto (chave de desenvolvimento, admin) ─────────────────
+export const fetchPremiumOpen = async (): Promise<boolean> => {
+    const r = await fetch('/api/admin/premium-open');
+    if (!r.ok) return allowlistError(r);
+    return (await r.json()).premiumOpen === true;
+};
+
+export const setPremiumOpen = async (premiumOpen: boolean): Promise<boolean> => {
+    const r = await fetch('/api/admin/premium-open', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ premiumOpen }),
+    });
+    if (!r.ok) return allowlistError(r);
+    return (await r.json()).premiumOpen === true;
+};
+
 // Attack Surface: Shodan-led external exposure search with optional TCP validation.
 export type AttackSurfaceMode = 'guided' | 'advanced';
 export type AttackSurfaceTargetType = 'ip' | 'domain' | 'cidr' | 'org';

@@ -1940,6 +1940,20 @@ app.get('/api/admin/allowlist', requireAdmin, (req, res) => {
     res.json({ allowlist: allowlistForClient(), org: ALLOWED_ORG || null });
 });
 
+// Liga/desliga o gate premium inteiro (chave de desenvolvimento). Só admin.
+app.get('/api/admin/premium-open', requireAdmin, (req, res) => {
+    res.json({ premiumOpen });
+});
+
+app.put('/api/admin/premium-open', requireAdmin, (req, res) => {
+    const open = req.body?.premiumOpen === true;
+    try { writeJsonAtomic(PREMIUM_OPEN_PATH, open); }
+    catch (e) { return res.status(500).json({ error: `falha ao salvar: ${e.message}` }); }
+    premiumOpen = open;
+    console.warn(`[premium] gate ${open ? 'aberto' : 'fechado'} por ${req.user.login}`);
+    res.json({ premiumOpen });
+});
+
 // Adiciona um login à allow-list premium dinâmica. Body: { login }.
 app.post('/api/admin/allowlist', requireAdmin, (req, res) => {
     const login = String((req.body || {}).login || '').trim().toLowerCase();
@@ -2179,6 +2193,17 @@ function hasPremiumAccessSync(login) {
     return ALLOWED_LOGINS.includes(l) || dynamicAllowlist.includes(l);
 }
 
+// Chave de desenvolvimento: com ela ligada, qualquer sessão autenticada passa
+// pelo gate premium. Serve pra desenvolver sem ficar comentando o gate no
+// código. Só admin liga/desliga, o padrão é desligada e o estado sobrevive a
+// restart — se ficar ligada em produção, todo mundo logado vira premium.
+const PREMIUM_OPEN_PATH = process.env.PREMIUM_OPEN_PATH || path.join(__dirname, '.premium-open.json');
+function loadPremiumOpen() {
+    try { return JSON.parse(fs.readFileSync(PREMIUM_OPEN_PATH, 'utf8')) === true; } catch { return false; }
+}
+let premiumOpen = loadPremiumOpen();
+if (premiumOpen) console.warn('[premium] gate aberto: toda sessão autenticada tem premium');
+
 async function resolvePremiumAccess(login, accessToken) {
     const l = login.toLowerCase();
     if (hasPremiumAccessSync(l)) return { allowed: true, viaOrg: false };
@@ -2193,6 +2218,7 @@ async function resolvePremiumAccess(login, accessToken) {
 }
 
 function sessionHasPremium(p) {
+    if (premiumOpen) return true;
     return hasPremiumAccessSync(p?.login) || Boolean(ALLOWED_ORG && p?.premiumViaOrg);
 }
 

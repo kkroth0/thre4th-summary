@@ -201,7 +201,7 @@ export function Header({ actions, logoAddon, onLogoClick, showBackButton = false
         <span className="min-w-0 flex-1">
           <span className="flex items-center gap-2 text-sm font-semibold text-foreground">
             {item.label}
-            {item.premium && (
+            {item.premium && !auth.isPremium && (
               <span className="rounded border border-border bg-background px-1.5 py-0.5 text-[9px] font-bold leading-none text-muted-foreground">
                 PRO
               </span>
@@ -223,8 +223,10 @@ export function Header({ actions, logoAddon, onLogoClick, showBackButton = false
         key={item.path}
         to={item.path}
         className={cn(
-          "group relative flex items-center rounded-md text-[13px] font-medium transition-colors",
-          isCollapsed ? "h-10 w-10 justify-center" : "h-9 w-full gap-2 px-2",
+          "group relative flex rounded-md font-medium transition-colors",
+          isCollapsed
+            ? "h-10 w-10 items-center justify-center"
+            : "min-h-[68px] flex-col items-center justify-center gap-1.5 px-1 py-2 text-center text-[11px] leading-tight",
           active
             ? "bg-primary/10 text-foreground"
             : "text-muted-foreground hover:bg-secondary hover:text-foreground"
@@ -234,9 +236,9 @@ export function Header({ actions, logoAddon, onLogoClick, showBackButton = false
         <Icon className={cn("h-4 w-4 shrink-0", active ? "text-primary" : "text-muted-foreground group-hover:text-foreground")} />
         {!isCollapsed && (
           <>
-            <span className="min-w-0 flex-1 truncate">{item.label}</span>
-            {item.premium && (
-              <span className="shrink-0 rounded border border-border px-1 py-0.5 text-[9px] font-bold leading-none text-muted-foreground">
+            <span className="line-clamp-2">{item.label}</span>
+            {item.premium && !auth.isPremium && (
+              <span className="absolute right-1 top-1 rounded border border-border px-1 py-0.5 text-[8px] font-bold leading-none text-muted-foreground">
                 PRO
               </span>
             )}
@@ -265,7 +267,7 @@ export function Header({ actions, logoAddon, onLogoClick, showBackButton = false
           {group.label}
         </div>
       )}
-      <div className="space-y-1">{group.items.map(renderDesktopItem)}</div>
+      <div className={cn(isCollapsed ? "space-y-1" : "grid grid-cols-2 gap-1")}>{group.items.map(renderDesktopItem)}</div>
     </div>
   );
 

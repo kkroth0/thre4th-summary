@@ -1,18 +1,23 @@
 import { useEffect, useState } from "react";
-import { CheckCircle2, Plug, ShieldCheck, XCircle } from "lucide-react";
+import { CheckCircle2, Plug, ShieldCheck, Unlock, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import AllowlistManager from "@/components/AllowlistManager";
 import FeedSourcesManager from "@/components/FeedSourcesManager";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
+import { Switch } from "@/components/ui/switch";
+import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { fetchIntegrationStatus, type IntegrationStatus } from "@/services/threatApi";
+import { fetchIntegrationStatus, fetchPremiumOpen, setPremiumOpen, type IntegrationStatus } from "@/services/threatApi";
 
 export function AdminSettings() {
   const { language } = useLanguage();
+  const { refresh } = useAuth();
   const pt = language === "pt";
   const [integrations, setIntegrations] = useState<IntegrationStatus[]>([]);
   const [keyless, setKeyless] = useState<string[]>([]);
+  const [premiumOpen, setOpen] = useState(false);
+  const [savingGate, setSavingGate] = useState(false);
 
   useEffect(() => {
     fetchIntegrationStatus()
@@ -21,7 +26,22 @@ export function AdminSettings() {
         setKeyless(result.keyless);
       })
       .catch((error) => toast.error(error instanceof Error ? error.message : "Falha ao carregar integrações"));
+    fetchPremiumOpen().then(setOpen).catch(() => undefined);
   }, []);
+
+  // O gate vale no servidor, então a sessão precisa reler isPremium pra UI
+  // acompanhar sem F5.
+  const toggleGate = async (next: boolean) => {
+    setSavingGate(true);
+    try {
+      setOpen(await setPremiumOpen(next));
+      await refresh();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Falha ao salvar");
+    } finally {
+      setSavingGate(false);
+    }
+  };
 
   const missing = integrations.filter((integration) => !integration.configured && integration.required).length;
 
@@ -33,6 +53,31 @@ export function AdminSettings() {
       </div>
 
       <AllowlistManager />
+
+      <Card>
+        <CardContent className="flex items-start gap-3 p-5">
+          <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 ring-1 ring-inset ring-primary/20">
+            <Unlock className="text-primary" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2 font-medium">
+              {pt ? "Gate premium aberto" : "Premium gate open"}
+              {premiumOpen ? <Badge variant="outline" className="text-[10px]">{pt ? "ligado" : "on"}</Badge> : null}
+            </div>
+            <div className="text-sm text-muted-foreground">
+              {pt
+                ? "Chave de desenvolvimento: libera os recursos premium (e some com os selos PRO) para qualquer conta logada, sem mexer na allow-list. Deixe desligado em produção."
+                : "Development switch: unlocks premium features (and hides the PRO tags) for any signed-in account, without touching the allow-list. Keep it off in production."}
+            </div>
+          </div>
+          <Switch
+            checked={premiumOpen}
+            disabled={savingGate}
+            onCheckedChange={toggleGate}
+            aria-label={pt ? "Gate premium aberto" : "Premium gate open"}
+          />
+        </CardContent>
+      </Card>
 
       <Card>
         <CardContent className="flex flex-col gap-4 p-5">
