@@ -2489,7 +2489,7 @@ app.get('/api/feed/job', requirePremium, (req, res) => {
     expireStaleJobs();
     const job = jobsStore[(req.query.id || '').toString()];
     if (!job) return res.status(404).json({ error: 'job não encontrado' });
-    if (job.ownerSub && job.ownerSub !== req.user.sub) return res.status(403).json({ error: 'job pertence a outro usuário' });
+    if (job.ownerSub !== req.user.sub) return res.status(403).json({ error: 'job pertence a outro usuário' });
     // Posição na fila = quantos jobs pending foram criados antes deste (0 = já
     // sendo processado / próximo). Deixa o front mostrar "N na sua frente".
     let queuePosition = 0;

@@ -251,6 +251,21 @@ test('gate premium aberto libera quem está fora da allow-list, e fechar volta a
     assert.equal(blockedAgain.status, 403);
 });
 
+test('gate premium so aceita admin: sessao comum leva 403 e nao muda nada', async () => {
+    const r = await fetch(`${BASE}/api/admin/premium-open`, {
+        method: 'PUT',
+        headers: { ...OUTSIDER_HEADERS, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ premiumOpen: true }),
+    });
+    assert.equal(r.status, 403);
+
+    const leitura = await fetch(`${BASE}/api/admin/premium-open`, { headers: OUTSIDER_HEADERS });
+    assert.equal(leitura.status, 403);
+
+    const aindaBarrado = await fetch(`${BASE}/api/knowledge`, { headers: OUTSIDER_HEADERS });
+    assert.equal(aindaBarrado.status, 403);
+});
+
 test('gate premium não aceita sessão anônima', async () => {
     const r = await fetch(`${BASE}/api/admin/premium-open`, {
         method: 'PUT',
