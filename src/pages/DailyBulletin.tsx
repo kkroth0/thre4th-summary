@@ -308,63 +308,63 @@ const DailyBulletin: React.FC = () => {
           : "Paste a link to a security report or news post. It gets summarized on its own and you download the JSON for your slide."}
       />
 
+      {/* Generator — one calm input row, no card chrome */}
+      <section className="mb-8">
+        {auth.authenticated ? (
+          <div className="space-y-3">
+            <div
+              data-testid="report-generator-command-bar"
+              className="flex min-h-12 flex-row items-center gap-1 rounded-md border border-border bg-background p-1 shadow-sm sm:flex-row sm:items-center"
+            >
+              <Input
+                placeholder={pt ? "Cole uma URL…" : "Paste a URL…"}
+                value={pasteUrl}
+                onChange={(e) => setPasteUrl(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter" && pasteUrl.trim()) { generate(pasteUrl.trim(), pasteType, ""); setPasteUrl(""); } }}
+                className="h-10 min-w-0 flex-1 border-0 bg-transparent px-3 text-sm shadow-none focus-visible:ring-0"
+              />
+              <Select value={pasteType} onValueChange={(v) => setPasteType(v as DeckType)}>
+                <SelectTrigger
+                  data-testid="report-generator-type-trigger"
+                  aria-label={pt ? "Tipo do relatorio" : "Report type"}
+                  className="h-10 w-[6.9rem] shrink-0 justify-between rounded-sm border-0 bg-muted/60 px-2.5 text-xs font-medium shadow-none focus:ring-0 sm:w-[7.75rem]"
+                >
+                  <span className="truncate">
+                    {pasteType === "vuln" ? (pt ? "Vuln." : "Vuln.") : (pt ? "Campanha" : "Campaign")}
+                  </span>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="vuln">{pt ? "Vulnerabilidade" : "Vulnerability"}</SelectItem>
+                  <SelectItem value="campaign">{pt ? "Campanha" : "Campaign"}</SelectItem>
+                </SelectContent>
+              </Select>
+              <Button onClick={() => { generate(pasteUrl.trim(), pasteType, ""); setPasteUrl(""); }} disabled={!pasteUrl.trim()} className="h-10 shrink-0 gap-2 rounded-sm px-3 sm:px-4">
+                <Sparkles className="h-4 w-4" /> {pt ? "Gerar" : "Generate"}
+              </Button>
+            </div>
+            <div data-testid="report-generator-status-row" className="flex items-center gap-1.5 px-1 text-xs text-muted-foreground">
+              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+              <span className="truncate">{auth.login} · {pt ? "pronto para gerar" : "ready to generate"}</span>
+              <Link to="/settings" className="ml-auto shrink-0 hover:text-foreground">{pt ? "Configurações" : "Settings"}</Link>
+            </div>
+          </div>
+        ) : (
+          <div className="flex items-center gap-4 rounded-xl bg-muted/40 p-5">
+            <KeyRound className="h-5 w-5 text-muted-foreground shrink-0" />
+            <div className="flex-1 min-w-0">
+              <div className="text-sm font-medium">{pt ? "Entre para gerar" : "Sign in to generate"}</div>
+              <div className="text-xs text-muted-foreground">{pt ? "Requer login com GitHub (acesso liberado)." : "Requires GitHub sign-in (approved access)."}</div>
+            </div>
+            <Button asChild variant="outline" size="sm" className="shrink-0">
+              <Link to="/login">{pt ? "Entrar" : "Sign in"} <ArrowRight className="h-4 w-4 ml-1.5" /></Link>
+            </Button>
+          </div>
+        )}
+      </section>
+
       <div className="grid gap-10 lg:grid-cols-[400px_1fr] lg:items-start lg:gap-8">
         {/* ── work column ───────────────────────────────────────────── */}
         <div className="min-w-0 space-y-10">
-          {/* Generator — one calm input row, no card chrome */}
-          <section>
-            {auth.authenticated ? (
-              <div className="space-y-3">
-                <div
-                  data-testid="report-generator-command-bar"
-                  className="flex min-h-12 flex-row items-center gap-1 rounded-md border border-border bg-background p-1 shadow-sm sm:flex-row sm:items-center"
-                >
-                  <Input
-                    placeholder={pt ? "Cole uma URL…" : "Paste a URL…"}
-                    value={pasteUrl}
-                    onChange={(e) => setPasteUrl(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === "Enter" && pasteUrl.trim()) { generate(pasteUrl.trim(), pasteType, ""); setPasteUrl(""); } }}
-                    className="h-10 min-w-0 flex-1 border-0 bg-transparent px-3 text-sm shadow-none focus-visible:ring-0"
-                  />
-                  <Select value={pasteType} onValueChange={(v) => setPasteType(v as DeckType)}>
-                    <SelectTrigger
-                      data-testid="report-generator-type-trigger"
-                      aria-label={pt ? "Tipo do relatorio" : "Report type"}
-                      className="h-10 w-[6.9rem] shrink-0 justify-between rounded-sm border-0 bg-muted/60 px-2.5 text-xs font-medium shadow-none focus:ring-0 sm:w-[7.75rem]"
-                    >
-                      <span className="truncate">
-                        {pasteType === "vuln" ? (pt ? "Vuln." : "Vuln.") : (pt ? "Campanha" : "Campaign")}
-                      </span>
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="vuln">{pt ? "Vulnerabilidade" : "Vulnerability"}</SelectItem>
-                      <SelectItem value="campaign">{pt ? "Campanha" : "Campaign"}</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <Button onClick={() => { generate(pasteUrl.trim(), pasteType, ""); setPasteUrl(""); }} disabled={!pasteUrl.trim()} className="h-10 shrink-0 gap-2 rounded-sm px-3 sm:px-4">
-                    <Sparkles className="h-4 w-4" /> {pt ? "Gerar" : "Generate"}
-                  </Button>
-                </div>
-                <div data-testid="report-generator-status-row" className="flex items-center gap-1.5 px-1 text-xs text-muted-foreground">
-                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
-                  <span className="truncate">{auth.login} · {pt ? "pronto para gerar" : "ready to generate"}</span>
-                  <Link to="/settings" className="ml-auto shrink-0 hover:text-foreground">{pt ? "Configurações" : "Settings"}</Link>
-                </div>
-              </div>
-            ) : (
-              <div className="flex items-center gap-4 rounded-xl bg-muted/40 p-5">
-                <KeyRound className="h-5 w-5 text-muted-foreground shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium">{pt ? "Entre para gerar" : "Sign in to generate"}</div>
-                  <div className="text-xs text-muted-foreground">{pt ? "Requer login com GitHub (acesso liberado)." : "Requires GitHub sign-in (approved access)."}</div>
-                </div>
-                <Button asChild variant="outline" size="sm" className="shrink-0">
-                  <Link to="/login">{pt ? "Entrar" : "Sign in"} <ArrowRight className="h-4 w-4 ml-1.5" /></Link>
-                </Button>
-              </div>
-            )}
-          </section>
-
           {/* Your reports — selectable job cards */}
           <section>
             <div className="flex items-center justify-between mb-1.5">
