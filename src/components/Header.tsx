@@ -63,7 +63,9 @@ export function useNavCatalog() {
   const homeItem: NavItem = {
     path: "/analyzer",
     label: pt ? "Busca ThreatSumm4ry" : "ThreatSumm4ry Search",
-    description: pt ? "IOC, dominio, URL, hash ou CVE em 21 fontes." : "IOC, domain, URL, hash or CVE across 21 sources.",
+    description: pt
+      ? "Cole um IP, dominio, link ou hash suspeito e veja o que 21 fontes sabem sobre ele."
+      : "Paste a suspicious IP, domain, link or hash and see what 21 sources know about it.",
     icon: Search,
   };
 
@@ -74,21 +76,25 @@ export function useNavCatalog() {
         {
           path: "/dnsbl",
           label: "DNSBL",
-          description: pt ? "Blocklists por IP, dominio ou range." : "Blocklists by IP, domain or range.",
+          description: pt
+            ? "Descubra se um IP ou dominio seu caiu em lista de bloqueio — o motivo do e-mail nao chegar."
+            : "Find out if your IP or domain landed on a blocklist — the reason email stops arriving.",
           icon: ShieldAlert,
         },
         {
           path: "/phishing-analyzer",
           label: tr({ pt: "Phishing Analyzer", en: "Phishing Analyzer", es: "Análisis de Phishing", fr: "Analyse de Phishing" }),
-          description: pt ? "Headers, URLs, anexos e IOCs." : "Headers, URLs, attachments and IOCs.",
+          description: pt
+            ? "Cole o e-mail suspeito e descubra se e golpe: quem mandou, os links e os anexos."
+            : "Paste the suspicious email and find out if it is a scam: sender, links and attachments.",
           icon: Mail,
         },
         {
           path: "/attack-surface",
           label: "Attack Surface",
           description: pt
-            ? "Scan externo, XLSX e monitoramento de exposicao."
-            : "External scan, XLSX export, and exposure monitoring.",
+            ? "Veja o que da sua empresa esta exposto na internet e acompanhe o que muda."
+            : "See what of your company is exposed to the internet and track what changes.",
           icon: Radar,
         },
       ],
@@ -100,48 +106,60 @@ export function useNavCatalog() {
           path: "/knowledge",
           label: "Knowledge",
           description: pt
-            ? "As fontes que voce guardou para gerar inteligencia."
-            : "The sources you saved to build intel from.",
+            ? "Sua biblioteca: guarde a noticia ou o relatorio agora para usar no relatorio depois."
+            : "Your library: save the news or report now to use it in your write-up later.",
           icon: Lightbulb,
           premium: true,
         },
         {
           path: "/relatorios",
           label: "Threat Feed Generator",
-          description: pt ? "URL, PDF ou relatorio em uma analise CTI." : "URL, PDF or report into CTI analysis.",
+          description: pt
+            ? "Cole o link de um relatorio e receba o resumo pronto para apresentar."
+            : "Paste a report link and get a summary ready to present.",
           icon: FileSearch,
           premium: true,
         },
         {
           path: "/hunting",
           label: "Hunting",
-          description: pt ? "Hipóteses, KQL e cobertura ATT&CK." : "Hypotheses, KQL, and ATT&CK coverage.",
+          description: pt
+            ? "O que procurar nos seus logs, com a consulta pronta para colar e o que ja foi coberto."
+            : "What to look for in your logs, with the query ready to paste and what you already cover.",
           icon: Crosshair,
           premium: true,
         },
         {
           path: "/newsletter",
           label: "Intel Scrapping",
-          description: pt ? "Recorte semanal curado." : "Curated weekly digest.",
+          description: pt
+            ? "As noticias de seguranca da semana reunidas em um lugar so, ja filtradas."
+            : "The week's security news gathered in one place, already filtered.",
           icon: Database,
           premium: true,
         },
         {
           path: "/atores",
           label: tr({ pt: "Atores", en: "Threat Actors", es: "Actores", fr: "Acteurs" }),
-          description: pt ? "Aliases, TTPs e setores alvo." : "Aliases, TTPs and target sectors.",
+          description: pt
+            ? "Quem sao os grupos que atacam: como agem, quem eles visam e por quais nomes aparecem."
+            : "Who the attacking groups are: how they operate, who they target and what names they go by.",
           icon: Users,
         },
         {
           path: "/threat-map",
           label: pt ? "Mapa de Ameacas" : "Threat Map",
-          description: pt ? "Vitimas de ransomware por pais." : "Ransomware victims by country.",
+          description: pt
+            ? "Onde o ransomware esta batendo agora, vitima por vitima, no mapa."
+            : "Where ransomware is hitting right now, victim by victim, on the map.",
           icon: MapPinned,
         },
         {
           path: "/vendors",
           label: pt ? "Fontes" : "Sources",
-          description: pt ? "Fontes, integracoes e cobertura." : "Sources, integrations and coverage.",
+          description: pt
+            ? "De onde vem cada dado que voce ve aqui e o que cada fonte cobre."
+            : "Where every piece of data here comes from and what each source covers.",
           icon: BookOpen,
         },
       ],
@@ -152,19 +170,25 @@ export function useNavCatalog() {
         {
           path: "/cves",
           label: tr({ pt: "CVEs", en: "CVEs", es: "CVEs", fr: "CVE" }),
-          description: pt ? "EPSS, KEV e exploit publico." : "EPSS, KEV and public exploit context.",
+          description: pt
+            ? "As falhas do momento e a chance real de cada uma ser explorada — o que corrigir antes."
+            : "Today's flaws and the real odds of each being exploited — what to fix first.",
           icon: Shield,
         },
         {
           path: "/patch-tuesday",
           label: "Microsoft Patch Tuesday",
-          description: pt ? "Timeline mensal Microsoft." : "Monthly Microsoft timeline.",
+          description: pt
+            ? "O que a Microsoft corrigiu neste mes e o que nao pode esperar o proximo ciclo."
+            : "What Microsoft fixed this month and what cannot wait for the next cycle.",
           icon: CalendarCheck,
         },
         {
           path: "/sap-patch",
           label: "SAP Monthly Patch",
-          description: pt ? "Notas de seguranca mensais SAP." : "Monthly SAP security notes.",
+          description: pt
+            ? "O que a SAP corrigiu neste mes e o que nao pode esperar o proximo ciclo."
+            : "What SAP fixed this month and what cannot wait for the next cycle.",
           icon: ShieldCheck,
         },
       ],
