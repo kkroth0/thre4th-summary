@@ -10,6 +10,7 @@ import {
   LayoutGrid,
   Lightbulb,
   LogIn,
+  LogOut,
   Mail,
   MapPinned,
   Radar,
@@ -22,6 +23,13 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { BrandMark } from "@/components/BrandMark";
@@ -63,9 +71,7 @@ export function useNavCatalog() {
   const homeItem: NavItem = {
     path: "/analyzer",
     label: pt ? "Busca ThreatSumm4ry" : "ThreatSumm4ry Search",
-    description: pt
-      ? "Cole um IP, dominio, link ou hash suspeito e veja o que 21 fontes sabem sobre ele."
-      : "Paste a suspicious IP, domain, link or hash and see what 21 sources know about it.",
+    description: pt ? "IP, dominio, link ou hash em 21 fontes." : "IP, domain, link or hash across 21 sources.",
     icon: Search,
   };
 
@@ -76,25 +82,19 @@ export function useNavCatalog() {
         {
           path: "/dnsbl",
           label: "DNSBL",
-          description: pt
-            ? "Descubra se um IP ou dominio seu caiu em lista de bloqueio — o motivo do e-mail nao chegar."
-            : "Find out if your IP or domain landed on a blocklist — the reason email stops arriving.",
+          description: pt ? "IPs e dominios em listas de bloqueio." : "IPs and domains on blocklists.",
           icon: ShieldAlert,
         },
         {
           path: "/phishing-analyzer",
           label: tr({ pt: "Phishing Analyzer", en: "Phishing Analyzer", es: "Análisis de Phishing", fr: "Analyse de Phishing" }),
-          description: pt
-            ? "Cole o e-mail suspeito e descubra se e golpe: quem mandou, os links e os anexos."
-            : "Paste the suspicious email and find out if it is a scam: sender, links and attachments.",
+          description: pt ? "E-mails suspeitos, links e anexos." : "Suspicious emails, links and attachments.",
           icon: Mail,
         },
         {
           path: "/attack-surface",
           label: "Attack Surface",
-          description: pt
-            ? "Veja o que da sua empresa esta exposto na internet e acompanhe o que muda."
-            : "See what of your company is exposed to the internet and track what changes.",
+          description: pt ? "Ativos expostos na internet." : "Assets exposed to the internet.",
           icon: Radar,
         },
       ],
@@ -105,61 +105,47 @@ export function useNavCatalog() {
         {
           path: "/knowledge",
           label: "Knowledge",
-          description: pt
-            ? "Sua biblioteca: guarde a noticia ou o relatorio agora para usar no relatorio depois."
-            : "Your library: save the news or report now to use it in your write-up later.",
+          description: pt ? "Noticias e relatorios salvos." : "Saved news and reports.",
           icon: Lightbulb,
           premium: true,
         },
         {
           path: "/relatorios",
           label: "Threat Feed Generator",
-          description: pt
-            ? "Cole o link de um relatorio e receba o resumo pronto para apresentar."
-            : "Paste a report link and get a summary ready to present.",
+          description: pt ? "Resumo pronto a partir de um link." : "Ready-made summary from a link.",
           icon: FileSearch,
           premium: true,
         },
         {
           path: "/hunting",
           label: "Hunting",
-          description: pt
-            ? "O que procurar nos seus logs, com a consulta pronta para colar e o que ja foi coberto."
-            : "What to look for in your logs, with the query ready to paste and what you already cover.",
+          description: pt ? "Buscas prontas para os seus logs." : "Ready-made searches for your logs.",
           icon: Crosshair,
           premium: true,
         },
         {
           path: "/newsletter",
           label: "Intel Scrapping",
-          description: pt
-            ? "As noticias de seguranca da semana reunidas em um lugar so, ja filtradas."
-            : "The week's security news gathered in one place, already filtered.",
+          description: pt ? "Noticias de seguranca da semana." : "This week's security news.",
           icon: Database,
           premium: true,
         },
         {
           path: "/atores",
           label: tr({ pt: "Atores", en: "Threat Actors", es: "Actores", fr: "Acteurs" }),
-          description: pt
-            ? "Quem sao os grupos que atacam: como agem, quem eles visam e por quais nomes aparecem."
-            : "Who the attacking groups are: how they operate, who they target and what names they go by.",
+          description: pt ? "Grupos de ataque, alvos e apelidos." : "Attack groups, targets and aliases.",
           icon: Users,
         },
         {
           path: "/threat-map",
           label: pt ? "Mapa de Ameacas" : "Threat Map",
-          description: pt
-            ? "Onde o ransomware esta batendo agora, vitima por vitima, no mapa."
-            : "Where ransomware is hitting right now, victim by victim, on the map.",
+          description: pt ? "Vitimas de ransomware por pais." : "Ransomware victims by country.",
           icon: MapPinned,
         },
         {
           path: "/vendors",
           label: pt ? "Fontes" : "Sources",
-          description: pt
-            ? "De onde vem cada dado que voce ve aqui e o que cada fonte cobre."
-            : "Where every piece of data here comes from and what each source covers.",
+          description: pt ? "Origem e cobertura dos dados." : "Data origin and coverage.",
           icon: BookOpen,
         },
       ],
@@ -170,25 +156,19 @@ export function useNavCatalog() {
         {
           path: "/cves",
           label: tr({ pt: "CVEs", en: "CVEs", es: "CVEs", fr: "CVE" }),
-          description: pt
-            ? "As falhas do momento e a chance real de cada uma ser explorada — o que corrigir antes."
-            : "Today's flaws and the real odds of each being exploited — what to fix first.",
+          description: pt ? "Falhas criticas e risco de exploracao." : "Critical flaws and exploitation risk.",
           icon: Shield,
         },
         {
           path: "/patch-tuesday",
           label: "Microsoft Patch Tuesday",
-          description: pt
-            ? "O que a Microsoft corrigiu neste mes e o que nao pode esperar o proximo ciclo."
-            : "What Microsoft fixed this month and what cannot wait for the next cycle.",
+          description: pt ? "Correcoes mensais da Microsoft." : "Monthly Microsoft fixes.",
           icon: CalendarCheck,
         },
         {
           path: "/sap-patch",
           label: "SAP Monthly Patch",
-          description: pt
-            ? "O que a SAP corrigiu neste mes e o que nao pode esperar o proximo ciclo."
-            : "What SAP fixed this month and what cannot wait for the next cycle.",
+          description: pt ? "Correcoes mensais da SAP." : "Monthly SAP fixes.",
           icon: ShieldCheck,
         },
       ],
@@ -233,7 +213,7 @@ export function NavTabs() {
 
 export function Header({ actions, logoAddon, onLogoClick, showBackButton = false }: HeaderProps) {
   const { t, language } = useLanguage();
-  const { auth, loading: authLoading } = useAuth();
+  const { auth, loading: authLoading, signOut } = useAuth();
   const { pathname } = useLocation();
   const { homeItem, navGroups } = useNavCatalog();
 
@@ -301,18 +281,47 @@ export function Header({ actions, logoAddon, onLogoClick, showBackButton = false
         <div className="ml-auto flex shrink-0 items-center gap-1.5">
           {actions}
 
+          {/* Engrenagem: administracao em cima, conta embaixo, sair por ultimo */}
           {!authLoading && auth.authenticated && (
-            <Tooltip delayDuration={100}>
-              <TooltipTrigger asChild>
-                <Button variant="ghost" size="icon" asChild className="h-8 w-8 rounded-md text-muted-foreground">
-                  <Link to="/settings">
-                    <SettingsIcon className="h-4 w-4" />
-                    <span className="sr-only">{pt ? "Configuracoes" : "Settings"}</span>
-                  </Link>
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>{pt ? "Configuracoes" : "Settings"}</TooltipContent>
-            </Tooltip>
+            <DropdownMenu>
+              <Tooltip delayDuration={100}>
+                <TooltipTrigger asChild>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="icon" className="h-8 w-8 rounded-md text-muted-foreground">
+                      <SettingsIcon className="h-4 w-4" />
+                      <span className="sr-only">{pt ? "Configuracoes" : "Settings"}</span>
+                    </Button>
+                  </DropdownMenuTrigger>
+                </TooltipTrigger>
+                <TooltipContent>{pt ? "Configuracoes" : "Settings"}</TooltipContent>
+              </Tooltip>
+              <DropdownMenuContent align="end" className="w-60">
+                {auth.isAdmin && (
+                  <>
+                    <DropdownMenuItem asChild>
+                      <Link to="/settings?section=admin">{pt ? "Acesso premium" : "Premium access"}</Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <Link to="/vendors">{pt ? "Fontes e integracoes" : "Sources and integrations"}</Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                  </>
+                )}
+                <DropdownMenuItem asChild>
+                  <Link to="/settings?section=api-keys">{pt ? "Chaves de API" : "API keys"}</Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link to="/settings">{pt ? "Minhas preferencias" : "My preferences"}</Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link to="/profile">{pt ? "Perfil" : "Profile"}</Link>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onSelect={() => signOut()}>
+                  <LogOut className="h-4 w-4" /> {pt ? "Sair" : "Sign out"}
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           )}
 
           {!authLoading &&
