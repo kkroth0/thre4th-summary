@@ -7,7 +7,6 @@ import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useAuth } from "@/contexts/AuthContext";
-import { useSidebar } from "@/contexts/SidebarContext";
 import { cn } from "@/lib/utils";
 
 type Feature = "threat-brief" | "advisory-feed" | "exposure-watchlist" | "knowledge" | "hunting";
@@ -40,7 +39,6 @@ const COPY: Record<Feature, { pt: [string, string]; en: [string, string] }> = {
 export function PremiumRoute({ children, feature }: { children: React.ReactNode; feature: Feature }) {
   const { auth, loading } = useAuth();
   const { language } = useLanguage();
-  const { isCollapsed } = useSidebar();
   const pt = language === "pt";
 
   if (!loading && auth.authenticated && auth.isPremium) return <>{children}</>;
@@ -50,10 +48,7 @@ export function PremiumRoute({ children, feature }: { children: React.ReactNode;
 
   return (
     <div
-      className={cn(
-        "soc-shell relative min-h-screen bg-background flex flex-col transition-[padding] duration-200",
-        isCollapsed ? "lg:pl-[72px]" : "lg:pl-64"
-      )}
+      className="soc-shell relative min-h-screen bg-background flex flex-col"
     >
       <div className="soc-grid pointer-events-none absolute inset-0 z-0" />
       <Header />

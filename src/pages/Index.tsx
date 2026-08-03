@@ -19,7 +19,6 @@ import { Footer } from "@/components/Footer";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { Header } from "@/components/Header";
 import { BrandMark } from "@/components/BrandMark";
-import { useSidebar } from "@/contexts/SidebarContext";
 
 import { IocTimeline } from "@/components/IocTimeline";
 import { GeographicNetworkOverview } from "@/components/GeographicNetworkOverview";
@@ -206,7 +205,6 @@ const Index = () => {
   const { toast } = useToast();
   const { t, language } = useLanguage();
   const location = useLocation();
-  const { isCollapsed } = useSidebar();
   const isAnalyzerRoute = location.pathname === "/analyzer";
   const contactUrl = "https://www.linkedin.com/in/matheuslima-andrade/";
 
@@ -317,7 +315,6 @@ const Index = () => {
     : toolCards;
   const shellClassName = cn(
     "soc-shell relative flex min-h-screen flex-col overflow-hidden transition-[padding] duration-200",
-    isCollapsed ? "lg:pl-[72px]" : "lg:pl-64"
   );
 
 
@@ -1806,10 +1803,7 @@ const Index = () => {
           reachable while reviewing results. On the empty state the form is the hero instead. */}
       {hasResults && (
         <div
-          className={cn(
-            "fixed left-0 right-0 top-14 z-30 border-b border-border bg-background/95 px-4 py-3.5 backdrop-blur animate-fade-in md:px-8 lg:top-0",
-            isCollapsed ? "lg:left-[72px]" : "lg:left-[264px]"
-          )}
+          className="fixed left-0 right-0 top-14 z-30 border-b border-border bg-background/95 px-4 py-3.5 backdrop-blur animate-fade-in md:px-8"
         >
           <div className="max-w-7xl mx-auto">
             <SearchForm
