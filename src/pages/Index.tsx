@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { getFieldCategory } from "@/components/VendorDataTable";
-import { Shield, AlertTriangle, Bug, FileSearch, Globe, Link as LinkIcon, Radar, Database, Eye, Search, LayoutGrid, Mail, ArrowRight, Upload, Copy, Check, Clock, Download, FileJson, FileCode, ChevronDown, Bookmark, MapPinned } from "lucide-react";
+import { Shield, AlertTriangle, Bug, FileSearch, Globe, Github, Link as LinkIcon, Radar, Database, Eye, Search, LayoutGrid, Mail, ArrowRight, Upload, Copy, Check, Clock, Download, FileJson, FileCode, ChevronDown, Bookmark, MapPinned } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -17,7 +17,7 @@ import { VendorContent } from "@/components/VendorContent";
 import { VendorFilter } from "@/components/VendorFilter";
 import { Footer } from "@/components/Footer";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { Header } from "@/components/Header";
+import { Header, useNavCatalog } from "@/components/Header";
 import { BrandMark } from "@/components/BrandMark";
 
 import { IocTimeline } from "@/components/IocTimeline";
@@ -189,7 +189,6 @@ const Index = () => {
   const { auth } = useAuth();
   const [savingScans, setSavingScans] = useState(false);
   const [query, setQuery] = useState("");
-  const [toolSearch, setToolSearch] = useState("");
   const [selectedVendors, setSelectedVendors] = useState<string[]>(ALL_VENDORS);
 
   // Changed data to results array to support multi-IP
@@ -207,112 +206,8 @@ const Index = () => {
   const location = useLocation();
   const isAnalyzerRoute = location.pathname === "/analyzer";
   const contactUrl = "https://www.linkedin.com/in/matheuslima-andrade/";
+  const { navGroups } = useNavCatalog();
 
-  const toolCards = [
-    {
-      title: "ThreatSumm4ry Search",
-      description: language === "pt" ? "Busque IPv4/IPv6, dominio, URL ou hash e consolide 21 fontes em um veredito unico." : "Search IPv4/IPv6, domain, URL, or hash and consolidate 21 sources into one verdict.",
-      href: "/analyzer",
-      icon: Search,
-      tags: [language === "pt" ? "BUSCA" : "SEARCH", language === "pt" ? "21 FONTES" : "21 SOURCES", "EXPORT"],
-      group: "analysis",
-      featured: true,
-    },
-    {
-      title: "Phishing Analyzer",
-      description: language === "pt" ? "Analise headers, URLs, anexos e IOCs de mensagens submetidas." : "Analyze headers, URLs, attachments and IOCs from submitted messages.",
-      href: "/phishing-analyzer",
-      icon: Mail,
-      tags: ["SPF", "DKIM", "DMARC"],
-      group: "analysis",
-      featured: true,
-    },
-    {
-      title: "DNSBL",
-      description: language === "pt" ? "Consulta paralela em blocklists por IP, dominio ou range." : "Parallel blocklist checks by IP, domain or range.",
-      href: "/dnsbl",
-      icon: Globe,
-      tags: ["BULK", "EXPORT"],
-      group: "analysis",
-    },
-    {
-      title: language === "pt" ? "Geração de Relatórios" : "Report Generation",
-      description: language === "pt" ? "Cole uma URL, PDF ou relatorio de vendor e receba uma analise de CTI/Hunting." : "Paste a URL, PDF or vendor report and receive CTI/Hunting analysis.",
-      href: "/relatorios",
-      icon: FileSearch,
-      tags: ["URL", "PDF", "AI"],
-      group: "analysis",
-      featured: true,
-    },
-    {
-      title: "CVEs",
-      description: language === "pt" ? "Catalogo priorizado por EPSS, KEV e exploit publico." : "Catalog prioritized by EPSS, KEV and public exploit signals.",
-      href: "/cves",
-      icon: Shield,
-      tags: ["NVD", "CISA-KEV", "EPSS"],
-      group: "intel",
-      featured: true,
-    },
-    {
-      title: language === "pt" ? "Atores" : "Threat Actors",
-      description: language === "pt" ? "Fichas de threat actors: aliases, TTPs e alvos por setor." : "Threat actor profiles: aliases, TTPs and sector targeting.",
-      href: "/atores",
-      icon: Eye,
-      tags: ["MITRE", "OSINT"],
-      group: "intel",
-    },
-    {
-      title: language === "pt" ? "Mapa de Ameacas" : "Threat Map",
-      description: language === "pt" ? "Mapa global de vitimas de ransomware por pais nos ultimos 90 dias." : "Global ransomware victim map by country over the last 90 days.",
-      href: "/threat-map",
-      icon: MapPinned,
-      tags: ["MAP", "Ransomware.live"],
-      group: "intel",
-    },
-    {
-      title: language === "pt" ? "Patch Tuesday Microsoft" : "Microsoft Patch Tuesday",
-      description: language === "pt" ? "Timeline mensal Microsoft com severidade, exploitability e produto afetado." : "Monthly Microsoft timeline with severity, exploitability and affected products.",
-      href: "/patch-tuesday",
-      icon: Bug,
-      tags: ["MSRC", language === "pt" ? "MENSAL" : "MONTHLY"],
-      group: "intel",
-    },
-    {
-      title: language === "pt" ? "Relatorio diario" : "Daily Report",
-      description: language === "pt" ? "Resumo diario objetivo: TL;DR, campanhas ativas e acoes recomendadas." : "Focused daily report: TL;DR, active campaigns and recommended actions.",
-      href: "/relatorios",
-      icon: FileSearch,
-      tags: [language === "pt" ? "DIARIO" : "DAILY", "06:00"],
-      group: "reports",
-      featured: true,
-    },
-    {
-      title: language === "pt" ? "Notícias de Segurança" : "Security News",
-      description: language === "pt" ? "Recorte semanal curado por analistas. Sem clickbait, sem vendor pitch." : "Weekly analyst-curated digest. No clickbait, no vendor pitch.",
-      href: "/newsletter",
-      icon: Database,
-      tags: [language === "pt" ? "SEMANAL" : "WEEKLY", "SEX 07:00"],
-      group: "reports",
-    },
-  ];
-
-  const toolGroups = [
-    { key: "analysis", title: language === "pt" ? "Analise" : "Analysis", description: language === "pt" ? "Investigar artefatos e mensagens" : "Investigate artifacts and messages" },
-    { key: "intel", title: "Intel", description: language === "pt" ? "Vulnerabilidades, atores e advisories" : "Vulnerabilities, actors and advisories" },
-    { key: "reports", title: language === "pt" ? "Relatorios" : "Reports", description: language === "pt" ? "Resumos objetivos e newsletter" : "Focused reports and newsletter" },
-  ];
-
-  const normalizedToolSearch = toolSearch.trim().toLowerCase();
-  const visibleToolCards = normalizedToolSearch
-    ? toolCards.filter((tool) =>
-        [
-          tool.title,
-          tool.description,
-          tool.group,
-          ...tool.tags,
-        ].join(" ").toLowerCase().includes(normalizedToolSearch)
-    )
-    : toolCards;
   const shellClassName = cn(
     "soc-shell relative flex min-h-screen flex-col overflow-hidden transition-[padding] duration-200",
   );
@@ -1425,367 +1320,197 @@ const Index = () => {
     }
   };
 
-  const renderToolCard = (tool: typeof toolCards[number], variant: "featured" | "compact" = "compact") => {
-    const Icon = tool.icon;
-    const isSearchTool = tool.href === "/analyzer";
-    const content = (
-      <div
-        className={cn(
-          "group relative flex h-full flex-col overflow-hidden rounded-lg border bg-card text-left transition-all hover:border-foreground/25 hover:shadow-sm",
-          variant === "featured" ? "min-h-[210px] p-7" : "min-h-[168px] p-6",
-          isSearchTool
-            ? "border-primary/40 bg-primary/[0.035] shadow-[0_18px_70px_-48px_hsl(var(--primary))]"
-            : "border-border"
-        )}
-      >
-        {isSearchTool && (
-          <div className="absolute inset-x-0 top-0 h-1 bg-primary" />
-        )}
-        <div className="flex items-start justify-between gap-4">
-          <span className={cn(
-            "flex h-10 w-10 shrink-0 items-center justify-center rounded-md border bg-background text-foreground",
-            isSearchTool ? "border-primary/30 text-primary" : "border-border"
-          )}>
-            <Icon className="h-5 w-5" />
-          </span>
-          <div className="flex items-center gap-2">
-            {isSearchTool && (
-              <span className="rounded-full border border-primary/25 bg-primary/10 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-primary">
-                {language === "pt" ? "principal" : "main"}
-              </span>
-            )}
-            <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-foreground" />
-          </div>
-        </div>
-        <div className={cn("flex-1", variant === "featured" ? "mt-8" : "mt-6")}>
-          <h3 className="text-lg font-bold tracking-tight text-foreground">{tool.title}</h3>
-          <p className="mt-3 text-sm leading-6 text-muted-foreground">{tool.description}</p>
-        </div>
-        <div className="mt-6 flex flex-wrap gap-2">
-          {tool.tags.map((tag) => (
-            <span key={tag} className="rounded-full border border-border bg-background px-2.5 py-1 font-mono text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-              {tag}
-            </span>
-          ))}
-        </div>
-      </div>
-    );
-
-    return tool.href.startsWith("#") ? (
-      <a key={tool.title} href={tool.href} className="block h-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-        {content}
-      </a>
-    ) : (
-      <Link key={tool.title} to={tool.href} className="block h-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-        {content}
-      </Link>
-    );
-  };
-
   if (results.length === 0 && !isAnalyzing && !isAnalyzerRoute) {
+    const navLinks = [
+      { href: "#ferramentas", label: language === "pt" ? "Ferramentas" : "Tools" },
+      { href: "#acesso", label: language === "pt" ? "Acesso" : "Access" },
+      { href: contactUrl, label: language === "pt" ? "Contato" : "Contact", external: true },
+    ];
+
     return (
       <div className="min-h-screen bg-background text-foreground">
         <header className="sticky top-0 z-50 border-b border-border bg-background/95 backdrop-blur">
-          <div className="mx-auto flex min-h-20 max-w-6xl flex-col gap-3 px-4 py-3 md:min-h-24 md:flex-row md:items-center md:justify-between md:px-8">
-            <div className="flex items-center justify-between gap-4">
-              <Link to="/" onClick={handleReset} className="flex min-w-0 items-center gap-3">
-                <BrandMark className="h-8 w-8 rounded-md" />
-                <span className="truncate text-lg font-black tracking-tight">threatsumm4ry</span>
-              </Link>
-              <Button size="sm" asChild className="h-9 px-3 md:hidden">
-                <Link to="/cadastro">{language === "pt" ? "Cadastrar" : "Sign up"}</Link>
-              </Button>
-            </div>
+          <div className="mx-auto flex h-14 max-w-5xl items-center gap-4 px-4 md:px-6">
+            <Link to="/" onClick={handleReset} className="flex shrink-0 items-center gap-2">
+              <BrandMark className="h-7 w-7 rounded-md" />
+              <span className="text-sm font-bold tracking-tight">threatsumm4ry</span>
+            </Link>
 
-            <nav className="scrollbar-none flex items-center gap-1 overflow-x-auto rounded-full border border-border bg-secondary/40 p-1 md:mx-4">
-              {[
-                { href: "#sobre", label: language === "pt" ? "Sobre" : "About" },
-                { href: "#tools", label: language === "pt" ? "Ferramentas" : "Tools" },
-                { href: "#newsletter", label: language === "pt" ? "Notícias" : "News" },
-                { href: contactUrl, label: language === "pt" ? "Contato" : "Contact", external: true },
-              ].map((item) => (
-                item.href.startsWith("#") ? (
-                  <a
-                    key={item.href}
-                    href={item.href}
-                    className="whitespace-nowrap rounded-full px-3 py-1.5 text-sm font-bold text-muted-foreground transition-colors hover:bg-background hover:text-foreground"
-                  >
-                      {item.label}
-                    </a>
-                ) : item.external ? (
-                  <a
-                    key={item.href}
-                    href={item.href}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="whitespace-nowrap rounded-full px-3 py-1.5 text-sm font-bold text-muted-foreground transition-colors hover:bg-background hover:text-foreground"
-                  >
-                    {item.label}
-                  </a>
-                ) : (
-                  <Link
-                    key={item.href}
-                    to={item.href}
-                    className="whitespace-nowrap rounded-full px-3 py-1.5 text-sm font-bold text-muted-foreground transition-colors hover:bg-background hover:text-foreground"
-                  >
-                    {item.label}
-                  </Link>
-                )
+            <nav className="hidden items-center gap-1 sm:flex">
+              {navLinks.map((item) => (
+                <a
+                  key={item.href}
+                  href={item.href}
+                  {...(item.external ? { target: "_blank", rel: "noopener noreferrer" } : {})}
+                  className="rounded-md px-2.5 py-1.5 text-[13px] text-muted-foreground transition-colors hover:text-foreground"
+                >
+                  {item.label}
+                </a>
               ))}
             </nav>
 
-            <div className="hidden items-center gap-2 md:flex">
-              <Button variant="ghost" asChild className="h-9 px-3 text-sm font-bold text-muted-foreground hover:text-foreground">
+            <div className="ml-auto flex shrink-0 items-center gap-1.5">
+              <Button variant="ghost" size="sm" asChild className="h-8 px-2.5 text-xs">
                 <Link to="/login">{language === "pt" ? "Entrar" : "Sign in"}</Link>
               </Button>
-              <Button variant="outline" asChild className="h-9 px-3 text-sm font-bold">
-                <Link to="/cadastro">{language === "pt" ? "Cadastrar" : "Sign up"}</Link>
-              </Button>
-            </div>
-
-            <div className="grid grid-cols-2 gap-2 md:hidden">
-              <Button variant="outline" asChild className="h-9 text-sm font-bold">
-                <Link to="/login">{language === "pt" ? "Entrar" : "Sign in"}</Link>
-              </Button>
-              <Button asChild className="h-9 text-sm font-bold">
-                <Link to="/cadastro">{language === "pt" ? "Cadastrar" : "Sign up"}</Link>
+              <Button size="sm" asChild className="h-8 px-2.5 text-xs">
+                <Link to="/cadastro">{language === "pt" ? "Criar conta" : "Create account"}</Link>
               </Button>
             </div>
           </div>
         </header>
 
-        <main>
-          <section id="testar" className="mx-auto max-w-6xl scroll-mt-32 px-4 pb-16 pt-24 text-center md:px-8 md:pb-24 md:pt-32">
-            <div className="border-b border-border pb-16 md:pb-24">
-              <span className="inline-flex items-center rounded-full border border-border bg-background px-5 py-2 text-sm font-bold text-muted-foreground">
-                {language === "pt" ? "coletanea de tools para SOC · CTI · threat hunting" : "tool collection for SOC · CTI · threat hunting"}
-              </span>
-              <h1 className="mx-auto mt-8 max-w-5xl text-4xl font-black tracking-tight text-foreground md:text-6xl">
-                {language === "pt" ? (
-                  <>
-                    As ferramentas de seguranca que voce <span className="text-primary">realmente</span> abre no dia a dia.
-                  </>
-                ) : (
-                  <>
-                    Security tools you <span className="text-primary">actually</span> open every day.
-                  </>
-                )}
-              </h1>
-              <p className="mx-auto mt-7 max-w-5xl text-base font-semibold leading-8 text-muted-foreground md:text-xl">
-                {language === "pt"
-                  ? "Um so lugar para analisar phishing, consultar CVEs, checar DNSBL, acompanhar Patch Tuesday e gerar relatorios de CTI a partir de qualquer URL ou PDF. Direto, sem vendor pitch."
-                  : "One place to analyze phishing, query CVEs, check DNSBL, follow Patch Tuesday and generate CTI reports from any URL or PDF. Direct, no vendor pitch."}
-              </p>
+        <main className="mx-auto max-w-5xl px-4 md:px-6">
+          {/* Hero: a busca e a propria demonstracao, entao ela abre a pagina */}
+          <section className="border-b border-border py-16 md:py-24">
+            <h1 className="max-w-3xl text-3xl font-bold leading-tight tracking-tight md:text-5xl">
+              {language === "pt"
+                ? "As ferramentas de SOC e CTI do dia a dia, em um lugar só."
+                : "The SOC and CTI tools you use daily, in one place."}
+            </h1>
+            <p className="mt-4 max-w-2xl text-base leading-7 text-muted-foreground">
+              {language === "pt"
+                ? "Consulta de indicadores, análise de phishing, vulnerabilidades, grupos de ataque, hunting e relatórios. Nada para instalar."
+                : "Indicator lookup, phishing analysis, vulnerabilities, threat actors, hunting and reports. Nothing to install."}
+            </p>
 
-              <div className="soc-panel relative mx-auto mt-12 w-full max-w-4xl overflow-hidden rounded-xl border-primary/35 bg-card p-4 text-left shadow-[0_24px_80px_-56px_hsl(var(--primary))]">
-                <div className="absolute inset-x-0 top-0 h-1 bg-primary" />
-                <div className="mb-4 flex flex-col gap-3 px-1 pt-1 text-center md:flex-row md:items-center md:justify-between md:text-left">
-                  <div>
-                    <span className="inline-flex items-center rounded-full border border-primary/25 bg-primary/10 px-3 py-1 text-[11px] font-black uppercase tracking-wide text-primary">
-                      {language === "pt" ? "Ferramenta principal" : "Main tool"}
-                    </span>
-                    <h2 className="mt-3 text-xl font-black tracking-tight text-foreground">
-                      ThreatSumm4ry Search
-                    </h2>
-                    <p className="mt-1 text-sm font-semibold text-muted-foreground">
-                      {language === "pt"
-                        ? "Cole IPv4/IPv6, dominio, URL ou hash e veja a analise multi-fonte na hora."
-                        : "Paste an IPv4/IPv6 address, domain, URL, or hash and see the multi-source analysis right away."}
-                    </p>
-                  </div>
-                  <div className="grid grid-cols-3 gap-2 text-center">
-                    {[
-                      ["21", language === "pt" ? "fontes" : "sources"],
-                      ["5", "exports"],
-                      [String(MAX_ANALYZER_TARGETS), language === "pt" ? "por lote" : "per batch"],
-                    ].map(([value, label]) => (
-                      <div key={label} className="rounded-md border border-border bg-background px-3 py-2">
-                        <div className="font-mono text-sm font-black text-foreground">{value}</div>
-                        <div className="mt-0.5 text-[10px] font-bold uppercase tracking-wide text-muted-foreground">{label}</div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-                <SearchForm
-                  query={query}
-                  setQuery={setQuery}
-                  onSubmit={handleSearch}
-                  isLoading={isAnalyzing}
-                  selectedVendors={selectedVendors}
-                  onVendorsChange={setSelectedVendors}
-                />
+            <div className="mt-10 rounded-lg border border-border bg-card p-4">
+              <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2 px-1">
+                <h2 className="text-sm font-semibold">
+                  {language === "pt" ? "Consulta de Indicadores" : "Indicator Lookup"}
+                </h2>
+                <p className="text-xs text-muted-foreground">
+                  {language === "pt"
+                    ? `IP, domínio, URL ou hash · 21 fontes · até ${MAX_ANALYZER_TARGETS} por vez`
+                    : `IP, domain, URL or hash · 21 sources · up to ${MAX_ANALYZER_TARGETS} at once`}
+                </p>
               </div>
-
-              <div className="mt-6 flex flex-wrap justify-center gap-2.5">
-                {["14.103.115.208", "51.210.208.8", "103.65.237.234", "1.1.1.1", "8.8.8.8"].map((ip) => (
+              <SearchForm
+                query={query}
+                setQuery={setQuery}
+                onSubmit={handleSearch}
+                isLoading={isAnalyzing}
+                selectedVendors={selectedVendors}
+                onVendorsChange={setSelectedVendors}
+              />
+              <div className="mt-3 flex flex-wrap items-center gap-2 px-1">
+                <span className="text-xs text-muted-foreground">{language === "pt" ? "exemplos:" : "examples:"}</span>
+                {["14.103.115.208", "51.210.208.8", "1.1.1.1"].map((ip) => (
                   <button
                     key={ip}
-                    onClick={() => setQuery(prev => prev ? `${prev}\n${ip}` : ip)}
-                    className="rounded-full border border-border bg-background px-3 py-1.5 font-mono text-xs font-medium text-muted-foreground transition-colors hover:border-foreground/40 hover:text-foreground"
+                    onClick={() => setQuery((prev) => (prev ? `${prev}\n${ip}` : ip))}
+                    className="rounded border border-border px-2 py-0.5 font-mono text-xs text-muted-foreground transition-colors hover:text-foreground"
                   >
                     {ip}
                   </button>
                 ))}
               </div>
-
-              {searchHistory.length > 0 && (
-                <div className="mt-5 flex flex-wrap items-center justify-center gap-2.5">
-                  {searchHistory.slice(0, 4).map((entry) => {
-                    const label = entry.replace(/\s+/g, " ").trim();
-                    const short = label.length > 30 ? `${label.slice(0, 30)}...` : label;
-                    return (
-                      <button
-                        key={entry}
-                        onClick={() => setQuery(entry)}
-                        title={label}
-                        className="inline-flex items-center gap-2 rounded-full border border-border bg-secondary/60 px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
-                      >
-                        <Clock className="h-3 w-3" />
-                        <span className="font-mono">{short}</span>
-                      </button>
-                    );
-                  })}
-                  <button
-                    onClick={clearSearchHistory}
-                    className="text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
-                  >
-                    {language === "pt" ? "limpar" : "clear"}
-                  </button>
-                </div>
-              )}
             </div>
-          </section>
 
-          <section id="sobre" className="mx-auto max-w-6xl scroll-mt-32 px-4 pb-16 md:px-8">
-            <div className="grid gap-8 border-b border-border pb-16 md:grid-cols-[0.9fr_1.1fr] md:items-start">
-              <div>
-                <p className="text-xs font-black uppercase tracking-wide text-primary">
-                  {language === "pt" ? "Sobre" : "About"}
-                </p>
-                <h2 className="mt-3 text-3xl font-black tracking-tight text-foreground md:text-4xl">
-                  {language === "pt" ? "Uma bancada operacional para analistas." : "An operational workbench for analysts."}
-                </h2>
-                <p className="mt-5 text-base font-medium leading-8 text-muted-foreground">
-                  {language === "pt"
-                    ? "ThreatSumm4ry junta as tarefas repetidas de SOC e CTI em um lugar: triagem de phishing, vulnerabilidades, DNSBL, atores, advisories, hunting e relatorios acionaveis."
-                    : "ThreatSumm4ry brings repetitive SOC and CTI tasks into one place: phishing triage, vulnerabilities, DNSBL, actors, advisories, hunting and actionable reports."}
-                </p>
-              </div>
-
-              <div className="grid gap-4 sm:grid-cols-3">
-                {[
-                  {
-                    icon: Shield,
-                    title: language === "pt" ? "Triagem rapida" : "Fast triage",
-                    text: language === "pt" ? "Abra a tool certa sem procurar em dez abas." : "Open the right tool without hunting across tabs.",
-                  },
-                  {
-                    icon: Database,
-                    title: language === "pt" ? "Contexto unico" : "Unified context",
-                    text: language === "pt" ? "CVEs, advisories e fontes organizadas por finalidade." : "CVEs, advisories and sources organized by purpose.",
-                  },
-                  {
-                    icon: Radar,
-                    title: "Hunting ready",
-                    text: language === "pt" ? "Relatorios e queries para sair do resumo para acao." : "Reports and queries to move from summary to action.",
-                  },
-                ].map((item) => {
-                  const Icon = item.icon;
+            {searchHistory.length > 0 && (
+              <div className="mt-4 flex flex-wrap items-center gap-2">
+                <span className="text-xs text-muted-foreground">{language === "pt" ? "recentes:" : "recent:"}</span>
+                {searchHistory.slice(0, 4).map((entry) => {
+                  const label = entry.replace(/\s+/g, " ").trim();
                   return (
-                    <div key={item.title} className="rounded-lg border border-border bg-card p-5">
-                      <span className="flex h-10 w-10 items-center justify-center rounded-md border border-border bg-background">
-                        <Icon className="h-5 w-5" />
-                      </span>
-                      <h3 className="mt-5 text-base font-black text-foreground">{item.title}</h3>
-                      <p className="mt-2 text-sm font-medium leading-6 text-muted-foreground">{item.text}</p>
-                    </div>
+                    <button
+                      key={entry}
+                      onClick={() => setQuery(entry)}
+                      title={label}
+                      className="inline-flex items-center gap-1.5 rounded border border-border px-2 py-0.5 font-mono text-xs text-muted-foreground transition-colors hover:text-foreground"
+                    >
+                      <Clock className="h-3 w-3" />
+                      {label.length > 28 ? `${label.slice(0, 28)}…` : label}
+                    </button>
                   );
                 })}
-              </div>
-            </div>
-          </section>
-
-          <section id="tools" className="mx-auto max-w-6xl scroll-mt-28 px-4 pb-20 md:px-8">
-            <div className="border-t border-border pt-14">
-              <div className="flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
-                <div>
-                  <h2 className="text-3xl font-black tracking-tight text-foreground">{language === "pt" ? "Todas as tools" : "All tools"}</h2>
-                  <p className="mt-2 text-sm font-medium text-muted-foreground">
-                    {language === "pt" ? "Organizadas por finalidade - clique para abrir." : "Organized by purpose - click to open."}
-                  </p>
-                </div>
-                <div className="flex h-11 w-full items-center gap-2 rounded-lg border border-border bg-card px-3 md:max-w-sm">
-                  <Search className="h-4 w-4 shrink-0 text-muted-foreground" />
-                  <input
-                    value={toolSearch}
-                    onChange={(event) => setToolSearch(event.target.value)}
-                    placeholder={language === "pt" ? "Filtrar tools..." : "Filter tools..."}
-                    className="min-w-0 flex-1 bg-transparent text-sm font-semibold outline-none placeholder:text-muted-foreground"
-                  />
-                </div>
-              </div>
-            </div>
-
-            <div className="mt-10 space-y-12">
-              {toolGroups.map((group) => {
-                const tools = visibleToolCards.filter((tool) => tool.group === group.key);
-                if (!tools.length) return null;
-
-                return (
-                  <section key={group.key}>
-                    <div className="mb-5 flex items-end justify-between gap-4 border-b border-border pb-5">
-                      <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:gap-4">
-                        <h3 className="text-xl font-black tracking-tight text-foreground">{group.title}</h3>
-                        <p className="text-sm font-medium text-muted-foreground">{group.description}</p>
-                      </div>
-                      <span className="font-mono text-sm text-muted-foreground">{String(tools.length).padStart(2, "0")}</span>
-                    </div>
-                    <div className="grid gap-4 md:grid-cols-2">
-                      {tools.map((tool) => renderToolCard(tool))}
-                    </div>
-                  </section>
-                );
-              })}
-            </div>
-            {visibleToolCards.length === 0 && (
-              <div className="mt-10 rounded-lg border border-border bg-card p-8 text-center text-sm font-medium text-muted-foreground">
-                {language === "pt" ? "Nenhuma tool encontrada para essa busca." : "No tools found for that search."}
+                <button onClick={clearSearchHistory} className="text-xs text-muted-foreground underline-offset-2 hover:underline">
+                  {language === "pt" ? "limpar" : "clear"}
+                </button>
               </div>
             )}
           </section>
 
-          <section id="newsletter" className="mx-auto max-w-6xl scroll-mt-28 px-4 pb-20 md:px-8">
-            <div className="flex flex-col gap-6 rounded-lg border border-border bg-card p-8 md:flex-row md:items-center md:justify-between">
-              <div>
-                <p className="text-xs font-black uppercase tracking-wide text-primary">{language === "pt" ? "Notícias de Segurança" : "Security News"}</p>
-                <h2 className="mt-3 text-2xl font-black tracking-tight text-foreground">
-                  {language === "pt" ? "Recorte semanal, direto ao ponto." : "Weekly digest, straight to the point."}
-                </h2>
-                <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                  {language === "pt" ? "Sexta, 07:00 BRT. So o que mudou de fato na semana - sem clickbait e sem vendor pitch." : "Friday, 07:00 BRT. Only what actually changed during the week - no clickbait, no vendor pitch."}
-                </p>
-              </div>
-              <div className="flex w-full max-w-md flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
-                <span className="rounded-md border border-border bg-background px-3 py-2 text-xs font-bold uppercase tracking-wide text-muted-foreground">
-                  {language === "pt" ? "Premium via allow-list" : "Premium via allow-list"}
-                </span>
-                <Button asChild className="h-11 shrink-0">
-                  <Link to="/newsletter">{language === "pt" ? "Abrir notícias" : "Open news"}</Link>
-                </Button>
-              </div>
+          {/* Ferramentas: mesma lista do menu do app, sem catalogo paralelo */}
+          <section id="ferramentas" className="scroll-mt-20 border-b border-border py-14">
+            <h2 className="text-xl font-bold tracking-tight">{language === "pt" ? "Todas as ferramentas" : "All tools"}</h2>
+            <div className="mt-8 space-y-8">
+              {navGroups.map((group) => (
+                <div key={group.label}>
+                  <h3 className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{group.label}</h3>
+                  <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                    {group.items.map((item) => {
+                      const Icon = item.icon;
+                      return (
+                        <Link
+                          key={item.path}
+                          to={item.path}
+                          className="group flex items-start gap-3 rounded-lg border border-border bg-card p-4 transition-colors hover:border-foreground/25"
+                        >
+                          <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border bg-background">
+                            <Icon className="h-4 w-4 text-muted-foreground group-hover:text-foreground" />
+                          </span>
+                          <span className="min-w-0">
+                            <span className="flex items-center gap-2 text-sm font-semibold">
+                              {item.label}
+                              {item.premium && (
+                                <span className="rounded border border-border px-1 py-0.5 text-[9px] font-bold uppercase leading-none text-muted-foreground">
+                                  {language === "pt" ? "restrito" : "restricted"}
+                                </span>
+                              )}
+                            </span>
+                            <span className="mt-1 block text-[13px] leading-5 text-muted-foreground">{item.description}</span>
+                          </span>
+                        </Link>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
             </div>
           </section>
 
+          {/* Acesso: o modelo e allow-list, entao a pagina diz isso sem rodeio */}
+          <section id="acesso" className="scroll-mt-20 py-14">
+            <h2 className="text-xl font-bold tracking-tight">{language === "pt" ? "Acesso" : "Access"}</h2>
+            <div className="mt-6 grid gap-4 sm:grid-cols-2">
+              <div className="rounded-lg border border-border bg-card p-5">
+                <h3 className="text-sm font-semibold">{language === "pt" ? "Ferramentas abertas" : "Open tools"}</h3>
+                <p className="mt-2 text-[13px] leading-6 text-muted-foreground">
+                  {language === "pt"
+                    ? "Consulta de indicadores, phishing, listas de bloqueio, vulnerabilidades, grupos de ataque e mapa de ransomware funcionam com a conta gratuita — ou sem conta nenhuma."
+                    : "Indicator lookup, phishing, blocklists, vulnerabilities, threat actors and the ransomware map work with a free account — or with no account at all."}
+                </p>
+              </div>
+              <div className="rounded-lg border border-border bg-card p-5">
+                <h3 className="text-sm font-semibold">{language === "pt" ? "Áreas restritas" : "Restricted areas"}</h3>
+                <p className="mt-2 text-[13px] leading-6 text-muted-foreground">
+                  {language === "pt"
+                    ? "Hunting, geração de relatórios, biblioteca de fontes e notícias são liberados na mão, um login por vez. Não há plano nem preço: é convite."
+                    : "Hunting, report generation, the source library and news are granted by hand, one login at a time. There is no plan and no price: it is an invite."}
+                </p>
+              </div>
+            </div>
+            <div className="mt-6 flex flex-wrap items-center gap-2">
+              <Button asChild>
+                <Link to="/cadastro"><Github className="h-4 w-4" /> {language === "pt" ? "Criar conta com GitHub" : "Create account with GitHub"}</Link>
+              </Button>
+              <Button variant="outline" asChild>
+                <a href={contactUrl} target="_blank" rel="noopener noreferrer">
+                  {language === "pt" ? "Pedir acesso" : "Request access"}
+                </a>
+              </Button>
+            </div>
+          </section>
         </main>
 
-        <footer className="mx-auto flex max-w-6xl flex-col gap-4 border-t border-border px-4 py-8 text-sm font-semibold text-muted-foreground md:flex-row md:items-center md:justify-between md:px-8">
-          <div className="flex items-center gap-3">
-            <BrandMark className="h-7 w-7 rounded-md" />
-            <span>{language === "pt" ? "threatsumm4ry · coletanea de tools · 2026" : "threatsumm4ry · tool collection · 2026"}</span>
-          </div>
-          <div className="flex items-center gap-5">
-            <a href="#sobre" className="transition-colors hover:text-foreground">{language === "pt" ? "Sobre" : "About"}</a>
-            <a href={contactUrl} target="_blank" rel="noopener noreferrer" className="transition-colors hover:text-foreground">
+        <footer className="border-t border-border">
+          <div className="mx-auto flex max-w-5xl flex-col gap-3 px-4 py-6 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between md:px-6">
+            <div className="flex items-center gap-2">
+              <BrandMark className="h-6 w-6 rounded" />
+              <span>threatsumm4ry · {new Date().getFullYear()}</span>
+            </div>
+            <a href={contactUrl} target="_blank" rel="noopener noreferrer" className="hover:text-foreground">
               {language === "pt" ? "Contato" : "Contact"}
             </a>
           </div>
