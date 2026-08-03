@@ -26,8 +26,6 @@ const Knowledge = lazy(() => import("./pages/Knowledge"));
 const Hunting = lazy(() => import("./pages/Hunting"));
 const PatchTuesday = lazy(() => import("./pages/PatchTuesday"));
 const SapPatch = lazy(() => import("./pages/SapPatch"));
-const Advisories = lazy(() => import("./pages/Advisories"));
-const AdvisoryPost = lazy(() => import("./pages/AdvisoryPost"));
 const Admin = lazy(() => import("./pages/Admin"));
 const ThreatMap = lazy(() => import("./pages/ThreatMap"));
 const NotFound = lazy(() => import("./pages/NotFound"));
@@ -58,8 +56,6 @@ const App = () => (
                 <Route path="/actors" element={<Navigate to="/atores" replace />} />
                 <Route path="/patch-tuesday" element={<PatchTuesday />} />
                 <Route path="/sap-patch" element={<SapPatch />} />
-                <Route path="/advisories" element={<Advisories />} />
-                <Route path="/advisories/:slug" element={<AdvisoryPost />} />
                 <Route path="/latam-threats" element={<Navigate to="/threat-map" replace />} />
                 <Route path="/threat-map" element={<ThreatMap />} />
 

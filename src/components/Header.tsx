@@ -14,7 +14,6 @@ import {
   Mail,
   MapPinned,
   Menu,
-  Megaphone,
   Radar,
   Search,
   Settings as SettingsIcon,
@@ -71,19 +70,19 @@ export function Header({ actions, logoAddon, onLogoClick, showBackButton = false
 
   const navGroups: NavGroup[] = [
     {
-      label: pt ? "Analise" : "Analysis",
+      label: "Tools",
       items: [
-        {
-          path: "/phishing-analyzer",
-          label: tr({ pt: "Phishing Analyzer", en: "Phishing Analyzer", es: "Análisis de Phishing", fr: "Analyse de Phishing" }),
-          description: pt ? "Headers, URLs, anexos e IOCs." : "Headers, URLs, attachments and IOCs.",
-          icon: Mail,
-        },
         {
           path: "/dnsbl",
           label: "DNSBL",
           description: pt ? "Blocklists por IP, dominio ou range." : "Blocklists by IP, domain or range.",
           icon: ShieldAlert,
+        },
+        {
+          path: "/phishing-analyzer",
+          label: tr({ pt: "Phishing Analyzer", en: "Phishing Analyzer", es: "Análisis de Phishing", fr: "Analyse de Phishing" }),
+          description: pt ? "Headers, URLs, anexos e IOCs." : "Headers, URLs, attachments and IOCs.",
+          icon: Mail,
         },
         {
           path: "/attack-surface",
@@ -93,6 +92,11 @@ export function Header({ actions, logoAddon, onLogoClick, showBackButton = false
             : "External scan, XLSX export, and exposure monitoring.",
           icon: Radar,
         },
+      ],
+    },
+    {
+      label: "Intel & Hunting",
+      items: [
         {
           path: "/knowledge",
           label: "Knowledge",
@@ -104,7 +108,7 @@ export function Header({ actions, logoAddon, onLogoClick, showBackButton = false
         },
         {
           path: "/relatorios",
-          label: pt ? "Gerador de Relatorios" : "Report Generator",
+          label: "Threat Feed Generator",
           description: pt ? "URL, PDF ou relatorio em uma analise CTI." : "URL, PDF or report into CTI analysis.",
           icon: FileSearch,
           premium: true,
@@ -116,16 +120,12 @@ export function Header({ actions, logoAddon, onLogoClick, showBackButton = false
           icon: Crosshair,
           premium: true,
         },
-      ],
-    },
-    {
-      label: "Intel",
-      items: [
         {
-          path: "/cves",
-          label: tr({ pt: "CVEs", en: "CVEs", es: "CVEs", fr: "CVE" }),
-          description: pt ? "EPSS, KEV e exploit publico." : "EPSS, KEV and public exploit context.",
-          icon: Shield,
+          path: "/newsletter",
+          label: "Intel Scrapping",
+          description: pt ? "Recorte semanal curado." : "Curated weekly digest.",
+          icon: Database,
+          premium: true,
         },
         {
           path: "/atores",
@@ -134,41 +134,39 @@ export function Header({ actions, logoAddon, onLogoClick, showBackButton = false
           icon: Users,
         },
         {
-          path: "/advisories",
-          label: "Advisories",
-          description: pt ? "Boletim diario, KPIs e avisos normalizados." : "Daily brief, KPIs and normalized advisories.",
-          icon: Megaphone,
-        },
-        {
           path: "/threat-map",
           label: pt ? "Mapa de Ameacas" : "Threat Map",
           description: pt ? "Vitimas de ransomware por pais." : "Ransomware victims by country.",
           icon: MapPinned,
         },
         {
+          path: "/vendors",
+          label: pt ? "Fontes" : "Sources",
+          description: pt ? "Fontes, integracoes e cobertura." : "Sources, integrations and coverage.",
+          icon: BookOpen,
+        },
+      ],
+    },
+    {
+      label: "Vulnerability Management",
+      items: [
+        {
+          path: "/cves",
+          label: tr({ pt: "CVEs", en: "CVEs", es: "CVEs", fr: "CVE" }),
+          description: pt ? "EPSS, KEV e exploit publico." : "EPSS, KEV and public exploit context.",
+          icon: Shield,
+        },
+        {
           path: "/patch-tuesday",
-          label: "Patch Tuesday",
+          label: "Microsoft Patch Tuesday",
           description: pt ? "Timeline mensal Microsoft." : "Monthly Microsoft timeline.",
           icon: CalendarCheck,
         },
         {
           path: "/sap-patch",
-          label: "SAP Patch",
+          label: "SAP Monthly Patch",
           description: pt ? "Notas de seguranca mensais SAP." : "Monthly SAP security notes.",
           icon: ShieldCheck,
-        },
-        {
-          path: "/newsletter",
-          label: "Newsletter",
-          description: pt ? "Recorte semanal curado." : "Curated weekly digest.",
-          icon: Database,
-          premium: true,
-        },
-        {
-          path: "/vendors",
-          label: pt ? "Fontes" : "Sources",
-          description: pt ? "Fontes, integracoes e cobertura." : "Sources, integrations and coverage.",
-          icon: BookOpen,
         },
       ],
     },
@@ -183,9 +181,8 @@ export function Header({ actions, logoAddon, onLogoClick, showBackButton = false
     onLogoClick?.();
   };
 
-  // Rich card row (icon box + label + description) shared by the mobile drawer
-  // and the expanded desktop sidebar, so both read the same. The mobile list
-  // wraps this in <SheetClose> to dismiss the drawer on navigation.
+  // Rich card row (icon box + label + description) used by the mobile drawer,
+  // where there's width to spare. The desktop rail uses tiles instead.
   const renderNavCard = (item: NavItem) => {
     const Icon = item.icon;
     const active = isRouteActive(item.path);
@@ -216,11 +213,9 @@ export function Header({ actions, logoAddon, onLogoClick, showBackButton = false
     );
   };
 
+  // Desktop tile: one line, icon + label, description on hover. Collapsed drops
+  // the label and keeps the same tooltip.
   const renderDesktopItem = (item: NavItem) => {
-    // Expanded: the same rich card as the drawer.
-    if (!isCollapsed) return renderNavCard(item);
-
-    // Collapsed rail: icon only, description moves to a hover tooltip.
     const Icon = item.icon;
     const active = isRouteActive(item.path);
     const link = (
@@ -228,14 +223,25 @@ export function Header({ actions, logoAddon, onLogoClick, showBackButton = false
         key={item.path}
         to={item.path}
         className={cn(
-          "group relative flex h-10 w-10 items-center justify-center rounded-md text-[13px] font-medium transition-colors",
+          "group relative flex items-center rounded-md text-[13px] font-medium transition-colors",
+          isCollapsed ? "h-10 w-10 justify-center" : "h-9 w-full gap-2.5 px-2.5",
           active
             ? "bg-primary/10 text-foreground"
             : "text-muted-foreground hover:bg-secondary hover:text-foreground"
         )}
       >
-        {active && <span className="absolute left-0 top-2 h-6 w-0.5 rounded-full bg-primary" />}
+        {active && <span className="absolute left-0 top-2 h-5 w-0.5 rounded-full bg-primary" />}
         <Icon className={cn("h-4 w-4 shrink-0", active ? "text-primary" : "text-muted-foreground group-hover:text-foreground")} />
+        {!isCollapsed && (
+          <>
+            <span className="min-w-0 flex-1 truncate">{item.label}</span>
+            {item.premium && (
+              <span className="shrink-0 rounded border border-border px-1.5 py-0.5 text-[9px] font-bold leading-none text-muted-foreground">
+                PRO
+              </span>
+            )}
+          </>
+        )}
       </Link>
     );
 

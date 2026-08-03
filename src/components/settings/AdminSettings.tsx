@@ -1,30 +1,18 @@
-import { useCallback, useEffect, useState } from "react";
-import { CheckCircle2, Megaphone, Pencil, Plug, Plus, Rss, ShieldCheck, XCircle } from "lucide-react";
-import { Link } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { CheckCircle2, Plug, ShieldCheck, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import AllowlistManager from "@/components/AllowlistManager";
 import FeedSourcesManager from "@/components/FeedSourcesManager";
-import { PostEditor } from "@/components/PostEditor";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { fetchIntegrationStatus, fetchPosts, type IntegrationStatus, type PostCard } from "@/services/threatApi";
+import { fetchIntegrationStatus, type IntegrationStatus } from "@/services/threatApi";
 
 export function AdminSettings() {
   const { language } = useLanguage();
   const pt = language === "pt";
   const [integrations, setIntegrations] = useState<IntegrationStatus[]>([]);
   const [keyless, setKeyless] = useState<string[]>([]);
-  const [posts, setPosts] = useState<PostCard[]>([]);
-
-  const loadPosts = useCallback(async () => {
-    try {
-      setPosts((await fetchPosts()).posts);
-    } catch {
-      // The publications card remains usable for creating a post.
-    }
-  }, []);
 
   useEffect(() => {
     fetchIntegrationStatus()
@@ -33,8 +21,7 @@ export function AdminSettings() {
         setKeyless(result.keyless);
       })
       .catch((error) => toast.error(error instanceof Error ? error.message : "Falha ao carregar integrações"));
-    loadPosts();
-  }, [loadPosts]);
+  }, []);
 
   const missing = integrations.filter((integration) => !integration.configured && integration.required).length;
 
@@ -42,53 +29,10 @@ export function AdminSettings() {
     <div className="flex flex-col gap-5">
       <div>
         <h2 className="flex items-center gap-2 text-xl font-semibold"><ShieldCheck className="text-primary" /> Admin</h2>
-        <p className="mt-1 text-sm text-muted-foreground">{pt ? "Acesso, publicações e integrações da plataforma." : "Platform access, publications, and integrations."}</p>
+        <p className="mt-1 text-sm text-muted-foreground">{pt ? "Acesso e integrações da plataforma." : "Platform access and integrations."}</p>
       </div>
 
       <AllowlistManager />
-
-      <Card>
-        <CardContent className="flex flex-col gap-4 p-5">
-          <div className="flex items-start justify-between gap-3">
-            <div className="flex items-start gap-3">
-              <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 ring-1 ring-inset ring-primary/20">
-                <Megaphone className="text-primary" />
-              </span>
-              <div>
-                <div className="font-medium">{pt ? "Publicações (Advisories)" : "Posts (Advisories)"}</div>
-                <div className="text-sm text-muted-foreground">
-                  {posts.length} {pt ? "no total" : "total"} · {posts.filter((post) => !post.published).length} {pt ? "rascunho(s)" : "draft(s)"}
-                </div>
-              </div>
-            </div>
-            <div className="flex shrink-0 items-center gap-2">
-              <Button asChild variant="ghost" size="icon" className="text-muted-foreground" title="RSS">
-                <a href="/api/advisories/feed.xml" target="_blank" rel="noreferrer"><Rss /><span className="sr-only">RSS</span></a>
-              </Button>
-              <PostEditor
-                trigger={<Button size="sm"><Plus data-icon="inline-start" /> {pt ? "Nova" : "New"}</Button>}
-                onSaved={loadPosts}
-              />
-            </div>
-          </div>
-          {posts.length > 0 ? (
-            <div className="flex flex-col gap-1.5">
-              {posts.map((post) => (
-                <div key={post.id} className="flex items-center gap-3 rounded-md border px-3 py-2">
-                  <Link to={`/advisories/${post.slug}`} className="min-w-0 flex-1 truncate text-sm font-medium hover:text-primary">{post.title}</Link>
-                  {!post.published ? <Badge variant="outline" className="shrink-0 text-[10px]">{pt ? "rascunho" : "draft"}</Badge> : null}
-                  <PostEditor
-                    post={post}
-                    trigger={<Button variant="ghost" size="icon" className="size-8 shrink-0"><Pencil /><span className="sr-only">{pt ? "Editar" : "Edit"}</span></Button>}
-                    onSaved={loadPosts}
-                    onDeleted={loadPosts}
-                  />
-                </div>
-              ))}
-            </div>
-          ) : null}
-        </CardContent>
-      </Card>
 
       <Card>
         <CardContent className="flex flex-col gap-4 p-5">

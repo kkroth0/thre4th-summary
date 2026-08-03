@@ -264,14 +264,6 @@ const Index = () => {
       group: "intel",
     },
     {
-      title: "Advisories",
-      description: language === "pt" ? "Boletim diario com veredito, KPIs, destaques criticos e ransomware do dia." : "Daily brief with verdict, KPIs, critical highlights and ransomware of the day.",
-      href: "/advisories",
-      icon: Mail,
-      tags: ["DAILY", "KEV", "EPSS"],
-      group: "intel",
-    },
-    {
       title: language === "pt" ? "Mapa de Ameacas" : "Threat Map",
       description: language === "pt" ? "Mapa global de vitimas de ransomware por pais nos ultimos 90 dias." : "Global ransomware victim map by country over the last 90 days.",
       href: "/threat-map",
