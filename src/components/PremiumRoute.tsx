@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { Lock, Github, Loader2, Sparkles, FileText, Mail, Crosshair, ArrowRight, ShieldCheck } from "lucide-react";
+import { Lock, Github, Loader2, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -7,35 +7,34 @@ import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useAuth } from "@/contexts/AuthContext";
-import { cn } from "@/lib/utils";
 
 type Feature = "threat-brief" | "advisory-feed" | "exposure-watchlist" | "knowledge" | "hunting";
 
 const COPY: Record<Feature, { pt: [string, string]; en: [string, string] }> = {
   "threat-brief": {
-    pt: ["Geração de Relatórios", "Cole o link de um relatório ou notícia e receba uma análise organizada."],
-    en: ["Report Generation", "Paste a link to a report or news post and get an organized analysis."],
+    pt: ["Geração de Relatórios", "Resumo pronto a partir de um link."],
+    en: ["Report Generation", "Ready-made summary from a link."],
   },
   "advisory-feed": {
-    pt: ["Notícias de Segurança", "Um resumo diário dos avisos de segurança que importam."],
-    en: ["Security News", "A daily rundown of the security alerts that matter."],
+    pt: ["Notícias de Segurança", "Notícias de segurança da semana."],
+    en: ["Security News", "This week's security news."],
   },
   "exposure-watchlist": {
-    pt: ["Superfície de Ataque", "Monitore ativos externos e acompanhe drift na superficie exposta."],
-    en: ["Attack Surface Monitor", "Monitor external assets and track exposed-surface drift."],
+    pt: ["Superfície de Ataque", "Ativos expostos na internet."],
+    en: ["Attack Surface", "Assets exposed to the internet."],
   },
   knowledge: {
-    pt: ["Biblioteca de Fontes", "Guarde as fontes que importam e transforme cada uma em relatório."],
-    en: ["Source Library", "Keep the sources that matter and turn each one into a report."],
+    pt: ["Biblioteca de Fontes", "Notícias e relatórios salvos."],
+    en: ["Source Library", "Saved news and reports."],
   },
   hunting: {
-    pt: ["Threat Hunting", "Explore hipóteses, mantenha consultas KQL e acompanhe sua cobertura ATT&CK."],
-    en: ["Threat Hunting", "Explore hypotheses, keep KQL queries, and track your ATT&CK coverage."],
+    pt: ["Threat Hunting", "Buscas prontas para os seus logs."],
+    en: ["Threat Hunting", "Ready-made searches for your logs."],
   },
 };
 
-// Gate de recurso premium = login aberto + allow-list premium separada.
-// Renderiza os filhos só quando a sessão existe e o usuário tem premium.
+// Não é paywall: o cadastro é livre e esta área é liberada na mão, login a
+// login. O card diz isso — sem preço, sem plano, sem "faça upgrade".
 export function PremiumRoute({ children, feature }: { children: React.ReactNode; feature: Feature }) {
   const { auth, loading } = useAuth();
   const { language } = useLanguage();
@@ -58,53 +57,52 @@ export function PremiumRoute({ children, feature }: { children: React.ReactNode;
             <Loader2 className="h-4 w-4 animate-spin" /> {pt ? "Verificando sessão…" : "Checking session…"}
           </CardContent></Card>
         ) : (
-          <Card className="border-border/50  shadow-primary/5 overflow-hidden">
-            <div className="bg-gradient-to-br from-primary/10 to-transparent p-6 text-center">
-              <div className="mx-auto mb-3 h-14 w-14 rounded-xl bg-primary/15 ring-1 ring-inset ring-primary/25 flex items-center justify-center">
-                <Lock className="h-6 w-6 text-primary" />
+          <Card>
+            <CardContent className="flex flex-col items-center gap-4 p-7 text-center">
+              <span className="flex h-11 w-11 items-center justify-center rounded-xl border border-border bg-secondary">
+                <Lock className="h-5 w-5 text-muted-foreground" />
+              </span>
+
+              <div>
+                <Badge variant="outline" className="mb-2 font-normal">
+                  {pt ? "Acesso restrito" : "Restricted access"}
+                </Badge>
+                <h1 className="text-xl font-bold">{title}</h1>
+                <p className="mt-1.5 text-sm text-muted-foreground">{blurb}</p>
               </div>
-              <Badge className="mb-2 gap-1"><Sparkles className="h-3 w-3" /> {pt ? "Recurso premium" : "Premium feature"}</Badge>
-              <h1 className="text-2xl font-bold">{title}</h1>
-              <p className="text-muted-foreground mt-1.5 text-sm">
-                {anonymous
-                  ? blurb
-                  : (pt
-                    ? "Sua conta já acessa as ferramentas gratuitas. Este recurso precisa de liberação premium."
-                    : "Your account can already use the free tools. This feature needs premium access.")}
-              </p>
-            </div>
-            <CardContent className="p-6 pt-5 flex flex-col gap-4">
-              <ul className="space-y-2 text-sm text-muted-foreground">
-                {[
-                  { icon: FileText, t: pt ? "Um resumo a partir de qualquer link" : "A summary from any link" },
-                  { icon: Mail, t: pt ? "Um feed dos avisos que importam" : "A feed of the alerts that matter" },
-                  { icon: Crosshair, t: pt ? "Ajuda pra investigar ameaças" : "Help digging into threats" },
-                ].map((r) => (
-                  <li key={r.t} className="flex items-center gap-2.5">
-                    <r.icon className="h-4 w-4 text-primary shrink-0" /> {r.t}
-                  </li>
-                ))}
-              </ul>
+
               {anonymous ? (
-                <div className="grid gap-2 sm:grid-cols-2">
-                  <Button asChild size="lg" className="w-full">
-                    <Link to="/login"><Github className="h-4 w-4 mr-2" /> {pt ? "Entrar" : "Sign in"}</Link>
-                  </Button>
-                  <Button asChild size="lg" variant="outline" className="w-full">
-                    <Link to="/cadastro">{pt ? "Cadastrar" : "Sign up"} <ArrowRight className="h-4 w-4 ml-1.5" /></Link>
-                  </Button>
-                </div>
+                <>
+                  <div className="grid w-full gap-2 sm:grid-cols-2">
+                    <Button asChild className="w-full">
+                      <Link to="/login"><Github className="h-4 w-4" /> {pt ? "Entrar" : "Sign in"}</Link>
+                    </Button>
+                    <Button asChild variant="outline" className="w-full">
+                      <Link to="/cadastro">{pt ? "Criar conta" : "Create account"} <ArrowRight className="h-4 w-4" /></Link>
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {pt
+                      ? "A conta é gratuita e leva um clique. Esta área depende de liberação."
+                      : "The account is free and takes one click. This area needs to be granted."}
+                  </p>
+                </>
               ) : (
-                <Button asChild size="lg" variant="outline" className="w-full">
-                  <Link to="/profile"><Github className="h-4 w-4 mr-2" /> {pt ? "Ver minha conta" : "View my account"}</Link>
-                </Button>
+                <>
+                  <p className="text-sm text-muted-foreground">
+                    {pt ? "Sua conta está ativa, mas ainda sem acesso a esta área." : "Your account is active, but this area is not open to it yet."}
+                    {auth.login ? <> <span className="font-mono text-foreground">{auth.login}</span></> : null}
+                  </p>
+                  <Button asChild variant="outline" className="w-full sm:w-auto">
+                    <Link to="/profile">{pt ? "Ver minha conta" : "View my account"}</Link>
+                  </Button>
+                  <p className="text-xs text-muted-foreground">
+                    {pt
+                      ? "A liberação é feita na mão, um login por vez. Mande o seu para quem administra."
+                      : "Access is granted by hand, one login at a time. Send yours to whoever administers it."}
+                  </p>
+                </>
               )}
-              <p className="text-xs text-center text-muted-foreground inline-flex items-center justify-center gap-1">
-                <ShieldCheck className="h-3 w-3" />
-                {anonymous
-                  ? (pt ? "Conta free liberada. Premium depende da allow-list." : "Free account allowed. Premium depends on the allow-list.")
-                  : (pt ? "Peça para um admin adicionar seu GitHub na lista premium." : "Ask an admin to add your GitHub login to the premium list.")}
-              </p>
             </CardContent>
           </Card>
         )}
