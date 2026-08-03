@@ -92,7 +92,7 @@ const VENDOR_INFO: Record<string, { description: string; docLink: string; domain
 };
 
 const VendorDirectory = () => {
-    const { t } = useLanguage();
+    const { t, language } = useLanguage();
     const [searchQuery, setSearchQuery] = useState("");
     const [selectedType, setSelectedType] = useState<string>("ALL");
     const [apiStatuses, setApiStatuses] = useState<Record<string, boolean>>({});
@@ -133,7 +133,7 @@ const VendorDirectory = () => {
                     <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-muted/40 p-6 rounded-xl border border-border/50 ">
                         <div>
                             <h1 className="text-2xl font-bold flex items-center gap-2">
-                                {t('vendors') || 'API Integrations'}
+                                {language === 'pt' ? 'Fontes de Dados' : 'Data Sources'}
                                 <Badge variant="secondary" className="bg-primary/10 text-primary border-border/50">
                                     {vendorsList.length} integrated
                                 </Badge>

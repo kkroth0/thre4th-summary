@@ -385,7 +385,7 @@ const Hunting = () => {
   return (
     <PageLayout width="max-w-7xl">
       <PageHeader
-        title="Hunting"
+        title="Threat Hunting"
         subtitle={pt ? "Hipóteses públicas para explorar. Consultas KQL privadas para operar. Cobertura ATT&CK medida no que é seu." : "Public hypotheses to explore. Private KQL queries to operate. ATT&CK coverage measured on your own hunts."}
         actions={<Button onClick={() => { setEditingId(""); setForm({ ...EMPTY_FORM }); }}><Plus className="mr-2 h-4 w-4" /> {pt ? "Nova hunt" : "New hunt"}</Button>}
       />

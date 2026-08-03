@@ -396,7 +396,7 @@ const CveDashboard = () => {
             <div>
               <h1 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
                 <Shield className="h-6 w-6 text-primary" />
-                {t("cveDashboard") || "CVE Dashboard"}
+                {language === "pt" ? "Vulnerabilidades" : "Vulnerabilities"}
               </h1>
               <p className="text-xs text-muted-foreground mt-1">
                 {tr({

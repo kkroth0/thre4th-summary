@@ -13,24 +13,24 @@ type Feature = "threat-brief" | "advisory-feed" | "exposure-watchlist" | "knowle
 
 const COPY: Record<Feature, { pt: [string, string]; en: [string, string] }> = {
   "threat-brief": {
-    pt: ["Threat Feed Generator", "Cole o link de um relatório ou notícia e receba uma análise organizada."],
-    en: ["Threat Feed Generator", "Paste a link to a report or news post and get an organized analysis."],
+    pt: ["Geração de Relatórios", "Cole o link de um relatório ou notícia e receba uma análise organizada."],
+    en: ["Report Generation", "Paste a link to a report or news post and get an organized analysis."],
   },
   "advisory-feed": {
-    pt: ["Coletor de Intel", "Um resumo diário dos avisos de segurança que importam."],
-    en: ["Intel Collector", "A daily rundown of the security alerts that matter."],
+    pt: ["Notícias de Segurança", "Um resumo diário dos avisos de segurança que importam."],
+    en: ["Security News", "A daily rundown of the security alerts that matter."],
   },
   "exposure-watchlist": {
-    pt: ["Attack Surface Monitor", "Monitore ativos externos e acompanhe drift na superficie exposta."],
+    pt: ["Superfície de Ataque", "Monitore ativos externos e acompanhe drift na superficie exposta."],
     en: ["Attack Surface Monitor", "Monitor external assets and track exposed-surface drift."],
   },
   knowledge: {
-    pt: ["Knowledge", "Guarde as fontes que importam e transforme cada uma em relatório."],
-    en: ["Knowledge", "Keep the sources that matter and turn each one into a report."],
+    pt: ["Biblioteca de Fontes", "Guarde as fontes que importam e transforme cada uma em relatório."],
+    en: ["Source Library", "Keep the sources that matter and turn each one into a report."],
   },
   hunting: {
-    pt: ["Hunting", "Explore hipóteses, mantenha consultas KQL e acompanhe sua cobertura ATT&CK."],
-    en: ["Hunting", "Explore hypotheses, keep KQL queries, and track your ATT&CK coverage."],
+    pt: ["Threat Hunting", "Explore hipóteses, mantenha consultas KQL e acompanhe sua cobertura ATT&CK."],
+    en: ["Threat Hunting", "Explore hypotheses, keep KQL queries, and track your ATT&CK coverage."],
   },
 };
 

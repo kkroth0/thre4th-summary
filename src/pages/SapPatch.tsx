@@ -123,7 +123,7 @@ export default function SapPatch() {
                         <span className="grid place-items-center h-9 w-9 rounded-xl bg-primary/10 text-primary">
                             <ShieldCheck className="h-5 w-5" />
                         </span>
-                        <h1 className="text-2xl font-bold tracking-tight">SAP Monthly Patch</h1>
+                        <h1 className="text-2xl font-bold tracking-tight">{pt ? "Correções SAP" : "SAP Fixes"}</h1>
                     </div>
                     <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
                         <span>{pt ? "Notas de segurança do último patch day mensal da SAP." : "Security notes from SAP's latest monthly patch day."}</span>

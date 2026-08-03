@@ -61,7 +61,7 @@ const Knowledge = () => {
     return (
         <PageLayout width="max-w-6xl">
             <PageHeader
-                title="Knowledge"
+                title={pt ? "Biblioteca de Fontes" : "Source Library"}
                 subtitle={pt
                     ? "As fontes que você guardou para gerar inteligência. Só entra o que você marcar — o feed continua sendo fluxo."
                     : "The sources you saved to build intel from. Only what you mark lands here — the feed stays a stream."}
@@ -99,8 +99,8 @@ const Knowledge = () => {
                     <p className="font-semibold">{pt ? "Nada guardado ainda" : "Nothing saved yet"}</p>
                     <p className="mt-1 text-sm text-muted-foreground">
                         {pt
-                            ? "Use o botão de salvar no Intel Scrapping para trazer uma fonte para cá."
-                            : "Use the save button on Intel Scrapping to bring a source here."}
+                            ? "Use o botão de salvar em Notícias de Segurança para trazer uma fonte para cá."
+                            : "Use the save button on Security News to bring a source here."}
                     </p>
                 </div>
             ) : (

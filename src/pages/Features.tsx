@@ -66,7 +66,7 @@ const content = {
     ctaTitle: "Ready to start?",
     ctaSub: "Generate a report from a single URL, or open the curated advisory feed and see what matters today.",
     ctaSearch: "ThreatSumm4ry Search",
-    ctaBrief: "Threat Feed Generator",
+    ctaBrief: "Report Generation",
     ctaFeed: "Intel Collector",
     ctaCves: "CVE Dashboard",
   },
@@ -96,7 +96,7 @@ const content = {
 
     rightFeatureTitle: "Do dado bruto à inteligência acionável",
 
-    subFeat1Title: "Threat Feed Generator",
+    subFeat1Title: "Geração de Relatórios",
     subFeat1Desc: "Transforme qualquer URL em um relatório pronto para compartilhar e um JSON para o slide oficial, com extração determinística de IOC e CVE — nada inventado.",
     subFeat2Title: "Pontuação por relevância",
     subFeat2Desc: "Cada advisory é pontuado por sinais de CTI — exploração, malware, alcance, setor e região — e re-ranqueado com CISA KEV e FIRST EPSS.",
@@ -128,7 +128,7 @@ const content = {
     ctaTitle: "Pronto para começar?",
     ctaSub: "Gere um relatório a partir de uma única URL, ou abra o feed de advisories curado e veja o que importa hoje.",
     ctaSearch: "Busca ThreatSumm4ry",
-    ctaBrief: "Threat Feed Generator",
+    ctaBrief: "Geração de Relatórios",
     ctaFeed: "Coletor de Intel",
     ctaCves: "Painel de CVEs",
   },
