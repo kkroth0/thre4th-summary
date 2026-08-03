@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300..700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Overpass:ital,wght@0,100..900;1,100..900&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -11,16 +11,18 @@ All colors MUST be HSL.
 @layer base {
   :root {
     --background: 0 0% 100%;
-    --foreground: 0 0% 4%;
+    --foreground: 204 37% 11%;
 
     --card: 0 0% 100%;
-    --card-foreground: 0 0% 4%;
+    --card-foreground: 204 37% 11%;
 
     --popover: 0 0% 100%;
     --popover-foreground: 0 0% 4%;
 
-    --primary: 221 83% 53%;
-    --primary-foreground: 0 0% 100%;
+    /* laranja da marca (#F36B08); o texto em cima e a tinta escura da logo
+       (#111D25), porque branco sobre laranja nao passa em contraste */
+    --primary: 25 94% 49%;
+    --primary-foreground: 204 37% 11%;
 
     --secondary: 0 0% 96%;
     --secondary-foreground: 0 0% 9%;
@@ -36,7 +38,7 @@ All colors MUST be HSL.
 
     --border: 0 0% 90%;
     --input: 0 0% 90%;
-    --ring: 221 83% 53%;
+    --ring: 25 94% 49%;
 
     --radius: 0.375rem;
 
@@ -44,9 +46,9 @@ All colors MUST be HSL.
 
     --sidebar-foreground: 0 0% 4%;
 
-    --sidebar-primary: 221 83% 53%;
+    --sidebar-primary: 25 94% 49%;
 
-    --sidebar-primary-foreground: 0 0% 98%;
+    --sidebar-primary-foreground: 204 37% 11%;
 
     --sidebar-accent: 0 0% 96%;
 
@@ -54,7 +56,7 @@ All colors MUST be HSL.
 
     --sidebar-border: 0 0% 90%;
 
-    --sidebar-ring: 221 83% 53%;
+    --sidebar-ring: 25 94% 49%;
 
     --chart-1: 41 22.2% 64.6%;
 
@@ -77,7 +79,7 @@ All colors MUST be HSL.
     --threat-malicious: 0 84% 60%;
     --threat-malicious-foreground: 0 0% 100%;
 
-    --font-sans: 'Space Grotesk', ui-sans-serif, system-ui, sans-serif;
+    --font-sans: 'Overpass', ui-sans-serif, system-ui, sans-serif;
 
     --font-serif: ui-serif, Georgia, Cambria, "Times New Roman", Times, serif;
 
@@ -105,47 +107,48 @@ All colors MUST be HSL.
   }
 
   .dark {
-    --background: 0 0% 0%;
-    --foreground: 0 0% 98%;
+    /* tons do mark: #03070A de fundo, #111D25 nas superficies, #27333E nas bordas */
+    --background: 204 55% 3%;
+    --foreground: 210 40% 98%;
 
-    --card: 0 0% 4%;
-    --card-foreground: 0 0% 98%;
+    --card: 204 37% 11%;
+    --card-foreground: 210 40% 98%;
 
-    --popover: 0 0% 4%;
-    --popover-foreground: 0 0% 98%;
+    --popover: 204 37% 11%;
+    --popover-foreground: 210 40% 98%;
 
-    --primary: 217 91% 60%;
-    --primary-foreground: 0 0% 100%;
+    --primary: 25 94% 53%;
+    --primary-foreground: 204 37% 11%;
 
-    --secondary: 0 0% 10%;
-    --secondary-foreground: 0 0% 98%;
+    --secondary: 209 23% 20%;
+    --secondary-foreground: 210 40% 98%;
 
-    --muted: 0 0% 10%;
-    --muted-foreground: 0 0% 64%;
+    --muted: 209 23% 20%;
+    --muted-foreground: 210 15% 68%;
 
-    --accent: 0 0% 10%;
-    --accent-foreground: 0 0% 98%;
+    --accent: 209 23% 20%;
+    --accent-foreground: 210 40% 98%;
 
     --destructive: 0 84% 64%;
     --destructive-foreground: 210 40% 98%;
 
-    --border: 0 0% 15%;
-    --input: 0 0% 15%;
-    --ring: 217 91% 60%;
-    --sidebar-background: 0 0% 0%;
-    --sidebar-foreground: 0 0% 98%;
-    --sidebar-primary: 217 91% 60%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 0 0% 7%;
-    --sidebar-accent-foreground: 0 0% 98%;
-    --sidebar-border: 0 0% 15%;
-    --sidebar-ring: 217 91% 60%;
+    --border: 209 23% 20%;
+    --input: 209 23% 20%;
+    --ring: 25 94% 53%;
+    --sidebar-background: 204 55% 3%;
+    --sidebar-foreground: 210 40% 98%;
+    --sidebar-primary: 25 94% 53%;
+    --sidebar-primary-foreground: 204 37% 11%;
+    --sidebar-accent: 209 23% 20%;
+    --sidebar-accent-foreground: 210 40% 98%;
+    --sidebar-border: 209 23% 20%;
+    --sidebar-ring: 25 94% 53%;
     --chart-1: 0 0% 98%;
     --chart-2: 162 17% 69.6%;
     --chart-3: 70 18.8% 76.9%;
     --chart-4: 304 26.5% 62.7%;
     --chart-5: 16 24.6% 64.5%;
-    --sidebar: 0 0% 4%;
+    --sidebar: 204 37% 11%;
 
     --threat-safe: 142 70% 45%;
     --threat-safe-foreground: 0 0% 100%;
@@ -166,6 +169,7 @@ All colors MUST be HSL.
   body {
     @apply bg-background text-foreground font-sans antialiased;
     min-height: 100vh;
+    font-weight: 300;
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
   }
 
