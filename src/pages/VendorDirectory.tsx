@@ -132,14 +132,13 @@ const VendorDirectory = () => {
                     {/* Header bar and stats summary */}
                     <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-muted/40 p-6 rounded-xl border border-border/50 ">
                         <div>
-                            <h1 className="text-2xl font-bold flex items-center gap-2">
+                            <h1 className="text-3xl font-semibold tracking-tight">
                                 {language === 'pt' ? 'Fontes de Dados' : 'Data Sources'}
-                                <Badge variant="secondary" className="bg-primary/10 text-primary border-border/50">
-                                    {vendorsList.length} integrated
-                                </Badge>
                             </h1>
-                            <p className="text-xs text-muted-foreground mt-1">
-                                High-density intelligence sources lookup database
+                            <p className="mt-2 max-w-2xl leading-relaxed text-muted-foreground">
+                                {language === 'pt'
+                                    ? `As ${vendorsList.length} fontes que alimentam as consultas, o que cada uma cobre e quais estão ativas.`
+                                    : `The ${vendorsList.length} sources behind every lookup, what each one covers and which are active.`}
                             </p>
                         </div>
                         <div className="text-xs text-muted-foreground/80 md:text-right space-y-0.5">

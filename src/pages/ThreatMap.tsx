@@ -781,18 +781,18 @@ const ThreatMap = () => {
     <PageLayout width="max-w-7xl" showBackButton={false}>
       <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
         <div>
-          <Badge variant="outline" className="mb-3 gap-1.5">
+          <h1 className="text-3xl font-semibold tracking-tight">
+            {pt ? "Mapa de Ransomware" : "Ransomware Map"}
+          </h1>
+          <p className="mt-2 max-w-2xl leading-relaxed text-muted-foreground">
+            {pt
+              ? "Vítimas reivindicadas por grupo, país, setor e data, com a evidência de cada reivindicação."
+              : "Victims claimed by group, country, sector and date, with the evidence behind each claim."}
+          </p>
+          <Badge variant="outline" className="mt-3 gap-1.5 font-normal">
             <RadioTower className="h-3.5 w-3.5" />
             {data?.source || "ransomware.live"}
           </Badge>
-          <h1 className="text-3xl font-black tracking-tight md:text-4xl">
-            {pt ? "Mesa operacional de ransomware" : "Ransomware operation desk"}
-          </h1>
-          <p className="mt-2 max-w-2xl text-sm font-medium leading-6 text-muted-foreground">
-            {pt
-              ? "Veja quem foi reivindicado, por qual grupo, onde, em qual setor e com que evidencia."
-              : "See who was claimed, by which crew, where, in what sector, and with what evidence."}
-          </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex rounded-md border border-border bg-background p-1">

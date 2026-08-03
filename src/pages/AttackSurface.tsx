@@ -267,22 +267,18 @@ export default function AttackSurface() {
       <div className="flex flex-col gap-6">
         <header className="flex flex-col gap-4 border-b border-border pb-6 lg:flex-row lg:items-end lg:justify-between">
           <div className="max-w-3xl">
-            <div className="flex flex-wrap items-center gap-2">
-              <Badge variant="secondary" className="gap-1 border-primary/25 bg-primary/10 text-primary">
-                <Radar className="h-3.5 w-3.5" />
-                Attack Surface
-              </Badge>
-              <Badge variant="outline">Scan + Monitor</Badge>
-              <Badge variant="outline">Shodan</Badge>
-            </div>
-            <h1 className="mt-4 text-3xl font-semibold tracking-tight md:text-4xl">
-              {pt ? "Superficie de ataque externa" : "External attack surface"}
+            <h1 className="text-3xl font-semibold tracking-tight">
+              {pt ? "Superfície de Ataque" : "Attack Surface"}
             </h1>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
+            <p className="mt-2 max-w-2xl leading-relaxed text-muted-foreground">
               {pt
-                ? "Enxergue seu perimetro como um atacante enxerga. Mapeie servicos expostos via Shodan, importe alvos em massa, exporte XLSX e monitore drift nos ativos salvos."
-                : "See your perimeter the way an attacker does. Map exposed services with Shodan, bulk-import targets, export XLSX, and monitor drift across saved assets."}
+                ? "Serviços expostos do seu perímetro, pelo Shodan. Importação em massa, exportação XLSX e acompanhamento do que muda nos ativos salvos."
+                : "Exposed services on your perimeter, via Shodan. Bulk import, XLSX export, and tracking of what changes across saved assets."}
             </p>
+            <Badge variant="outline" className="mt-3 gap-1.5 font-normal">
+              <Radar className="h-3.5 w-3.5" />
+              Shodan
+            </Badge>
           </div>
           {result && (
             <div className="text-xs text-muted-foreground lg:text-right">

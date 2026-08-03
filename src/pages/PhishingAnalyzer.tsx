@@ -565,14 +565,13 @@ const PhishingAnalyzer = () => {
           {/* Header Row */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b pb-4">
             <div>
-              <h1 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
-                <ShieldAlert className="h-6 w-6 text-primary" />
-                {language === "pt" ? "Analisador de Phishing EML" : "EML Phishing Analyzer"}
+              <h1 className="text-3xl font-semibold tracking-tight">
+                {language === "pt" ? "Análise de Phishing" : "Phishing Analysis"}
               </h1>
-              <p className="text-xs text-muted-foreground mt-1">
+              <p className="mt-2 leading-relaxed text-muted-foreground">
                 {language === "pt"
-                  ? "Analise arquivos de e-mail (.eml) localmente para verificar indicadores de falsificação, links maliciosos e anexos perigosos"
-                  : "Analyze email files (.eml) locally to scan for domain spoofing, suspicious links, dangerous attachments, and authentication status"}
+                  ? "Remetente, autenticação, links e anexos de um .eml. O arquivo é lido no navegador e não sai da sua máquina."
+                  : "Sender, authentication, links and attachments from a .eml file. It is read in the browser and never leaves your machine."}
               </p>
             </div>
             {parsedData && (

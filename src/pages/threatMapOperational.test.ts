@@ -13,7 +13,7 @@ test("threat map prioritizes recent ransomware victims before map context", asyn
   assert.ok(victimTable > -1, "VictimTable component should exist");
   assert.ok(mapContext > -1, "ContextMapPanel component should exist");
   assert.ok(victimTable < mapContext, "victim table should be defined before map context");
-  assert.match(source, /Ransomware operation desk/);
+  assert.match(source, /Ransomware Map/);
   assert.match(source, /Vitimas recentes/);
   assert.match(source, /Situacao agora/);
   assert.match(source, /Fonte/);

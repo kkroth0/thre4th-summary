@@ -655,13 +655,13 @@ const Actors = () => {
                 MITRE + MISP
               </span>
             </div>
-            <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">
+            <h1 className="text-3xl font-semibold tracking-tight">
               {pt ? "Grupos de Ataque" : "Threat actors"}
             </h1>
-            <p className="mt-3 max-w-2xl text-sm leading-relaxed text-muted-foreground sm:text-base">
+            <p className="mt-2 max-w-2xl leading-relaxed text-muted-foreground">
               {pt
-                ? "Diretório operacional para comparar grupos por aliases, origem, motivação, TTPs mapeadas e referências de pesquisa."
-                : "Operational directory for comparing groups by aliases, origin, motivation, mapped TTPs, and research references."}
+                ? "Aliases, origem, motivação, técnicas mapeadas e referências de cada grupo, lado a lado."
+                : "Aliases, origin, motivation, mapped techniques and references for each group, side by side."}
             </p>
           </div>
 

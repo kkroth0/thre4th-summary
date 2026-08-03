@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { checkDNSBL, checkDNSBLBatch } from "@/services/threatApi";
 import { useToast } from "@/hooks/use-toast";
 import { PageLayout } from "@/components/PageLayout";
+import { PageHeader } from "@/components/PageHeader";
 import { useLanguage } from "@/contexts/LanguageContext";
 
 import DNSBL_PROVIDERS from "../config/dnsblProviders.json";
@@ -246,13 +247,13 @@ const DnsblCheck = () => {
             <div className={`flex-1 p-4 md:p-8 flex flex-col ${results.length === 0 ? "justify-center min-h-[50vh]" : ""} transition-all duration-500`}>
                 <div className={`w-full transition-all duration-500 ${results.length === 0 ? "max-w-3xl mx-auto space-y-6 py-6" : "max-w-7xl mx-auto space-y-8"}`}>
 
-                    {/* Page Header */}
-                    <header className={results.length === 0 ? "text-center mb-2" : "mb-2"}>
-                        <h1 className="text-3xl font-semibold tracking-tight">{t('checkIpReputation')}</h1>
-                        <p className={`text-muted-foreground mt-2 leading-relaxed ${results.length === 0 ? "max-w-2xl mx-auto" : ""}`}>
-                            {t('dnsblDescription', { count: DNSBL_PROVIDERS.length })}
-                        </p>
-                    </header>
+                    <PageHeader
+                        className="mb-2"
+                        title={language === "pt" ? "Listas de Bloqueio" : "Blocklists"}
+                        subtitle={language === "pt"
+                            ? `Um IP, domínio ou range consultado em ${DNSBL_PROVIDERS.length} listas públicas de bloqueio, com o motivo de cada aparição.`
+                            : `An IP, domain or range checked against ${DNSBL_PROVIDERS.length} public blocklists, with the reason behind each listing.`}
+                    />
 
                     {/* Search Panel — flat, ThreatBrief style */}
                     <div className={`w-full ${results.length === 0 ? "max-w-2xl mx-auto" : "max-w-none"}`}>

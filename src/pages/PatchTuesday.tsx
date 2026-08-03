@@ -267,23 +267,16 @@ const PatchTuesday = () => {
                 <div className="max-w-6xl mx-auto space-y-6">
                     {/* Title + month selector */}
                     <div className="flex flex-col lg:flex-row justify-between items-start lg:items-end gap-4 bg-muted/40 p-6 rounded-xl border border-border/50 ">
-                        <div className="space-y-1.5">
-                            <div className="flex items-center gap-2">
-                                <h1 className="text-2xl font-bold flex items-center gap-2.5">
-                                    <span className="grid place-items-center h-9 w-9 rounded-xl bg-primary/10 text-primary">
-                                        <CalendarDays className="h-5 w-5" />
-                                    </span>
-                                    {isPt ? "Patch Tuesday Microsoft" : "Microsoft Patch Tuesday"}
-                                </h1>
-                                <Badge variant="secondary" className="bg-primary/10 text-primary border-border/50">
-                                    MSRC
-                                </Badge>
-                            </div>
-                            <p className="text-xs text-muted-foreground max-w-xl">
+                        <div>
+                            <h1 className="text-3xl font-semibold tracking-tight">
+                                {isPt ? "Patch Tuesday Microsoft" : "Microsoft Patch Tuesday"}
+                            </h1>
+                            <p className="mt-2 max-w-xl leading-relaxed text-muted-foreground">
                                 {isPt
-                                    ? "Gere relatórios consolidados e profissionais (PDF, PPTX e Excel) das atualizações de segurança da Microsoft, direto da API oficial do MSRC."
-                                    : "Generate consolidated, professional reports (PDF, PPTX & Excel) of Microsoft's security updates, straight from the official MSRC API."}
+                                    ? "Correções do ciclo mensal da Microsoft, direto da API do MSRC, com exportação em PDF, PPTX e Excel."
+                                    : "Fixes from Microsoft's monthly cycle, straight from the MSRC API, exportable to PDF, PPTX and Excel."}
                             </p>
+                            <Badge variant="outline" className="mt-3 font-normal">MSRC</Badge>
                         </div>
 
                         <div className="flex items-center gap-2 w-full lg:w-auto">
