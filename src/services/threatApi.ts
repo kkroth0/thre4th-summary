@@ -1690,8 +1690,8 @@ export interface PrivateHunt {
     hearthId: string;
     /** Ritmo esperado: '', 'daily', 'weekly', 'monthly' ou 'intel'. */
     cadence: string;
-    /** 'own' quando o analista escreveu; 'hearth'/'ptbr' quando foi adotada. */
-    origin: 'own' | 'hearth' | 'ptbr';
+    /** De qual catálogo veio; vazio quando o analista escreveu a hunt. */
+    adoptedFrom: '' | 'hearth' | 'ptbr';
     sourceId: string;
     runs: HuntRun[];
     createdAt: string;
@@ -1752,7 +1752,7 @@ export interface PtbrHunt {
 }
 
 export type HuntingItem = HearthHunt | PrivateHunt;
-export type HuntInput = Omit<PrivateHunt, 'id' | 'ownerSub' | 'queryLang' | 'createdAt' | 'updatedAt' | 'origin' | 'sourceId' | 'runs'>;
+export type HuntInput = Omit<PrivateHunt, 'id' | 'ownerSub' | 'queryLang' | 'createdAt' | 'updatedAt' | 'adoptedFrom' | 'sourceId' | 'runs'>;
 
 export interface TechniqueCoverageNode {
     id: string;

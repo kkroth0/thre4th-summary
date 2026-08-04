@@ -3155,7 +3155,7 @@ app.post('/api/hunts/adopt', requirePremium, async (req, res) => {
     if (!sourceId) return res.status(400).json({ error: 'id obrigatório' });
 
     const mine = huntsStore[req.user.sub] || [];
-    const already = mine.find((hunt) => hunt.origin === origin && hunt.sourceId === sourceId);
+    const already = mine.find((hunt) => hunt.adoptedFrom === origin && hunt.sourceId === sourceId);
     if (already) return res.json({ hunt: already, items: mine, adopted: false });
 
     let input;
@@ -3226,7 +3226,7 @@ app.post('/api/hunts/adopt', requirePremium, async (req, res) => {
 
     let hunt;
     try {
-        hunt = normalizeHuntInput({ ...input, origin, sourceId }, { ownerSub: req.user.sub });
+        hunt = normalizeHuntInput({ ...input, adoptedFrom: origin, sourceId }, { ownerSub: req.user.sub });
     } catch (error) {
         return res.status(400).json({ error: error.message });
     }

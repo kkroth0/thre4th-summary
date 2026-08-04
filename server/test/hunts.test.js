@@ -178,22 +178,25 @@ test('resumo do mês conta por estado e só pontua achado do que fechou', () => 
     assert.equal(monthlySummary(hunts, '2026-09').total, 0);
 });
 
-test('origem só aceita catálogo conhecido e sobrevive ao update', () => {
+test('catálogo de origem só aceita valor conhecido e sobrevive ao update', () => {
     const adotada = normalizeHuntInput(
-        { title: 'Egress', hypothesis: 'saida incomum', origin: 'ptbr', sourceId: 'weekly/top-egress' },
+        { title: 'Egress', hypothesis: 'saida incomum', adoptedFrom: 'ptbr', sourceId: 'weekly/top-egress' },
         { ownerSub: 'u1' },
     );
-    assert.equal(adotada.origin, 'ptbr');
+    assert.equal(adotada.adoptedFrom, 'ptbr');
     assert.equal(adotada.sourceId, 'weekly/top-egress');
 
-    // Origem inventada não vira rótulo: cai pra 'own'.
-    assert.equal(normalizeHuntInput({ title: 't', hypothesis: 'h', origin: 'inventada' }, { ownerSub: 'u1' }).origin, 'own');
-    assert.equal(normalizeHuntInput({ title: 't', hypothesis: 'h' }, { ownerSub: 'u1' }).origin, 'own');
+    // Catálogo inventado não vira rótulo, e hunt própria fica sem catálogo.
+    assert.equal(normalizeHuntInput({ title: 't', hypothesis: 'h', adoptedFrom: 'inventada' }, { ownerSub: 'u1' }).adoptedFrom, '');
+    assert.equal(normalizeHuntInput({ title: 't', hypothesis: 'h' }, { ownerSub: 'u1' }).adoptedFrom, '');
 
-    // O PATCH passa a hunt inteira pelo normalize; a origem não pode se perder.
+    // A hunt privada NUNCA carrega `origin`: esse campo é do catálogo público e
+    // misturar os dois faz a tela tratar hunt adotada como item de catálogo.
+    assert.equal('origin' in normalizeHuntInput({ title: 't', hypothesis: 'h', origin: 'hearth' }, { ownerSub: 'u1' }), false);
+
+    // O PATCH passa a hunt inteira pelo normalize; o catálogo não pode se perder.
     const editada = normalizeHuntInput({ ...adotada, title: 'Egress revisado' }, { ownerSub: 'u1', id: adotada.id });
-    assert.equal(editada.origin, 'ptbr');
-    assert.equal(editada.sourceId, 'weekly/top-egress');
+    assert.equal(editada.adoptedFrom, 'ptbr');
 });
 
 test('hunt salva antes dos campos novos nao chega quebrada no cliente', () => {
@@ -201,14 +204,19 @@ test('hunt salva antes dos campos novos nao chega quebrada no cliente', () => {
     const antiga = { id: 'h1', title: 'Egress', hypothesis: 'saida', techniques: [] };
     const corrigida = withDefaults(antiga);
 
-    assert.equal(corrigida.origin, 'own', 'sem origem vira própria, e não undefined');
+    assert.equal(corrigida.adoptedFrom, '', 'sem catálogo vira vazio, e não undefined');
     assert.deepEqual(corrigida.runs, [], 'sem execuções vira lista vazia, e não undefined');
     assert.equal(corrigida.sourceId, '');
     assert.equal(corrigida.title, 'Egress', 'o resto passa intacto');
 
-    // Origem inventada no disco também é normalizada.
-    assert.equal(withDefaults({ origin: 'sei-la' }).origin, 'own');
-    assert.equal(withDefaults({ origin: 'ptbr' }).origin, 'ptbr');
+    // Hunt gravada com o nome errado do campo migra em vez de vazar os dois.
+    const legada = withDefaults({ id: 'h2', origin: 'hearth', title: 'Adotada antes do rename' });
+    assert.equal(legada.adoptedFrom, 'hearth', 'o valor antigo é aproveitado');
+    assert.equal('origin' in legada, false, 'o campo antigo não chega ao cliente');
+
+    // Valor inventado no disco também é normalizado.
+    assert.equal(withDefaults({ adoptedFrom: 'sei-la' }).adoptedFrom, '');
+    assert.equal(withDefaults({ adoptedFrom: 'ptbr' }).adoptedFrom, 'ptbr');
 });
 
 // ─── Cadência: o que ficou pra trás ───────────────────────────────────────

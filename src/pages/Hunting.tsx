@@ -343,16 +343,11 @@ const OUTCOME_LABEL: Record<RunOutcome, string> = {
   incident: "Incidente",
 };
 
-const ORIGIN_LABEL: Record<PrivateHunt["origin"], string> = {
-  own: "própria",
-  hearth: "HEARTH",
-  ptbr: "pt-BR",
-};
+const ADOPTED_LABEL: Record<string, string> = { hearth: "HEARTH", ptbr: "pt-BR" };
 
-// Hunt salva antes do campo existir chega sem `origin`. O servidor preenche na
-// leitura, mas a tela nao pode depender disso pra nao quebrar inteira por causa
-// de um rotulo.
-const originLabel = (origin?: PrivateHunt["origin"]) => ORIGIN_LABEL[origin ?? "own"] ?? ORIGIN_LABEL.own;
+// Hunt escrita pelo analista nao tem catalogo de origem, e hunt salva antes do
+// campo existir chega sem ele. Os dois casos caem em "própria".
+const originLabel = (adoptedFrom?: string) => ADOPTED_LABEL[adoptedFrom ?? ""] ?? "própria";
 
 const CADENCE_LABEL: Record<string, string> = {
   daily: "Diária",
@@ -748,8 +743,8 @@ const Hunting = () => {
                         <article key={run.id} className="rounded-md border p-3">
                           <div className="flex items-start justify-between gap-2">
                             <h4 className="text-sm font-medium leading-snug">{run.title}</h4>
-                            {hunt && hunt.origin !== "own" && (
-                              <Badge variant="outline" className="shrink-0 text-[10px] font-normal">{originLabel(hunt.origin)}</Badge>
+                            {hunt?.adoptedFrom && (
+                              <Badge variant="outline" className="shrink-0 text-[10px] font-normal">{originLabel(hunt.adoptedFrom)}</Badge>
                             )}
                           </div>
 
@@ -859,7 +854,7 @@ const Hunting = () => {
                             <TableCell className="max-w-xl py-3">
                               <button type="button" className="line-clamp-2 text-left text-sm font-medium leading-snug hover:text-primary" onClick={() => setSelected(hunt)}>{hunt.title}</button>
                               <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
-                                <Badge variant={hearth ? "secondary" : "default"} className="text-[9px]">{hearth ? "HEARTH" : originLabel(hunt.origin).toUpperCase()}</Badge>
+                                <Badge variant={hearth ? "secondary" : "default"} className="text-[9px]">{hearth ? "HEARTH" : originLabel(hunt.adoptedFrom).toUpperCase()}</Badge>
                                 <span>{hearth ? [hunt.category, hunt.submitter.name].filter(Boolean).join(" · ") : hunt.status}</span>
                               </div>
                             </TableCell>

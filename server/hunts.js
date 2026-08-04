@@ -62,10 +62,11 @@ export function normalizeHuntInput(input = {}, {
         status,
         sourceReportId: clean(input.sourceReportId, 80),
         hearthId: clean(input.hearthId, 40),
-        // De onde a hunt veio: 'own' quando o analista escreveu, 'hearth' ou
-        // 'ptbr' quando foi adotada. O par (origin, sourceId) e o que impede
-        // adotar duas vezes a mesma hunt e duplicar a fila do mes.
-        origin: ['hearth', 'ptbr'].includes(clean(input.origin, 20)) ? clean(input.origin, 20) : 'own',
+        // De qual catalogo a hunt foi adotada ('' = o analista escreveu). NAO
+        // reusar o nome `origin`: no catalogo do HEARTH esse campo significa
+        // "item de catalogo", e misturar os dois faz a hunt adotada ser tratada
+        // como item publico — que foi exatamente o bug da tela branca.
+        adoptedFrom: ['hearth', 'ptbr'].includes(clean(input.adoptedFrom, 20)) ? clean(input.adoptedFrom, 20) : '',
         sourceId: clean(input.sourceId, 200),
         cadence: Object.hasOwn(CADENCES, clean(input.cadence, 20)) ? clean(input.cadence, 20) : '',
         runs: Array.isArray(input.runs) ? input.runs.slice(0, RUNS_CAP) : [],
@@ -181,9 +182,17 @@ export function overdueHunts(list = [], now = Date.now()) {
  * e sem `runs`, e quem indexa por esses campos quebra.
  */
 export function withDefaults(hunt) {
+    // `origin` foi usado por engano nas hunts privadas antes de virar
+    // `adoptedFrom`. Some daqui: enquanto ele existir no payload, a tela trata
+    // hunt adotada como item do catalogo publico e procura campo que nao ha.
+    const { origin: legacy, ...rest } = hunt || {};
+    const adopted = ['hearth', 'ptbr'].includes(hunt?.adoptedFrom)
+        ? hunt.adoptedFrom
+        : (['hearth', 'ptbr'].includes(legacy) ? legacy : '');
+
     return {
-        ...hunt,
-        origin: ['hearth', 'ptbr', 'own'].includes(hunt?.origin) ? hunt.origin : 'own',
+        ...rest,
+        adoptedFrom: adopted,
         sourceId: hunt?.sourceId || '',
         cadence: Object.hasOwn(CADENCES, hunt?.cadence) ? hunt.cadence : '',
         runs: Array.isArray(hunt?.runs) ? hunt.runs : [],
