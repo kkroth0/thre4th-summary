@@ -21,7 +21,7 @@ import { groupByField, refsOfReport, relatedTo, techniqueCoverage } from './atta
 import { jobSummary, pruneJobsMap } from './feedJobs.js';
 import { parseHearthData } from './hearth.js';
 import { parseSentinelTables, catalogSources } from './sentinelTables.js';
-import { normalizeHuntInput, upsertHunt } from './hunts.js';
+import { normalizeHuntInput, upsertHunt, normalizeRunInput, upsertRun, monthlySummary } from './hunts.js';
 import { addKnowledgeItem, normalizeKnowledgeInput } from './knowledge.js';
 import { createWatchlistStore, runDueExposureSnapshots, runExposureSnapshot } from './exposureWatchlist.js';
 import { detectQueryType, sanitizeQuery } from './iocValidation.js';
@@ -3032,6 +3032,88 @@ app.patch('/api/hunts/:id', requirePremium, (req, res) => {
         return res.status(500).json({ error: 'não foi possível salvar a hunt' });
     }
     res.json({ hunt, items });
+});
+
+// ─── Execucao de hunt: o quadro do analista ───────────────────────────────
+// Estados: pending (na fila) -> running (rodando) -> done (fechada, com achado).
+// Uma hunt mensal roda varias vezes, entao execucao e lista dentro da hunt.
+
+const persistHunt = (req, res, hunt) => {
+    const items = upsertHunt(huntsStore[req.user.sub], hunt);
+    try {
+        saveHuntsStore({ ...huntsStore, [req.user.sub]: items });
+    } catch (error) {
+        console.error('hunts store write failed:', error.message);
+        res.status(500).json({ error: 'não foi possível salvar a execução' });
+        return null;
+    }
+    return items;
+};
+
+// Abre uma execucao (ou registra uma ja fechada de uma vez).
+app.post('/api/hunts/:id/runs', requirePremium, (req, res) => {
+    const current = (huntsStore[req.user.sub] || []).find((hunt) => hunt.id === req.params.id);
+    if (!current) return res.status(404).json({ error: 'hunt não encontrado' });
+
+    let run;
+    try {
+        run = normalizeRunInput(req.body || {});
+    } catch (error) {
+        return res.status(400).json({ error: error.message });
+    }
+
+    const hunt = upsertRun(current, run);
+    const items = persistHunt(req, res, hunt);
+    if (!items) return;
+    res.status(201).json({ hunt, run, items });
+});
+
+// Avanca a execucao: comecar, fechar com achado, corrigir contagem.
+app.patch('/api/hunts/:id/runs/:runId', requirePremium, (req, res) => {
+    const current = (huntsStore[req.user.sub] || []).find((hunt) => hunt.id === req.params.id);
+    if (!current) return res.status(404).json({ error: 'hunt não encontrado' });
+    const previous = (current.runs || []).find((item) => item.id === req.params.runId);
+    if (!previous) return res.status(404).json({ error: 'execução não encontrada' });
+
+    let run;
+    try {
+        // startedAt e do momento em que abriu, nao do ultimo toque: e ele que
+        // decide de qual mes a execucao e.
+        run = normalizeRunInput({ ...previous, ...(req.body || {}) }, {
+            id: previous.id,
+            startedAt: previous.startedAt,
+        });
+    } catch (error) {
+        return res.status(400).json({ error: error.message });
+    }
+
+    const hunt = upsertRun(current, run);
+    const items = persistHunt(req, res, hunt);
+    if (!items) return;
+    res.json({ hunt, run, items });
+});
+
+// Controle do mes: quanto rodou, em que estado parou e o que saiu.
+app.get('/api/hunts/runs/summary', requirePremium, (req, res) => {
+    const month = String(req.query.month || new Date().toISOString().slice(0, 7));
+    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) return res.status(400).json({ error: 'mês inválido' });
+    res.json(monthlySummary(huntsStore[req.user.sub] || [], month));
+});
+
+// Indice por tecnica ATT&CK: a partir dele o mapa do MITRE fica clicavel e
+// responde "que hunts eu tenho pra T1059?" sem varrer a lista no cliente.
+app.get('/api/hunts/by-technique/:technique', requirePremium, (req, res) => {
+    const technique = String(req.params.technique || '').toUpperCase();
+    if (!/^T\d{4}(?:\.\d{3})?$/.test(technique)) return res.status(400).json({ error: 'técnica inválida' });
+
+    const hunts = (huntsStore[req.user.sub] || [])
+        .filter((hunt) => (hunt.techniques || []).includes(technique))
+        .map(({ id, title, status, techniques, runs }) => ({
+            id, title, status, techniques,
+            lastRun: (runs || [])[0] || null,
+        }));
+
+    res.json({ technique, hunts, total: hunts.length });
 });
 
 app.delete('/api/hunts/:id', requirePremium, (req, res) => {

@@ -274,3 +274,64 @@ test('gate premium não aceita sessão anônima', async () => {
     });
     assert.equal(r.status, 401);
 });
+
+test('execucao de hunt: abre, fecha com achado e entra no resumo do mes', async () => {
+    const criada = await fetch(`${BASE}/api/hunts`, {
+        method: 'POST',
+        headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: 'Egress incomum', hypothesis: 'saida para dominio novo', techniques: ['T1071'] }),
+    });
+    assert.equal(criada.status, 201);
+    const { hunt } = await criada.json();
+
+    const aberta = await fetch(`${BASE}/api/hunts/${hunt.id}/runs`, {
+        method: 'POST',
+        headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ state: 'running' }),
+    });
+    assert.equal(aberta.status, 201);
+    const { run } = await aberta.json();
+    assert.equal(run.finishedAt, null);
+
+    const fechada = await fetch(`${BASE}/api/hunts/${hunt.id}/runs/${run.id}`, {
+        method: 'PATCH',
+        headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ state: 'done', outcome: 'suspicious', events: 7, findings: 'sete conexoes para dominio de 2 dias' }),
+    });
+    assert.equal(fechada.status, 200);
+    const fechadaBody = await fechada.json();
+    assert.equal(fechadaBody.run.outcome, 'suspicious');
+    assert.ok(fechadaBody.run.finishedAt, 'execucao fechada carimba o fim');
+
+    const mes = new Date().toISOString().slice(0, 7);
+    const resumo = await fetch(`${BASE}/api/hunts/runs/summary?month=${mes}`, { headers: AUTH_HEADERS });
+    assert.equal(resumo.status, 200);
+    const corpo = await resumo.json();
+    assert.equal(corpo.byState.done >= 1, true);
+    assert.equal(corpo.byOutcome.suspicious >= 1, true);
+
+    const porTecnica = await fetch(`${BASE}/api/hunts/by-technique/T1071`, { headers: AUTH_HEADERS });
+    assert.equal(porTecnica.status, 200);
+    const indice = await porTecnica.json();
+    assert.equal(indice.hunts.some((item) => item.id === hunt.id), true);
+    assert.equal(indice.hunts.find((item) => item.id === hunt.id).lastRun.outcome, 'suspicious');
+
+    const invalida = await fetch(`${BASE}/api/hunts/by-technique/T99`, { headers: AUTH_HEADERS });
+    assert.equal(invalida.status, 400);
+});
+
+test('execucao de outro dono nao existe pra quem consulta', async () => {
+    const criada = await fetch(`${BASE}/api/hunts`, {
+        method: 'POST',
+        headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: 'Privada', hypothesis: 'so do dono' }),
+    });
+    const { hunt } = await criada.json();
+
+    const invasao = await fetch(`${BASE}/api/hunts/${hunt.id}/runs`, {
+        method: 'POST',
+        headers: { ...OTHER_AUTH_HEADERS, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ state: 'running' }),
+    });
+    assert.equal(invasao.status, 404);
+});
