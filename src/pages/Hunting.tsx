@@ -1,5 +1,5 @@
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, CalendarRange, CheckCircle2, ExternalLink, FileCode2, FilterX, Loader2, Pencil, Play, Plus, Search, Sparkles, Trash2 } from "lucide-react";
+import { CalendarRange, CheckCircle2, ExternalLink, FileCode2, FilterX, Loader2, Pencil, Play, Plus, Search, Sparkles, Trash2, Undo2 } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
@@ -97,7 +97,7 @@ function HuntFormDialog({ form, editing, saving, sources, generating, onChange, 
   });
   return (
     <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
-      <DialogContent className="max-h-[92vh] max-w-3xl overflow-y-auto">
+      <DialogContent className="max-h-[92vh] w-[min(96vw,72rem)] max-w-none overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{editing ? "Editar hunt" : "Nova hunt"}</DialogTitle>
           <DialogDescription>Hipótese operacional e consulta KQL privadas da sua conta.</DialogDescription>
@@ -204,7 +204,7 @@ function HuntDetail({ hunt, onClose, onEdit, onCopy }: {
   const body = hearth ? hunt.why : hunt.hypothesis;
   return (
     <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
-      <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto">
+      <DialogContent className="max-h-[92vh] w-[min(96vw,72rem)] max-w-none overflow-y-auto">
         <DialogHeader>
           <div className="flex flex-wrap items-center gap-2 pr-8">
             <Badge variant={hearth ? "secondary" : "default"}>{hearth ? "HEARTH" : "Sua hunt"}</Badge>
@@ -680,20 +680,31 @@ const Hunting = () => {
                               </div>
                               {run.findings && <p className="text-xs leading-5 text-muted-foreground">{run.findings}</p>}
                             </div>
-                          ) : (
-                            <div className="mt-3 flex gap-2">
-                              {run.state === "pending" && (
-                                <Button size="sm" variant="outline" disabled={runSaving} onClick={() => advanceRun(run.huntId, run.id, { state: "running" })}>
-                                  <Play className="h-3.5 w-3.5" /> Iniciar
-                                </Button>
-                              )}
-                              {run.state === "running" && (
+                          ) : null}
+
+                          {/* Fluxo nos dois sentidos: fechar errado acontece. */}
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            {run.state === "pending" && (
+                              <Button size="sm" variant="outline" disabled={runSaving} onClick={() => advanceRun(run.huntId, run.id, { state: "running" })}>
+                                <Play className="h-3.5 w-3.5" /> Iniciar
+                              </Button>
+                            )}
+                            {run.state === "running" && (
+                              <>
                                 <Button size="sm" disabled={runSaving} onClick={() => setFinishing({ huntId: run.huntId, runId: run.id })}>
                                   <CheckCircle2 className="h-3.5 w-3.5" /> Fechar
                                 </Button>
-                              )}
-                            </div>
-                          )}
+                                <Button size="sm" variant="ghost" disabled={runSaving} title="Voltar para a fila" onClick={() => advanceRun(run.huntId, run.id, { state: "pending" })}>
+                                  <Undo2 className="h-3.5 w-3.5" /> Fila
+                                </Button>
+                              </>
+                            )}
+                            {run.state === "done" && (
+                              <Button size="sm" variant="ghost" disabled={runSaving} title="Reabrir: o resultado sai, a contagem e o texto ficam" onClick={() => advanceRun(run.huntId, run.id, { state: "running" })}>
+                                <Undo2 className="h-3.5 w-3.5" /> Reabrir
+                              </Button>
+                            )}
+                          </div>
                         </article>
                       );
                     })}

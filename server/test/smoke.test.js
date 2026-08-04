@@ -376,3 +376,48 @@ test('gerador de hunt valida entrada antes de chamar modelo', async () => {
     });
     assert.equal(anonima.status, 401);
 });
+
+test('execucao volta atras: reabrir limpa o veredito e preserva o trabalho', async () => {
+    const criada = await fetch(`${BASE}/api/hunts`, {
+        method: 'POST',
+        headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: 'Voltar atras', hypothesis: 'testar fluxo reverso' }),
+    });
+    const { hunt } = await criada.json();
+
+    const aberta = await fetch(`${BASE}/api/hunts/${hunt.id}/runs`, {
+        method: 'POST',
+        headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ state: 'running' }),
+    });
+    const { run } = await aberta.json();
+
+    const patch = (body) => fetch(`${BASE}/api/hunts/${hunt.id}/runs/${run.id}`, {
+        method: 'PATCH',
+        headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+    }).then((r) => r.json());
+
+    const fechada = await patch({ state: 'done', outcome: 'incident', events: 9, findings: 'nove eventos suspeitos' });
+    assert.equal(fechada.run.outcome, 'incident');
+
+    // Reabrir: veredito sai, contagem e texto ficam.
+    const reaberta = await patch({ state: 'running' });
+    assert.equal(reaberta.run.state, 'running');
+    assert.equal(reaberta.run.outcome, 'none', 'incidente nao sobrevive a reabertura');
+    assert.equal(reaberta.run.finishedAt, null);
+    assert.equal(reaberta.run.events, 9, 'contagem e trabalho feito, nao veredito');
+    assert.match(reaberta.run.findings, /nove eventos suspeitos/);
+
+    // E volta pra fila.
+    const naFila = await patch({ state: 'pending' });
+    assert.equal(naFila.run.state, 'pending');
+
+    // Contradicao explicita continua barrada.
+    const contradicao = await fetch(`${BASE}/api/hunts/${hunt.id}/runs/${run.id}`, {
+        method: 'PATCH',
+        headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ state: 'running', outcome: 'incident' }),
+    });
+    assert.equal(contradicao.status, 400);
+});

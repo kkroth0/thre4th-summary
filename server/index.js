@@ -3253,14 +3253,22 @@ app.patch('/api/hunts/:id/runs/:runId', requirePremium, (req, res) => {
     const previous = (current.runs || []).find((item) => item.id === req.params.runId);
     if (!previous) return res.status(404).json({ error: 'execução não encontrada' });
 
+    const patch = req.body || {};
+    // Voltar atras e parte do fluxo: o analista fecha errado, reabre e corrige.
+    // Sair de "done" limpa o veredito herdado — resultado so vive em execucao
+    // fechada — mas preserva contagem e texto, que sao o trabalho ja feito.
+    const leavingDone = patch.state && patch.state !== 'done' && previous.state === 'done';
+    const merged = {
+        ...previous,
+        ...patch,
+        ...(leavingDone && patch.outcome === undefined ? { outcome: 'none' } : {}),
+    };
+
     let run;
     try {
         // startedAt e do momento em que abriu, nao do ultimo toque: e ele que
         // decide de qual mes a execucao e.
-        run = normalizeRunInput({ ...previous, ...(req.body || {}) }, {
-            id: previous.id,
-            startedAt: previous.startedAt,
-        });
+        run = normalizeRunInput(merged, { id: previous.id, startedAt: previous.startedAt });
     } catch (error) {
         return res.status(400).json({ error: error.message });
     }
