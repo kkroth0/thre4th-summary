@@ -16,6 +16,7 @@ import { VendorCard } from "@/components/VendorCard";
 import { VendorContent } from "@/components/VendorContent";
 import { VendorFilter } from "@/components/VendorFilter";
 import { Footer } from "@/components/Footer";
+import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { Header, useNavCatalog } from "@/components/Header";
 import { BrandMark } from "@/components/BrandMark";
@@ -32,7 +33,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { MultiIpSummary } from "@/components/MultiIpSummary";
 import { fetchThreatDataProgressive, saveScan } from "@/services/threatApi";
 import { ScanHistory } from "@/components/ScanHistory";
-import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { SearchForm } from "@/components/SearchForm";
 import { extractIocsFromText, isSupportedAnalyzerQuery, MAX_ANALYZER_TARGETS } from "@/utils/iocExtract";
@@ -186,7 +186,7 @@ const HeroOpsPanel = ({ language }: { language: string }) => {
 };
 
 const Index = () => {
-  const { auth } = useAuth();
+  const { auth, loading: authLoading } = useAuth();
   const [savingScans, setSavingScans] = useState(false);
   const [query, setQuery] = useState("");
   const [selectedVendors, setSelectedVendors] = useState<string[]>(ALL_VENDORS);
@@ -208,9 +208,9 @@ const Index = () => {
   const contactUrl = "https://www.linkedin.com/in/matheuslima-andrade/";
   const { navGroups } = useNavCatalog();
 
-  const shellClassName = cn(
-    "soc-shell relative flex min-h-screen flex-col overflow-hidden transition-[padding] duration-200",
-  );
+  // Sem overflow-hidden: qualquer ancestral com overflow recortado desliga o
+  // position: sticky da barra de busca.
+  const shellClassName = "soc-shell relative flex min-h-screen flex-col";
 
 
   // Load saved preferences
@@ -1320,7 +1320,8 @@ const Index = () => {
     }
   };
 
-  if (results.length === 0 && !isAnalyzing && !isAnalyzerRoute) {
+  // A landing e so pra quem nao entrou: com sessao, "/" ja e a busca.
+  if (results.length === 0 && !isAnalyzing && !isAnalyzerRoute && !(authLoading || auth.authenticated)) {
     const navLinks = [
       { href: "#ferramentas", label: language === "pt" ? "Ferramentas" : "Tools" },
       { href: "#acesso", label: language === "pt" ? "Acesso" : "Access" },
@@ -1524,11 +1525,13 @@ const Index = () => {
   return (
     <div className={shellClassName}>
       <Header onLogoClick={handleReset} showBackButton={false} />
-      {/* Persistent search bar: only once a search is running or done, so the tool stays
-          reachable while reviewing results. On the empty state the form is the hero instead. */}
+      {/* Barra de busca persistente: some no estado vazio, onde o formulario ja
+          e o heroi. Fica sticky logo abaixo do header (h-14) em vez de fixed —
+          assim ela ocupa o proprio espaco, o conteudo nao precisa de padding
+          adivinhado pra compensar e nada passa por baixo dela na rolagem. */}
       {hasResults && (
         <div
-          className="fixed left-0 right-0 top-14 z-30 border-b border-border bg-background/95 px-4 py-3.5 backdrop-blur animate-fade-in md:px-8"
+          className="sticky top-14 z-30 border-b border-border bg-background/95 px-4 py-3.5 backdrop-blur md:px-8"
         >
           <div className="max-w-7xl mx-auto">
             <SearchForm
@@ -1547,7 +1550,7 @@ const Index = () => {
       <div
         className={cn(
           "relative z-10 flex-1 px-4 pb-4 md:px-8 md:pb-8",
-          hasResults ? "pt-28 md:pt-32 lg:pt-28" : "pt-20 md:pt-24 lg:pt-10"
+          hasResults ? "pt-6" : "pt-10"
         )}
       >
         <div className="max-w-7xl mx-auto space-y-6">

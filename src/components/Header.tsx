@@ -219,6 +219,9 @@ export function Header({ actions, logoAddon, onLogoClick, showBackButton = false
 
   const pt = language === "pt";
   const current = [homeItem, ...navGroups.flatMap((g) => g.items)].find((i) => isRouteActive(i.path, pathname));
+  // Logado, a casa e a busca; deslogado, e a landing. A logo nunca joga quem
+  // ja entrou de volta pra pagina de venda.
+  const homePath = auth.authenticated ? homeItem.path : "/";
 
   const launcherCard = (item: NavItem) => {
     const Icon = item.icon;
@@ -255,16 +258,16 @@ export function Header({ actions, logoAddon, onLogoClick, showBackButton = false
   return (
     <header className="sticky top-0 z-50 border-b border-border bg-background/95 backdrop-blur">
       <div className="flex h-14 items-center gap-3 px-4 lg:px-6">
-        {showBackButton && pathname !== "/" && (
+        {showBackButton && pathname !== homePath && (
           <Button variant="ghost" size="icon" asChild className="h-8 w-8 shrink-0 rounded-md">
-            <Link to="/">
+            <Link to={homePath}>
               <ArrowLeft className="h-4 w-4" />
               <span className="sr-only">{t("back") || "Back"}</span>
             </Link>
           </Button>
         )}
 
-        <Link to="/" onClick={() => onLogoClick?.()} className="flex shrink-0 items-center gap-2">
+        <Link to={homePath} onClick={() => onLogoClick?.()} className="flex shrink-0 items-center gap-2">
           <BrandMark className="h-7 w-7 rounded-md" />
           <span className="hidden text-sm font-bold tracking-tight text-foreground sm:inline">threatsumm4ry</span>
         </Link>
