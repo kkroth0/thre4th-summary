@@ -23,7 +23,7 @@ import { parseHearthData } from './hearth.js';
 import { parseSentinelTables, catalogSources } from './sentinelTables.js';
 import { parsePtbrHunt, isHuntPath } from './huntsPtbr.js';
 import { GENERATOR_SYSTEM, buildGeneratePrompt, normalizeGenerated } from './huntGenerator.js';
-import { normalizeHuntInput, upsertHunt, normalizeRunInput, upsertRun, monthlySummary, withDefaults, overdueHunts, huntSchedule } from './hunts.js';
+import { normalizeHuntInput, upsertHunt, normalizeRunInput, upsertRun, monthlySummary, withDefaults, overdueHunts, huntSchedule, nextHuntId, huntIdSeq } from './hunts.js';
 import { addKnowledgeItem, normalizeKnowledgeInput } from './knowledge.js';
 import { createWatchlistStore, runDueExposureSnapshots, runExposureSnapshot } from './exposureWatchlist.js';
 import { detectQueryType, sanitizeQuery } from './iocValidation.js';
@@ -2104,6 +2104,29 @@ function loadHuntsStore() { try { const o = JSON.parse(fs.readFileSync(HUNTS_STO
 function saveHuntsStore(nextStore) { writeJsonAtomic(HUNTS_STORE_PATH, nextStore); huntsStore = nextStore; }
 let huntsStore = loadHuntsStore();
 
+// Marca d'agua da numeracao: { ownerSub: { ano: ultimoNumero } }. Vive fora da
+// lista de hunts porque precisa sobreviver a apagar a ultima hunt do ano — e a
+// lista, por definicao, nao sobrevive.
+const HUNT_SEQ_PATH = process.env.HUNT_SEQ_PATH || path.join(__dirname, '.hunt-seq.json');
+function loadHuntSeq() { try { const o = JSON.parse(fs.readFileSync(HUNT_SEQ_PATH, 'utf8')); return (o && typeof o === 'object') ? o : {}; } catch { return {}; } }
+let huntSeqStore = loadHuntSeq();
+
+/** Reserva o proximo id do usuario e grava a marca antes de devolver. */
+function reserveHuntId(ownerSub) {
+    const year = new Date().getUTCFullYear();
+    const floor = Number(huntSeqStore[ownerSub]?.[year]) || 0;
+    const id = nextHuntId(huntsStore[ownerSub] || [], year, floor);
+
+    const used = huntIdSeq(id);
+    huntSeqStore = { ...huntSeqStore, [ownerSub]: { ...(huntSeqStore[ownerSub] || {}), [year]: used } };
+    // Falha ao gravar nao impede criar a hunt: o pior caso volta a ser o de
+    // antes (numero derivado da lista), nao perder o trabalho do analista.
+    try { writeJsonAtomic(HUNT_SEQ_PATH, huntSeqStore); }
+    catch (error) { console.error('hunt sequence write failed:', error.message); }
+
+    return id;
+}
+
 // Segredo compartilhado p/ as rotas servidor-a-servidor (worker).
 // Sem FEED_AGENT_SECRET definido, as rotas protegidas ficam desabilitadas (503),
 // pra não exporem leitura/escrita de boletim sem auth.
@@ -3009,7 +3032,10 @@ app.get('/api/hunts/coverage', requirePremium, (req, res) => {
 app.post('/api/hunts', requirePremium, (req, res) => {
     let hunt;
     try {
-        hunt = normalizeHuntInput(req.body || {}, { ownerSub: req.user.sub });
+        hunt = normalizeHuntInput(req.body || {}, {
+            ownerSub: req.user.sub,
+            id: reserveHuntId(req.user.sub),
+        });
     } catch (error) {
         return res.status(400).json({ error: error.message });
     }
@@ -3226,7 +3252,10 @@ app.post('/api/hunts/adopt', requirePremium, async (req, res) => {
 
     let hunt;
     try {
-        hunt = normalizeHuntInput({ ...input, adoptedFrom: origin, sourceId }, { ownerSub: req.user.sub });
+        hunt = normalizeHuntInput({ ...input, adoptedFrom: origin, sourceId }, {
+            ownerSub: req.user.sub,
+            id: reserveHuntId(req.user.sub),
+        });
     } catch (error) {
         return res.status(400).json({ error: error.message });
     }

@@ -5,6 +5,7 @@ import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import crypto from 'node:crypto';
+import { huntIdSeq } from '../hunts.js';
 import { mkdirSync, rmSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -14,6 +15,7 @@ const PORT = 3900 + Math.floor(Math.random() * 100);
 const BASE = `http://127.0.0.1:${PORT}`;
 const HUNTS_STORE_PATH = `/tmp/threatsumm4ry-smoke-hunts-${PORT}.json`;
 const PREMIUM_OPEN_PATH = `/tmp/threatsumm4ry-smoke-premium-${PORT}.json`;
+const HUNT_SEQ_PATH = `/tmp/threatsumm4ry-smoke-seq-${PORT}.json`;
 const SESSION_SECRET = 'test-secret';
 const sessionBody = Buffer.from(JSON.stringify({ sub: 'smoke-user', login: 'tester', exp: Math.floor(Date.now() / 1000) + 3600 })).toString('base64url');
 const sessionSig = crypto.createHmac('sha256', SESSION_SECRET).update(sessionBody).digest('base64url');
@@ -44,7 +46,7 @@ before(async () => {
         env: {
             ...process.env,
             PORT: String(PORT), NODE_ENV: 'test', SESSION_SECRET,
-            GITHUB_ALLOWED_LOGINS: 'tester', HUNTS_STORE_PATH, PREMIUM_OPEN_PATH,
+            GITHUB_ALLOWED_LOGINS: 'tester', HUNTS_STORE_PATH, PREMIUM_OPEN_PATH, HUNT_SEQ_PATH,
         },
         stdio: 'ignore',
     });
@@ -57,6 +59,8 @@ after(() => {
     rmSync(`${HUNTS_STORE_PATH}.tmp`, { force: true });
     rmSync(PREMIUM_OPEN_PATH, { force: true });
     rmSync(`${PREMIUM_OPEN_PATH}.tmp`, { force: true });
+    rmSync(HUNT_SEQ_PATH, { force: true });
+    rmSync(`${HUNT_SEQ_PATH}.tmp`, { force: true });
 });
 
 test('GET /api/vendors/status returns vendor map', async () => {
@@ -420,4 +424,47 @@ test('execucao volta atras: reabrir limpa o veredito e preserva o trabalho', asy
         body: JSON.stringify({ state: 'running', outcome: 'incident' }),
     });
     assert.equal(contradicao.status, 400);
+});
+
+test('hunt criada recebe id legivel e sequencial', async () => {
+    const criar = (title) => fetch(`${BASE}/api/hunts`, {
+        method: 'POST',
+        headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title, hypothesis: 'testar numeracao' }),
+    }).then((r) => r.json());
+
+    // A contagem parte do que a conta ja tem; o teste checa o passo, nao o
+    // numero inicial.
+    const ano = new Date().getUTCFullYear();
+    const primeira = await criar('Numeracao 1');
+    assert.match(primeira.hunt.id, new RegExp(`^TH-${ano}-\\d{3}$`));
+
+    const segunda = await criar('Numeracao 2');
+    const n1 = Number(primeira.hunt.id.split('-')[2]);
+    const n2 = Number(segunda.hunt.id.split('-')[2]);
+    assert.equal(n2, n1 + 1, 'a segunda hunt e a proxima da sequencia');
+
+    // O id novo funciona como chave em todo o resto.
+    const execucao = await fetch(`${BASE}/api/hunts/${segunda.hunt.id}/runs`, {
+        method: 'POST',
+        headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ state: 'running' }),
+    });
+    assert.equal(execucao.status, 201);
+});
+
+test('numero nao volta depois de apagar a ultima hunt do ano', async () => {
+    const criar = () => fetch(`${BASE}/api/hunts`, {
+        method: 'POST',
+        headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: 'Efemera', hypothesis: 'criar e apagar' }),
+    }).then((r) => r.json());
+
+    const primeira = await criar();
+    const apagar = await fetch(`${BASE}/api/hunts/${primeira.hunt.id}`, { method: 'DELETE', headers: AUTH_HEADERS });
+    assert.equal(apagar.status, 200);
+
+    const segunda = await criar();
+    assert.notEqual(segunda.hunt.id, primeira.hunt.id, 'id apagado nao pode ser reemitido');
+    assert.equal(huntIdSeq(segunda.hunt.id), huntIdSeq(primeira.hunt.id) + 1);
 });

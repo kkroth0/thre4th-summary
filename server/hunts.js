@@ -23,6 +23,36 @@ const cleanList = (value, maxItems = 100) => [...new Set(
     (Array.isArray(value) ? value : []).map((item) => clean(item, 160)).filter(Boolean),
 )].slice(0, maxItems);
 
+// Identificador legivel: TH-<ano>-<sequencial>. O hex aleatorio funcionava pra
+// maquina, mas ninguem diz "olha a 8f3a91c2e004" numa reuniao.
+const HUNT_ID = /^TH-(\d{4})-(\d{3,})$/;
+
+/**
+ * Proximo id do ano. Numero nunca volta: o `floor` e a marca d'agua gravada em
+ * disco, entao apagar a ultima hunt do ano nao faz a contagem recomecar. Sem
+ * ele, um "TH-2026-001" citado em relatorio antigo passaria a apontar pra outra
+ * hunt — que e exatamente o que um id serve pra evitar.
+ *
+ * A lista ainda entra no calculo pra cobrir quem ja tinha hunts antes do
+ * contador existir.
+ */
+export function nextHuntId(list = [], year = new Date().getUTCFullYear(), floor = 0) {
+    const naLista = (list || []).reduce((max, hunt) => {
+        const match = HUNT_ID.exec(String(hunt?.id ?? ''));
+        if (!match || Number(match[1]) !== year) return max;
+        return Math.max(max, Number(match[2]));
+    }, 0);
+
+    // Passou de 999 o ano vira quatro digitos em vez de estourar o formato.
+    return `TH-${year}-${String(Math.max(naLista, floor) + 1).padStart(3, '0')}`;
+}
+
+/** O numero de um id nosso, pra gravar a marca d'agua. 0 se nao for do formato. */
+export function huntIdSeq(id) {
+    const match = HUNT_ID.exec(String(id ?? ''));
+    return match ? Number(match[2]) : 0;
+}
+
 /** Valida a entrada não confiável e fixa os campos de identidade no servidor. */
 export function normalizeHuntInput(input = {}, {
     ownerSub,

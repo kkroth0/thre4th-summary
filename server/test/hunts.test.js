@@ -12,6 +12,8 @@ import {
     withDefaults,
     overdueHunts,
     huntSchedule,
+    nextHuntId,
+    huntIdSeq,
 } from '../hunts.js';
 
 const now = '2026-08-01T12:00:00.000Z';
@@ -296,4 +298,54 @@ test('a agenda diz quando vence, não só o que venceu', () => {
         overdueHunts(lista, AGORA).map((item) => item.id),
         agenda.filter((item) => item.late).map((item) => item.id),
     );
+});
+
+// ─── Identificador legível ────────────────────────────────────────────────
+test('a numeração começa em 001 e sobe preenchendo com zero', () => {
+    assert.equal(nextHuntId([], 2026), 'TH-2026-001');
+    assert.equal(nextHuntId([{ id: 'TH-2026-001' }], 2026), 'TH-2026-002');
+    assert.equal(nextHuntId([{ id: 'TH-2026-001' }, { id: 'TH-2026-002' }], 2026), 'TH-2026-003');
+    assert.equal(nextHuntId([{ id: 'TH-2026-009' }], 2026), 'TH-2026-010');
+    assert.equal(nextHuntId([{ id: 'TH-2026-099' }], 2026), 'TH-2026-100');
+});
+
+test('cada ano tem a própria contagem', () => {
+    const lista = [{ id: 'TH-2026-007' }, { id: 'TH-2025-042' }];
+    assert.equal(nextHuntId(lista, 2027), 'TH-2027-001', 'ano novo começa do começo');
+    assert.equal(nextHuntId(lista, 2026), 'TH-2026-008');
+    assert.equal(nextHuntId(lista, 2025), 'TH-2025-043');
+});
+
+test('apagar a última do ano não faz a contagem recomeçar', () => {
+    // O caso que a lista sozinha não cobre: 001 e 002 criadas e apagadas, lista
+    // vazia. Sem a marca d'água a próxima voltaria a ser 001, e o id de um
+    // relatório antigo passaria a apontar pra outra hunt.
+    assert.equal(nextHuntId([], 2026, 2), 'TH-2026-003');
+    assert.equal(nextHuntId([], 2026, 0), 'TH-2026-001', 'conta nova ainda começa do 001');
+
+    // Entre lista e marca d'água vale o maior: cobre quem já tinha hunts antes
+    // do contador existir.
+    assert.equal(nextHuntId([{ id: 'TH-2026-010' }], 2026, 3), 'TH-2026-011');
+    assert.equal(nextHuntId([{ id: 'TH-2026-002' }], 2026, 9), 'TH-2026-010');
+
+    assert.equal(huntIdSeq('TH-2026-042'), 42);
+    assert.equal(huntIdSeq('8f3a91c2e004'), 0, 'id antigo não move a marca');
+    assert.equal(huntIdSeq(undefined), 0);
+});
+
+test('id apagado não volta, e o hex antigo não atrapalha', () => {
+    // Buraco no meio: a próxima é depois da maior, não a que vagou. Id que já
+    // saiu em relatório não pode reaparecer apontando pra outra hunt.
+    assert.equal(nextHuntId([{ id: 'TH-2026-001' }, { id: 'TH-2026-005' }], 2026), 'TH-2026-006');
+
+    // Hunts criadas antes do formato continuam com o id delas e são ignoradas.
+    assert.equal(nextHuntId([{ id: '8f3a91c2e004' }, { id: 'TH-2026-002' }], 2026), 'TH-2026-003');
+    assert.equal(nextHuntId([{ id: '8f3a91c2e004' }], 2026), 'TH-2026-001');
+
+    // Lixo no campo não derruba a contagem.
+    assert.equal(nextHuntId([{ id: 'TH-2026-abc' }, { id: null }, {}], 2026), 'TH-2026-001');
+});
+
+test('passou de 999 o formato cresce em vez de estourar', () => {
+    assert.equal(nextHuntId([{ id: 'TH-2026-999' }], 2026), 'TH-2026-1000');
 });
