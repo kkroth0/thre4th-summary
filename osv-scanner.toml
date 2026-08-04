@@ -1,0 +1,16 @@
+# Exceções do OSV Scanner. Mesma disciplina do .trivyignore e do
+# scripts/audit-check.mjs: motivo, data e condição de saída em cada uma.
+
+[[IgnoredVulns]]
+id = "GHSA-qwww-vcr4-c8h2"
+# O OSV pede uma data de expiração — sem ela a exceção vira permanente e ninguém
+# revisita. Em 2027-02-04 ela cai sozinha e o build volta a cobrar uma decisão.
+ignoreUntil = 2027-02-04
+reason = """
+react-router: CSRF em modo RSC. Não aplicável — o app é SPA estática no
+Cloudflare Pages, sem SSR e sem React Server Components, e a falha exige o modo
+RSC. A correção é react-router 8.3.0, que exige React >= 19.2.7 enquanto o app
+está no 18.3.1; corrigir significaria migrar o React inteiro. O npm audit só
+oferece downgrade forçado para 7.11, que quebra a aplicação. Revisar ao migrar
+para React 19 ou se sair correção na linha 7.x. Registrado em 2026-08-04.
+"""
