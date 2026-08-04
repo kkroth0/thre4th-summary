@@ -1,0 +1,20 @@
+# Vulnerabilidades aceitas conscientemente. Cada linha precisa de motivo, data
+# e condição de saída — sem isso o arquivo vira tapete pra esconder sujeira.
+#
+# GHSA-qwww-vcr4-c8h2 — react-router: CSRF em modo RSC
+#
+# Não aplicável aqui: o app é SPA estática servida pelo Cloudflare Pages, sem
+# SSR e sem React Server Components. A falha exige o modo RSC, que não existe
+# neste build.
+#
+# Por que não corrigir: a correção é react-router 8.3.0, que exige React >= 19.
+# O app está no React 18.3.1, então "corrigir" significa migrar o React inteiro
+# — 34 mil linhas de frontend — para fechar uma falha que não nos alcança. O
+# npm audit, por sua vez, só oferece downgrade forçado para 7.11, que quebra a
+# aplicação.
+#
+# Revisar quando: o projeto migrar para React 19 (aí a subida sai de graça), ou
+# quando sair correção dentro da linha 7.x.
+#
+# Registrado em 2026-08-04.
+GHSA-qwww-vcr4-c8h2
