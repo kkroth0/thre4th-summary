@@ -9,6 +9,7 @@ import {
     upsertRun,
     monthlySummary,
     RUNS_CAP,
+    withDefaults,
 } from '../hunts.js';
 
 const now = '2026-08-01T12:00:00.000Z';
@@ -192,4 +193,19 @@ test('origem só aceita catálogo conhecido e sobrevive ao update', () => {
     const editada = normalizeHuntInput({ ...adotada, title: 'Egress revisado' }, { ownerSub: 'u1', id: adotada.id });
     assert.equal(editada.origin, 'ptbr');
     assert.equal(editada.sourceId, 'weekly/top-egress');
+});
+
+test('hunt salva antes dos campos novos nao chega quebrada no cliente', () => {
+    // Exatamente o formato que estava no disco antes de runs/origin existirem.
+    const antiga = { id: 'h1', title: 'Egress', hypothesis: 'saida', techniques: [] };
+    const corrigida = withDefaults(antiga);
+
+    assert.equal(corrigida.origin, 'own', 'sem origem vira própria, e não undefined');
+    assert.deepEqual(corrigida.runs, [], 'sem execuções vira lista vazia, e não undefined');
+    assert.equal(corrigida.sourceId, '');
+    assert.equal(corrigida.title, 'Egress', 'o resto passa intacto');
+
+    // Origem inventada no disco também é normalizada.
+    assert.equal(withDefaults({ origin: 'sei-la' }).origin, 'own');
+    assert.equal(withDefaults({ origin: 'ptbr' }).origin, 'ptbr');
 });

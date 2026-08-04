@@ -330,6 +330,11 @@ const ORIGIN_LABEL: Record<PrivateHunt["origin"], string> = {
   ptbr: "pt-BR",
 };
 
+// Hunt salva antes do campo existir chega sem `origin`. O servidor preenche na
+// leitura, mas a tela nao pode depender disso pra nao quebrar inteira por causa
+// de um rotulo.
+const originLabel = (origin?: PrivateHunt["origin"]) => ORIGIN_LABEL[origin ?? "own"] ?? ORIGIN_LABEL.own;
+
 const currentMonth = () => new Date().toISOString().slice(0, 7);
 const monthLabel = (month: string) =>
   new Date(`${month}-01T12:00:00Z`).toLocaleDateString("pt-BR", { month: "long", year: "numeric", timeZone: "UTC" });
@@ -660,7 +665,7 @@ const Hunting = () => {
                           <div className="flex items-start justify-between gap-2">
                             <h4 className="text-sm font-medium leading-snug">{run.title}</h4>
                             {hunt && hunt.origin !== "own" && (
-                              <Badge variant="outline" className="shrink-0 text-[10px] font-normal">{ORIGIN_LABEL[hunt.origin]}</Badge>
+                              <Badge variant="outline" className="shrink-0 text-[10px] font-normal">{originLabel(hunt.origin)}</Badge>
                             )}
                           </div>
 
@@ -759,7 +764,7 @@ const Hunting = () => {
                             <TableCell className="max-w-xl py-3">
                               <button type="button" className="line-clamp-2 text-left text-sm font-medium leading-snug hover:text-primary" onClick={() => setSelected(hunt)}>{hunt.title}</button>
                               <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
-                                <Badge variant={hearth ? "secondary" : "default"} className="text-[9px]">{hearth ? "HEARTH" : ORIGIN_LABEL[hunt.origin].toUpperCase()}</Badge>
+                                <Badge variant={hearth ? "secondary" : "default"} className="text-[9px]">{hearth ? "HEARTH" : originLabel(hunt.origin).toUpperCase()}</Badge>
                                 <span>{hearth ? [hunt.category, hunt.submitter.name].filter(Boolean).join(" · ") : hunt.status}</span>
                               </div>
                             </TableCell>

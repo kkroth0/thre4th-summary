@@ -23,7 +23,7 @@ import { parseHearthData } from './hearth.js';
 import { parseSentinelTables, catalogSources } from './sentinelTables.js';
 import { parsePtbrHunt, isHuntPath } from './huntsPtbr.js';
 import { GENERATOR_SYSTEM, buildGeneratePrompt, normalizeGenerated } from './huntGenerator.js';
-import { normalizeHuntInput, upsertHunt, normalizeRunInput, upsertRun, monthlySummary } from './hunts.js';
+import { normalizeHuntInput, upsertHunt, normalizeRunInput, upsertRun, monthlySummary, withDefaults } from './hunts.js';
 import { addKnowledgeItem, normalizeKnowledgeInput } from './knowledge.js';
 import { createWatchlistStore, runDueExposureSnapshots, runExposureSnapshot } from './exposureWatchlist.js';
 import { detectQueryType, sanitizeQuery } from './iocValidation.js';
@@ -2989,7 +2989,7 @@ app.get('/api/hearth', requirePremium, async (req, res) => {
 });
 
 app.get('/api/hunts', requirePremium, (req, res) => {
-    res.json({ items: huntsStore[req.user.sub] || [] });
+    res.json({ items: (huntsStore[req.user.sub] || []).map(withDefaults) });
 });
 
 app.get('/api/hunts/coverage', requirePremium, (req, res) => {

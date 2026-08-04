@@ -134,6 +134,20 @@ export function monthlySummary(list = [], month) {
     return { month, total: runs.length, byState, byOutcome, runs };
 }
 
+/**
+ * Preenche os campos que nao existiam quando a hunt foi salva. O store e um
+ * JSON flat sem migracao: sem isto, hunt de ontem chega no cliente sem `origin`
+ * e sem `runs`, e quem indexa por esses campos quebra.
+ */
+export function withDefaults(hunt) {
+    return {
+        ...hunt,
+        origin: ['hearth', 'ptbr', 'own'].includes(hunt?.origin) ? hunt.origin : 'own',
+        sourceId: hunt?.sourceId || '',
+        runs: Array.isArray(hunt?.runs) ? hunt.runs : [],
+    };
+}
+
 /** Insere/atualiza no topo e corta o excedente mais antigo. */
 export function upsertHunt(list = [], hunt, cap = HUNTS_CAP) {
     return [hunt, ...list.filter((item) => item.id !== hunt.id)].slice(0, cap);
