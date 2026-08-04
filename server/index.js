@@ -21,6 +21,7 @@ import { groupByField, refsOfReport, relatedTo, techniqueCoverage } from './atta
 import { jobSummary, pruneJobsMap } from './feedJobs.js';
 import { parseHearthData } from './hearth.js';
 import { parseSentinelTables, catalogSources } from './sentinelTables.js';
+import { parsePtbrHunt, isHuntPath } from './huntsPtbr.js';
 import { normalizeHuntInput, upsertHunt, normalizeRunInput, upsertRun, monthlySummary } from './hunts.js';
 import { addKnowledgeItem, normalizeKnowledgeInput } from './knowledge.js';
 import { createWatchlistStore, runDueExposureSnapshots, runExposureSnapshot } from './exposureWatchlist.js';
@@ -1445,6 +1446,11 @@ const memoryCache = {
         data: null,
         expiresAt: 0,
         ttl: 24 * 60 * 60 * 1000 // schema de workspace muda devagar
+    },
+    ptbrHunts: {
+        data: null,
+        expiresAt: 0,
+        ttl: 6 * 60 * 60 * 1000 // catálogo próprio muda mais que schema
     },
     newsletter: {
         data: null,
@@ -3032,6 +3038,123 @@ app.patch('/api/hunts/:id', requirePremium, (req, res) => {
         return res.status(500).json({ error: 'não foi possível salvar a hunt' });
     }
     res.json({ hunt, items });
+});
+
+// ─── Catalogo proprio de hunts (threat-hunting-ptbr) ─────────────────────
+// Um GET na arvore do repo lista os arquivos; o corpo de cada hunt vem do raw,
+// que e CDN e nao gasta a cota de 60/h da API. O KQL nao entra aqui: sao 237
+// arquivos e so o hunt adotado precisa da consulta.
+const PTBR_REPO = 'kkroth0/threat-hunting-ptbr';
+const PTBR_TREE_URL = `https://api.github.com/repos/${PTBR_REPO}/git/trees/main?recursive=1`;
+const ptbrRawUrl = (filePath) => `https://raw.githubusercontent.com/${PTBR_REPO}/main/${filePath}`;
+
+async function getPtbrHunts() {
+    const cache = memoryCache.ptbrHunts;
+    if (cache.data && cache.expiresAt > Date.now()) return cache.data;
+    try {
+        await assertSafePublicUrl(PTBR_TREE_URL);
+        const tree = await axios.get(PTBR_TREE_URL, { timeout: 12000, headers: { 'User-Agent': 'threatsumm4ry' } });
+        const paths = (tree.data?.tree || []).map((node) => node.path).filter(isHuntPath);
+
+        const files = await Promise.all(paths.map(async (filePath) => {
+            try {
+                const raw = await axios.get(ptbrRawUrl(filePath), { responseType: 'text', maxContentLength: 500_000, timeout: 12000 });
+                return parsePtbrHunt(raw.data, filePath);
+            } catch {
+                return null; // um arquivo torto nao derruba o catalogo inteiro
+            }
+        }));
+
+        cache.data = files.filter(Boolean);
+        cache.expiresAt = Date.now() + cache.ttl;
+        return cache.data;
+    } catch (error) {
+        if (cache.data) return cache.data;
+        throw error;
+    }
+}
+
+app.get('/api/hunts/ptbr', requirePremium, async (req, res) => {
+    try {
+        const hunts = await getPtbrHunts();
+        res.json({ hunts, total: hunts.length, source: `https://github.com/${PTBR_REPO}` });
+    } catch (error) {
+        console.error('pt-BR hunt catalog fetch failed:', error.message);
+        res.status(502).json({ error: 'catálogo pt-BR indisponível' });
+    }
+});
+
+// Adotar: traz a hunt do catalogo (HEARTH ou pt-BR) pra lista privada, ja com o
+// KQL quando existe, pra ela poder entrar no quadro. Idempotente por origem +
+// id: adotar de novo devolve a mesma hunt em vez de duplicar a fila do mes.
+app.post('/api/hunts/adopt', requirePremium, async (req, res) => {
+    const origin = String(req.body?.origin || '').toLowerCase();
+    const sourceId = String(req.body?.id || '').slice(0, 200);
+    if (!['hearth', 'ptbr'].includes(origin)) return res.status(400).json({ error: 'origem inválida' });
+    if (!sourceId) return res.status(400).json({ error: 'id obrigatório' });
+
+    const mine = huntsStore[req.user.sub] || [];
+    const already = mine.find((hunt) => hunt.origin === origin && hunt.sourceId === sourceId);
+    if (already) return res.json({ hunt: already, items: mine, adopted: false });
+
+    let input;
+    try {
+        if (origin === 'ptbr') {
+            const found = (await getPtbrHunts()).find((hunt) => hunt.id === sourceId);
+            if (!found) return res.status(404).json({ error: 'hunt não encontrado no catálogo' });
+
+            let query = '';
+            if (found.queryPath) {
+                // Caminho vindo do proprio catalogo, nao do cliente: nada de
+                // ../ pra escapar do repo.
+                const safePath = found.queryPath.replace(/\.\./g, '').replace(/^\/+/, '');
+                query = await axios.get(ptbrRawUrl(safePath), { responseType: 'text', maxContentLength: 200_000, timeout: 12000 })
+                    .then((raw) => String(raw.data || ''))
+                    .catch(() => '');
+            }
+
+            input = {
+                title: found.title,
+                hypothesis: found.hypothesis,
+                dataSources: found.dataSources,
+                technologies: found.technologies,
+                notes: [found.notes, found.expected].filter(Boolean).join('\n\n'),
+                query,
+                status: 'ready',
+            };
+        } else {
+            const found = (await getHearthCatalog()).find((hunt) => hunt.id === sourceId);
+            if (!found) return res.status(404).json({ error: 'hunt não encontrado no catálogo' });
+            input = {
+                title: found.title,
+                hypothesis: found.why || found.title,
+                tactics: found.tactics,
+                techniques: found.techniques,
+                notes: found.notes,
+                status: 'ready',
+                hearthId: found.id,
+            };
+        }
+    } catch (error) {
+        console.error('hunt adoption failed:', error.message);
+        return res.status(502).json({ error: 'catálogo indisponível' });
+    }
+
+    let hunt;
+    try {
+        hunt = normalizeHuntInput({ ...input, origin, sourceId }, { ownerSub: req.user.sub });
+    } catch (error) {
+        return res.status(400).json({ error: error.message });
+    }
+
+    const items = upsertHunt(mine, hunt);
+    try {
+        saveHuntsStore({ ...huntsStore, [req.user.sub]: items });
+    } catch (error) {
+        console.error('hunts store write failed:', error.message);
+        return res.status(500).json({ error: 'não foi possível salvar a hunt' });
+    }
+    res.status(201).json({ hunt, items, adopted: true });
 });
 
 // ─── Execucao de hunt: o quadro do analista ───────────────────────────────

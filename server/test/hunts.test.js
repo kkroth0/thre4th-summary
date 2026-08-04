@@ -175,3 +175,21 @@ test('resumo do mês conta por estado e só pontua achado do que fechou', () => 
 
     assert.equal(monthlySummary(hunts, '2026-09').total, 0);
 });
+
+test('origem só aceita catálogo conhecido e sobrevive ao update', () => {
+    const adotada = normalizeHuntInput(
+        { title: 'Egress', hypothesis: 'saida incomum', origin: 'ptbr', sourceId: 'weekly/top-egress' },
+        { ownerSub: 'u1' },
+    );
+    assert.equal(adotada.origin, 'ptbr');
+    assert.equal(adotada.sourceId, 'weekly/top-egress');
+
+    // Origem inventada não vira rótulo: cai pra 'own'.
+    assert.equal(normalizeHuntInput({ title: 't', hypothesis: 'h', origin: 'inventada' }, { ownerSub: 'u1' }).origin, 'own');
+    assert.equal(normalizeHuntInput({ title: 't', hypothesis: 'h' }, { ownerSub: 'u1' }).origin, 'own');
+
+    // O PATCH passa a hunt inteira pelo normalize; a origem não pode se perder.
+    const editada = normalizeHuntInput({ ...adotada, title: 'Egress revisado' }, { ownerSub: 'u1', id: adotada.id });
+    assert.equal(editada.origin, 'ptbr');
+    assert.equal(editada.sourceId, 'weekly/top-egress');
+});

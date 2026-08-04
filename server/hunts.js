@@ -58,6 +58,11 @@ export function normalizeHuntInput(input = {}, {
         status,
         sourceReportId: clean(input.sourceReportId, 80),
         hearthId: clean(input.hearthId, 40),
+        // De onde a hunt veio: 'own' quando o analista escreveu, 'hearth' ou
+        // 'ptbr' quando foi adotada. O par (origin, sourceId) e o que impede
+        // adotar duas vezes a mesma hunt e duplicar a fila do mes.
+        origin: ['hearth', 'ptbr'].includes(clean(input.origin, 20)) ? clean(input.origin, 20) : 'own',
+        sourceId: clean(input.sourceId, 200),
         runs: Array.isArray(input.runs) ? input.runs.slice(0, RUNS_CAP) : [],
         createdAt: createdAt || now,
         updatedAt: now,

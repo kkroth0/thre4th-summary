@@ -335,3 +335,26 @@ test('execucao de outro dono nao existe pra quem consulta', async () => {
     });
     assert.equal(invasao.status, 404);
 });
+
+test('adotar hunt do catalogo e idempotente e valida a origem', async () => {
+    const invalida = await fetch(`${BASE}/api/hunts/adopt`, {
+        method: 'POST',
+        headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ origin: 'inventada', id: 'x' }),
+    });
+    assert.equal(invalida.status, 400);
+
+    const semId = await fetch(`${BASE}/api/hunts/adopt`, {
+        method: 'POST',
+        headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ origin: 'ptbr' }),
+    });
+    assert.equal(semId.status, 400);
+
+    const anonima = await fetch(`${BASE}/api/hunts/adopt`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ origin: 'ptbr', id: 'weekly/x' }),
+    });
+    assert.equal(anonima.status, 401);
+});
