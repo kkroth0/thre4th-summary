@@ -1,5 +1,5 @@
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
-import { ExternalLink, FileCode2, FilterX, Loader2, Pencil, Plus, Search, Trash2 } from "lucide-react";
+import { CalendarRange, CheckCircle2, ExternalLink, FileCode2, FilterX, Loader2, Pencil, Play, Plus, Search, Trash2 } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
@@ -18,9 +18,11 @@ import { PageHeader } from "@/components/PageHeader";
 import { PageLayout } from "@/components/PageLayout";
 import { useLanguage } from "@/contexts/LanguageContext";
 import {
-  createHunt, deleteHunt, fetchHearth, fetchHuntCoverage, fetchHuntFieldCoverage, fetchHunts,
-  updateHunt, type FieldCoverage, type HearthHunt, type HuntInput, type HuntingItem,
-  type PrivateHunt, type TechniqueCoverage, type TechniqueCoverageNode,
+  adoptHunt, createHunt, deleteHunt, fetchHearth, fetchHuntCoverage, fetchHuntFieldCoverage, fetchHunts,
+  fetchMonthlyRuns, fetchPtbrHunts, startHuntRun, updateHunt, updateHuntRun,
+  type FieldCoverage, type HearthHunt, type HuntInput, type HuntingItem, type HuntRun,
+  type MonthlySummary, type PrivateHunt, type PtbrHunt, type RunOutcome, type RunState,
+  type TechniqueCoverage, type TechniqueCoverageNode,
 } from "@/services/threatApi";
 import { filterHunts, huntOrigin, parseList } from "./huntingView";
 
@@ -277,6 +279,104 @@ function TechniqueMatrix({ coverage, hunts }: { coverage: TechniqueCoverage | nu
   );
 }
 
+// ─── Quadro de execução ────────────────────────────────────────────────────
+// Três colunas no lugar de um campo de status: o analista vê de relance o que
+// está na fila, o que está rodando e o que fechou no mês. A hunt adotada do
+// catálogo entra misturada com as próprias — o selo de origem já separa.
+const RUN_COLUMNS: { state: RunState; label: string }[] = [
+  { state: "pending", label: "Em aguardo" },
+  { state: "running", label: "Em andamento" },
+  { state: "done", label: "Finalizado" },
+];
+
+const OUTCOME_LABEL: Record<RunOutcome, string> = {
+  none: "Nada encontrado",
+  suspicious: "Suspeito",
+  incident: "Incidente",
+};
+
+const ORIGIN_LABEL: Record<PrivateHunt["origin"], string> = {
+  own: "própria",
+  hearth: "HEARTH",
+  ptbr: "pt-BR",
+};
+
+const currentMonth = () => new Date().toISOString().slice(0, 7);
+const monthLabel = (month: string) =>
+  new Date(`${month}-01T12:00:00Z`).toLocaleDateString("pt-BR", { month: "long", year: "numeric", timeZone: "UTC" });
+
+/** Fecha a execução com o achado. Sem campo de cliente: o que não existe não vaza. */
+function FinishRunDialog({ open, saving, onClose, onFinish }: {
+  open: boolean;
+  saving: boolean;
+  onClose: () => void;
+  onFinish: (input: { outcome: RunOutcome; events: number; hosts: number; findings: string }) => void;
+}) {
+  const [outcome, setOutcome] = useState<RunOutcome>("none");
+  const [events, setEvents] = useState("0");
+  const [hosts, setHosts] = useState("0");
+  const [findings, setFindings] = useState("");
+
+  return (
+    <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Fechar execução</DialogTitle>
+          <DialogDescription>
+            Registre o que saiu. Não use nome de cliente, host ou usuário — o campo é para o achado, não para o dado.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          <div className="space-y-1.5">
+            <Label>Resultado</Label>
+            <Select value={outcome} onValueChange={(value) => setOutcome(value as RunOutcome)}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {(Object.keys(OUTCOME_LABEL) as RunOutcome[]).map((value) => (
+                  <SelectItem key={value} value={value}>{OUTCOME_LABEL[value]}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="run-events">Eventos</Label>
+              <Input id="run-events" inputMode="numeric" value={events} onChange={(e) => setEvents(e.target.value)} />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="run-hosts">Hosts</Label>
+              <Input id="run-hosts" inputMode="numeric" value={hosts} onChange={(e) => setHosts(e.target.value)} />
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="run-findings">Achados</Label>
+            <Textarea
+              id="run-findings"
+              rows={4}
+              value={findings}
+              onChange={(e) => setFindings(e.target.value)}
+              placeholder="O que apareceu, o padrão observado e o que fazer a seguir."
+            />
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="ghost" onClick={onClose}>Cancelar</Button>
+          <Button
+            disabled={saving}
+            onClick={() => onFinish({ outcome, events: Number(events) || 0, hosts: Number(hosts) || 0, findings })}
+          >
+            {saving && <Loader2 className="h-4 w-4 animate-spin" />} Fechar execução
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 const Hunting = () => {
   const { language } = useLanguage();
   const pt = language === "pt";
@@ -289,6 +389,11 @@ const Hunting = () => {
   const [dataSourceCoverage, setDataSourceCoverage] = useState<FieldCoverage | null>(null);
   const [loading, setLoading] = useState(true);
   const [catalogError, setCatalogError] = useState(false);
+  const [ptbrCatalog, setPtbrCatalog] = useState<PtbrHunt[]>([]);
+  const [month, setMonth] = useState(currentMonth);
+  const [summary, setSummary] = useState<MonthlySummary | null>(null);
+  const [runSaving, setRunSaving] = useState(false);
+  const [finishing, setFinishing] = useState<{ huntId: string; runId: string } | null>(null);
   const [query, setQuery] = useState(() => searchParams.get("query") || "");
   const deferredQuery = useDeferredValue(query);
   const [showHearth, setShowHearth] = useState(true);
@@ -314,9 +419,10 @@ const Hunting = () => {
     let live = true;
     Promise.allSettled([
       fetchHearth(), fetchHunts(), fetchHuntCoverage("technique"),
-      fetchHuntFieldCoverage("technology"), fetchHuntFieldCoverage("dataSource"),
-    ]).then(([hearth, own, tech, technologies, dataSources]) => {
+      fetchHuntFieldCoverage("technology"), fetchHuntFieldCoverage("dataSource"), fetchPtbrHunts(),
+    ]).then(([hearth, own, tech, technologies, dataSources, ptbr]) => {
       if (!live) return;
+      if (ptbr.status === "fulfilled") setPtbrCatalog(ptbr.value.hunts);
       if (hearth.status === "fulfilled") setCatalog(hearth.value.hunts); else setCatalogError(true);
       if (own.status === "fulfilled") setPrivateHunts(own.value); else toast.error(pt ? "Falha ao carregar suas hunts" : "Failed to load your hunts");
       if (tech.status === "fulfilled") setTechCoverage(tech.value);
@@ -326,6 +432,13 @@ const Hunting = () => {
     });
     return () => { live = false; };
   }, [pt]);
+
+  const refreshSummary = useCallback(async (target: string) => {
+    try { setSummary(await fetchMonthlyRuns(target)); }
+    catch { setSummary(null); }
+  }, []);
+
+  useEffect(() => { refreshSummary(month); }, [month, refreshSummary]);
 
   useEffect(() => {
     if (prefilled.current || searchParams.get("new") !== "1") return;
@@ -380,6 +493,42 @@ const Hunting = () => {
     try { setPrivateHunts(await deleteHunt(hunt.id)); await refreshCoverage(); }
     catch (error) { toast.error((error as Error).message); }
   };
+  // Entrar na fila e sempre criar execucao pendente: o quadro mostra o que o
+  // analista escolheu rodar no mes, nao a biblioteca inteira.
+  const queueHunt = async (hunt: PrivateHunt) => {
+    setRunSaving(true);
+    try {
+      const { items } = await startHuntRun(hunt.id, { state: "pending" });
+      setPrivateHunts(items);
+      await refreshSummary(month);
+      toast.success("Hunt na fila do mês");
+    } catch (error) { toast.error((error as Error).message); }
+    finally { setRunSaving(false); }
+  };
+
+  const adoptAndQueue = async (origin: "hearth" | "ptbr", id: string) => {
+    setRunSaving(true);
+    try {
+      const { hunt, items } = await adoptHunt(origin, id);
+      setPrivateHunts(items);
+      const queued = await startHuntRun(hunt.id, { state: "pending" });
+      setPrivateHunts(queued.items);
+      await Promise.all([refreshSummary(month), refreshCoverage()]);
+      toast.success("Hunt adotada e na fila");
+    } catch (error) { toast.error((error as Error).message); }
+    finally { setRunSaving(false); }
+  };
+
+  const advanceRun = async (huntId: string, runId: string, input: Partial<HuntRun>) => {
+    setRunSaving(true);
+    try {
+      const { items } = await updateHuntRun(huntId, runId, input);
+      setPrivateHunts(items);
+      await refreshSummary(month);
+    } catch (error) { toast.error((error as Error).message); }
+    finally { setRunSaving(false); }
+  };
+
   const clearFilters = () => { setQuery(""); setShowHearth(true); setShowPrivate(true); setCategory("all"); setTactic("all"); setTechnique("all"); setTechnology("all"); setDataSource("all"); };
 
   return (
@@ -391,10 +540,121 @@ const Hunting = () => {
       />
 
       <Tabs defaultValue="library" className="space-y-5">
-        <TabsList className="grid w-full max-w-sm grid-cols-2">
+        <TabsList className="grid w-full max-w-lg grid-cols-3">
           <TabsTrigger value="library">Biblioteca <span className="ml-2 text-xs text-muted-foreground">{allItems.length}</span></TabsTrigger>
+          <TabsTrigger value="board">Execução{summary?.total ? <span className="ml-2 text-xs text-muted-foreground">{summary.total}</span> : null}</TabsTrigger>
           <TabsTrigger value="coverage">Cobertura</TabsTrigger>
         </TabsList>
+
+        <TabsContent value="board" className="space-y-5">
+          <div className="flex flex-wrap items-end justify-between gap-4">
+            <div>
+              <h2 className="text-lg font-semibold">Controle de {monthLabel(month)}</h2>
+              <p className="text-sm text-muted-foreground">
+                A execução conta pelo mês em que começou. Sem campo de cliente: registre o achado, não o dado.
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <CalendarRange className="h-4 w-4 text-muted-foreground" />
+              <Input
+                type="month"
+                value={month}
+                onChange={(event) => setMonth(event.target.value || currentMonth())}
+                className="h-9 w-[11rem]"
+              />
+            </div>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-4">
+            {[
+              ["No mês", summary?.total ?? 0],
+              ["Em andamento", summary?.byState.running ?? 0],
+              ["Suspeitos", summary?.byOutcome.suspicious ?? 0],
+              ["Incidentes", summary?.byOutcome.incident ?? 0],
+            ].map(([label, value]) => (
+              <div key={String(label)} className="rounded-lg border bg-card p-4">
+                <div className="text-2xl font-semibold tabular-nums">{value}</div>
+                <div className="mt-0.5 text-xs uppercase tracking-wide text-muted-foreground">{label}</div>
+              </div>
+            ))}
+          </div>
+
+          <div className="grid gap-4 lg:grid-cols-3">
+            {RUN_COLUMNS.map((column) => {
+              const runs = (summary?.runs || []).filter((run) => run.state === column.state);
+              return (
+                <section key={column.state} className="rounded-lg border bg-card">
+                  <header className="flex items-center justify-between border-b px-4 py-3">
+                    <h3 className="text-sm font-semibold">{column.label}</h3>
+                    <span className="font-mono text-xs text-muted-foreground">{String(runs.length).padStart(2, "0")}</span>
+                  </header>
+                  <div className="space-y-2 p-3">
+                    {runs.map((run) => {
+                      const hunt = privateHunts.find((item) => item.id === run.huntId);
+                      return (
+                        <article key={run.id} className="rounded-md border p-3">
+                          <div className="flex items-start justify-between gap-2">
+                            <h4 className="text-sm font-medium leading-snug">{run.title}</h4>
+                            {hunt && hunt.origin !== "own" && (
+                              <Badge variant="outline" className="shrink-0 text-[10px] font-normal">{ORIGIN_LABEL[hunt.origin]}</Badge>
+                            )}
+                          </div>
+
+                          {run.state === "done" ? (
+                            <div className="mt-2 space-y-1.5">
+                              <div className="flex items-center gap-1.5 text-xs">
+                                <CheckCircle2 className={`h-3.5 w-3.5 ${run.outcome === "none" ? "text-muted-foreground" : "text-primary"}`} />
+                                {OUTCOME_LABEL[run.outcome]}
+                                {(run.events > 0 || run.hosts > 0) && (
+                                  <span className="text-muted-foreground">· {run.events} ev · {run.hosts} hosts</span>
+                                )}
+                              </div>
+                              {run.findings && <p className="text-xs leading-5 text-muted-foreground">{run.findings}</p>}
+                            </div>
+                          ) : (
+                            <div className="mt-3 flex gap-2">
+                              {run.state === "pending" && (
+                                <Button size="sm" variant="outline" disabled={runSaving} onClick={() => advanceRun(run.huntId, run.id, { state: "running" })}>
+                                  <Play className="h-3.5 w-3.5" /> Iniciar
+                                </Button>
+                              )}
+                              {run.state === "running" && (
+                                <Button size="sm" disabled={runSaving} onClick={() => setFinishing({ huntId: run.huntId, runId: run.id })}>
+                                  <CheckCircle2 className="h-3.5 w-3.5" /> Fechar
+                                </Button>
+                              )}
+                            </div>
+                          )}
+                        </article>
+                      );
+                    })}
+                    {!runs.length && <p className="px-1 py-6 text-center text-xs text-muted-foreground">vazio</p>}
+                  </div>
+                </section>
+              );
+            })}
+          </div>
+
+          {!!ptbrCatalog.length && (
+            <section className="rounded-lg border bg-card p-4">
+              <h3 className="text-sm font-semibold">Catálogo pt-BR</h3>
+              <p className="mt-0.5 text-xs text-muted-foreground">Suas hunts do threat-hunting-ptbr. Adotar traz o KQL junto e já coloca na fila.</p>
+              <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                {ptbrCatalog.map((hunt) => (
+                  <div key={hunt.id} className="flex items-start justify-between gap-3 rounded-md border p-3">
+                    <div className="min-w-0">
+                      <div className="text-sm font-medium leading-snug">{hunt.title}</div>
+                      <div className="mt-0.5 text-xs text-muted-foreground">{hunt.cadence || "sem cadência"} · {hunt.dataSources.slice(0, 2).join(", ") || "sem tabela"}</div>
+                    </div>
+                    <Button size="sm" variant="outline" className="shrink-0" disabled={runSaving} onClick={() => adoptAndQueue("ptbr", hunt.id)}>
+                      Adotar
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+        </TabsContent>
 
         <TabsContent value="library" className="space-y-4">
           <div className="relative max-w-2xl">
@@ -435,7 +695,7 @@ const Hunting = () => {
                             <TableCell className="max-w-xl py-3">
                               <button type="button" className="line-clamp-2 text-left text-sm font-medium leading-snug hover:text-primary" onClick={() => setSelected(hunt)}>{hunt.title}</button>
                               <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
-                                <Badge variant={hearth ? "secondary" : "default"} className="text-[9px]">{hearth ? "HEARTH" : "SUA"}</Badge>
+                                <Badge variant={hearth ? "secondary" : "default"} className="text-[9px]">{hearth ? "HEARTH" : ORIGIN_LABEL[hunt.origin].toUpperCase()}</Badge>
                                 <span>{hearth ? [hunt.category, hunt.submitter.name].filter(Boolean).join(" · ") : hunt.status}</span>
                               </div>
                             </TableCell>
@@ -443,6 +703,16 @@ const Hunting = () => {
                             <TableCell className="py-3 text-xs text-muted-foreground">{hearth ? hunt.tactics.slice(0, 2).join(" · ") : [...hunt.technologies, ...hunt.dataSources].slice(0, 2).join(" · ") || "—"}</TableCell>
                             <TableCell className="py-3 text-right">
                               <div className="flex justify-end gap-1">
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8"
+                                  disabled={runSaving}
+                                  title={hearth ? "Adotar e colocar na fila do mês" : "Colocar na fila do mês"}
+                                  onClick={() => (hearth ? adoptAndQueue("hearth", hunt.id) : queueHunt(hunt))}
+                                >
+                                  <Play className="h-4 w-4" />
+                                </Button>
                                 <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setSelected(hunt)} title="Abrir"><FileCode2 className="h-4 w-4" /></Button>
                                 {!hearth && <><Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openPrivate(hunt)} title="Editar"><Pencil className="h-4 w-4" /></Button><Button variant="ghost" size="icon" className="h-8 w-8 hover:text-destructive" onClick={() => remove(hunt)} title="Apagar"><Trash2 className="h-4 w-4" /></Button></>}
                               </div>
@@ -474,6 +744,17 @@ const Hunting = () => {
 
       <HuntDetail hunt={selected} onClose={() => setSelected(null)} onEdit={openPrivate} onCopy={copyHearth} />
       <HuntFormDialog form={form} editing={Boolean(editingId)} saving={saving} onChange={setForm} onClose={() => { setForm(null); setEditingId(""); }} onSave={save} />
+
+      <FinishRunDialog
+        open={!!finishing}
+        saving={runSaving}
+        onClose={() => setFinishing(null)}
+        onFinish={async (input) => {
+          if (!finishing) return;
+          await advanceRun(finishing.huntId, finishing.runId, { state: "done", ...input });
+          setFinishing(null);
+        }}
+      />
     </PageLayout>
   );
 };

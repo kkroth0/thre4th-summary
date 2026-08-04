@@ -1688,12 +1688,53 @@ export interface PrivateHunt {
     status: HuntStatus;
     sourceReportId: string;
     hearthId: string;
+    /** 'own' quando o analista escreveu; 'hearth'/'ptbr' quando foi adotada. */
+    origin: 'own' | 'hearth' | 'ptbr';
+    sourceId: string;
+    runs: HuntRun[];
     createdAt: string;
     updatedAt: string;
 }
 
+export type RunState = 'pending' | 'running' | 'done';
+export type RunOutcome = 'none' | 'suspicious' | 'incident';
+
+export interface HuntRun {
+    id: string;
+    state: RunState;
+    outcome: RunOutcome;
+    events: number;
+    hosts: number;
+    findings: string;
+    startedAt: string;
+    finishedAt: string | null;
+    updatedAt: string;
+}
+
+export interface MonthlySummary {
+    month: string;
+    total: number;
+    byState: Record<RunState, number>;
+    byOutcome: Record<RunOutcome, number>;
+    runs: (HuntRun & { huntId: string; title: string })[];
+}
+
+export interface PtbrHunt {
+    id: string;
+    origin: 'ptbr';
+    title: string;
+    hypothesis: string;
+    cadence: string;
+    dataSources: string[];
+    technologies: string[];
+    queryPath: string;
+    notes: string;
+    expected: string;
+    sourcePath: string;
+}
+
 export type HuntingItem = HearthHunt | PrivateHunt;
-export type HuntInput = Omit<PrivateHunt, 'id' | 'ownerSub' | 'queryLang' | 'createdAt' | 'updatedAt'>;
+export type HuntInput = Omit<PrivateHunt, 'id' | 'ownerSub' | 'queryLang' | 'createdAt' | 'updatedAt' | 'origin' | 'sourceId' | 'runs'>;
 
 export interface TechniqueCoverageNode {
     id: string;
@@ -1738,6 +1779,28 @@ export const fetchHuntCoverage = async (axis: 'technique'): Promise<TechniqueCov
     handleResponse(await fetch(`/api/hunts/coverage?axis=${axis}`), 'Hunting');
 export const fetchHuntFieldCoverage = async (axis: 'technology' | 'dataSource'): Promise<FieldCoverage> =>
     handleResponse(await fetch(`/api/hunts/coverage?axis=${axis}`), 'Hunting');
+
+// ─── Execução de hunt (quadro do analista) ─────────────────────────────────
+export const fetchPtbrHunts = async (): Promise<{ hunts: PtbrHunt[]; total: number; source: string }> =>
+    handleResponse(await fetch('/api/hunts/ptbr'), 'Hunting');
+
+export const adoptHunt = async (origin: 'hearth' | 'ptbr', id: string): Promise<{ hunt: PrivateHunt; items: PrivateHunt[]; adopted: boolean }> =>
+    handleResponse(await fetch('/api/hunts/adopt', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ origin, id }),
+    }), 'Hunting');
+
+export const startHuntRun = async (huntId: string, input: Partial<HuntRun> = {}): Promise<{ hunt: PrivateHunt; run: HuntRun; items: PrivateHunt[] }> =>
+    handleResponse(await fetch(`/api/hunts/${encodeURIComponent(huntId)}/runs`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input),
+    }), 'Hunting');
+
+export const updateHuntRun = async (huntId: string, runId: string, input: Partial<HuntRun>): Promise<{ hunt: PrivateHunt; run: HuntRun; items: PrivateHunt[] }> =>
+    handleResponse(await fetch(`/api/hunts/${encodeURIComponent(huntId)}/runs/${encodeURIComponent(runId)}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input),
+    }), 'Hunting');
+
+export const fetchMonthlyRuns = async (month: string): Promise<MonthlySummary> =>
+    handleResponse(await fetch(`/api/hunts/runs/summary?month=${encodeURIComponent(month)}`), 'Hunting');
 
 export const fetchJobRelated = async (id: string): Promise<{ hunts: PrivateHunt[]; reports: BoletimJob[] }> =>
     handleResponse(await fetch(`/api/feed/job/${encodeURIComponent(id)}/related`), 'Hunting');
