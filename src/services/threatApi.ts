@@ -1713,13 +1713,18 @@ export interface HuntRun {
     updatedAt: string;
 }
 
-export interface OverdueHunt {
+export interface ScheduledHunt {
     id: string;
     title: string;
     cadence: string;
     lastRunAt: string | null;
+    nextDueAt: string | null;
     daysLate: number | null;
+    late: boolean;
 }
+
+/** O painel do mês devolve só as vencidas; a agenda devolve todas. */
+export type OverdueHunt = ScheduledHunt;
 
 export interface MonthlySummary {
     month: string;
@@ -1847,6 +1852,9 @@ export const updateHuntRun = async (huntId: string, runId: string, input: Partia
     handleResponse(await fetch(`/api/hunts/${encodeURIComponent(huntId)}/runs/${encodeURIComponent(runId)}`, {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input),
     }), 'Hunting');
+
+export const fetchHuntSchedule = async (): Promise<{ schedule: ScheduledHunt[]; total: number; late: number }> =>
+    handleResponse(await fetch('/api/hunts/schedule'), 'Hunting');
 
 export const fetchMonthlyRuns = async (month: string): Promise<MonthlySummary> =>
     handleResponse(await fetch(`/api/hunts/runs/summary?month=${encodeURIComponent(month)}`), 'Hunting');

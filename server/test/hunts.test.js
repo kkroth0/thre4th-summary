@@ -11,6 +11,7 @@ import {
     RUNS_CAP,
     withDefaults,
     overdueHunts,
+    huntSchedule,
 } from '../hunts.js';
 
 const now = '2026-08-01T12:00:00.000Z';
@@ -267,4 +268,32 @@ test('cadência inválida não vira rótulo', () => {
     const hunt = normalizeHuntInput({ title: 't', hypothesis: 'h', cadence: 'quinzenal' }, { ownerSub: 'u1' });
     assert.equal(hunt.cadence, '');
     assert.equal(normalizeHuntInput({ title: 't', hypothesis: 'h', cadence: 'weekly' }, { ownerSub: 'u1' }).cadence, 'weekly');
+});
+
+test('a agenda diz quando vence, não só o que venceu', () => {
+    const lista = [
+        { id: 'nunca', title: 'Nunca rodou', cadence: 'weekly', runs: [] },
+        { id: 'em-dia', title: 'Em dia', cadence: 'weekly', runs: [runEm(new Date(AGORA - 2 * DIA).toISOString())] },
+        { id: 'atrasada', title: 'Atrasada', cadence: 'daily', runs: [runEm(new Date(AGORA - 5 * DIA).toISOString())] },
+        { id: 'sem-ritmo', title: 'Sem ritmo', cadence: '', runs: [] },
+    ];
+
+    const agenda = huntSchedule(lista, AGORA);
+    assert.deepEqual(agenda.map((item) => item.id), ['nunca', 'atrasada', 'em-dia'], 'sem ritmo fica fora');
+
+    const emDia = agenda.find((item) => item.id === 'em-dia');
+    assert.equal(emDia.late, false);
+    assert.equal(emDia.daysLate, null, 'quem está em dia não tem atraso');
+    assert.equal(emDia.nextDueAt.slice(0, 10), new Date(AGORA + 5 * DIA).toISOString().slice(0, 10));
+
+    const nunca = agenda.find((item) => item.id === 'nunca');
+    assert.equal(nunca.late, true);
+    assert.equal(nunca.lastRunAt, null);
+    assert.equal(nunca.daysLate, null, 'sem execução não há de quando contar atraso');
+
+    // O alerta é um recorte da agenda, não uma segunda regra.
+    assert.deepEqual(
+        overdueHunts(lista, AGORA).map((item) => item.id),
+        agenda.filter((item) => item.late).map((item) => item.id),
+    );
 });

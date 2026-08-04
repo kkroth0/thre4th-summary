@@ -23,7 +23,7 @@ import { parseHearthData } from './hearth.js';
 import { parseSentinelTables, catalogSources } from './sentinelTables.js';
 import { parsePtbrHunt, isHuntPath } from './huntsPtbr.js';
 import { GENERATOR_SYSTEM, buildGeneratePrompt, normalizeGenerated } from './huntGenerator.js';
-import { normalizeHuntInput, upsertHunt, normalizeRunInput, upsertRun, monthlySummary, withDefaults, overdueHunts } from './hunts.js';
+import { normalizeHuntInput, upsertHunt, normalizeRunInput, upsertRun, monthlySummary, withDefaults, overdueHunts, huntSchedule } from './hunts.js';
 import { addKnowledgeItem, normalizeKnowledgeInput } from './knowledge.js';
 import { createWatchlistStore, runDueExposureSnapshots, runExposureSnapshot } from './exposureWatchlist.js';
 import { detectQueryType, sanitizeQuery } from './iocValidation.js';
@@ -3369,6 +3369,15 @@ app.get('/api/hunts/runs/summary', requirePremium, (req, res) => {
     if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) return res.status(400).json({ error: 'mês inválido' });
     const items = (huntsStore[req.user.sub] || []).map(withDefaults);
     res.json({ ...monthlySummary(items, month), overdue: overdueHunts(items) });
+});
+
+// Controle continuo: onde cada hunt com ritmo esta agora, independente do mes
+// escolhido no painel. O resumo mensal responde "o que aconteceu em agosto";
+// isto responde "o que esta em dia e o que nao esta".
+app.get('/api/hunts/schedule', requirePremium, (req, res) => {
+    const items = (huntsStore[req.user.sub] || []).map(withDefaults);
+    const schedule = huntSchedule(items);
+    res.json({ schedule, total: schedule.length, late: schedule.filter((item) => item.late).length });
 });
 
 // Indice por tecnica ATT&CK: a partir dele o mapa do MITRE fica clicavel e

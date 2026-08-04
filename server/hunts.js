@@ -141,39 +141,55 @@ export function monthlySummary(list = [], month) {
 }
 
 /**
- * Hunts que ja deveriam ter rodado e nao rodaram. E a pergunta que o quadro nao
- * respondia: ele mostra o que foi feito, isto mostra o que ficou pra tras.
- * Sem cadencia a hunt nunca vence — quem nao definiu ritmo nao esta atrasado.
+ * Agenda de todas as hunts com ritmo definido: quando rodou, quando vence e
+ * quanto esta atrasada. E a visao continua — o resumo do mes responde "o que
+ * aconteceu em agosto", isto responde "onde tudo esta agora".
+ *
+ * Sem cadencia a hunt fica de fora: quem nao combinou ritmo nao esta atrasado.
  */
-export function overdueHunts(list = [], now = Date.now()) {
+export function huntSchedule(list = [], now = Date.now()) {
+    const dia = 24 * 60 * 60 * 1000;
+
     return list
         .map((hunt) => {
             const days = CADENCES[hunt.cadence];
             if (!days) return null;
 
-            // A ultima execucao que conta e a mais recente por inicio; a lista
-            // guarda a mais nova no topo, mas nao da pra confiar nisso depois de
-            // uma reabertura ter mexido na ordem.
+            // A execucao que vale e a mais recente por data. A lista guarda a mais
+            // nova no topo, mas reabrir mexe na ordem — nao da pra confiar nela.
             const last = (hunt.runs || [])
                 .map((run) => Date.parse(run.startedAt))
                 .filter(Number.isFinite)
                 .sort((a, b) => b - a)[0];
 
-            const dueMs = days * 24 * 60 * 60 * 1000;
-            const elapsed = last === undefined ? Infinity : now - last;
-            if (elapsed < dueMs) return null;
+            const dueMs = days * dia;
+            const nextDue = last === undefined ? now : last + dueMs;
+            const late = now >= nextDue;
 
             return {
                 id: hunt.id,
                 title: hunt.title,
                 cadence: hunt.cadence,
                 lastRunAt: last === undefined ? null : new Date(last).toISOString(),
-                daysLate: last === undefined ? null : Math.floor((elapsed - dueMs) / (24 * 60 * 60 * 1000)),
+                nextDueAt: last === undefined ? null : new Date(nextDue).toISOString(),
+                // Nunca rodou nao tem "dias de atraso": nao ha de quando contar.
+                daysLate: late && last !== undefined ? Math.floor((now - nextDue) / dia) : null,
+                late,
             };
         })
         .filter(Boolean)
-        // Nunca rodou primeiro, depois o mais atrasado.
-        .sort((a, b) => (a.lastRunAt === null ? -1 : b.lastRunAt === null ? 1 : b.daysLate - a.daysLate));
+        // Nunca rodou primeiro, depois o mais atrasado, depois o que vence antes.
+        .sort((a, b) => {
+            if (a.late !== b.late) return a.late ? -1 : 1;
+            if ((a.lastRunAt === null) !== (b.lastRunAt === null)) return a.lastRunAt === null ? -1 : 1;
+            if (a.late) return (b.daysLate ?? 0) - (a.daysLate ?? 0);
+            return Date.parse(a.nextDueAt) - Date.parse(b.nextDueAt);
+        });
+}
+
+/** So o que ja venceu — o alerta do painel sai daqui, sem regra duplicada. */
+export function overdueHunts(list = [], now = Date.now()) {
+    return huntSchedule(list, now).filter((item) => item.late);
 }
 
 /**
