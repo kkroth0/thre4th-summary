@@ -34,7 +34,10 @@ test("removes the Hunt service runtime and operational configuration", async () 
   ].map(read));
 
   for (const source of activeFiles) {
-    assert.doesNotMatch(source, /hunt-service|hunt-pack|HUNT_SERVICE|ci:hunt|\/threat-hunting/i);
+    // A rota aposentada era exatamente "/threat-hunting" — o padrão exige a
+    // aspa antes e o fim logo depois pra não pegar o repo de catálogo
+    // (github.com/kkroth0/threat-hunting-ptbr), que é fonte de dados viva.
+    assert.doesNotMatch(source, /hunt-service|hunt-pack|HUNT_SERVICE|ci:hunt|['"`]\/threat-hunting['"`]/i);
   }
   await assert.rejects(access("hunt-service"), { code: "ENOENT" });
 });
