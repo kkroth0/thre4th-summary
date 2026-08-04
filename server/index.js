@@ -20,6 +20,7 @@ import { runAttackSurfaceScan } from './attackSurface.js';
 import { groupByField, refsOfReport, relatedTo, techniqueCoverage } from './attackIndex.js';
 import { jobSummary, pruneJobsMap } from './feedJobs.js';
 import { parseHearthData } from './hearth.js';
+import { parseSentinelTables, catalogSources } from './sentinelTables.js';
 import { normalizeHuntInput, upsertHunt } from './hunts.js';
 import { addKnowledgeItem, normalizeKnowledgeInput } from './knowledge.js';
 import { createWatchlistStore, runDueExposureSnapshots, runExposureSnapshot } from './exposureWatchlist.js';
@@ -1439,6 +1440,11 @@ const memoryCache = {
         data: null,
         expiresAt: 0,
         ttl: 24 * 60 * 60 * 1000 // 24 hours
+    },
+    sentinelTables: {
+        data: null,
+        expiresAt: 0,
+        ttl: 24 * 60 * 60 * 1000 // schema de workspace muda devagar
     },
     newsletter: {
         data: null,
@@ -2927,6 +2933,43 @@ async function getHearthCatalog() {
         throw error;
     }
 }
+
+// Schema do workspace, publicado pelo dono em markdown (saida do getschema).
+// URL fixa: e fonte propria, nao entrada de usuario — nao ha SSRF a temer aqui,
+// mas passa pelo mesmo assertSafePublicUrl que o resto.
+const SENTINEL_TABLES_URL = 'https://raw.githubusercontent.com/kkroth0/threat-hunting-ptbr/main/Tables_Data.md';
+
+async function getSentinelTables() {
+    const cache = memoryCache.sentinelTables;
+    if (cache.data && cache.expiresAt > Date.now()) return cache.data;
+    try {
+        await assertSafePublicUrl(SENTINEL_TABLES_URL);
+        const response = await axios.get(SENTINEL_TABLES_URL, { responseType: 'text', maxContentLength: 4_000_000, timeout: 12000 });
+        cache.data = parseSentinelTables(response.data);
+        cache.expiresAt = Date.now() + cache.ttl;
+        return cache.data;
+    } catch (error) {
+        if (cache.data) return cache.data;
+        throw error;
+    }
+}
+
+// Catalogo de tabelas: alimenta o filtro de fonte na UI e, depois, o gerador
+// de KQL. So o resumo vai pro cliente — 3,4 mil colunas nao tem porque trafegar.
+app.get('/api/sentinel/tables', requirePremium, async (req, res) => {
+    try {
+        const catalog = await getSentinelTables();
+        res.json({
+            sources: catalogSources(catalog),
+            tables: catalog.map(({ table, source, columns }) => ({ table, source, columnCount: columns.length })),
+            total: catalog.length,
+            source: SENTINEL_TABLES_URL,
+        });
+    } catch (error) {
+        console.error('Sentinel table catalog fetch failed:', error.message);
+        res.status(502).json({ error: 'catálogo de tabelas indisponível' });
+    }
+});
 
 app.get('/api/hearth', requirePremium, async (req, res) => {
     try {
