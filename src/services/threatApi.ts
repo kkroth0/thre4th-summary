@@ -1688,6 +1688,8 @@ export interface PrivateHunt {
     status: HuntStatus;
     sourceReportId: string;
     hearthId: string;
+    /** Ritmo esperado: '', 'daily', 'weekly', 'monthly' ou 'intel'. */
+    cadence: string;
     /** 'own' quando o analista escreveu; 'hearth'/'ptbr' quando foi adotada. */
     origin: 'own' | 'hearth' | 'ptbr';
     sourceId: string;
@@ -1711,12 +1713,28 @@ export interface HuntRun {
     updatedAt: string;
 }
 
+export interface OverdueHunt {
+    id: string;
+    title: string;
+    cadence: string;
+    lastRunAt: string | null;
+    daysLate: number | null;
+}
+
 export interface MonthlySummary {
     month: string;
     total: number;
     byState: Record<RunState, number>;
     byOutcome: Record<RunOutcome, number>;
     runs: (HuntRun & { huntId: string; title: string })[];
+    /** Hunts com cadência definida que já deveriam ter rodado. */
+    overdue: OverdueHunt[];
+}
+
+export interface KqlEntry {
+    path: string;
+    folder: string;
+    name: string;
 }
 
 export interface PtbrHunt {
@@ -1805,10 +1823,20 @@ export const generateHunt = async (input: { hypothesis: string; sources?: string
 export const fetchPtbrHunts = async (): Promise<{ hunts: PtbrHunt[]; total: number; source: string }> =>
     handleResponse(await fetch('/api/hunts/ptbr'), 'Hunting');
 
-export const adoptHunt = async (origin: 'hearth' | 'ptbr', id: string): Promise<{ hunt: PrivateHunt; items: PrivateHunt[]; adopted: boolean }> =>
+export const adoptHunt = async (
+    origin: 'hearth' | 'ptbr',
+    id: string,
+    options: { generate?: boolean; sources?: string[] } = {},
+): Promise<{ hunt: PrivateHunt; items: PrivateHunt[]; adopted: boolean }> =>
     handleResponse(await fetch('/api/hunts/adopt', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ origin, id }),
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ origin, id, ...options }),
     }), 'Hunting');
+
+export const fetchKqlLibrary = async (): Promise<{ queries: KqlEntry[]; total: number; folders: string[] }> =>
+    handleResponse(await fetch('/api/hunts/kql'), 'Hunting');
+
+export const fetchKqlContent = async (path: string): Promise<{ path: string; query: string }> =>
+    handleResponse(await fetch(`/api/hunts/kql/content?path=${encodeURIComponent(path)}`), 'Hunting');
 
 export const startHuntRun = async (huntId: string, input: Partial<HuntRun> = {}): Promise<{ hunt: PrivateHunt; run: HuntRun; items: PrivateHunt[] }> =>
     handleResponse(await fetch(`/api/hunts/${encodeURIComponent(huntId)}/runs`, {

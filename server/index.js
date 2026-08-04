@@ -23,7 +23,7 @@ import { parseHearthData } from './hearth.js';
 import { parseSentinelTables, catalogSources } from './sentinelTables.js';
 import { parsePtbrHunt, isHuntPath } from './huntsPtbr.js';
 import { GENERATOR_SYSTEM, buildGeneratePrompt, normalizeGenerated } from './huntGenerator.js';
-import { normalizeHuntInput, upsertHunt, normalizeRunInput, upsertRun, monthlySummary, withDefaults } from './hunts.js';
+import { normalizeHuntInput, upsertHunt, normalizeRunInput, upsertRun, monthlySummary, withDefaults, overdueHunts } from './hunts.js';
 import { addKnowledgeItem, normalizeKnowledgeInput } from './knowledge.js';
 import { createWatchlistStore, runDueExposureSnapshots, runExposureSnapshot } from './exposureWatchlist.js';
 import { detectQueryType, sanitizeQuery } from './iocValidation.js';
@@ -1452,6 +1452,11 @@ const memoryCache = {
         data: null,
         expiresAt: 0,
         ttl: 6 * 60 * 60 * 1000 // catálogo próprio muda mais que schema
+    },
+    ptbrKql: {
+        data: null,
+        expiresAt: 0,
+        ttl: 6 * 60 * 60 * 1000
     },
     newsletter: {
         data: null,
@@ -3085,6 +3090,61 @@ app.get('/api/hunts/ptbr', requirePremium, async (req, res) => {
     }
 });
 
+// Biblioteca de consultas do repo: 237 arquivos .kql que estavam invisiveis no
+// app. So a lista vem do inventario; o corpo de cada consulta e buscado quando
+// alguem abre — ninguem precisa de 237 downloads pra procurar uma.
+async function getPtbrKqlIndex() {
+    const cache = memoryCache.ptbrKql;
+    if (cache.data && cache.expiresAt > Date.now()) return cache.data;
+    try {
+        await assertSafePublicUrl(PTBR_TREE_URL);
+        const tree = await axios.get(PTBR_TREE_URL, { timeout: 12000, headers: { 'User-Agent': 'threatsumm4ry' } });
+        cache.data = (tree.data?.tree || [])
+            .map((node) => node.path)
+            .filter((filePath) => /^sentinel\/kql\/.+\.kql$/.test(filePath))
+            .map((filePath) => {
+                const parts = filePath.split('/');
+                return {
+                    path: filePath,
+                    folder: parts.length > 3 ? parts[2] : '',
+                    name: parts[parts.length - 1].replace(/\.kql$/, ''),
+                };
+            })
+            .sort((a, b) => a.path.localeCompare(b.path));
+        cache.expiresAt = Date.now() + cache.ttl;
+        return cache.data;
+    } catch (error) {
+        if (cache.data) return cache.data;
+        throw error;
+    }
+}
+
+app.get('/api/hunts/kql', requirePremium, async (req, res) => {
+    try {
+        const queries = await getPtbrKqlIndex();
+        res.json({ queries, total: queries.length, folders: [...new Set(queries.map((item) => item.folder).filter(Boolean))].sort() });
+    } catch (error) {
+        console.error('kql index fetch failed:', error.message);
+        res.status(502).json({ error: 'biblioteca de consultas indisponível' });
+    }
+});
+
+// O caminho vem do cliente, entao so vale se estiver no indice — e o indice sai
+// do repo, nao da requisicao. Sem isso, "path" viraria leitura arbitraria.
+app.get('/api/hunts/kql/content', requirePremium, async (req, res) => {
+    const wanted = String(req.query.path || '');
+    try {
+        const index = await getPtbrKqlIndex();
+        if (!index.some((item) => item.path === wanted)) return res.status(404).json({ error: 'consulta não encontrada' });
+
+        const raw = await axios.get(ptbrRawUrl(wanted), { responseType: 'text', maxContentLength: 200_000, timeout: 12000 });
+        res.json({ path: wanted, query: String(raw.data || '') });
+    } catch (error) {
+        console.error('kql content fetch failed:', error.message);
+        res.status(502).json({ error: 'consulta indisponível' });
+    }
+});
+
 // Adotar: traz a hunt do catalogo (HEARTH ou pt-BR) pra lista privada, ja com o
 // KQL quando existe, pra ela poder entrar no quadro. Idempotente por origem +
 // id: adotar de novo devolve a mesma hunt em vez de duplicar a fila do mes.
@@ -3121,6 +3181,7 @@ app.post('/api/hunts/adopt', requirePremium, async (req, res) => {
                 technologies: found.technologies,
                 notes: [found.notes, found.expected].filter(Boolean).join('\n\n'),
                 query,
+                cadence: found.cadence,
                 status: 'ready',
             };
         } else {
@@ -3139,6 +3200,28 @@ app.post('/api/hunts/adopt', requirePremium, async (req, res) => {
     } catch (error) {
         console.error('hunt adoption failed:', error.message);
         return res.status(502).json({ error: 'catálogo indisponível' });
+    }
+
+    // Hunt do HEARTH e hipotese sem consulta: 319 das 320 da biblioteca. Gerar
+    // na adocao poupa o analista de copiar a frase pro formulario so pra pedir
+    // o KQL. Falha na geracao nao impede adotar — a hunt entra sem query.
+    if (req.body?.generate && !input.query) {
+        try {
+            const generated = await generateQuery({
+                hypothesis: input.hypothesis,
+                sources: Array.isArray(req.body?.sources) ? req.body.sources.map((item) => String(item).slice(0, 80)) : [],
+                techniques: input.techniques || [],
+            });
+            input = {
+                ...input,
+                query: generated.query,
+                dataSources: generated.dataSources.length ? generated.dataSources : input.dataSources,
+                falsePositives: generated.falsePositives || input.falsePositives,
+                notes: [input.notes, generated.notes].filter(Boolean).join('\n\n'),
+            };
+        } catch (error) {
+            console.warn('adopt generation skipped:', error.message);
+        }
     }
 
     let hunt;
@@ -3160,6 +3243,38 @@ app.post('/api/hunts/adopt', requirePremium, async (req, res) => {
 
 // Gera hunt + KQL com o LLM, preso ao schema real do workspace. A chave e do
 // servidor: o analista nao traz a dele.
+// Gera consulta a partir da hipotese. Devolve null quando nao da — quem chama
+// decide se isso e erro (rota /generate) ou so uma hunt sem query (adopt).
+async function generateQuery({ hypothesis, sources = [], techniques = [] }) {
+    if (!process.env.OPENROUTER_API_KEY) throw new Error('OPENROUTER_API_KEY não configurada');
+
+    const catalog = await getSentinelTables();
+    const userPrompt = buildGeneratePrompt({ catalog, hypothesis, sources, techniques });
+
+    const response = await axios.post(`${OPENROUTER_BASE_URL}/chat/completions`, {
+        model: OPENROUTER_MODEL,
+        temperature: 0.1,
+        response_format: { type: 'json_object' },
+        messages: [
+            { role: 'system', content: GENERATOR_SYSTEM },
+            { role: 'user', content: userPrompt },
+        ],
+    }, {
+        headers: {
+            Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
+            'Content-Type': 'application/json',
+            'HTTP-Referer': APP_BASE_URL,
+            'X-OpenRouter-Title': 'ThreatSumm4ry',
+        },
+        timeout: 60000,
+    });
+
+    const raw = response.data?.choices?.[0]?.message?.content;
+    if (!raw) throw new Error('modelo não respondeu');
+    // Resposta do modelo e entrada nao confiavel como qualquer outra.
+    return normalizeGenerated(JSON.parse(raw), catalog);
+}
+
 app.post('/api/hunts/generate', requirePremium, async (req, res) => {
     if (!process.env.OPENROUTER_API_KEY) {
         return res.status(503).json({ error: 'geração indisponível: OPENROUTER_API_KEY não configurada' });
@@ -3172,39 +3287,8 @@ app.post('/api/hunts/generate', requirePremium, async (req, res) => {
         .map((item) => String(item).toUpperCase())
         .filter((item) => /^T\d{4}(?:\.\d{3})?$/.test(item));
 
-    let catalog;
-    let userPrompt;
     try {
-        catalog = await getSentinelTables();
-        userPrompt = buildGeneratePrompt({ catalog, hypothesis, sources, techniques });
-    } catch (error) {
-        return res.status(502).json({ error: `catálogo de tabelas indisponível: ${error.message}` });
-    }
-
-    try {
-        const response = await axios.post(`${OPENROUTER_BASE_URL}/chat/completions`, {
-            model: OPENROUTER_MODEL,
-            temperature: 0.1,
-            response_format: { type: 'json_object' },
-            messages: [
-                { role: 'system', content: GENERATOR_SYSTEM },
-                { role: 'user', content: userPrompt },
-            ],
-        }, {
-            headers: {
-                Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
-                'Content-Type': 'application/json',
-                'HTTP-Referer': APP_BASE_URL,
-                'X-OpenRouter-Title': 'ThreatSumm4ry',
-            },
-            timeout: 60000,
-        });
-
-        const raw = response.data?.choices?.[0]?.message?.content;
-        if (!raw) return res.status(502).json({ error: 'modelo não respondeu' });
-
-        // Resposta do modelo e entrada nao confiavel como qualquer outra.
-        const generated = normalizeGenerated(JSON.parse(raw), catalog);
+        const generated = await generateQuery({ hypothesis, sources, techniques });
         res.json({ ...generated, model: OPENROUTER_MODEL, sources });
     } catch (error) {
         console.error('hunt generation failed:', error.message);
@@ -3283,7 +3367,8 @@ app.patch('/api/hunts/:id/runs/:runId', requirePremium, (req, res) => {
 app.get('/api/hunts/runs/summary', requirePremium, (req, res) => {
     const month = String(req.query.month || new Date().toISOString().slice(0, 7));
     if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) return res.status(400).json({ error: 'mês inválido' });
-    res.json(monthlySummary(huntsStore[req.user.sub] || [], month));
+    const items = (huntsStore[req.user.sub] || []).map(withDefaults);
+    res.json({ ...monthlySummary(items, month), overdue: overdueHunts(items) });
 });
 
 // Indice por tecnica ATT&CK: a partir dele o mapa do MITRE fica clicavel e

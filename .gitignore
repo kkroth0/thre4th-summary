@@ -37,3 +37,8 @@ server/.*.json
 
 # Sessões do visual companion (brainstorming) · mockups locais
 .superpowers/
+
+# Rascunhos de sessao e material de referencia que ficam na raiz durante o
+# trabalho. Sao seus, ficam no disco — so nao sujam o git status.
+2026-*-*.txt
+other-sites-examples/

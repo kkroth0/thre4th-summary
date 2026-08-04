@@ -23,9 +23,10 @@ import { PageLayout } from "@/components/PageLayout";
 import { useLanguage } from "@/contexts/LanguageContext";
 import {
   adoptHunt, createHunt, deleteHunt, fetchHearth, fetchHuntCoverage, fetchHuntFieldCoverage, fetchHunts,
-  fetchMonthlyRuns, fetchPtbrHunts, fetchSentinelTables, generateHunt, startHuntRun, updateHunt, updateHuntRun,
+  fetchKqlContent, fetchKqlLibrary, fetchMonthlyRuns, fetchPtbrHunts, fetchSentinelTables, generateHunt,
+  startHuntRun, updateHunt, updateHuntRun,
   type FieldCoverage, type HearthHunt, type HuntInput, type HuntingItem, type HuntRun,
-  type MonthlySummary, type PrivateHunt, type PtbrHunt, type RunOutcome, type RunState,
+  type KqlEntry, type MonthlySummary, type PrivateHunt, type PtbrHunt, type RunOutcome, type RunState,
   type TechniqueCoverage, type TechniqueCoverageNode,
 } from "@/services/threatApi";
 import { filterHunts, huntOrigin, parseList } from "./huntingView";
@@ -34,12 +35,13 @@ type HuntForm = {
   title: string; hypothesis: string; tactics: string; techniques: string; cves: string;
   technologies: string; dataSources: string; query: string; notes: string;
   falsePositives: string; status: HuntInput["status"]; sourceReportId: string; hearthId: string;
+  cadence: string;
 };
 
 const EMPTY_FORM: HuntForm = {
   title: "", hypothesis: "", tactics: "", techniques: "", cves: "", technologies: "",
   dataSources: "", query: "", notes: "", falsePositives: "", status: "draft",
-  sourceReportId: "", hearthId: "",
+  sourceReportId: "", hearthId: "", cadence: "",
 };
 
 const isHearth = (hunt: HuntingItem): hunt is HearthHunt => huntOrigin(hunt) === "hearth";
@@ -48,14 +50,14 @@ const formOf = (hunt: PrivateHunt): HuntForm => ({
   techniques: hunt.techniques.join(", "), cves: hunt.cves.join(", "),
   technologies: hunt.technologies.join(", "), dataSources: hunt.dataSources.join(", "),
   query: hunt.query, notes: hunt.notes, falsePositives: hunt.falsePositives, status: hunt.status,
-  sourceReportId: hunt.sourceReportId, hearthId: hunt.hearthId,
+  sourceReportId: hunt.sourceReportId, hearthId: hunt.hearthId, cadence: hunt.cadence || "",
 });
 const inputOf = (form: HuntForm): HuntInput => ({
   title: form.title, hypothesis: form.hypothesis, tactics: parseList(form.tactics),
   techniques: parseList(form.techniques, true), cves: parseList(form.cves, true),
   technologies: parseList(form.technologies), dataSources: parseList(form.dataSources), query: form.query,
   notes: form.notes, falsePositives: form.falsePositives, status: form.status,
-  sourceReportId: form.sourceReportId, hearthId: form.hearthId,
+  sourceReportId: form.sourceReportId, hearthId: form.hearthId, cadence: form.cadence,
 });
 
 function FacetSelect({ label, value, options, onChange }: {
@@ -171,6 +173,19 @@ function HuntFormDialog({ form, editing, saving, sources, generating, onChange, 
           <div className="space-y-1.5">
             <Label htmlFor="hunt-notes">Notas</Label>
             <Textarea id="hunt-notes" rows={3} {...field("notes")} />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Cadência</Label>
+            <Select value={form.cadence || "none"} onValueChange={(value) => onChange({ ...form, cadence: value === "none" ? "" : value })}>
+              <SelectTrigger aria-label="Cadência"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">Sem ritmo definido</SelectItem>
+                <SelectItem value="daily">Diária</SelectItem>
+                <SelectItem value="weekly">Semanal</SelectItem>
+                <SelectItem value="monthly">Mensal</SelectItem>
+                <SelectItem value="intel">Sob demanda (intel)</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
           <div className="space-y-1.5">
             <Label>Status</Label>
@@ -339,6 +354,13 @@ const ORIGIN_LABEL: Record<PrivateHunt["origin"], string> = {
 // de um rotulo.
 const originLabel = (origin?: PrivateHunt["origin"]) => ORIGIN_LABEL[origin ?? "own"] ?? ORIGIN_LABEL.own;
 
+const CADENCE_LABEL: Record<string, string> = {
+  daily: "Diária",
+  weekly: "Semanal",
+  monthly: "Mensal",
+  intel: "Sob demanda",
+};
+
 const currentMonth = () => new Date().toISOString().slice(0, 7);
 const monthLabel = (month: string) =>
   new Date(`${month}-01T12:00:00Z`).toLocaleDateString("pt-BR", { month: "long", year: "numeric", timeZone: "UTC" });
@@ -434,6 +456,9 @@ const Hunting = () => {
   const [tableSources, setTableSources] = useState<string[]>([]);
   const [generating, setGenerating] = useState(false);
   const [removing, setRemoving] = useState<PrivateHunt | null>(null);
+  const [kqlIndex, setKqlIndex] = useState<KqlEntry[]>([]);
+  const [kqlQuery, setKqlQuery] = useState("");
+  const [openedKql, setOpenedKql] = useState<{ path: string; query: string } | null>(null);
   const [finishing, setFinishing] = useState<{ huntId: string; runId: string } | null>(null);
   const [query, setQuery] = useState(() => searchParams.get("query") || "");
   const deferredQuery = useDeferredValue(query);
@@ -461,9 +486,10 @@ const Hunting = () => {
     Promise.allSettled([
       fetchHearth(), fetchHunts(), fetchHuntCoverage("technique"),
       fetchHuntFieldCoverage("technology"), fetchHuntFieldCoverage("dataSource"), fetchPtbrHunts(),
-      fetchSentinelTables(),
-    ]).then(([hearth, own, tech, technologies, dataSources, ptbr, tables]) => {
+      fetchSentinelTables(), fetchKqlLibrary(),
+    ]).then(([hearth, own, tech, technologies, dataSources, ptbr, tables, kql]) => {
       if (!live) return;
+      if (kql.status === "fulfilled") setKqlIndex(kql.value.queries);
       if (tables.status === "fulfilled") setTableSources(tables.value.sources);
       if (ptbr.status === "fulfilled") setPtbrCatalog(ptbr.value.hunts);
       if (hearth.status === "fulfilled") setCatalog(hearth.value.hunts); else setCatalogError(true);
@@ -541,6 +567,13 @@ const Hunting = () => {
     } catch (error) { toast.error((error as Error).message); }
     finally { setRemoving(null); }
   };
+  // O conteudo da consulta so e buscado quando alguem abre: 237 arquivos nao
+  // precisam viajar pra alguem procurar um.
+  const openKql = async (path: string) => {
+    try { setOpenedKql(await fetchKqlContent(path)); }
+    catch (error) { toast.error((error as Error).message); }
+  };
+
   // O modelo preenche o formulario; quem salva e o analista, depois de olhar.
   const generateQuery = async (source: string) => {
     if (!form?.hypothesis.trim()) return;
@@ -585,10 +618,11 @@ const Hunting = () => {
     finally { setRunSaving(false); }
   };
 
-  const adoptAndQueue = async (origin: "hearth" | "ptbr", id: string) => {
+  const adoptAndQueue = async (origin: "hearth" | "ptbr", id: string, generate = false) => {
     setRunSaving(true);
     try {
-      const { hunt, items } = await adoptHunt(origin, id);
+      if (generate) toast.info("Gerando a consulta — leva alguns segundos.");
+      const { hunt, items } = await adoptHunt(origin, id, generate ? { generate: true } : {});
       setPrivateHunts(items);
       const queued = await startHuntRun(hunt.id, { state: "pending" });
       setPrivateHunts(queued.items);
@@ -619,8 +653,9 @@ const Hunting = () => {
       />
 
       <Tabs defaultValue="library" className="space-y-5">
-        <TabsList className="grid w-full max-w-lg grid-cols-3">
+        <TabsList className="grid w-full max-w-2xl grid-cols-4">
           <TabsTrigger value="library">Biblioteca <span className="ml-2 text-xs text-muted-foreground">{allItems.length}</span></TabsTrigger>
+          <TabsTrigger value="kql">Consultas{kqlIndex.length ? <span className="ml-2 text-xs text-muted-foreground">{kqlIndex.length}</span> : null}</TabsTrigger>
           <TabsTrigger value="board">Execução{summary?.total ? <span className="ml-2 text-xs text-muted-foreground">{summary.total}</span> : null}</TabsTrigger>
           <TabsTrigger value="coverage">Cobertura</TabsTrigger>
         </TabsList>
@@ -643,6 +678,45 @@ const Hunting = () => {
               />
             </div>
           </div>
+
+          {!!summary?.overdue?.length && (
+            <section className="rounded-lg border border-primary/40 bg-primary/5 p-4">
+              <h3 className="flex items-center gap-2 text-sm font-semibold">
+                <CalendarRange className="h-4 w-4 text-primary" />
+                Vencidas — {summary.overdue.length}
+              </h3>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                Cadência definida e prazo passado. Sem ritmo definido, a hunt nunca vence.
+              </p>
+              <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                {summary.overdue.map((item) => {
+                  const hunt = privateHunts.find((entry) => entry.id === item.id);
+                  return (
+                    <div key={item.id} className="flex items-center justify-between gap-3 rounded-md border bg-background p-3">
+                      <div className="min-w-0">
+                        <div className="truncate text-sm font-medium">{item.title}</div>
+                        <div className="mt-0.5 text-xs text-muted-foreground">
+                          {CADENCE_LABEL[item.cadence] || item.cadence}
+                          {item.lastRunAt === null
+                            ? " · nunca rodou"
+                            : ` · ${item.daysLate} dia(s) de atraso`}
+                        </div>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="shrink-0"
+                        disabled={runSaving || !hunt}
+                        onClick={() => hunt && queueHunt(hunt)}
+                      >
+                        <Play className="h-3.5 w-3.5" /> Rodar
+                      </Button>
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+          )}
 
           <div className="grid gap-3 sm:grid-cols-4">
             {[
@@ -803,6 +877,18 @@ const Hunting = () => {
                                 >
                                   <Play className="h-4 w-4" />
                                 </Button>
+                                {hearth && (
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-8 w-8"
+                                    disabled={runSaving}
+                                    title="Adotar gerando o KQL contra as suas tabelas"
+                                    onClick={() => adoptAndQueue("hearth", hunt.id, true)}
+                                  >
+                                    <Sparkles className="h-4 w-4" />
+                                  </Button>
+                                )}
                                 <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setSelected(hunt)} title="Abrir"><FileCode2 className="h-4 w-4" /></Button>
                                 {!hearth && <><Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openPrivate(hunt)} title="Editar"><Pencil className="h-4 w-4" /></Button><Button variant="ghost" size="icon" className="h-8 w-8 hover:text-destructive" onClick={() => setRemoving(hunt)} title="Apagar"><Trash2 className="h-4 w-4" /></Button></>}
                               </div>
@@ -815,6 +901,37 @@ const Hunting = () => {
                 </div>
               )}
             </section>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="kql" className="space-y-4">
+          <div>
+            <h2 className="text-lg font-semibold">Consultas do repositório</h2>
+            <p className="text-sm text-muted-foreground">
+              As {kqlIndex.length} consultas do threat-hunting-ptbr. Abrir busca o conteúdo na hora.
+            </p>
+          </div>
+
+          <div className="relative max-w-2xl">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input value={kqlQuery} onChange={(event) => setKqlQuery(event.target.value)} placeholder="Filtrar por nome ou pasta…" className="pl-9" />
+          </div>
+
+          <div className="grid gap-2 md:grid-cols-2">
+            {kqlIndex
+              .filter((item) => `${item.folder} ${item.name}`.toLowerCase().includes(kqlQuery.trim().toLowerCase()))
+              .slice(0, 60)
+              .map((item) => (
+                <button
+                  key={item.path}
+                  type="button"
+                  onClick={() => openKql(item.path)}
+                  className="rounded-md border p-3 text-left transition-colors hover:border-primary/50"
+                >
+                  <div className="truncate text-sm font-medium">{item.name}</div>
+                  <div className="mt-0.5 font-mono text-[11px] text-muted-foreground">{item.folder || "raiz"}</div>
+                </button>
+              ))}
           </div>
         </TabsContent>
 
@@ -844,6 +961,27 @@ const Hunting = () => {
         onSave={save}
         onGenerate={generateQuery}
       />
+
+      <Dialog open={!!openedKql} onOpenChange={(open) => !open && setOpenedKql(null)}>
+        <DialogContent className="max-h-[92vh] w-[min(96vw,72rem)] max-w-none overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="font-mono text-sm">{openedKql?.path}</DialogTitle>
+            <DialogDescription>Consulta do seu repositório, somente leitura.</DialogDescription>
+          </DialogHeader>
+          <pre className="overflow-x-auto rounded-md bg-muted p-4 font-mono text-xs leading-relaxed">{openedKql?.query}</pre>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                if (openedKql) navigator.clipboard.writeText(openedKql.query);
+                toast.success("Consulta copiada");
+              }}
+            >
+              Copiar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <AlertDialog open={!!removing} onOpenChange={(open) => !open && setRemoving(null)}>
         <AlertDialogContent>

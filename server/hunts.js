@@ -14,6 +14,10 @@ export const RUN_STATES = ['pending', 'running', 'done'];
 export const RUN_OUTCOMES = ['none', 'suspicious', 'incident'];
 export const RUNS_CAP = 24; // dois anos de cadencia mensal por hunt
 
+// Cadencia: de quanto em quanto tempo a hunt deveria rodar. 'intel' e sob
+// demanda (chega inteligencia, roda), entao nao vence.
+export const CADENCES = { daily: 1, weekly: 7, monthly: 30, intel: 0 };
+
 const clean = (value, max) => String(value ?? '').replace(CONTROL_CHARS, ' ').trim().slice(0, max);
 const cleanList = (value, maxItems = 100) => [...new Set(
     (Array.isArray(value) ? value : []).map((item) => clean(item, 160)).filter(Boolean),
@@ -63,6 +67,7 @@ export function normalizeHuntInput(input = {}, {
         // adotar duas vezes a mesma hunt e duplicar a fila do mes.
         origin: ['hearth', 'ptbr'].includes(clean(input.origin, 20)) ? clean(input.origin, 20) : 'own',
         sourceId: clean(input.sourceId, 200),
+        cadence: Object.hasOwn(CADENCES, clean(input.cadence, 20)) ? clean(input.cadence, 20) : '',
         runs: Array.isArray(input.runs) ? input.runs.slice(0, RUNS_CAP) : [],
         createdAt: createdAt || now,
         updatedAt: now,
@@ -135,6 +140,42 @@ export function monthlySummary(list = [], month) {
 }
 
 /**
+ * Hunts que ja deveriam ter rodado e nao rodaram. E a pergunta que o quadro nao
+ * respondia: ele mostra o que foi feito, isto mostra o que ficou pra tras.
+ * Sem cadencia a hunt nunca vence — quem nao definiu ritmo nao esta atrasado.
+ */
+export function overdueHunts(list = [], now = Date.now()) {
+    return list
+        .map((hunt) => {
+            const days = CADENCES[hunt.cadence];
+            if (!days) return null;
+
+            // A ultima execucao que conta e a mais recente por inicio; a lista
+            // guarda a mais nova no topo, mas nao da pra confiar nisso depois de
+            // uma reabertura ter mexido na ordem.
+            const last = (hunt.runs || [])
+                .map((run) => Date.parse(run.startedAt))
+                .filter(Number.isFinite)
+                .sort((a, b) => b - a)[0];
+
+            const dueMs = days * 24 * 60 * 60 * 1000;
+            const elapsed = last === undefined ? Infinity : now - last;
+            if (elapsed < dueMs) return null;
+
+            return {
+                id: hunt.id,
+                title: hunt.title,
+                cadence: hunt.cadence,
+                lastRunAt: last === undefined ? null : new Date(last).toISOString(),
+                daysLate: last === undefined ? null : Math.floor((elapsed - dueMs) / (24 * 60 * 60 * 1000)),
+            };
+        })
+        .filter(Boolean)
+        // Nunca rodou primeiro, depois o mais atrasado.
+        .sort((a, b) => (a.lastRunAt === null ? -1 : b.lastRunAt === null ? 1 : b.daysLate - a.daysLate));
+}
+
+/**
  * Preenche os campos que nao existiam quando a hunt foi salva. O store e um
  * JSON flat sem migracao: sem isto, hunt de ontem chega no cliente sem `origin`
  * e sem `runs`, e quem indexa por esses campos quebra.
@@ -144,6 +185,7 @@ export function withDefaults(hunt) {
         ...hunt,
         origin: ['hearth', 'ptbr', 'own'].includes(hunt?.origin) ? hunt.origin : 'own',
         sourceId: hunt?.sourceId || '',
+        cadence: Object.hasOwn(CADENCES, hunt?.cadence) ? hunt.cadence : '',
         runs: Array.isArray(hunt?.runs) ? hunt.runs : [],
     };
 }

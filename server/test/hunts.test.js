@@ -10,6 +10,7 @@ import {
     monthlySummary,
     RUNS_CAP,
     withDefaults,
+    overdueHunts,
 } from '../hunts.js';
 
 const now = '2026-08-01T12:00:00.000Z';
@@ -208,4 +209,54 @@ test('hunt salva antes dos campos novos nao chega quebrada no cliente', () => {
     // Origem inventada no disco também é normalizada.
     assert.equal(withDefaults({ origin: 'sei-la' }).origin, 'own');
     assert.equal(withDefaults({ origin: 'ptbr' }).origin, 'ptbr');
+});
+
+// ─── Cadência: o que ficou pra trás ───────────────────────────────────────
+const DIA = 24 * 60 * 60 * 1000;
+const AGORA = Date.parse('2026-08-04T12:00:00.000Z');
+const runEm = (iso) => ({ id: iso, state: 'done', outcome: 'none', startedAt: iso });
+
+test('sem cadência a hunt nunca vence', () => {
+    const semRitmo = [{ id: 'h1', title: 'Ad hoc', cadence: '', runs: [] }];
+    assert.deepEqual(overdueHunts(semRitmo, AGORA), []);
+
+    // 'intel' é sob demanda: chega inteligência, roda. Não tem atraso.
+    const sobDemanda = [{ id: 'h2', title: 'IOC sweep', cadence: 'intel', runs: [] }];
+    assert.deepEqual(overdueHunts(sobDemanda, AGORA), []);
+});
+
+test('vence quando passou o intervalo, e não antes', () => {
+    const recente = [{ id: 'h1', title: 'Semanal', cadence: 'weekly', runs: [runEm(new Date(AGORA - 3 * DIA).toISOString())] }];
+    assert.deepEqual(overdueHunts(recente, AGORA), [], 'três dias não vence uma semanal');
+
+    const atrasada = [{ id: 'h1', title: 'Semanal', cadence: 'weekly', runs: [runEm(new Date(AGORA - 10 * DIA).toISOString())] }];
+    const vencidas = overdueHunts(atrasada, AGORA);
+    assert.equal(vencidas.length, 1);
+    assert.equal(vencidas[0].daysLate, 3, 'dez dias em cadência de sete: três de atraso');
+});
+
+test('hunt que nunca rodou aparece primeiro, depois a mais atrasada', () => {
+    const lista = [
+        { id: 'atrasada', title: 'Atrasada', cadence: 'daily', runs: [runEm(new Date(AGORA - 9 * DIA).toISOString())] },
+        { id: 'nunca', title: 'Nunca rodou', cadence: 'monthly', runs: [] },
+        { id: 'pouco', title: 'Pouco atrasada', cadence: 'daily', runs: [runEm(new Date(AGORA - 3 * DIA).toISOString())] },
+    ];
+
+    assert.deepEqual(overdueHunts(lista, AGORA).map((item) => item.id), ['nunca', 'atrasada', 'pouco']);
+    assert.equal(overdueHunts(lista, AGORA)[0].lastRunAt, null);
+});
+
+test('a execução que conta é a mais recente, mesmo fora de ordem na lista', () => {
+    // Reabrir e fechar mexe na ordem da lista: não dá pra confiar no topo.
+    const foraDeOrdem = [{
+        id: 'h1', title: 'Semanal', cadence: 'weekly',
+        runs: [runEm(new Date(AGORA - 30 * DIA).toISOString()), runEm(new Date(AGORA - 2 * DIA).toISOString())],
+    }];
+    assert.deepEqual(overdueHunts(foraDeOrdem, AGORA), [], 'a de dois dias atrás é a que vale');
+});
+
+test('cadência inválida não vira rótulo', () => {
+    const hunt = normalizeHuntInput({ title: 't', hypothesis: 'h', cadence: 'quinzenal' }, { ownerSub: 'u1' });
+    assert.equal(hunt.cadence, '');
+    assert.equal(normalizeHuntInput({ title: 't', hypothesis: 'h', cadence: 'weekly' }, { ownerSub: 'u1' }).cadence, 'weekly');
 });
