@@ -6,6 +6,10 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
+  AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -429,6 +433,7 @@ const Hunting = () => {
   const [runSaving, setRunSaving] = useState(false);
   const [tableSources, setTableSources] = useState<string[]>([]);
   const [generating, setGenerating] = useState(false);
+  const [removing, setRemoving] = useState<PrivateHunt | null>(null);
   const [finishing, setFinishing] = useState<{ huntId: string; runId: string } | null>(null);
   const [query, setQuery] = useState(() => searchParams.get("query") || "");
   const deferredQuery = useDeferredValue(query);
@@ -526,10 +531,15 @@ const Hunting = () => {
     } catch (error) { toast.error((error as Error).message); }
     finally { setSaving(false); }
   };
+  // Confirmacao no proprio app: window.confirm trava a aba inteira e ignora o
+  // tema, a fonte e o idioma da pagina.
   const remove = async (hunt: PrivateHunt) => {
-    if (!window.confirm(pt ? `Apagar “${hunt.title}”?` : `Delete “${hunt.title}”?`)) return;
-    try { setPrivateHunts(await deleteHunt(hunt.id)); await refreshCoverage(); }
-    catch (error) { toast.error((error as Error).message); }
+    try {
+      setPrivateHunts(await deleteHunt(hunt.id));
+      await refreshCoverage();
+      toast.success(pt ? "Hunt apagada" : "Hunt deleted");
+    } catch (error) { toast.error((error as Error).message); }
+    finally { setRemoving(null); }
   };
   // O modelo preenche o formulario; quem salva e o analista, depois de olhar.
   const generateQuery = async (source: string) => {
@@ -794,7 +804,7 @@ const Hunting = () => {
                                   <Play className="h-4 w-4" />
                                 </Button>
                                 <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setSelected(hunt)} title="Abrir"><FileCode2 className="h-4 w-4" /></Button>
-                                {!hearth && <><Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openPrivate(hunt)} title="Editar"><Pencil className="h-4 w-4" /></Button><Button variant="ghost" size="icon" className="h-8 w-8 hover:text-destructive" onClick={() => remove(hunt)} title="Apagar"><Trash2 className="h-4 w-4" /></Button></>}
+                                {!hearth && <><Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openPrivate(hunt)} title="Editar"><Pencil className="h-4 w-4" /></Button><Button variant="ghost" size="icon" className="h-8 w-8 hover:text-destructive" onClick={() => setRemoving(hunt)} title="Apagar"><Trash2 className="h-4 w-4" /></Button></>}
                               </div>
                             </TableCell>
                           </TableRow>
@@ -834,6 +844,26 @@ const Hunting = () => {
         onSave={save}
         onGenerate={generateQuery}
       />
+
+      <AlertDialog open={!!removing} onOpenChange={(open) => !open && setRemoving(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{pt ? "Apagar esta hunt?" : "Delete this hunt?"}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {removing?.title}
+              {removing?.runs?.length
+                ? pt
+                  ? ` · ${removing.runs.length} execução(ões) registrada(s) somem junto, inclusive do fechamento do mês.`
+                  : ` · ${removing.runs.length} recorded run(s) go with it, including from the monthly summary.`
+                : pt ? " · Não dá para desfazer." : " · This cannot be undone."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{pt ? "Cancelar" : "Cancel"}</AlertDialogCancel>
+            <AlertDialogAction onClick={() => removing && remove(removing)}>{pt ? "Apagar" : "Delete"}</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <FinishRunDialog
         open={!!finishing}
