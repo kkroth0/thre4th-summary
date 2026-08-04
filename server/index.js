@@ -22,6 +22,7 @@ import { jobSummary, pruneJobsMap } from './feedJobs.js';
 import { parseHearthData } from './hearth.js';
 import { parseSentinelTables, catalogSources } from './sentinelTables.js';
 import { parsePtbrHunt, isHuntPath } from './huntsPtbr.js';
+import { GENERATOR_SYSTEM, buildGeneratePrompt, normalizeGenerated } from './huntGenerator.js';
 import { normalizeHuntInput, upsertHunt, normalizeRunInput, upsertRun, monthlySummary } from './hunts.js';
 import { addKnowledgeItem, normalizeKnowledgeInput } from './knowledge.js';
 import { createWatchlistStore, runDueExposureSnapshots, runExposureSnapshot } from './exposureWatchlist.js';
@@ -3155,6 +3156,60 @@ app.post('/api/hunts/adopt', requirePremium, async (req, res) => {
         return res.status(500).json({ error: 'não foi possível salvar a hunt' });
     }
     res.status(201).json({ hunt, items, adopted: true });
+});
+
+// Gera hunt + KQL com o LLM, preso ao schema real do workspace. A chave e do
+// servidor: o analista nao traz a dele.
+app.post('/api/hunts/generate', requirePremium, async (req, res) => {
+    if (!process.env.OPENROUTER_API_KEY) {
+        return res.status(503).json({ error: 'geração indisponível: OPENROUTER_API_KEY não configurada' });
+    }
+
+    const hypothesis = String(req.body?.hypothesis || '').trim();
+    if (!hypothesis) return res.status(400).json({ error: 'hipótese obrigatória' });
+    const sources = (Array.isArray(req.body?.sources) ? req.body.sources : []).map((item) => String(item).slice(0, 80));
+    const techniques = (Array.isArray(req.body?.techniques) ? req.body.techniques : [])
+        .map((item) => String(item).toUpperCase())
+        .filter((item) => /^T\d{4}(?:\.\d{3})?$/.test(item));
+
+    let catalog;
+    let userPrompt;
+    try {
+        catalog = await getSentinelTables();
+        userPrompt = buildGeneratePrompt({ catalog, hypothesis, sources, techniques });
+    } catch (error) {
+        return res.status(502).json({ error: `catálogo de tabelas indisponível: ${error.message}` });
+    }
+
+    try {
+        const response = await axios.post(`${OPENROUTER_BASE_URL}/chat/completions`, {
+            model: OPENROUTER_MODEL,
+            temperature: 0.1,
+            response_format: { type: 'json_object' },
+            messages: [
+                { role: 'system', content: GENERATOR_SYSTEM },
+                { role: 'user', content: userPrompt },
+            ],
+        }, {
+            headers: {
+                Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
+                'Content-Type': 'application/json',
+                'HTTP-Referer': APP_BASE_URL,
+                'X-OpenRouter-Title': 'ThreatSumm4ry',
+            },
+            timeout: 60000,
+        });
+
+        const raw = response.data?.choices?.[0]?.message?.content;
+        if (!raw) return res.status(502).json({ error: 'modelo não respondeu' });
+
+        // Resposta do modelo e entrada nao confiavel como qualquer outra.
+        const generated = normalizeGenerated(JSON.parse(raw), catalog);
+        res.json({ ...generated, model: OPENROUTER_MODEL, sources });
+    } catch (error) {
+        console.error('hunt generation failed:', error.message);
+        res.status(502).json({ error: 'não foi possível gerar a hunt agora' });
+    }
 });
 
 // ─── Execucao de hunt: o quadro do analista ───────────────────────────────

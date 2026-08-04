@@ -1,5 +1,5 @@
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
-import { CalendarRange, CheckCircle2, ExternalLink, FileCode2, FilterX, Loader2, Pencil, Play, Plus, Search, Trash2 } from "lucide-react";
+import { AlertTriangle, CalendarRange, CheckCircle2, ExternalLink, FileCode2, FilterX, Loader2, Pencil, Play, Plus, Search, Sparkles, Trash2 } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
@@ -19,7 +19,7 @@ import { PageLayout } from "@/components/PageLayout";
 import { useLanguage } from "@/contexts/LanguageContext";
 import {
   adoptHunt, createHunt, deleteHunt, fetchHearth, fetchHuntCoverage, fetchHuntFieldCoverage, fetchHunts,
-  fetchMonthlyRuns, fetchPtbrHunts, startHuntRun, updateHunt, updateHuntRun,
+  fetchMonthlyRuns, fetchPtbrHunts, fetchSentinelTables, generateHunt, startHuntRun, updateHunt, updateHuntRun,
   type FieldCoverage, type HearthHunt, type HuntInput, type HuntingItem, type HuntRun,
   type MonthlySummary, type PrivateHunt, type PtbrHunt, type RunOutcome, type RunState,
   type TechniqueCoverage, type TechniqueCoverageNode,
@@ -78,14 +78,18 @@ function FacetSelect({ label, value, options, onChange }: {
   );
 }
 
-function HuntFormDialog({ form, editing, saving, onChange, onClose, onSave }: {
+function HuntFormDialog({ form, editing, saving, sources, generating, onChange, onClose, onSave, onGenerate }: {
   form: HuntForm | null;
   editing: boolean;
   saving: boolean;
+  sources: string[];
+  generating: boolean;
   onChange: (form: HuntForm) => void;
   onClose: () => void;
   onSave: () => void;
+  onGenerate: (source: string) => void;
 }) {
+  const [source, setSource] = useState("all");
   if (!form) return null;
   const field = (key: keyof HuntForm) => ({
     value: form[key],
@@ -106,6 +110,31 @@ function HuntFormDialog({ form, editing, saving, onChange, onClose, onSave }: {
           <div className="space-y-1.5 sm:col-span-2">
             <Label htmlFor="hunt-hypothesis">Hipótese</Label>
             <Textarea id="hunt-hypothesis" required rows={3} {...field("hypothesis")} />
+          </div>
+
+          {/* Gerar o KQL a partir da hipótese, preso ao schema do workspace. */}
+          <div className="flex flex-wrap items-end gap-2 rounded-md border bg-muted/40 p-3 sm:col-span-2">
+            <div className="min-w-0 flex-1">
+              <Label className="text-xs">Gerar consulta com IA</Label>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Escreva a hipótese acima e escolha a fonte. A consulta sai contra as tabelas reais do workspace.
+              </p>
+            </div>
+            <Select value={source} onValueChange={setSource}>
+              <SelectTrigger className="h-9 w-44"><SelectValue placeholder="Fonte" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todas as fontes</SelectItem>
+                {sources.map((item) => <SelectItem key={item} value={item}>{item}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={generating || !form.hypothesis.trim()}
+              onClick={() => onGenerate(source)}
+            >
+              {generating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />} Gerar KQL
+            </Button>
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="hunt-tactics">Táticas</Label>
@@ -393,6 +422,8 @@ const Hunting = () => {
   const [month, setMonth] = useState(currentMonth);
   const [summary, setSummary] = useState<MonthlySummary | null>(null);
   const [runSaving, setRunSaving] = useState(false);
+  const [tableSources, setTableSources] = useState<string[]>([]);
+  const [generating, setGenerating] = useState(false);
   const [finishing, setFinishing] = useState<{ huntId: string; runId: string } | null>(null);
   const [query, setQuery] = useState(() => searchParams.get("query") || "");
   const deferredQuery = useDeferredValue(query);
@@ -420,8 +451,10 @@ const Hunting = () => {
     Promise.allSettled([
       fetchHearth(), fetchHunts(), fetchHuntCoverage("technique"),
       fetchHuntFieldCoverage("technology"), fetchHuntFieldCoverage("dataSource"), fetchPtbrHunts(),
-    ]).then(([hearth, own, tech, technologies, dataSources, ptbr]) => {
+      fetchSentinelTables(),
+    ]).then(([hearth, own, tech, technologies, dataSources, ptbr, tables]) => {
       if (!live) return;
+      if (tables.status === "fulfilled") setTableSources(tables.value.sources);
       if (ptbr.status === "fulfilled") setPtbrCatalog(ptbr.value.hunts);
       if (hearth.status === "fulfilled") setCatalog(hearth.value.hunts); else setCatalogError(true);
       if (own.status === "fulfilled") setPrivateHunts(own.value); else toast.error(pt ? "Falha ao carregar suas hunts" : "Failed to load your hunts");
@@ -493,6 +526,37 @@ const Hunting = () => {
     try { setPrivateHunts(await deleteHunt(hunt.id)); await refreshCoverage(); }
     catch (error) { toast.error((error as Error).message); }
   };
+  // O modelo preenche o formulario; quem salva e o analista, depois de olhar.
+  const generateQuery = async (source: string) => {
+    if (!form?.hypothesis.trim()) return;
+    setGenerating(true);
+    try {
+      const result = await generateHunt({
+        hypothesis: form.hypothesis,
+        sources: source === "all" ? [] : [source],
+        techniques: parseList(form.techniques, true),
+      });
+
+      setForm({
+        ...form,
+        title: form.title || result.title,
+        query: result.query || form.query,
+        dataSources: result.dataSources.join(", ") || form.dataSources,
+        falsePositives: result.falsePositives || form.falsePositives,
+        notes: result.notes || form.notes,
+      });
+
+      if (result.unknownTables.length) {
+        toast.warning(`Revise: a consulta cita tabela que o workspace não tem — ${result.unknownTables.join(", ")}`);
+      } else if (!result.query) {
+        toast.info("O modelo não conseguiu montar a consulta com essas tabelas. Veja as notas.");
+      } else {
+        toast.success(`Consulta gerada com ${result.model}`);
+      }
+    } catch (error) { toast.error((error as Error).message); }
+    finally { setGenerating(false); }
+  };
+
   // Entrar na fila e sempre criar execucao pendente: o quadro mostra o que o
   // analista escolheu rodar no mes, nao a biblioteca inteira.
   const queueHunt = async (hunt: PrivateHunt) => {
@@ -743,7 +807,17 @@ const Hunting = () => {
       </Tabs>
 
       <HuntDetail hunt={selected} onClose={() => setSelected(null)} onEdit={openPrivate} onCopy={copyHearth} />
-      <HuntFormDialog form={form} editing={Boolean(editingId)} saving={saving} onChange={setForm} onClose={() => { setForm(null); setEditingId(""); }} onSave={save} />
+      <HuntFormDialog
+        form={form}
+        editing={Boolean(editingId)}
+        saving={saving}
+        sources={tableSources}
+        generating={generating}
+        onChange={setForm}
+        onClose={() => { setForm(null); setEditingId(""); }}
+        onSave={save}
+        onGenerate={generateQuery}
+      />
 
       <FinishRunDialog
         open={!!finishing}

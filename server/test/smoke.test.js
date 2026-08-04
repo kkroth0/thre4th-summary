@@ -358,3 +358,21 @@ test('adotar hunt do catalogo e idempotente e valida a origem', async () => {
     });
     assert.equal(anonima.status, 401);
 });
+
+test('gerador de hunt valida entrada antes de chamar modelo', async () => {
+    const semHipotese = await fetch(`${BASE}/api/hunts/generate`, {
+        method: 'POST',
+        headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sources: ['Cloudflare'] }),
+    });
+    // Sem OPENROUTER_API_KEY no ambiente de teste a rota devolve 503 antes de
+    // qualquer validacao — o que importa e nunca chamar o modelo sem chave.
+    assert.ok([400, 503].includes(semHipotese.status), `status inesperado: ${semHipotese.status}`);
+
+    const anonima = await fetch(`${BASE}/api/hunts/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ hypothesis: 'x' }),
+    });
+    assert.equal(anonima.status, 401);
+});

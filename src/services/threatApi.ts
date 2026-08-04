@@ -1780,6 +1780,27 @@ export const fetchHuntCoverage = async (axis: 'technique'): Promise<TechniqueCov
 export const fetchHuntFieldCoverage = async (axis: 'technology' | 'dataSource'): Promise<FieldCoverage> =>
     handleResponse(await fetch(`/api/hunts/coverage?axis=${axis}`), 'Hunting');
 
+export interface GeneratedHunt {
+    title: string;
+    hypothesis: string;
+    query: string;
+    dataSources: string[];
+    falsePositives: string;
+    notes: string;
+    /** Tabelas que a consulta cita e o workspace não tem — alucinação do modelo. */
+    unknownTables: string[];
+    model: string;
+    sources: string[];
+}
+
+export const fetchSentinelTables = async (): Promise<{ sources: string[]; tables: { table: string; source: string; columnCount: number }[]; total: number }> =>
+    handleResponse(await fetch('/api/sentinel/tables'), 'Hunting');
+
+export const generateHunt = async (input: { hypothesis: string; sources?: string[]; techniques?: string[] }): Promise<GeneratedHunt> =>
+    handleResponse(await fetch('/api/hunts/generate', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input),
+    }), 'Hunting');
+
 // ─── Execução de hunt (quadro do analista) ─────────────────────────────────
 export const fetchPtbrHunts = async (): Promise<{ hunts: PtbrHunt[]; total: number; source: string }> =>
     handleResponse(await fetch('/api/hunts/ptbr'), 'Hunting');
