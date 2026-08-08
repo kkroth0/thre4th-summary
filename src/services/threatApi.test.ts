@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { detectIOCType, resolveVendorsForQuery, formatVendorData } from "./threatApi";
+import { detectIOCType, fetchAttackSurfaceCredits, formatVendorData, resolveVendorsForQuery } from "./threatApi";
 import { refang } from "@/utils/defang";
 import { isSupportedAnalyzerQuery } from "@/utils/iocExtract";
 
@@ -38,4 +38,15 @@ test("OpenPhish and Team Cymru expose a capital-S Status the aggregator can coun
   const cymruIp = formatVendorData("Team Cymru", { asn: "15169", bgp_prefix: "8.8.8.0/24", country: "US" }, "8.8.8.8");
   assert.equal(cymruIp.Status, undefined);
   assert.equal(cymruIp.ASN, "15169");
+});
+
+test("loads Shodan credits without exposing account data", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response(JSON.stringify({ plan: "member", queryCredits: 99 }));
+
+  try {
+    assert.deepEqual(await fetchAttackSurfaceCredits(), { plan: "member", queryCredits: 99 });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });

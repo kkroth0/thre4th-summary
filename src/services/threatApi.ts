@@ -1384,7 +1384,13 @@ export interface AttackSurfaceInput {
     target?: string;
     advancedQuery?: string;
     limit: number;
+    page?: number;
     activeValidation: boolean;
+}
+
+export interface ShodanCreditStatus {
+    plan: string | null;
+    queryCredits: number | null;
 }
 
 export interface AttackSurfaceFinding {
@@ -1447,6 +1453,12 @@ export const fetchAttackSurface = async (input: AttackSurfaceInput): Promise<Att
         const text = await response.text();
         throw new Error(`Attack Surface API error: ${response.status} ${response.statusText} - ${text}`);
     }
+    return response.json();
+};
+
+export const fetchAttackSurfaceCredits = async (): Promise<ShodanCreditStatus> => {
+    const response = await fetch('/api/attack-surface/credits');
+    if (!response.ok) throw new Error('Unable to load Shodan credits');
     return response.json();
 };
 

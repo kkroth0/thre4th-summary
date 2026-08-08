@@ -45,9 +45,12 @@ import {
   AttackSurfaceInput,
   AttackSurfaceRisk,
   AttackSurfaceTargetType,
+  ShodanCreditStatus,
   fetchAttackSurface,
+  fetchAttackSurfaceCredits,
 } from "@/services/threatApi";
 import { exportAttackSurfaceExcel } from "@/utils/attackSurfaceExcel";
+import { mergeAttackSurfaceResponses } from "@/utils/attackSurfaceBatch";
 import { parseAttackSurfaceTargets, type AttackSurfaceImportedTarget } from "@/utils/attackSurfaceImport";
 import { cn } from "@/lib/utils";
 
@@ -102,6 +105,23 @@ const riskSortValue: Record<AttackSurfaceRisk, number> = {
 const MIN_LOADING_MS = 5000;
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
+// Shodan's fixed search page size, not an application cap.
+const PAGE_SIZE = 100;
+
+// Shodan denies paid pagination with these once credits or rate limits run out.
+const isCreditError = (message: string) =>
+  /\b(401|403|429)\b/.test(message) || /credit|rate limit/i.test(message);
+
+const importedToInput = (
+  imported: AttackSurfaceImportedTarget,
+  activeValidation: boolean,
+): AttackSurfaceInput => {
+  const base = { limit: PAGE_SIZE, activeValidation };
+  if (imported.kind === "shodan_query") return { ...base, mode: "advanced", advancedQuery: imported.value };
+  if (imported.kind === "asn") return { ...base, mode: "advanced", advancedQuery: `asn:"${imported.value}"` };
+  return { ...base, mode: "guided", targetType: imported.kind, target: imported.value };
+};
+
 export default function AttackSurface() {
   const { language } = useLanguage();
   const pt = language === "pt";
@@ -115,7 +135,6 @@ export default function AttackSurface() {
   const [targetType, setTargetType] = useState<AttackSurfaceTargetType>("cidr");
   const [target, setTarget] = useState("");
   const [advancedQuery, setAdvancedQuery] = useState("");
-  const [limit, setLimit] = useState(50);
   const [activeValidation, setActiveValidation] = useState(false);
   const [riskFilter, setRiskFilter] = useState<AttackSurfaceRisk | "all">("all");
   const [textFilter, setTextFilter] = useState("");
@@ -124,6 +143,8 @@ export default function AttackSurface() {
   const [isExporting, setIsExporting] = useState(false);
   const [importTargets, setImportTargets] = useState<AttackSurfaceImportedTarget[]>([]);
   const [result, setResult] = useState<Awaited<ReturnType<typeof fetchAttackSurface>> | null>(null);
+  const [progress, setProgress] = useState("");
+  const [credits, setCredits] = useState<ShodanCreditStatus | null>(null);
 
   useEffect(() => {
     setFeatureMode(routeMode);
@@ -218,44 +239,90 @@ export default function AttackSurface() {
     }
   };
 
+  const refreshCredits = async () => {
+    try {
+      setCredits(await fetchAttackSurfaceCredits());
+    } catch {
+      setCredits(null);
+    }
+  };
+
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
-    const input: AttackSurfaceInput = {
-      mode,
-      targetType: mode === "guided" ? targetType : undefined,
-      target: mode === "guided" ? target.trim() : undefined,
-      advancedQuery: mode === "advanced" ? advancedQuery.trim() : undefined,
-      limit,
-      activeValidation,
-    };
+    const inputs: AttackSurfaceInput[] = importTargets.length > 0
+      ? importTargets.map((imported) => importedToInput(imported, activeValidation))
+      : [{
+          mode,
+          targetType: mode === "guided" ? targetType : undefined,
+          target: mode === "guided" ? target.trim() : undefined,
+          advancedQuery: mode === "advanced" ? advancedQuery.trim() : undefined,
+          limit: PAGE_SIZE,
+          activeValidation,
+        }];
 
-    const hasTarget = mode === "advanced" ? input.advancedQuery : input.target;
-    if (!hasTarget) {
+    if (importTargets.length === 0 && !(mode === "advanced" ? inputs[0].advancedQuery : inputs[0].target)) {
       toast.error(pt ? "Informe um alvo para buscar." : "Enter a target to search.");
       return;
     }
 
     setIsLoading(true);
     setOpenRows({});
+    setResult(null);
     const startedAt = Date.now();
-    try {
-      const response = await fetchAttackSurface(input);
-      // Hold the loading state for a short floor so a fast scan still reads as
-      // "a scan ran" instead of a flicker. Only on success — errors surface now.
-      const elapsed = Date.now() - startedAt;
-      if (elapsed < MIN_LOADING_MS) await sleep(MIN_LOADING_MS - elapsed);
-      setResult(response);
-      if (response.warnings.length > 0) {
+    const responses: Awaited<ReturnType<typeof fetchAttackSurface>>[] = [];
+    const batchWarnings: string[] = [];
+    let stopped = false;
+
+    await refreshCredits();
+
+    for (const [index, input] of inputs.entries()) {
+      if (stopped) break;
+      const label = input.advancedQuery || input.target || "";
+      const position = `${index + 1}/${inputs.length}`;
+      try {
+        // ponytail: paging stops only when Shodan denies credits, per spec. A very
+        // broad query can therefore spend every credit — add a cap if that bites.
+        for (let page = 1; ; page += 1) {
+          setProgress(pt ? `Alvo ${position} - ${label} (pagina ${page})` : `Target ${position} - ${label} (page ${page})`);
+          const response = await fetchAttackSurface({ ...input, page });
+          responses.push(response);
+          setResult(mergeAttackSurfaceResponses(responses));
+          if (response.queryKind === "host" || page * PAGE_SIZE >= response.summary.totalObserved) break;
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Attack Surface API error";
+        batchWarnings.push(`${label}: ${message}`);
+        if (isCreditError(message)) {
+          stopped = true;
+          batchWarnings.push(pt
+            ? "Coleta interrompida: creditos Shodan esgotados ou limite atingido."
+            : "Collection stopped: Shodan credits exhausted or rate limit reached.");
+        }
+      }
+      await refreshCredits();
+    }
+
+    // Hold the loading state for a short floor so a fast scan still reads as
+    // "a scan ran" instead of a flicker.
+    const elapsed = Date.now() - startedAt;
+    if (elapsed < MIN_LOADING_MS) await sleep(MIN_LOADING_MS - elapsed);
+
+    const merged = mergeAttackSurfaceResponses(responses);
+    if (!merged) {
+      setResult(null);
+      toast.error(batchWarnings[0] || (pt ? "Nenhum alvo retornou resultados." : "No target returned results."));
+    } else {
+      const warnings = [...merged.warnings, ...batchWarnings];
+      setResult({ ...merged, warnings, summary: { ...merged.summary, warnings } });
+      if (warnings.length > 0) {
         toast.warning(pt ? "Busca concluida com avisos." : "Search completed with warnings.");
       } else {
         toast.success(pt ? "Attack surface atualizado." : "Attack surface updated.");
       }
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Attack Surface API error");
-      setResult(null);
-    } finally {
-      setIsLoading(false);
     }
+
+    setProgress("");
+    setIsLoading(false);
   };
 
   const toggleRow = (id: string) => {
@@ -312,18 +379,13 @@ export default function AttackSurface() {
                 onChange={(event) => void importTxt(event.target.files?.[0])}
               />
               <div className="flex flex-wrap items-center gap-3">
-                <div className="flex items-center gap-2">
-                  <Label htmlFor="limit" className="text-xs font-semibold text-muted-foreground">Limit</Label>
-                  <Input
-                    id="limit"
-                    type="number"
-                    min={1}
-                    max={100}
-                    value={limit}
-                    onChange={(event) => setLimit(Number(event.target.value))}
-                    className="h-9 w-24"
-                  />
-                </div>
+                {credits && (
+                  <Badge variant="outline" className="h-9 gap-1.5 font-normal">
+                    <Radar className="h-3.5 w-3.5" />
+                    {credits.queryCredits ?? "?"} {pt ? "creditos" : "credits"}
+                    {credits.plan ? ` - ${credits.plan}` : ""}
+                  </Badge>
+                )}
                 <div className="flex items-center gap-2 rounded-md border border-border px-3 py-2">
                   <Checkbox
                     id="active-validation"
@@ -379,7 +441,7 @@ export default function AttackSurface() {
 
           {importTargets.length > 0 && (
             <div className="mt-4 flex flex-wrap gap-2">
-              {importTargets.slice(0, 10).map((imported) => (
+              {importTargets.map((imported) => (
                 <Button
                   key={`${imported.kind}:${imported.value}`}
                   type="button"
@@ -417,9 +479,9 @@ export default function AttackSurface() {
               {pt ? "Escaneando superficie..." : "Scanning attack surface..."}
             </h2>
             <p className="mx-auto mt-2 max-w-xl text-sm text-muted-foreground">
-              {pt
+              {progress || (pt
                 ? "Consultando Shodan e validando exposicao. Leva alguns segundos."
-                : "Querying Shodan and validating exposure. This takes a few seconds."}
+                : "Querying Shodan and validating exposure. This takes a few seconds.")}
             </p>
           </div>
         )}
