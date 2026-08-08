@@ -16,7 +16,7 @@ import {
     scoreArticle, localizeEnrichment, severityFromScore, extractIOCs, CTI_FEEDS,
     extractReadableText, collectArtifactLinks, githubArtifact, ARTIFACT_TEXT_FILE,
 } from './ctiIntel.js';
-import { runAttackSurfaceScan } from './attackSurface.js';
+import { getShodanCreditStatus, runAttackSurfaceScan } from './attackSurface.js';
 import { groupByField, refsOfReport, relatedTo, techniqueCoverage } from './attackIndex.js';
 import { jobSummary, pruneJobsMap } from './feedJobs.js';
 import { parseHearthData } from './hearth.js';
@@ -3968,6 +3968,17 @@ app.post('/api/attack-surface', scanLimiter, async (req, res) => {
         if (error.status && error.publicMessage) {
             return res.status(error.status).json({ error: error.publicMessage });
         }
+        const { status, message } = sanitizeError(error);
+        res.status(status).json({ error: message });
+    }
+});
+
+app.get('/api/attack-surface/credits', scanLimiter, async (req, res) => {
+    try {
+        const session = verifySession(getCookie(req, 'ts_session'));
+        res.json(await getShodanCreditStatus(buildExposureScanDeps(session?.sub)));
+    } catch (error) {
+        if (error.status && error.publicMessage) return res.status(error.status).json({ error: error.publicMessage });
         const { status, message } = sanitizeError(error);
         res.status(status).json({ error: message });
     }

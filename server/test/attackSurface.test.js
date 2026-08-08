@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   assessExposureRisk,
   buildAttackSurfaceQuery,
+  getShodanCreditStatus,
   isPublicIPv4,
   normalizeShodanHost,
   runAttackSurfaceScan,
@@ -192,6 +193,7 @@ test('runAttackSurfaceScan builds findings from a Shodan search', async () => {
       mode: 'advanced',
       advancedQuery: 'org:"Example"',
       limit: 1,
+      page: 3,
       activeValidation: false,
     },
     {
@@ -205,10 +207,11 @@ test('runAttackSurfaceScan builds findings from a Shodan search', async () => {
   assert.equal(result.summary.totalServices, 1);
   assert.equal(result.findings[0].risk, 'critical');
   assert.equal(result.warnings.length, 0);
+  assert.equal(calls[0].options.params.page, 3);
   assert.equal(calls.filter((call) => call.url.includes('api.platform.censys.io')).length, 0);
 });
 
-test('runAttackSurfaceScan caps host lookup findings before active validation', async () => {
+test('runAttackSurfaceScan keeps every host service before active validation', async () => {
   let tcpAttempts = 0;
   const axiosClient = {
     async get(url) {
@@ -249,7 +252,27 @@ test('runAttackSurfaceScan caps host lookup findings before active validation', 
     },
   );
 
-  assert.equal(result.findings.length, 2);
-  assert.equal(tcpAttempts, 2);
-  assert.equal(result.summary.activelyConfirmedOpen, 2);
+  assert.equal(result.findings.length, 5);
+  assert.equal(tcpAttempts, 5);
+  assert.equal(result.summary.activelyConfirmedOpen, 5);
+});
+
+test('getShodanCreditStatus exposes only the plan and remaining query credits', async () => {
+  const result = await getShodanCreditStatus({
+    shodanApiKey: 'shodan-key',
+    axiosClient: {
+      async get() {
+        return {
+          data: {
+            plan: 'member',
+            query_credits: 99,
+            scan_credits: 100,
+            key: 'must-not-leak',
+          },
+        };
+      },
+    },
+  });
+
+  assert.deepEqual(result, { plan: 'member', queryCredits: 99 });
 });

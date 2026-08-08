@@ -47,6 +47,11 @@ export const clampLimit = (value) => {
   return Math.min(parsed, MAX_LIMIT);
 };
 
+const clampPage = (value) => {
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 1;
+};
+
 const cleanText = (value, max = MAX_TEXT) => {
   if (value === undefined || value === null) return '';
   return String(value).replace(CONTROL_CHARS, ' ').replace(/\s+/g, ' ').trim().slice(0, max);
@@ -386,6 +391,24 @@ const sortFindings = (findings) => [...findings].sort((a, b) => {
   return a.port - b.port;
 });
 
+export const getShodanCreditStatus = async (deps = {}) => {
+  const { axiosClient, shodanApiKey } = deps;
+  if (!axiosClient?.get) throw createPublicError(500, 'HTTP client unavailable');
+  if (!shodanApiKey) throw createPublicError(503, 'Shodan API key missing');
+
+  const response = await axiosClient.get('https://api.shodan.io/api-info', {
+    params: { key: shodanApiKey },
+    timeout: 15000,
+  });
+  const data = response?.data || {};
+  const queryCredits = Number(data.query_credits);
+
+  return {
+    plan: cleanNullable(data.plan, 80),
+    queryCredits: Number.isFinite(queryCredits) && queryCredits >= 0 ? queryCredits : null,
+  };
+};
+
 export const runAttackSurfaceScan = async (input = {}, deps = {}) => {
   const {
     axiosClient,
@@ -397,6 +420,7 @@ export const runAttackSurfaceScan = async (input = {}, deps = {}) => {
   if (!shodanApiKey) throw createPublicError(503, 'Shodan API key missing');
 
   const queryPlan = buildAttackSurfaceQuery(input);
+  const page = clampPage(input.page);
   let shodanResponse;
 
   if (queryPlan.kind === 'host') {
@@ -406,7 +430,7 @@ export const runAttackSurfaceScan = async (input = {}, deps = {}) => {
     });
   } else {
     shodanResponse = await axiosClient.get('https://api.shodan.io/shodan/host/search', {
-      params: { key: shodanApiKey, query: queryPlan.query, limit: queryPlan.limit },
+      params: { key: shodanApiKey, query: queryPlan.query, limit: queryPlan.limit, page },
       timeout: 15000,
     });
   }
@@ -415,7 +439,6 @@ export const runAttackSurfaceScan = async (input = {}, deps = {}) => {
   let findings = queryPlan.kind === 'host'
     ? normalizeShodanHost(shodanData)
     : (Array.isArray(shodanData.matches) ? shodanData.matches.flatMap((match) => normalizeShodanHost(match)) : []);
-  findings = findings.slice(0, queryPlan.limit);
 
   const warnings = [];
   const providers = { shodan: true };
