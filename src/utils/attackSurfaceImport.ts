@@ -28,6 +28,15 @@ const clean = (value: string) => withoutControlChars(value).replace(/\s+/g, " ")
 
 const normalizeLine = (line: string) => clean(line.replace(/^\uFEFF/, ""));
 
+const hostnameFromUrl = (value: string) => {
+  try {
+    const url = new URL(value);
+    return url.protocol === "http:" || url.protocol === "https:" ? url.hostname : value;
+  } catch {
+    return value;
+  }
+};
+
 const parsedTarget = (
   kind: AttackSurfaceImportedKind,
   value: string,
@@ -63,11 +72,12 @@ const collect = (
   let ignored = 0;
 
   for (const { raw, line, counts } of entries) {
-    if (!raw) {
+    const value = hostnameFromUrl(raw);
+    if (!value) {
       if (counts) ignored += 1;
       continue;
     }
-    const target = classify(raw, line);
+    const target = classify(value, line);
     if (!target) {
       ignored += 1;
       continue;

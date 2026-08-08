@@ -99,6 +99,17 @@ test("deduplicates targets parsed from JSON", () => {
   assert.deepEqual(result.targets.map(({ value }) => value), ["example.com"]);
 });
 
+test("parses URL hostnames and keeps imports larger than 100 targets", () => {
+  const ips = Array.from({ length: 101 }, (_, index) => `1.1.${Math.floor(index / 256)}.${index % 256}`);
+  const result = parseAttackSurfaceTargets(["https://Example.COM/path", ...ips].join("\n"));
+
+  assert.deepEqual(
+    result.targets.slice(0, 2).map(({ kind, value }) => [kind, value]),
+    [["domain", "example.com"], ["ip", "1.1.0.0"]],
+  );
+  assert.equal(result.targets.length, 102);
+});
+
 test("falls back to line parsing when JSON is malformed", () => {
   const result = parseAttackSurfaceTargets("[\n8.8.8.8\n]");
 
