@@ -11,11 +11,14 @@ import {
   Loader2,
   MapPin,
   Radar,
+  Plus,
   Search,
   Shield,
   Target,
+  Trash2,
   UsersRound,
 } from "lucide-react";
+import { Link } from "react-router-dom";
 import { PageLayout } from "@/components/PageLayout";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -36,10 +39,14 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Label } from "@/components/ui/label";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { cn } from "@/lib/utils";
 import { fetchHunts, type PrivateHunt } from "@/services/threatApi";
-import { actorHuntCoverage, sortActors } from "./actorsView";
+import {
+  actorHuntCoverage, matchActors, sortActors, topTechniques, type OrgProfile,
+} from "./actorsView";
 
 interface ActorListItem {
   id: string;
@@ -50,6 +57,10 @@ interface ActorListItem {
   source: string;
   technique_count: number;
   techniques: string[];
+  /** Setores atacados, derivados da descrição no servidor. */
+  sectors: string[];
+  /** Países/regiões atacados, derivados da descrição no servidor. */
+  targets: string[];
 }
 
 interface Ref {
@@ -82,7 +93,10 @@ type SourceFilter = "all" | "attack" | "misp";
 type SortMode = "techniques" | "name" | "country" | "hunts";
 
 const ALL_COUNTRIES = "__all__";
+const ALL_SECTORS = "__all_sectors__";
+const ALL_TARGETS = "__all_targets__";
 const MAX_RESULTS = 180;
+const PROFILES_KEY = "actor-threat-profiles";
 
 const formatNumber = (value: number) =>
   new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(value);
@@ -513,18 +527,269 @@ function Fact({
   );
 }
 
+// ─── Modelagem de ameaças ──────────────────────────────────────────────────
+// Uma organização = setores em que ela atua + regiões em que ela opera. O
+// catálogo responde quem ataca gente assim; as suas hunts dizem o que disso
+// você já cobre. Vários perfis convivem: consultoria atende mais de um cliente.
+const loadProfiles = (): OrgProfile[] => {
+  try {
+    const raw = JSON.parse(localStorage.getItem(PROFILES_KEY) || "[]");
+    return Array.isArray(raw) ? raw : [];
+  } catch {
+    return [];
+  }
+};
+
+function ChipPicker({ options, chosen, onToggle }: {
+  options: string[];
+  chosen: string[];
+  onToggle: (value: string) => void;
+}) {
+  return (
+    <div className="flex max-h-40 flex-wrap gap-1.5 overflow-y-auto rounded-lg border border-border/80 bg-muted/20 p-2">
+      {options.map((option) => {
+        const on = chosen.includes(option);
+        return (
+          <button
+            key={option}
+            type="button"
+            aria-pressed={on}
+            onClick={() => onToggle(option)}
+            className={cn(
+              "rounded-md border px-2 py-1 text-xs transition-colors",
+              on ? "border-primary/40 bg-primary/10 text-foreground" : "border-border/70 text-muted-foreground hover:border-primary/30",
+            )}
+          >
+            {option}
+          </button>
+        );
+      })}
+      {!options.length && <span className="px-1 py-0.5 text-xs text-muted-foreground">—</span>}
+    </div>
+  );
+}
+
+function ThreatModelTab({ actors, sectors, targets, huntTechniques, pt, onOpen }: {
+  actors: ActorListItem[];
+  sectors: string[];
+  targets: string[];
+  huntTechniques: Set<string>;
+  pt: boolean;
+  onOpen: (id: string) => void;
+}) {
+  const [profiles, setProfiles] = useState<OrgProfile[]>(loadProfiles);
+  const [activeId, setActiveId] = useState<string>(() => loadProfiles()[0]?.id || "");
+
+  const persist = (next: OrgProfile[]) => {
+    setProfiles(next);
+    try { localStorage.setItem(PROFILES_KEY, JSON.stringify(next)); } catch { /* sem persistência, segue */ }
+  };
+  const active = profiles.find((profile) => profile.id === activeId) || null;
+  const patch = (changes: Partial<OrgProfile>) =>
+    active && persist(profiles.map((profile) => (profile.id === active.id ? { ...profile, ...changes } : profile)));
+  const toggle = (key: "sectors" | "regions", value: string) => {
+    if (!active) return;
+    const current = active[key];
+    patch({ [key]: current.includes(value) ? current.filter((item) => item !== value) : [...current, value] });
+  };
+  const addProfile = () => {
+    const profile: OrgProfile = { id: String(Date.now()), name: pt ? "Nova organização" : "New organization", sectors: [], regions: [] };
+    persist([...profiles, profile]);
+    setActiveId(profile.id);
+  };
+  const removeProfile = (id: string) => {
+    const next = profiles.filter((profile) => profile.id !== id);
+    persist(next);
+    if (activeId === id) setActiveId(next[0]?.id || "");
+  };
+
+  const matches = useMemo(() => (active ? matchActors(actors, active) : []), [actors, active]);
+  const ttps = useMemo(() => topTechniques(matches, huntTechniques), [matches, huntTechniques]);
+  const gaps = ttps.filter((item) => !item.covered).length;
+
+  return (
+    <div className="grid gap-6 xl:grid-cols-[280px_minmax(0,1fr)]">
+      <aside className="soc-panel h-fit rounded-lg p-4">
+        <div className="mb-3 flex items-center justify-between gap-2">
+          <h2 className="text-sm font-semibold">{pt ? "Organizações" : "Organizations"}</h2>
+          <Button size="sm" variant="outline" className="h-8 gap-1.5 px-2 text-xs" onClick={addProfile}>
+            <Plus className="h-3.5 w-3.5" /> {pt ? "Nova" : "New"}
+          </Button>
+        </div>
+        <div className="space-y-1.5">
+          {profiles.map((profile) => (
+            <div
+              key={profile.id}
+              className={cn(
+                "flex items-center gap-1 rounded-lg border px-2 py-1.5 text-sm",
+                profile.id === activeId ? "border-primary/40 bg-primary/5" : "border-border/70",
+              )}
+            >
+              <button type="button" onClick={() => setActiveId(profile.id)} className="min-w-0 flex-1 truncate text-left">
+                {profile.name}
+                <span className="ml-1.5 text-xs text-muted-foreground">
+                  {profile.sectors.length + profile.regions.length}
+                </span>
+              </button>
+              <Button
+                size="icon" variant="ghost" className="h-7 w-7 shrink-0 text-muted-foreground hover:text-destructive"
+                aria-label={pt ? `Remover ${profile.name}` : `Remove ${profile.name}`}
+                onClick={() => removeProfile(profile.id)}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          ))}
+          {!profiles.length && (
+            <p className="py-6 text-center text-xs text-muted-foreground">
+              {pt ? "Crie uma organização para mapear quem ataca gente como ela." : "Create an organization to map who attacks its kind."}
+            </p>
+          )}
+        </div>
+      </aside>
+
+      {!active ? (
+        <div className="rounded-lg border border-dashed border-border bg-muted/25 p-8 text-center text-sm text-muted-foreground">
+          {pt ? "Nenhuma organização selecionada." : "No organization selected."}
+        </div>
+      ) : (
+        <section className="space-y-5">
+          <div className="soc-panel space-y-4 rounded-lg p-4">
+            <div>
+              <Label htmlFor="profile-name" className="text-xs">{pt ? "Nome" : "Name"}</Label>
+              <Input
+                id="profile-name"
+                value={active.name}
+                onChange={(event) => patch({ name: event.target.value })}
+                className="mt-1 h-9"
+              />
+            </div>
+            <div>
+              <Label className="text-xs">{pt ? "Setores da organização" : "Organization sectors"}</Label>
+              <div className="mt-1"><ChipPicker options={sectors} chosen={active.sectors} onToggle={(value) => toggle("sectors", value)} /></div>
+            </div>
+            <div>
+              <Label className="text-xs">{pt ? "Países / regiões de operação" : "Countries / regions of operation"}</Label>
+              <div className="mt-1"><ChipPicker options={targets} chosen={active.regions} onToggle={(value) => toggle("regions", value)} /></div>
+            </div>
+          </div>
+
+          {!active.sectors.length && !active.regions.length ? (
+            <div className="rounded-lg border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
+              {pt ? "Escolha ao menos um setor ou região para ver os grupos relevantes." : "Pick at least one sector or region to see the relevant groups."}
+            </div>
+          ) : (
+            <>
+              <div className="grid gap-3 sm:grid-cols-3">
+                <StatTile
+                  icon={UsersRound}
+                  label={pt ? "Grupos relevantes" : "Relevant groups"}
+                  value={formatNumber(matches.length)}
+                  detail={pt ? "Atacam o setor ou a região do perfil." : "They hit this profile's sector or region."}
+                />
+                <StatTile
+                  icon={Crosshair}
+                  label={pt ? "TTPs em destaque" : "Highlighted TTPs"}
+                  value={formatNumber(ttps.length)}
+                  detail={pt ? "Técnicas mais repetidas entre eles." : "Techniques most repeated among them."}
+                  tone="text-sky-500"
+                />
+                <StatTile
+                  icon={Shield}
+                  label={pt ? "Sem hunt" : "Uncovered"}
+                  value={formatNumber(gaps)}
+                  detail={pt ? "Desses TTPs, nenhuma hunt sua cobre." : "Of those TTPs, none of your hunts covers."}
+                  tone={gaps ? "text-amber-500" : "text-emerald-500"}
+                />
+              </div>
+
+              {ttps.length > 0 && (
+                <div className="soc-panel rounded-lg p-4">
+                  <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    {pt ? "TTPs a priorizar" : "TTPs to prioritize"}
+                  </h3>
+                  <div className="flex flex-wrap gap-1.5">
+                    {ttps.map((item) => (
+                      <Link
+                        key={item.id}
+                        to={`/hunting?query=${encodeURIComponent(item.id)}`}
+                        title={pt
+                          ? `${item.actors} grupo(s) · ${item.covered ? "coberto por hunt sua" : "sem hunt sua"}`
+                          : `${item.actors} group(s) · ${item.covered ? "covered by your hunts" : "no hunt of yours"}`}
+                        className={cn(
+                          "rounded-md border px-2 py-1 font-mono text-xs transition-colors hover:border-primary/40",
+                          item.covered
+                            ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+                            : "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300",
+                        )}
+                      >
+                        {item.id} <span className="opacity-70">· {item.actors}</span>
+                      </Link>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="overflow-hidden rounded-lg border border-border">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="hover:bg-transparent">
+                      <TableHead className="h-9 px-2 text-[10px] font-semibold uppercase tracking-wide">{pt ? "Grupo" : "Group"}</TableHead>
+                      <TableHead className="hidden h-9 px-2 text-[10px] font-semibold uppercase tracking-wide sm:table-cell">{pt ? "Setores" : "Sectors"}</TableHead>
+                      <TableHead className="hidden h-9 px-2 text-[10px] font-semibold uppercase tracking-wide lg:table-cell">{pt ? "Regiões" : "Regions"}</TableHead>
+                      <TableHead className="h-9 px-2 text-right text-[10px] font-semibold uppercase tracking-wide">TTPs</TableHead>
+                      <TableHead className="h-9 px-2 text-right text-[10px] font-semibold uppercase tracking-wide">{pt ? "Ação" : "Action"}</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {matches.slice(0, 60).map(({ actor, sectorHits, regionHits }) => (
+                      <TableRow key={actor.id}>
+                        <TableCell className="px-2 py-2">
+                          <div className="truncate text-sm font-semibold">{actor.name}</div>
+                          <div className="truncate text-xs text-muted-foreground">{actor.country || "—"} · {actor.motivation || "—"}</div>
+                        </TableCell>
+                        <TableCell className="hidden px-2 py-2 text-xs text-muted-foreground sm:table-cell">{sectorHits.join(", ") || "—"}</TableCell>
+                        <TableCell className="hidden px-2 py-2 text-xs text-muted-foreground lg:table-cell">{regionHits.join(", ") || "—"}</TableCell>
+                        <TableCell className="px-2 py-2 text-right font-mono text-xs font-semibold">{actor.technique_count}</TableCell>
+                        <TableCell className="px-2 py-2 text-right">
+                          <Button variant="outline" size="sm" className="h-8 px-2 text-xs" onClick={() => onOpen(actor.id)}>
+                            {pt ? "Abrir" : "Open"}
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+              {matches.length > 60 && (
+                <p className="text-xs text-muted-foreground">
+                  {pt ? `Mostrando 60 de ${formatNumber(matches.length)}.` : `Showing 60 of ${formatNumber(matches.length)}.`}
+                </p>
+              )}
+            </>
+          )}
+        </section>
+      )}
+    </div>
+  );
+}
+
 const Actors = () => {
   const { language } = useLanguage();
   const pt = language === "pt";
 
   const [list, setList] = useState<ActorListItem[]>([]);
   const [countries, setCountries] = useState<string[]>([]);
+  const [sectorFacet, setSectorFacet] = useState<string[]>([]);
+  const [targetFacet, setTargetFacet] = useState<string[]>([]);
   const [privateHunts, setPrivateHunts] = useState<PrivateHunt[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
 
   const [query, setQuery] = useState("");
   const [country, setCountry] = useState<string>(ALL_COUNTRIES);
+  const [sector, setSector] = useState<string>(ALL_SECTORS);
+  const [target, setTarget] = useState<string>(ALL_TARGETS);
   const [sourceFilter, setSourceFilter] = useState<SourceFilter>("all");
   const [sortMode, setSortMode] = useState<SortMode>("techniques");
 
@@ -553,6 +818,8 @@ const Actors = () => {
         }
         setList(actorsResult.value.actors || []);
         setCountries(actorsResult.value.countries || []);
+        setSectorFacet(actorsResult.value.sectors || []);
+        setTargetFacet(actorsResult.value.targets || []);
         setError(false);
       } finally {
         if (alive) setLoading(false);
@@ -591,6 +858,8 @@ const Actors = () => {
 
     const matches = list.filter((actor) => {
       if (country !== ALL_COUNTRIES && actor.country !== country) return false;
+      if (sector !== ALL_SECTORS && !(actor.sectors || []).includes(sector)) return false;
+      if (target !== ALL_TARGETS && !(actor.targets || []).includes(target)) return false;
       if (sourceFilter === "attack" && !hasAttackMapping(actor.source)) return false;
       if (sourceFilter === "misp" && hasAttackMapping(actor.source)) return false;
 
@@ -600,6 +869,8 @@ const Actors = () => {
         ...actor.aliases,
         actor.country,
         actor.motivation,
+        ...(actor.sectors || []),
+        ...(actor.targets || []),
         sourceLabel(actor.source),
       ]
         .filter(Boolean)
@@ -609,7 +880,14 @@ const Actors = () => {
     });
 
     return sortActors(matches, sortMode, coverage);
-  }, [country, coverage, list, query, sortMode, sourceFilter]);
+  }, [country, coverage, list, query, sector, sortMode, sourceFilter, target]);
+
+  // Técnicas cobertas pelas suas hunts — a modelagem usa isso pra marcar o que
+  // já tem caça montada.
+  const huntTechniques = useMemo(
+    () => new Set((privateHunts || []).flatMap((hunt) => hunt.techniques)),
+    [privateHunts],
+  );
 
   const shown = filtered.slice(0, MAX_RESULTS);
   const selectedSummary = useMemo(() => list.find((actor) => actor.id === selectedId), [list, selectedId]);
@@ -714,6 +992,24 @@ const Actors = () => {
         />
       </section>
 
+      <Tabs defaultValue="catalog" className="space-y-5">
+        <TabsList>
+          <TabsTrigger value="catalog">{pt ? "Catálogo" : "Catalog"}</TabsTrigger>
+          <TabsTrigger value="model">{pt ? "Modelagem de ameaças" : "Threat modelling"}</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="model">
+          <ThreatModelTab
+            actors={list}
+            sectors={sectorFacet}
+            targets={targetFacet}
+            huntTechniques={huntTechniques}
+            pt={pt}
+            onOpen={openActor}
+          />
+        </TabsContent>
+
+        <TabsContent value="catalog">
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_440px]">
         <section className="soc-panel rounded-lg">
           <div className="border-b border-border p-4">
@@ -759,27 +1055,50 @@ const Actors = () => {
               </div>
             </div>
 
-            <div className="mt-4 grid gap-2 lg:grid-cols-[minmax(240px,1fr)_220px]">
+            <div className="mt-4 grid gap-2 lg:grid-cols-[minmax(240px,1fr)_200px]">
               <div className="relative">
                 <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
-                  placeholder={pt ? "Buscar ator, alias ou país" : "Search actor, alias, or country"}
+                  placeholder={pt ? "Buscar ator, alias, setor ou país" : "Search actor, alias, sector, or country"}
                   className="h-10 pl-9"
                 />
               </div>
               <Select value={country} onValueChange={setCountry}>
                 <SelectTrigger className="h-10">
-                  <SelectValue placeholder={pt ? "País" : "Country"} />
+                  <SelectValue placeholder={pt ? "Origem" : "Origin"} />
                 </SelectTrigger>
                 <SelectContent className="max-h-72">
-                  <SelectItem value={ALL_COUNTRIES}>{pt ? "Todos os países" : "All countries"}</SelectItem>
+                  <SelectItem value={ALL_COUNTRIES}>{pt ? "Todas as origens" : "All origins"}</SelectItem>
                   {countries.map((item) => (
                     <SelectItem key={item} value={item}>
                       {item}
                     </SelectItem>
                   ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Vitimologia: quem eles atacam, não de onde vêm. Derivada da
+                descrição do catálogo, então nem todo ator tem. */}
+            <div className="mt-2 grid gap-2 sm:grid-cols-2">
+              <Select value={sector} onValueChange={setSector}>
+                <SelectTrigger className="h-10 text-xs font-semibold">
+                  <SelectValue placeholder={pt ? "Indústria alvo" : "Targeted industry"} />
+                </SelectTrigger>
+                <SelectContent className="max-h-72">
+                  <SelectItem value={ALL_SECTORS}>{pt ? "Todas as indústrias alvo" : "All targeted industries"}</SelectItem>
+                  {sectorFacet.map((item) => <SelectItem key={item} value={item}>{item}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              <Select value={target} onValueChange={setTarget}>
+                <SelectTrigger className="h-10 text-xs font-semibold">
+                  <SelectValue placeholder={pt ? "País alvo" : "Targeted country"} />
+                </SelectTrigger>
+                <SelectContent className="max-h-72">
+                  <SelectItem value={ALL_TARGETS}>{pt ? "Todos os países alvo" : "All targeted countries"}</SelectItem>
+                  {targetFacet.map((item) => <SelectItem key={item} value={item}>{item}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
@@ -887,6 +1206,8 @@ const Actors = () => {
           )}
         </aside>
       </div>
+        </TabsContent>
+      </Tabs>
     </PageLayout>
   );
 };

@@ -16,6 +16,7 @@ import {
     scoreArticle, localizeEnrichment, severityFromScore, extractIOCs, CTI_FEEDS,
     extractReadableText, collectArtifactLinks, githubArtifact, ARTIFACT_TEXT_FILE,
 } from './ctiIntel.js';
+import { actorTargeting } from './actorProfile.js';
 import { getShodanCreditStatus, runAttackSurfaceScan } from './attackSurface.js';
 import { groupByField, refsOfReport, relatedTo, techniqueCoverage } from './attackIndex.js';
 import { jobSummary, pruneJobsMap } from './feedJobs.js';
@@ -3871,21 +3872,33 @@ const loadActors = () => {
     } catch (err) {
         console.error('Failed to load actors.json (run build-actors.mjs):', err.message);
     }
-    const countries = [...new Set(actors.map(a => a.country).filter(Boolean))].sort();
-    ACTORS_CACHE = { actors, countries };
+    // Vitimologia (setor/região atacada) sai da descrição — ver actorProfile.js.
+    // Feito uma vez aqui porque a descrição só existe no objeto completo, e a
+    // listagem (que é onde os filtros rodam) não carrega descrição.
+    actors = actors.map((actor) => ({ ...actor, ...actorTargeting(actor) }));
+    const facet = (key) => [...new Set(actors.flatMap((a) => a[key] || []).filter(Boolean))].sort();
+    ACTORS_CACHE = {
+        actors,
+        countries: [...new Set(actors.map(a => a.country).filter(Boolean))].sort(),
+        sectors: facet('sectors'),
+        targets: facet('targets'),
+    };
     return ACTORS_CACHE;
 };
 
-// List (slim) + country facet. The client fetches once and searches/filters in-memory.
+// List (slim) + facets. The client fetches once and searches/filters in-memory.
 app.get('/api/actors', (req, res) => {
-    const { actors, countries } = loadActors();
+    const { actors, countries, sectors, targets } = loadActors();
     res.set('Cache-Control', 'public, max-age=21600');
     res.json({
         total: actors.length,
         countries,
+        sectors,
+        targets,
         actors: actors.map(a => ({
             id: a.id, name: a.name, aliases: a.aliases || [], country: a.country || '',
             motivation: a.motivation || '', source: a.source,
+            sectors: a.sectors || [], targets: a.targets || [],
             technique_count: (a.techniques || []).length,
             techniques: (a.techniques || []).map((technique) => technique.id).filter(Boolean),
         })),

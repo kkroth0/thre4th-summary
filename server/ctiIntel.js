@@ -173,9 +173,9 @@ const ATTACK_TTPS = {
 };
 
 // Pre-compile each label -> single word-boundary regex over its keywords
-const compileLabelMap = (map) =>
+export const compileLabelMap = (map) =>
     Object.entries(map).map(([label, terms]) => ({ label, re: buildRe(terms, true) }));
-const SECTOR_RULES = compileLabelMap(TARGET_SECTORS);
+export const SECTOR_RULES = compileLabelMap(TARGET_SECTORS);
 const TTP_RULES = compileLabelMap(ATTACK_TTPS);
 const THREAT_RULES = Object.entries(
     // collapse duplicate labels (stealer/infostealer, zero-day/0-day) into one regex each
@@ -185,7 +185,7 @@ const THREAT_RULES = Object.entries(
     }, {})
 ).map(([label, terms]) => ({ label, re: buildRe(terms, true) }));
 
-const matchLabels = (text, rules) => rules.filter((r) => r.re.exec(text)).map((r) => r.label);
+export const matchLabels = (text, rules) => rules.filter((r) => r.re.exec(text)).map((r) => r.label);
 
 // PT-BR labels for the deterministic threat/sector chips, mirroring the
 // soc-sentinela bot output. Most threat names are technical terms kept in
