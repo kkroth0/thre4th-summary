@@ -1,13 +1,17 @@
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import {
   RefreshCw, ShieldAlert, Loader2, Sparkles, Trash2, KeyRound,
-  CheckCircle2, ArrowRight, RotateCcw,
+  CheckCircle2, ArrowRight, RotateCcw, ChevronDown, Download, SlidersHorizontal,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Switch } from "@/components/ui/switch";
 import {
-  Select, SelectContent, SelectItem, SelectTrigger,
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import {
   AlertDialog, AlertDialogTrigger, AlertDialogContent, AlertDialogHeader,
@@ -25,9 +29,19 @@ import {
   fetchDailySuggestions, generateBoletim, fetchJob, fetchJobList, deleteJob,
   type DailySuggestion, type BoletimJob, type DeckType,
 } from "@/services/threatApi";
-import { canOpenReport } from "./dailyBulletinView";
+import { exportBoletimJSON } from "@/utils/boletimExport";
+import {
+  canOpenReport, filterSuggestions, DEFAULT_SUGGESTION_PREFS, type SuggestionPrefs,
+} from "./dailyBulletinView";
 
-const slug = (s: string) => (s || "boletim").normalize("NFKD").replace(/[^\w\s-]/g, "").trim().toLowerCase().replace(/[\s_-]+/g, "-").slice(0, 50) || "boletim";
+const PREFS_KEY = "daily-suggestion-prefs";
+const loadPrefs = (): SuggestionPrefs => {
+  try {
+    return { ...DEFAULT_SUGGESTION_PREFS, ...JSON.parse(localStorage.getItem(PREFS_KEY) || "{}") };
+  } catch {
+    return DEFAULT_SUGGESTION_PREFS;
+  }
+};
 
 // Após esse tempo um job ainda "pending" vira erro no front (worker caiu, ou o
 // backend reiniciou e perdeu o job -> 404). Evita "gerando…" eterno. Casado com
@@ -75,11 +89,13 @@ const timeAgo = (iso: string, pt: boolean) => {
 const JobListItem: React.FC<{
   job: BoletimJob;
   selected: boolean;
+  picked: boolean;
   nowMs: number;
   pt: boolean;
   onSelect: (job: BoletimJob) => void;
+  onPick: (id: string, picked: boolean) => void;
   onRetry: (job: BoletimJob) => void;
-}> = ({ job: j, selected, nowMs, pt, onSelect, onRetry }) => {
+}> = ({ job: j, selected, picked, nowMs, pt, onSelect, onPick, onRetry }) => {
   const st = JOB_STATUS[j.status] || JOB_STATUS.pending;
   const elapsed = Math.max(0, nowMs - new Date(j.createdAt).getTime());
   const clickable = canOpenReport(j);
@@ -97,6 +113,13 @@ const JobListItem: React.FC<{
       )}
     >
       <div className="flex items-center gap-3">
+        <span onClick={(e) => e.stopPropagation()}>
+          <Checkbox
+            checked={picked}
+            onCheckedChange={(value) => onPick(j.id, Boolean(value))}
+            aria-label={pt ? `Selecionar ${j.title || j.url}` : `Select ${j.title || j.url}`}
+          />
+        </span>
         <span className={`h-2 w-2 rounded-full shrink-0 ${st.dot} ${j.status === "pending" ? "animate-pulse" : ""}`} />
         <div className="min-w-0 flex-1">
           <div className="text-sm font-medium truncate">{j.title || j.url}</div>
@@ -114,7 +137,7 @@ const JobListItem: React.FC<{
         )}
       </div>
       {j.status === "error" && (
-        <div className="mt-1.5 flex items-center gap-2 pl-5">
+        <div className="mt-1.5 flex items-center gap-2 pl-12">
           <span className="min-w-0 flex-1 truncate text-xs text-red-500/90">{j.error || (pt ? "falhou" : "failed")}</span>
           <Button
             size="sm" variant="ghost" className="h-6 px-2 text-xs text-muted-foreground hover:text-foreground shrink-0"
@@ -125,7 +148,7 @@ const JobListItem: React.FC<{
         </div>
       )}
       {j.status === "pending" && (
-        <div className="mt-2 pl-5">
+        <div className="mt-2 pl-12">
           <div className="relative h-1 w-full overflow-hidden rounded-full bg-muted">
             <span className="absolute top-0 h-full rounded-full bg-primary/70 animate-indeterminate" />
           </div>
@@ -153,6 +176,8 @@ const DailyBulletin: React.FC = () => {
   const [pasteUrl, setPasteUrl] = useState(() => searchParams.get("url") || "");
   const [pasteType, setPasteType] = useState<DeckType>("vuln");
   const [jobs, setJobs] = useState<BoletimJob[]>([]);
+  const [picked, setPicked] = useState<string[]>([]);
+  const [prefs, setPrefs] = useState<SuggestionPrefs>(loadPrefs);
   const [nowMs, setNowMs] = useState(Date.now());
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -162,19 +187,34 @@ const DailyBulletin: React.FC = () => {
   // aqui a gente só usa o estado pra liberar (ou barrar) o gerador.
   const { auth } = useAuth();
 
+  // Busca uma janela maior do que cabe na tela: os cortes por severidade/KEV/
+  // palavra-chave acontecem aqui, então vale ter folga pra filtrar.
   const loadSuggestions = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await fetchDailySuggestions(36, 12);
+      const data = await fetchDailySuggestions(prefs.hours, 40);
       setSuggestions(data.suggestions || []);
     } catch {
       toast.error(pt ? "Falha ao carregar sugestões" : "Failed to load suggestions");
     } finally {
       setLoading(false);
     }
-  }, [pt]);
+  }, [pt, prefs.hours]);
 
   useEffect(() => { loadSuggestions(); }, [loadSuggestions]);
+
+  const savePrefs = (next: Partial<SuggestionPrefs>) => {
+    setPrefs((current) => {
+      const merged = { ...current, ...next };
+      try { localStorage.setItem(PREFS_KEY, JSON.stringify(merged)); } catch { /* sem persistência, segue */ }
+      return merged;
+    });
+  };
+
+  const shownSuggestions = useMemo(
+    () => filterSuggestions(suggestions, prefs).slice(0, 14),
+    [suggestions, prefs],
+  );
 
   // A lista vem do servidor — antes vivia só no localStorage, então o histórico
   // era por navegador e sumia. Chega sem o JSON do boletim; o corpo é buscado
@@ -249,29 +289,39 @@ const DailyBulletin: React.FC = () => {
     }
   };
 
-  const download = (job: BoletimJob) => {
-    const blob = new Blob([JSON.stringify(job.json, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `boletim-${job.type}-${slug(job.title || job.url)}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
+  const togglePick = (id: string, on: boolean) =>
+    setPicked((prev) => (on ? [...new Set([...prev, id])] : prev.filter((value) => value !== id)));
+
+  // Baixa o JSON de cada selecionado. A listagem chega sem o boletim, então o
+  // que ainda não foi aberto é buscado antes de virar arquivo.
+  const downloadPicked = async () => {
+    const targets = jobs.filter((j) => picked.includes(j.id) && canOpenReport(j));
+    if (!targets.length) { toast.error(pt ? "Nenhum relatório pronto selecionado" : "No finished report selected"); return; }
+    let falhas = 0;
+    for (const job of targets) {
+      try {
+        const full = job.json ? job : { ...job, json: (await fetchJob(job.id)).json };
+        exportBoletimJSON(full);
+      } catch { falhas += 1; }
+    }
+    if (falhas) toast.error(pt ? `Falha ao baixar ${falhas} relatório(s)` : `Failed to download ${falhas} report(s)`);
+    else toast.success(pt ? `${targets.length} relatório(s) baixado(s)` : `${targets.length} report(s) downloaded`);
   };
 
-  // Apaga o histórico no servidor. Antes era só estado local, porque o
-  // histórico morava no navegador.
-  const clearHistory = async () => {
-    const alvo = jobs;
-    setJobs([]);
-    setSelectedId(null);
-    const falhas = await Promise.all(alvo.map((j) => deleteJob(j.id).then(() => 0).catch(() => 1)));
-    const erros = falhas.reduce((a: number, b) => a + b, 0);
+  // Apaga no servidor. Antes só dava pra limpar tudo; agora o que some é o que
+  // foi marcado.
+  const deletePicked = async () => {
+    const alvo = jobs.filter((j) => picked.includes(j.id));
+    setJobs((prev) => prev.filter((j) => !picked.includes(j.id)));
+    if (selectedId && picked.includes(selectedId)) setSelectedId(null);
+    setPicked([]);
+    const erros = (await Promise.all(alvo.map((j) => deleteJob(j.id).then(() => 0).catch(() => 1))))
+      .reduce((a: number, b) => a + b, 0);
     if (erros) {
       setJobs(await fetchJobList().catch(() => alvo));
       toast.error(pt ? `Falha ao apagar ${erros} relatório(s)` : `Failed to delete ${erros} report(s)`);
     } else {
-      toast.success(pt ? "Histórico apagado" : "History cleared");
+      toast.success(pt ? `${alvo.length} relatório(s) apagado(s)` : `${alvo.length} report(s) deleted`);
     }
   };
 
@@ -365,36 +415,62 @@ const DailyBulletin: React.FC = () => {
       <div className="grid gap-10 lg:grid-cols-[400px_1fr] lg:items-start lg:gap-8">
         {/* ── work column ───────────────────────────────────────────── */}
         <div className="min-w-0 space-y-10">
-          {/* Your reports — selectable job cards */}
-          <section>
-            <div className="flex items-center justify-between mb-1.5">
-              <h2 className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                {pt ? "Seus relatorios" : "Your reports"}{jobs.length > 0 ? ` · ${jobs.length}` : ""}
-              </h2>
-              {jobs.length > 0 && (
-                <AlertDialog>
-                  <AlertDialogTrigger asChild>
-                    <Button variant="ghost" size="sm" className="h-7 px-2 text-xs text-muted-foreground hover:text-destructive">
-                      <Trash2 className="h-3.5 w-3.5 mr-1.5" /> {pt ? "Limpar" : "Clear"}
-                    </Button>
-                  </AlertDialogTrigger>
-                  <AlertDialogContent>
-                    <AlertDialogHeader>
-                      <AlertDialogTitle>{pt ? "Limpar histórico de relatorios?" : "Clear report history?"}</AlertDialogTitle>
-                      <AlertDialogDescription>
-                        {pt
-                          ? "Isso apaga todos os relatórios da sua conta, no servidor, incluindo os JSON gerados. Não dá pra desfazer."
-                          : "This deletes every report on your account, on the server, including the generated JSON. This can't be undone."}
-                      </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                      <AlertDialogCancel>{pt ? "Cancelar" : "Cancel"}</AlertDialogCancel>
-                      <AlertDialogAction onClick={clearHistory}>{pt ? "Apagar" : "Delete"}</AlertDialogAction>
-                    </AlertDialogFooter>
-                  </AlertDialogContent>
-                </AlertDialog>
-              )}
-            </div>
+          {/* Your reports — collapsible list of selectable job cards */}
+          <details open className="group">
+            <summary className="mb-1.5 flex cursor-pointer list-none items-center gap-1.5 text-xs font-medium uppercase tracking-wider text-muted-foreground hover:text-foreground [&::-webkit-details-marker]:hidden">
+              <ChevronDown className="h-3.5 w-3.5 transition-transform group-open:rotate-0 -rotate-90" />
+              {pt ? "Seus relatorios" : "Your reports"}{jobs.length > 0 ? ` · ${jobs.length}` : ""}
+            </summary>
+
+            {jobs.length > 0 && (
+              <div className="mb-1.5 flex items-center gap-2 rounded-lg bg-muted/40 px-3 py-1.5">
+                <Checkbox
+                  checked={picked.length > 0 && picked.length === jobs.length}
+                  onCheckedChange={(value) => setPicked(value ? jobs.map((j) => j.id) : [])}
+                  aria-label={pt ? "Selecionar todos" : "Select all"}
+                />
+                <span className="text-xs text-muted-foreground">
+                  {picked.length
+                    ? (pt ? `${picked.length} selecionado(s)` : `${picked.length} selected`)
+                    : (pt ? "Selecionar" : "Select")}
+                </span>
+                <div className="ml-auto flex items-center gap-1">
+                  <Button
+                    variant="ghost" size="sm" disabled={!picked.length}
+                    className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
+                    onClick={() => void downloadPicked()}
+                  >
+                    <Download className="mr-1.5 h-3.5 w-3.5" /> JSON
+                  </Button>
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button
+                        variant="ghost" size="sm" disabled={!picked.length}
+                        className="h-7 px-2 text-xs text-muted-foreground hover:text-destructive"
+                      >
+                        <Trash2 className="mr-1.5 h-3.5 w-3.5" /> {pt ? "Apagar" : "Delete"}
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>
+                          {pt ? `Apagar ${picked.length} relatorio(s)?` : `Delete ${picked.length} report(s)?`}
+                        </AlertDialogTitle>
+                        <AlertDialogDescription>
+                          {pt
+                            ? "Some do servidor junto com o JSON gerado. Não dá pra desfazer."
+                            : "They go from the server along with the generated JSON. This can't be undone."}
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>{pt ? "Cancelar" : "Cancel"}</AlertDialogCancel>
+                        <AlertDialogAction onClick={() => void deletePicked()}>{pt ? "Apagar" : "Delete"}</AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                </div>
+              </div>
+            )}
 
             {jobs.length === 0 ? (
               <p className="py-10 text-center text-sm text-muted-foreground">
@@ -407,27 +483,89 @@ const DailyBulletin: React.FC = () => {
                     key={j.id}
                     job={j}
                     selected={selectedId === j.id}
+                    picked={picked.includes(j.id)}
                     nowMs={nowMs}
                     pt={pt}
                     onSelect={selectJob}
+                    onPick={togglePick}
                     onRetry={retryJob}
                   />
                 ))}
               </div>
             )}
-          </section>
+          </details>
 
           {/* Suggestions — quiet hairline list, action on hover */}
           <section>
             <div className="flex items-center justify-between mb-1.5">
-              <h2 className="text-xs font-medium uppercase tracking-wider text-muted-foreground">{pt ? "Sugestões do dia" : "Today's suggestions"}</h2>
-              <Button variant="ghost" size="sm" className="h-7 px-2 text-muted-foreground" onClick={loadSuggestions} disabled={loading} title={pt ? "Atualizar" : "Refresh"}>
-                {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-              </Button>
+              <h2 className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                {pt ? "Sugestões do dia" : "Today's suggestions"}
+                {shownSuggestions.length < suggestions.length ? ` · ${shownSuggestions.length}/${suggestions.length}` : ""}
+              </h2>
+              <div className="flex items-center gap-1">
+                {/* Personalização do feed: janela no servidor, o resto filtra na
+                    tela. Fica no navegador — é preferência, não configuração. */}
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="ghost" size="sm" className="h-7 px-2 text-muted-foreground" title={pt ? "Personalizar" : "Customize"}>
+                      <SlidersHorizontal className="h-3.5 w-3.5" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent align="end" className="w-72 space-y-4">
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">{pt ? "Janela" : "Window"}</Label>
+                      <Select value={String(prefs.hours)} onValueChange={(value) => savePrefs({ hours: Number(value) })}>
+                        <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="24">{pt ? "Últimas 24 h" : "Last 24 h"}</SelectItem>
+                          <SelectItem value="36">{pt ? "Últimas 36 h" : "Last 36 h"}</SelectItem>
+                          <SelectItem value="72">{pt ? "Últimos 3 dias" : "Last 3 days"}</SelectItem>
+                          <SelectItem value="168">{pt ? "Última semana" : "Last week"}</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">{pt ? "Severidade mínima" : "Minimum severity"}</Label>
+                      <Select value={prefs.minSeverity} onValueChange={(value) => savePrefs({ minSeverity: value as SuggestionPrefs["minSeverity"] })}>
+                        <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">{pt ? "Qualquer" : "Any"}</SelectItem>
+                          <SelectItem value="Medium">Medium</SelectItem>
+                          <SelectItem value="High">High</SelectItem>
+                          <SelectItem value="Critical">Critical</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="flex items-center justify-between gap-3">
+                      <Label htmlFor="sugestoes-kev" className="text-xs">{pt ? "Só CISA KEV" : "CISA KEV only"}</Label>
+                      <Switch id="sugestoes-kev" checked={prefs.kevOnly} onCheckedChange={(value) => savePrefs({ kevOnly: value })} />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="sugestoes-kw" className="text-xs">{pt ? "Palavras-chave" : "Keywords"}</Label>
+                      <Input
+                        id="sugestoes-kw"
+                        value={prefs.keywords}
+                        onChange={(e) => savePrefs({ keywords: e.target.value })}
+                        placeholder={pt ? "fortinet, sap, ransomware" : "fortinet, sap, ransomware"}
+                        className="h-9"
+                      />
+                      <p className="text-[11px] text-muted-foreground">
+                        {pt ? "Separadas por vírgula. Vazio mostra tudo." : "Comma separated. Empty shows everything."}
+                      </p>
+                    </div>
+                    <Button variant="ghost" size="sm" className="h-7 w-full text-xs" onClick={() => savePrefs(DEFAULT_SUGGESTION_PREFS)}>
+                      {pt ? "Restaurar padrão" : "Reset to default"}
+                    </Button>
+                  </PopoverContent>
+                </Popover>
+                <Button variant="ghost" size="sm" className="h-7 px-2 text-muted-foreground" onClick={loadSuggestions} disabled={loading} title={pt ? "Atualizar" : "Refresh"}>
+                  {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                </Button>
+              </div>
             </div>
-            {suggestions.length > 0 ? (
+            {shownSuggestions.length > 0 ? (
               <div className="divide-y divide-border/60">
-                {suggestions.map((s) => (
+                {shownSuggestions.map((s) => (
                   <div key={s.url} className="group flex items-center gap-3 py-2.5">
                     <span className={`h-2 w-2 rounded-full shrink-0 ${SEV_DOT[s.severity] || SEV_DOT.Low}`} title={s.severity} />
                     <a href={s.url} target="_blank" rel="noopener noreferrer" className="min-w-0 flex-1 truncate text-sm hover:underline" title={s.title}>
@@ -444,7 +582,11 @@ const DailyBulletin: React.FC = () => {
             ) : loading ? (
               <div className="py-10 text-center"><Loader2 className="h-4 w-4 animate-spin mx-auto text-muted-foreground" /></div>
             ) : (
-              <p className="py-10 text-center text-sm text-muted-foreground">{pt ? "Nenhuma sugestão no momento." : "No suggestions right now."}</p>
+              <p className="py-10 text-center text-sm text-muted-foreground">
+                {suggestions.length
+                  ? (pt ? "Nenhuma sugestão passa pelos seus filtros." : "No suggestion matches your filters.")
+                  : (pt ? "Nenhuma sugestão no momento." : "No suggestions right now.")}
+              </p>
             )}
           </section>
         </div>
@@ -454,7 +596,7 @@ const DailyBulletin: React.FC = () => {
           ref={paneRef}
           className="min-w-0 scroll-mt-24 lg:sticky lg:top-20 lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto"
         >
-          <ReportPane job={selectedJob} onDownload={download} />
+          <ReportPane job={selectedJob} />
         </div>
       </div>
     </PageLayout>
