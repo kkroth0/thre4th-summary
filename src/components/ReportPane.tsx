@@ -1,13 +1,18 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Crosshair, Download, ExternalLink, FileText } from "lucide-react";
+import { ChevronDown, Crosshair, ExternalLink, FileText, Loader2 } from "lucide-react";
 import { Link } from "react-router-dom";
+import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { BrandMark } from "@/components/BrandMark";
 import { BoletimView } from "@/components/BoletimView";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { fetchJobRelated, type BoletimJob, type BoletimReport, type PrivateHunt } from "@/services/threatApi";
 import { buildHuntLink } from "@/pages/dailyBulletinView";
+import { exportBoletimJSON, exportBoletimPDF, exportBoletimPPTX } from "@/utils/boletimExport";
 
 // Host da URL pra exibição compacta ("fortiguard.com" em vez do link inteiro).
 export const hostOf = (url?: string): string => {
@@ -92,12 +97,44 @@ function ReportRelations({ job, pt }: { job: BoletimJob; pt: boolean }) {
   );
 }
 
+// Um botão só: o formato é escolha de quem exporta, não três botões na toolbar.
+// PDF e PPTX montam o documento no navegador (libs carregadas sob demanda), daí
+// o estado de "gerando".
+function ExportMenu({ job, pt }: { job: BoletimJob; pt: boolean }) {
+  const [busy, setBusy] = useState(false);
+  const run = async (format: "json" | "pdf" | "pptx") => {
+    setBusy(true);
+    try {
+      if (format === "json") exportBoletimJSON(job);
+      else if (format === "pdf") await exportBoletimPDF(job);
+      else await exportBoletimPPTX(job);
+    } catch (error) {
+      toast.error((error as Error).message || (pt ? "Falha ao exportar" : "Export failed"));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="outline" size="sm" className="gap-1.5" disabled={busy}>
+          {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+          {pt ? "Exportar" : "Export"}
+          <ChevronDown className="h-3.5 w-3.5" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <DropdownMenuItem onSelect={() => void run("json")}>JSON</DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => void run("pdf")}>PDF</DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => void run("pptx")}>PowerPoint (PPTX)</DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 // Painel de leitura da workstation: toolbar com meta/ações + BoletimView.
 // `job === null` (ou sem JSON) mostra o estado vazio.
-export function ReportPane({ job, onDownload }: {
-  job: BoletimJob | null;
-  onDownload: (job: BoletimJob) => void;
-}) {
+export function ReportPane({ job }: { job: BoletimJob | null }) {
   const { language } = useLanguage();
   const pt = language === "pt";
 
@@ -151,9 +188,7 @@ export function ReportPane({ job, onDownload }: {
         )}
         <div className="ml-auto flex items-center gap-2">
           {usage}
-          <Button variant="outline" size="sm" className="gap-1.5" onClick={() => onDownload(job)}>
-            <Download className="h-3.5 w-3.5" /> JSON
-          </Button>
+          <ExportMenu job={job} pt={pt} />
         </div>
       </div>
 
