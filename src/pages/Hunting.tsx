@@ -1,5 +1,5 @@
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
-import { CalendarRange, CheckCircle2, ExternalLink, FileCode2, FilterX, Loader2, Pencil, Play, Plus, Search, Sparkles, Trash2, Undo2 } from "lucide-react";
+import { CalendarRange, CheckCircle2, Copy, ExternalLink, FileCode2, FilterX, Loader2, Pencil, Play, Plus, Search, Sparkles, Trash2, Undo2 } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
@@ -22,6 +22,7 @@ import { PageHeader } from "@/components/PageHeader";
 import { PageLayout } from "@/components/PageLayout";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { cn } from "@/lib/utils";
+import { formatKql } from "@/utils/kql";
 import {
   adoptHunt, createHunt, deleteHunt, fetchHearth, fetchHuntCoverage, fetchHuntFieldCoverage, fetchHunts,
   fetchHuntSchedule, fetchKqlContent, fetchKqlLibrary, fetchMonthlyRuns, fetchPtbrHunts, fetchSentinelTables, generateHunt,
@@ -81,6 +82,28 @@ function FacetSelect({ label, value, options, onChange }: {
           </SelectGroup>
         </SelectContent>
       </Select>
+    </div>
+  );
+}
+
+/** Bloco de consulta: KQL sempre identado, com copiar no canto. */
+function KqlBlock({ query, label = "Consulta KQL" }: { query: string; label?: string }) {
+  const pretty = formatKql(query);
+  if (!pretty) return null;
+  return (
+    <div className="rounded-md border bg-muted/40">
+      <div className="flex items-center justify-between border-b px-3 py-1.5">
+        <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{label}</span>
+        <Button
+          size="sm"
+          variant="ghost"
+          className="h-7 gap-1.5 px-2 text-xs"
+          onClick={() => { navigator.clipboard.writeText(pretty); toast.success("Consulta copiada"); }}
+        >
+          <Copy className="h-3.5 w-3.5" /> Copiar
+        </Button>
+      </div>
+      <pre className="overflow-x-auto p-3 font-mono text-xs leading-relaxed"><code>{pretty}</code></pre>
     </div>
   );
 }
@@ -222,6 +245,17 @@ function HuntDetail({ hunt, onClose, onEdit, onCopy }: {
   if (!hunt) return null;
   const hearth = isHearth(hunt);
   const body = hearth ? hunt.why : hunt.hypothesis;
+  // Ficha da hunt: só entra a linha que tem conteúdo — grade meio vazia é pior
+  // que grade curta.
+  const facts: [string, string][] = ([
+    ["Táticas", hunt.tactics.join(", ")],
+    ["Categoria", hearth ? hunt.category : ""],
+    ["CVEs", hearth ? "" : hunt.cves.join(", ")],
+    ["Tecnologias", hearth ? "" : hunt.technologies.join(", ")],
+    ["Fontes de dados", hearth ? "" : hunt.dataSources.join(", ")],
+    ["Cadência", hearth ? "" : CADENCE_LABEL[hunt.cadence] || ""],
+    ["Execuções", hearth ? "" : String(hunt.runs?.length || 0)],
+  ] as [string, string][]).filter(([, value]) => value);
   return (
     <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
       <DialogContent className="max-h-[92vh] w-[min(96vw,72rem)] max-w-none overflow-y-auto">
@@ -236,18 +270,42 @@ function HuntDetail({ hunt, onClose, onEdit, onCopy }: {
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-5 text-sm">
-          <p className="whitespace-pre-wrap leading-relaxed">{body}</p>
+          <section className="rounded-md border bg-muted/30 p-4">
+            <h3 className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Hipótese</h3>
+            <p className="whitespace-pre-wrap leading-relaxed">{body}</p>
+          </section>
+
           {!!hunt.techniques.length && (
-            <div className="flex flex-wrap gap-1.5">{hunt.techniques.map((id) => <Badge key={id} variant="outline" className="font-mono">{id}</Badge>)}</div>
+            <div>
+              <h3 className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">MITRE ATT&CK</h3>
+              <div className="flex flex-wrap gap-1.5">{hunt.techniques.map((id) => <Badge key={id} variant="outline" className="font-mono">{id}</Badge>)}</div>
+            </div>
           )}
-          {!hearth && hunt.query && (
-            <pre className="overflow-x-auto rounded-md border bg-muted/50 p-4 text-xs"><code>{hunt.query}</code></pre>
+
+          {!!facts.length && (
+            <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-2 lg:grid-cols-3">
+              {facts.map(([label, value]) => (
+                <div key={label}>
+                  <dt className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{label}</dt>
+                  <dd className="mt-0.5 break-words">{value}</dd>
+                </div>
+              ))}
+            </dl>
           )}
-          {(hearth ? hunt.notes : hunt.notes) && (
-            <div><h3 className="mb-1 font-semibold">Notas</h3><p className="whitespace-pre-wrap text-muted-foreground">{hunt.notes}</p></div>
+
+          {!hearth && <KqlBlock query={hunt.query} />}
+
+          {!hearth && hunt.falsePositives && (
+            <div>
+              <h3 className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Falsos positivos</h3>
+              <p className="whitespace-pre-wrap text-muted-foreground">{hunt.falsePositives}</p>
+            </div>
           )}
           {hearth && hunt.references && (
-            <div><h3 className="mb-1 font-semibold">Referências</h3><p className="whitespace-pre-wrap break-words text-muted-foreground">{hunt.references}</p></div>
+            <div>
+              <h3 className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Referências</h3>
+              <p className="whitespace-pre-wrap break-words text-muted-foreground">{hunt.references}</p>
+            </div>
           )}
         </div>
         <DialogFooter>
@@ -281,10 +339,21 @@ function FieldCoverageList({ coverage }: { coverage: FieldCoverage | null }) {
   );
 }
 
-function TechniqueMatrix({ coverage, hunts }: { coverage: TechniqueCoverage | null; hunts: PrivateHunt[] }) {
+/** Hunts (suas e do catálogo) que cobrem a técnica ou qualquer subtécnica dela. */
+const huntsForTechnique = <T extends HuntingItem>(hunts: T[], id: string) =>
+  hunts.filter((hunt) => hunt.techniques.some((value) => value === id || value.startsWith(`${id}.`)));
+
+function TechniqueMatrix({ coverage, hunts, catalog, onOpen }: {
+  coverage: TechniqueCoverage | null;
+  hunts: PrivateHunt[];
+  catalog: HearthHunt[];
+  onOpen: (hunt: HuntingItem) => void;
+}) {
   const [selected, setSelected] = useState<TechniqueCoverageNode | null>(null);
   if (!coverage) return <div className="flex items-center gap-2 py-16 text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Carregando cobertura…</div>;
-  const related = selected ? hunts.filter((hunt) => hunt.techniques.some((id) => id === selected.id || id.startsWith(`${selected.id}.`))) : [];
+  const related: HuntingItem[] = selected
+    ? [...huntsForTechnique(hunts, selected.id), ...huntsForTechnique(catalog, selected.id)]
+    : [];
   return (
     <div className="space-y-5">
       <div className="flex items-end justify-between gap-4">
@@ -315,15 +384,49 @@ function TechniqueMatrix({ coverage, hunts }: { coverage: TechniqueCoverage | nu
           ))}
         </div>
       </div>
-      {selected && (
-        <div className="rounded-md border p-4">
-          <div className="flex items-start justify-between gap-4"><div><div className="font-mono text-xs text-muted-foreground">{selected.id}</div><h3 className="font-semibold">{selected.name}</h3></div><Button size="sm" variant="ghost" onClick={() => setSelected(null)}>Fechar</Button></div>
-          {!!selected.subs.length && <div className="mt-3 flex flex-wrap gap-1.5">{selected.subs.map((sub) => <Badge key={sub.id} variant={sub.count ? "default" : "outline"} className="font-mono text-[10px]">{sub.id} · {sub.count}</Badge>)}</div>}
-          <div className="mt-4 space-y-2">
-            {related.length ? related.map((hunt) => <div key={hunt.id} className="rounded bg-muted/50 px-3 py-2 text-sm">{hunt.title}</div>) : <p className="text-sm text-muted-foreground">Nenhuma hunt privada cobre esta técnica.</p>}
+      {/* Clicar na técnica abre a lista de hunts disponíveis pra ela — as suas
+          e as do catálogo, porque descobrir o buraco só serve se der pra tapar. */}
+      <Dialog open={!!selected} onOpenChange={(open) => { if (!open) setSelected(null); }}>
+        <DialogContent className="max-h-[88vh] w-[min(96vw,52rem)] max-w-none overflow-y-auto">
+          <DialogHeader>
+            <div className="font-mono text-xs text-muted-foreground">{selected?.id}</div>
+            <DialogTitle className="text-lg leading-snug">{selected?.name}</DialogTitle>
+            <DialogDescription>
+              {related.length ? `${related.length} hunt(s) disponíveis para esta técnica.` : "Nenhuma hunt cobre esta técnica — nem sua, nem do catálogo."}
+            </DialogDescription>
+          </DialogHeader>
+
+          {!!selected?.subs.length && (
+            <div className="flex flex-wrap gap-1.5">
+              {selected.subs.map((sub) => <Badge key={sub.id} variant={sub.count ? "default" : "outline"} className="font-mono text-[10px]">{sub.id} · {sub.count}</Badge>)}
+            </div>
+          )}
+
+          <div className="space-y-2">
+            {related.map((hunt) => {
+              const hearth = isHearth(hunt);
+              return (
+                <button
+                  key={`${huntOrigin(hunt)}-${hunt.id}`}
+                  type="button"
+                  onClick={() => { setSelected(null); onOpen(hunt); }}
+                  className="flex w-full items-start justify-between gap-3 rounded-md border p-3 text-left transition-colors hover:border-primary/50 hover:bg-muted/40"
+                >
+                  <div className="min-w-0">
+                    <div className="text-sm font-medium leading-snug">{hunt.title}</div>
+                    <div className="mt-1 text-xs text-muted-foreground">
+                      {hearth ? [hunt.category, hunt.submitter.name].filter(Boolean).join(" · ") : [hunt.status, ...hunt.dataSources].filter(Boolean).join(" · ")}
+                    </div>
+                  </div>
+                  <Badge variant={hearth ? "secondary" : "default"} className="shrink-0 text-[10px]">
+                    {hearth ? "HEARTH" : originLabel(hunt.adoptedFrom).toUpperCase()}
+                  </Badge>
+                </button>
+              );
+            })}
           </div>
-        </div>
-      )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -661,7 +764,8 @@ const Hunting = () => {
       setForm({
         ...form,
         title: form.title || result.title,
-        query: result.query || form.query,
+        // O modelo devolve o KQL numa linha só; quem revisa é o analista.
+        query: formatKql(result.query) || form.query,
         dataSources: result.dataSources.join(", ") || form.dataSources,
         falsePositives: result.falsePositives || form.falsePositives,
         notes: result.notes || form.notes,
@@ -1096,7 +1200,7 @@ const Hunting = () => {
               <TabsTrigger value="technology">Tecnologias</TabsTrigger>
               <TabsTrigger value="dataSource">Fontes de dados</TabsTrigger>
             </TabsList>
-            <TabsContent value="technique"><TechniqueMatrix coverage={techCoverage} hunts={privateHunts} /></TabsContent>
+            <TabsContent value="technique"><TechniqueMatrix coverage={techCoverage} hunts={privateHunts} catalog={catalog} onOpen={setSelected} /></TabsContent>
             <TabsContent value="technology"><FieldCoverageList coverage={technologyCoverage} /></TabsContent>
             <TabsContent value="dataSource"><FieldCoverageList coverage={dataSourceCoverage} /></TabsContent>
           </Tabs>
@@ -1122,18 +1226,7 @@ const Hunting = () => {
             <DialogTitle className="font-mono text-sm">{openedKql?.path}</DialogTitle>
             <DialogDescription>Somente leitura. Copie para rodar no Sentinel.</DialogDescription>
           </DialogHeader>
-          <pre className="overflow-x-auto rounded-md bg-muted p-4 font-mono text-xs leading-relaxed">{openedKql?.query}</pre>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => {
-                if (openedKql) navigator.clipboard.writeText(openedKql.query);
-                toast.success("Consulta copiada");
-              }}
-            >
-              Copiar
-            </Button>
-          </DialogFooter>
+          <KqlBlock query={openedKql?.query || ""} />
         </DialogContent>
       </Dialog>
 
