@@ -108,6 +108,11 @@ const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve,
 // Shodan's fixed search page size, not an application cap.
 const PAGE_SIZE = 100;
 
+// Teto de páginas por alvo. Busca (CIDR/domínio/org/ASN/query) gasta 1 crédito
+// por página além da primeira: um /8 sem teto zera a cota num alvo só. Lookup
+// de IP não pagina, então um lote de IPs não encosta nisto.
+const MAX_PAGES_PER_TARGET = 10;
+
 // Shodan denies paid pagination with these once credits or rate limits run out.
 const isCreditError = (message: string) =>
   /\b(401|403|429)\b/.test(message) || /credit|rate limit/i.test(message);
@@ -283,14 +288,17 @@ export default function AttackSurface() {
       const label = input.advancedQuery || input.target || "";
       const position = `${index + 1}/${inputs.length}`;
       try {
-        // ponytail: paging stops only when Shodan denies credits, per spec. A very
-        // broad query can therefore spend every credit — add a cap if that bites.
-        for (let page = 1; ; page += 1) {
+        for (let page = 1; page <= MAX_PAGES_PER_TARGET; page += 1) {
           setProgress(pt ? `Alvo ${position} - ${label} (pagina ${page})` : `Target ${position} - ${label} (page ${page})`);
           const response = await fetchAttackSurface({ ...input, page });
           responses.push(response);
           setResult(mergeAttackSurfaceResponses(responses));
           if (response.queryKind === "host" || page * PAGE_SIZE >= response.summary.totalObserved) break;
+          if (page === MAX_PAGES_PER_TARGET) {
+            batchWarnings.push(pt
+              ? `${label}: parado em ${MAX_PAGES_PER_TARGET} paginas (${MAX_PAGES_PER_TARGET * PAGE_SIZE} de ${response.summary.totalObserved} resultados). Refine o alvo para ver o resto.`
+              : `${label}: stopped at ${MAX_PAGES_PER_TARGET} pages (${MAX_PAGES_PER_TARGET * PAGE_SIZE} of ${response.summary.totalObserved} results). Narrow the target to see the rest.`);
+          }
         }
       } catch (error) {
         const message = error instanceof Error ? error.message : "Attack Surface API error";
