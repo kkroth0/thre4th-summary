@@ -299,8 +299,10 @@ export default function AttackSurface() {
             : "Collection stopped: Shodan credits exhausted or rate limit reached.");
         }
       }
-      await refreshCredits();
     }
+    // Créditos só no fim: um refresh por alvo era uma chamada Shodan extra por
+    // alvo, o dobro do consumo do rate limit num lote grande.
+    await refreshCredits();
 
     // Hold the loading state for a short floor so a fast scan still reads as
     // "a scan ran" instead of a flicker.

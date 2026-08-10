@@ -18,6 +18,7 @@ import {
 } from './ctiIntel.js';
 import { actorTargeting } from './actorProfile.js';
 import { getShodanCreditStatus, runAttackSurfaceScan } from './attackSurface.js';
+import { shodanAxios } from './shodanGate.js';
 import { groupByField, refsOfReport, relatedTo, techniqueCoverage } from './attackIndex.js';
 import { jobSummary, pruneJobsMap } from './feedJobs.js';
 import { parseHearthData } from './hearth.js';
@@ -426,7 +427,9 @@ app.post('/api/alienvault', scanLimiter, async (req, res) => {
     }
 });
 
-// Shodan
+// Shodan — todas as chamadas passam pelo gate (~1 req/s por chave).
+const shodanClient = shodanAxios(axios);
+
 app.post('/api/shodan', scanLimiter, async (req, res) => {
     const { query } = req.body;
     if (!process.env.SHODAN_API_KEY) return res.status(500).json({ error: "API Key missing" });
@@ -440,7 +443,7 @@ app.post('/api/shodan', scanLimiter, async (req, res) => {
         const endpoint = queryType === "ip"
             ? `https://api.shodan.io/shodan/host/${sanitized}`
             : `https://api.shodan.io/dns/domain/${sanitized}`;
-        const response = await axios.get(endpoint, {
+        const response = await shodanClient.get(endpoint, {
             params: { key: process.env.SHODAN_API_KEY }
         });
         sendResponseWithQuota(res, response);
@@ -2426,7 +2429,7 @@ function getUserApiKey(userId, provider) {
 
 function buildExposureScanDeps(ownerId) {
     return {
-        axiosClient: axios,
+        axiosClient: shodanClient,
         shodanApiKey: getUserApiKey(ownerId, 'shodan') || process.env.SHODAN_API_KEY,
     };
 }
