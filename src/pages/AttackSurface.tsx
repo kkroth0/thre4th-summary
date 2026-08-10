@@ -247,6 +247,9 @@ export default function AttackSurface() {
     }
   };
 
+  // Saldo visível antes do primeiro scan, não só depois.
+  useEffect(() => { void refreshCredits(); }, []);
+
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
     const inputs: AttackSurfaceInput[] = importTargets.length > 0
