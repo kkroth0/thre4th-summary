@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { buildAttackSurfaceWorkbook, type ExcelWorkbookFactory } from "./attackSurfaceExport.ts";
-import type { AttackSurfaceResponse } from "@/services/threatApi";
+import type { AttackSurfaceFinding, AttackSurfaceResponse } from "@/services/threatApi";
 
 class FakeCell {
   value: unknown = undefined;
@@ -18,7 +18,7 @@ class FakeRow {
 
   set values(values: unknown[]) {
     values.forEach((value, index) => {
-      if (index > 0) this.getCell(index).value = value;
+      this.getCell(index + 1).value = value;
     });
   }
 
@@ -32,6 +32,7 @@ class FakeWorksheet {
   columns: { header: string; key: string; width: number }[] = [];
   rows = new Map<number, FakeRow>();
   autoFilter: unknown = undefined;
+  conditionalFormats: { ref: string }[] = [];
 
   constructor(public name: string) {}
 
@@ -49,7 +50,7 @@ class FakeWorksheet {
   addRow(values: Record<string, unknown> | unknown[]) {
     const row = this.getRow(this.rows.size + 1);
     if (Array.isArray(values)) {
-      row.values = [undefined, ...values];
+      row.values = values;
     } else {
       this.columns.forEach((column, index) => {
         row.getCell(index + 1).value = values[column.key];
@@ -67,6 +68,10 @@ class FakeWorksheet {
 
   getColumn() {
     return { width: 0, numFmt: "" };
+  }
+
+  addConditionalFormatting(format: { ref: string }) {
+    this.conditionalFormats.push(format);
   }
 }
 
@@ -88,103 +93,146 @@ class FakeWorkbook {
 
 const FakeExcelLib = { Workbook: FakeWorkbook } as unknown as ExcelWorkbookFactory;
 
-const sample: AttackSurfaceResponse = {
+const finding = (overrides: Partial<AttackSurfaceFinding> = {}): AttackSurfaceFinding => ({
+  id: "finding-1",
+  ip: "8.8.8.8",
+  port: 443,
+  transport: "tcp",
+  risk: "critical",
+  riskScore: 95,
+  riskReasons: ["Known vulnerabilities reported: CVE-2026-0001"],
+  service: "https",
+  product: "nginx",
+  version: "1.25",
+  organization: "Example",
+  asn: "AS15169",
+  hostnames: ["example.com"],
+  country: "US",
+  city: "Mountain View",
+  source: { shodan: true, censys: false },
+  observedAt: "2026-07-13T11:04:05.000Z",
+  cves: ["CVE-2026-0001"],
+  tags: ["cloud"],
+  bannerSnippet: "nginx",
+  validation: { attempted: true, status: "open", detail: "TCP connection accepted" },
+  sourceQuery: "ip:8.8.8.8",
+  ...overrides,
+});
+
+const response = (findings: AttackSurfaceFinding[]): AttackSurfaceResponse => ({
   generatedAt: "2026-07-13T12:00:00.000Z",
   query: "net:\"8.8.8.0/24\"",
   queryKind: "search",
   limit: 50,
   activeValidation: true,
-  warnings: ["Censys unavailable"],
+  warnings: [],
   summary: {
     totalAssets: 1,
-    totalServices: 1,
-    criticalHighFindings: 1,
+    totalServices: findings.length,
+    criticalHighFindings: findings.filter((item) => item.risk === "critical" || item.risk === "high").length,
     activelyConfirmedOpen: 1,
-    byRisk: { critical: 1, high: 0, medium: 0, low: 0 },
+    byRisk: {
+      critical: findings.filter((item) => item.risk === "critical").length,
+      high: 0,
+      medium: 0,
+      low: findings.filter((item) => item.risk === "low").length,
+    },
     providers: { shodan: true, censys: false },
-    warnings: ["Censys unavailable"],
-    totalObserved: 1,
+    warnings: [],
+    totalObserved: findings.length,
   },
-  findings: [{
-    id: "finding-1",
-    ip: "8.8.8.8",
-    port: 443,
-    transport: "tcp",
-    risk: "critical",
-    riskScore: 95,
-    riskReasons: ["Known vulnerabilities reported: CVE-2026-0001"],
-    service: "https",
-    product: "nginx",
-    version: "1.25",
-    organization: "Example",
-    asn: "AS15169",
-    hostnames: ["example.com"],
-    country: "US",
-    city: "Mountain View",
-    source: { shodan: true, censys: false },
-    observedAt: "2026-07-13T11:00:00.000Z",
-    cves: ["CVE-2026-0001"],
-    tags: ["cloud"],
-    bannerSnippet: "nginx",
-    validation: { attempted: true, status: "open", detail: "connected" },
-  }],
-};
+  findings,
+});
 
-test("builds an Attack Surface workbook with overview, findings and risk summary sheets", async () => {
-  const workbook = buildAttackSurfaceWorkbook(sample, FakeExcelLib) as unknown as FakeWorkbook;
+const build = (findings: AttackSurfaceFinding[], investida?: string) =>
+  buildAttackSurfaceWorkbook(response(findings), FakeExcelLib, { investida }) as unknown as FakeWorkbook;
 
-  assert.deepEqual(workbook.worksheets.map((sheet) => sheet.name), [
-    "Overview",
-    "Findings",
-    "Assets",
-    "Services",
-    "CVEs",
-    "Hostnames",
-    "Tags",
-    "Evidence",
-    "Validation",
-    "Risk Summary",
-    "Warnings",
-  ]);
-  assert.equal(workbook.getWorksheet("Overview")?.getCell("A1").value, "ThreatSumm4ry Attack Surface");
-  assert.deepEqual(workbook.getWorksheet("Findings")?.columns.map((column) => column.header), [
-    "Finding ID",
-    "Service Key",
-    "Risk",
-    "Score",
+test("Base de dados follows the EY reference columns, in PT-BR", () => {
+  const workbook = build([finding()], "Auren");
+  const sheet = workbook.getWorksheet("Base de dados")!;
+
+  assert.deepEqual(sheet.columns.map((column) => column.header), [
+    "Investida",
+    "Data da Varredura",
+    "Query",
+    "Grau de Exposição",
     "IP",
-    "Port",
-    "Transport",
-    "Service",
-    "Product",
-    "Version",
-    "Organization",
+    "Porta",
+    "Serviço",
+    "Observação",
     "ASN",
-    "Country",
-    "City",
-    "Sources",
-    "Observed",
-    "TCP Status",
-    "Risk Reason Count",
-    "CVE Count",
-    "Hostname Count",
-    "Tag Count",
+    "Hostnames",
+    "Organização",
+    "País",
+    "Banner",
+    "Validação TCP (Ativa)",
+    "Detalhe Validação",
   ]);
-  assert.equal(workbook.getWorksheet("Findings")?.getRow(2).getCell(1).value, "finding-1");
-  assert.equal(workbook.getWorksheet("Findings")?.getRow(2).getCell(2).value, "8.8.8.8:443/tcp");
-  assert.equal(workbook.getWorksheet("Findings")?.getRow(2).getCell(17).value, "open");
-  assert.equal(workbook.getWorksheet("Assets")?.getRow(2).getCell(1).value, "8.8.8.8");
-  assert.equal(workbook.getWorksheet("Assets")?.getRow(2).getCell(2).value, 1);
-  assert.equal(workbook.getWorksheet("Services")?.getRow(2).getCell(7).value, "https");
-  assert.equal(workbook.getWorksheet("CVEs")?.getRow(2).getCell(1).value, "finding-1");
-  assert.equal(workbook.getWorksheet("CVEs")?.getRow(2).getCell(5).value, "CVE-2026-0001");
-  assert.equal(workbook.getWorksheet("Hostnames")?.getRow(2).getCell(5).value, "example.com");
-  assert.equal(workbook.getWorksheet("Tags")?.getRow(2).getCell(5).value, "cloud");
-  assert.equal(workbook.getWorksheet("Evidence")?.getRow(2).getCell(5).value, "risk_reason");
-  assert.equal(workbook.getWorksheet("Evidence")?.getRow(3).getCell(5).value, "banner");
-  assert.equal(workbook.getWorksheet("Validation")?.getRow(2).getCell(5).value, true);
-  assert.equal(workbook.getWorksheet("Validation")?.getRow(2).getCell(6).value, "open");
-  assert.equal(workbook.getWorksheet("Risk Summary")?.getRow(2).getCell(1).value, "critical");
-  assert.equal(workbook.getWorksheet("Risk Summary")?.getRow(2).getCell(2).value, 1);
-  assert.equal(workbook.getWorksheet("Warnings")?.getRow(2).getCell(1).value, "Censys unavailable");
+
+  const row = sheet.getRow(2);
+  assert.equal(row.getCell(1).value, "Auren");
+  assert.equal(row.getCell(2).value, "13/07/2026 11:04:05 UTC");
+  assert.equal(row.getCell(3).value, "ip:8.8.8.8");
+  assert.equal(row.getCell(4).value, "Crítico");
+  assert.equal(row.getCell(6).value, 443);
+  assert.equal(row.getCell(7).value, "nginx");
+  assert.equal(row.getCell(8).value, "Vulnerabilidades conhecidas: CVE-2026-0001");
+  assert.equal(row.getCell(14).value, "Sim");
+  assert.equal(row.getCell(15).value, "Conexão TCP Aceita (Porta Aberta)");
+
+  const header = sheet.getRow(1).getCell(1);
+  assert.deepEqual(header.fill, { type: "pattern", pattern: "solid", fgColor: { argb: "FFC00000" } });
+  assert.equal(sheet.getRow(1).height, 18.5);
+});
+
+test("translates risk reasons and validation states without touching technical terms", () => {
+  const sheet = build([
+    finding({ riskReasons: ["SSH exposed"], validation: { attempted: true, status: "timeout", detail: "TCP connection timed out" } }),
+    finding({
+      id: "finding-2",
+      port: 161,
+      transport: "udp",
+      risk: "low",
+      riskReasons: ["Service has no high-risk rule match"],
+      cves: [],
+      validation: { attempted: false, status: "udp_not_supported", detail: "UDP service" },
+    }),
+    finding({
+      id: "finding-3",
+      port: 8080,
+      risk: "low",
+      riskReasons: ["Alternative HTTP port exposed"],
+      cves: [],
+      validation: { attempted: true, status: "error", detail: "TCP validation failed: ECONNRESET" },
+    }),
+  ]).getWorksheet("Base de dados")!;
+
+  assert.equal(sheet.getRow(2).getCell(8).value, "SSH exposto");
+  assert.equal(sheet.getRow(2).getCell(15).value, "Falha TCP (Tempo Esgotado)");
+  assert.equal(sheet.getRow(3).getCell(8).value, "Serviço não classificado como de alto risco.");
+  assert.equal(sheet.getRow(3).getCell(14).value, "N/A (UDP)");
+  assert.equal(sheet.getRow(4).getCell(8).value, "Porta alternativa HTTP");
+  assert.equal(sheet.getRow(4).getCell(15).value, "Falha TCP (Código: ECONNRESET)");
+});
+
+test("CVE sheet appears only when there are CVEs", () => {
+  const withCves = build([finding()]);
+  assert.deepEqual(withCves.worksheets.map((sheet) => sheet.name), ["Base de dados", "CVEs", "Gráficos"]);
+  assert.equal(withCves.getWorksheet("CVEs")?.getRow(2).getCell(3).value, "CVE-2026-0001");
+
+  const withoutCves = build([finding({ cves: [], riskReasons: ["SSH exposed"] })]);
+  assert.deepEqual(withoutCves.worksheets.map((sheet) => sheet.name), ["Base de dados", "Gráficos"]);
+});
+
+test("chart sheet carries the risk distribution with data bars", () => {
+  const charts = build([finding(), finding({ id: "finding-2", risk: "low", cves: [] })]).getWorksheet("Gráficos")!;
+
+  assert.equal(charts.getRow(1).getCell(1).value, "Distribuição por Grau de Exposição");
+  assert.equal(charts.getRow(2).getCell(1).value, "Grau de Exposição");
+  assert.equal(charts.getRow(3).getCell(1).value, "Crítico");
+  assert.equal(charts.getRow(3).getCell(2).value, 1);
+  assert.equal(charts.getRow(3).getCell(3).value, 50);
+  assert.equal(charts.getRow(6).getCell(1).value, "Baixo");
+  assert.ok(charts.conditionalFormats.some((format) => format.ref === "B3:B6"));
+  assert.ok(charts.conditionalFormats.length >= 5);
 });

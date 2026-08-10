@@ -1,8 +1,10 @@
 import type ExcelJS from "exceljs";
 import type { AttackSurfaceResponse } from "@/services/threatApi";
-import { buildAttackSurfaceWorkbook, type ExcelWorkbookFactory } from "@/utils/attackSurfaceExport";
-
-const stamp = () => new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
+import {
+  buildAttackSurfaceWorkbook,
+  type AttackSurfaceExportOptions,
+  type ExcelWorkbookFactory,
+} from "@/utils/attackSurfaceExport";
 
 const triggerDownload = (blob: Blob, filename: string) => {
   const url = URL.createObjectURL(blob);
@@ -15,12 +17,15 @@ const triggerDownload = (blob: Blob, filename: string) => {
   URL.revokeObjectURL(url);
 };
 
-export async function exportAttackSurfaceExcel(result: AttackSurfaceResponse): Promise<void> {
+export async function exportAttackSurfaceExcel(
+  result: AttackSurfaceResponse,
+  options: AttackSurfaceExportOptions = {},
+): Promise<void> {
   const { default: ExcelLib } = await import("exceljs");
-  const workbook = buildAttackSurfaceWorkbook(result, ExcelLib as ExcelWorkbookFactory);
+  const workbook = buildAttackSurfaceWorkbook(result, ExcelLib as ExcelWorkbookFactory, options);
   const buffer = await (workbook as ExcelJS.Workbook).xlsx.writeBuffer();
   triggerDownload(
     new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }),
-    `ThreatSumm4ry-Attack-Surface-${stamp()}.xlsx`,
+    "AttackSurfaceShodan_ThreatSumm4ry.xlsx",
   );
 }

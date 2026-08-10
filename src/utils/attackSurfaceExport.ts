@@ -1,419 +1,292 @@
 import type ExcelJS from "exceljs";
 import type { AttackSurfaceFinding, AttackSurfaceResponse, AttackSurfaceRisk } from "@/services/threatApi";
 
-const INK = "0F172A";
-const BRAND = "2563EB";
-const RISK_HEX: Record<AttackSurfaceRisk, string> = {
-  critical: "DC2626",
-  high: "EA580C",
-  medium: "CA8A04",
-  low: "16A34A",
-};
+// Padrão EY, igual ao modelo entregue ao cliente: cabeçalho vermelho escuro,
+// Calibri 14 em branco, borda fina, linha congelada e autofiltro. Nada de cor
+// nas linhas de dados — quem lê filtra pela coluna "Grau de Exposição".
+const HEADER_FILL = "C00000";
+const BORDER = { style: "thin" as const };
+const HEADER_BORDER = { top: BORDER, left: BORDER, bottom: BORDER, right: BORDER };
 
 export interface ExcelWorkbookFactory {
   Workbook: new () => ExcelJS.Workbook;
 };
 
-type ExportColumn = {
-  header: string;
-  key: string;
-  width: number;
+export interface AttackSurfaceExportOptions {
+  /** Nome da investida avaliada; vai em toda linha, como no modelo. */
+  investida?: string;
+}
+
+type ExportColumn = { header: string; key: string; width: number };
+
+const RISK_PT: Record<AttackSurfaceRisk, string> = {
+  critical: "Crítico",
+  high: "Alto",
+  medium: "Médio",
+  low: "Baixo",
 };
 
-const headerFill = (worksheet: ExcelJS.Worksheet, rowNumber: number, lastCol: number, color = INK) => {
+const RISK_ORDER: AttackSurfaceRisk[] = ["critical", "high", "medium", "low"];
+
+// As razões vêm do backend em inglês e são frases fechadas (server/attackSurface.js).
+// Traduzir aqui mantém a API estável e o relatório em PT-BR, sem mexer nos
+// termos técnicos (SSH, RDP, HTTP, CVE seguem como estão).
+const REASON_PT: Record<string, string> = {
+  "Telnet exposed": "Telnet exposto",
+  "SMB exposed": "SMB exposto",
+  "RDP exposed": "RDP exposto",
+  "FTP exposed": "FTP exposto",
+  "SSH exposed": "SSH exposto",
+  "MSSQL exposed": "MSSQL exposto",
+  "MySQL exposed": "MySQL exposto",
+  "VNC exposed": "VNC exposto",
+  "SMTP exposed": "SMTP exposto",
+  "Alternative HTTP port exposed": "Porta alternativa HTTP",
+  "Alternative HTTPS port exposed": "Porta alternativa HTTPS",
+  "Admin-like web service exposed": "Serviço web administrativo exposto",
+  "Standard web service exposed": "Porta web padrão.",
+  "Service has no high-risk rule match": "Serviço não classificado como de alto risco.",
+};
+
+const reasonPt = (reason: string) => {
+  const known = reason.match(/^Known vulnerabilities reported: (.+)$/);
+  if (known) return `Vulnerabilidades conhecidas: ${known[1]}`;
+  return REASON_PT[reason] || reason;
+};
+
+const VALIDATION_PT: Record<string, { status: string; detail: string }> = {
+  open: { status: "Sim", detail: "Conexão TCP Aceita (Porta Aberta)" },
+  closed: { status: "Não", detail: "Falha TCP (Conexão Recusada)" },
+  timeout: { status: "Não", detail: "Falha TCP (Tempo Esgotado)" },
+  udp_not_supported: { status: "N/A (UDP)", detail: "Serviço UDP - Validação ativa não suportada" },
+  not_requested: { status: "N/A", detail: "Validação ativa não solicitada" },
+};
+
+const validationPt = (finding: AttackSurfaceFinding) => {
+  const known = VALIDATION_PT[finding.validation.status];
+  if (known) return known;
+  // Só sobra `error`: o backend manda "TCP validation failed: ECONNRESET".
+  const code = (finding.validation.detail || "").match(/failed: (\S+)/);
+  return { status: "Não", detail: code ? `Falha TCP (Código: ${code[1]})` : "Falha TCP" };
+};
+
+// "27/07/2026 00:57:47 UTC", como no modelo. Sempre UTC: o Shodan carimba em
+// UTC e o relatório circula entre fusos.
+const scanDate = (value: string | null) => {
+  if (!value) return "N/A";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  const iso = date.toISOString();
+  return `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)} ${iso.slice(11, 19)} UTC`;
+};
+
+const serviceName = (finding: AttackSurfaceFinding) => finding.product || finding.service || "N/A";
+
+const applyHeader = (worksheet: ExcelJS.Worksheet, rowNumber: number, lastColumn: number) => {
   const row = worksheet.getRow(rowNumber);
-  for (let column = 1; column <= lastCol; column += 1) {
+  for (let column = 1; column <= lastColumn; column += 1) {
     const cell = row.getCell(column);
-    cell.font = { bold: true, color: { argb: "FFFFFFFF" } };
-    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: `FF${color}` } };
-    cell.alignment = { vertical: "middle" };
-    cell.border = { bottom: { style: "thin", color: { argb: "FFCBD5E1" } } };
+    cell.font = { name: "Calibri", bold: true, size: 14, color: { argb: "FFFFFFFF" } };
+    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: `FF${HEADER_FILL}` } };
+    cell.alignment = { horizontal: "left", vertical: "top" };
+    cell.border = HEADER_BORDER;
   }
-  row.height = 20;
+  row.height = 18.5;
 };
 
-const serviceKey = (finding: AttackSurfaceFinding) => `${finding.ip}:${finding.port}/${finding.transport}`;
-
-const sources = (finding: AttackSurfaceFinding) => [
-  finding.source.shodan && "Shodan",
-].filter(Boolean).join(", ");
-
-const percent = (part: number, total: number) => (total > 0 ? Number(((part / total) * 100).toFixed(1)) : 0);
-
-const addStructuredSheet = (
+const addSheet = (
   workbook: ExcelJS.Workbook,
   name: string,
   columns: ExportColumn[],
   rows: Record<string, unknown>[],
-  tabColor = INK,
 ) => {
   const worksheet = workbook.addWorksheet(name, {
-    properties: { tabColor: { argb: `FF${tabColor}` } },
+    properties: { tabColor: { argb: `FF${HEADER_FILL}` } },
     views: [{ state: "frozen", ySplit: 1 }],
   });
   worksheet.columns = columns;
-  headerFill(worksheet, 1, columns.length, tabColor);
+  applyHeader(worksheet, 1, columns.length);
   rows.forEach((row) => worksheet.addRow(row));
   worksheet.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: columns.length } };
-  worksheet.eachRow((row, rowNumber) => {
-    if (rowNumber === 1) return;
-    row.alignment = { vertical: "top", wrapText: true };
-  });
   return worksheet;
 };
 
-const buildAssets = (findings: AttackSurfaceFinding[]) => {
-  const assets = new Map<string, {
-    ip: string;
-    serviceCount: number;
-    critical: number;
-    high: number;
-    medium: number;
-    low: number;
-    maxScore: number;
-    organization: Set<string>;
-    asn: Set<string>;
-    country: Set<string>;
-    city: Set<string>;
-    hostnames: Set<string>;
-    sources: Set<string>;
-  }>();
-
+// Contagem por chave, maiores primeiro, cortada no topo N.
+const rankBy = (findings: AttackSurfaceFinding[], key: (finding: AttackSurfaceFinding) => string, top: number) => {
+  const counts = new Map<string, number>();
   findings.forEach((finding) => {
-    if (!assets.has(finding.ip)) {
-      assets.set(finding.ip, {
-        ip: finding.ip,
-        serviceCount: 0,
-        critical: 0,
-        high: 0,
-        medium: 0,
-        low: 0,
-        maxScore: 0,
-        organization: new Set(),
-        asn: new Set(),
-        country: new Set(),
-        city: new Set(),
-        hostnames: new Set(),
-        sources: new Set(),
-      });
-    }
-    const asset = assets.get(finding.ip)!;
-    asset.serviceCount += 1;
-    asset[finding.risk] += 1;
-    asset.maxScore = Math.max(asset.maxScore, finding.riskScore);
-    if (finding.organization) asset.organization.add(finding.organization);
-    if (finding.asn) asset.asn.add(finding.asn);
-    if (finding.country) asset.country.add(finding.country);
-    if (finding.city) asset.city.add(finding.city);
-    finding.hostnames.forEach((hostname) => asset.hostnames.add(hostname));
-    if (finding.source.shodan) asset.sources.add("Shodan");
+    const value = key(finding);
+    if (!value) return;
+    counts.set(value, (counts.get(value) || 0) + 1);
+  });
+  return Array.from(counts.entries())
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .slice(0, top);
+};
+
+const percent = (part: number, total: number) => (total > 0 ? Number(((part / total) * 100).toFixed(1)) : 0);
+
+// ponytail: o ExcelJS não escreve gráfico nativo do Excel, então "gráfico" aqui
+// é barra de dados condicional — nativa, imprime e acompanha o filtro. Trocar
+// por gráfico de verdade exige outra biblioteca de xlsx.
+const addChartBlock = (
+  worksheet: ExcelJS.Worksheet,
+  title: string,
+  labelHeader: string,
+  entries: [string, number][],
+  total: number,
+  startRow: number,
+) => {
+  const titleCell = worksheet.getRow(startRow).getCell(1);
+  titleCell.value = title;
+  titleCell.font = { name: "Calibri", bold: true, size: 12, color: { argb: `FF${HEADER_FILL}` } };
+
+  const headerRow = startRow + 1;
+  worksheet.getRow(headerRow).values = [labelHeader, "Serviços", "%"];
+  applyHeader(worksheet, headerRow, 3);
+
+  entries.forEach(([label, count], index) => {
+    worksheet.getRow(headerRow + 1 + index).values = [label, count, percent(count, total)];
   });
 
-  return Array.from(assets.values()).map((asset) => ({
-    ip: asset.ip,
-    serviceCount: asset.serviceCount,
-    critical: asset.critical,
-    high: asset.high,
-    medium: asset.medium,
-    low: asset.low,
-    maxScore: asset.maxScore,
-    organization: Array.from(asset.organization).join(", "),
-    asn: Array.from(asset.asn).join(", "),
-    country: Array.from(asset.country).join(", "),
-    city: Array.from(asset.city).join(", "),
-    hostnames: Array.from(asset.hostnames).join(", "),
-    sources: Array.from(asset.sources).join(", "),
-  }));
+  const firstDataRow = headerRow + 1;
+  const lastDataRow = headerRow + entries.length;
+  if (entries.length > 0) {
+    worksheet.addConditionalFormatting({
+      ref: `B${firstDataRow}:B${lastDataRow}`,
+      rules: [{
+        type: "dataBar",
+        // Prioridade única por bloco; o Excel reclama de regras empatadas.
+        priority: startRow,
+        // O ExcelJS escreve os cfvo direto no XML: sem min/max ele quebra na gravação.
+        cfvo: [{ type: "min" }, { type: "max" }],
+        color: { argb: `FF${HEADER_FILL}` },
+      } as ExcelJS.DataBarRuleType],
+    });
+  }
+
+  return lastDataRow + 2;
 };
 
 export function buildAttackSurfaceWorkbook(
   result: AttackSurfaceResponse,
   ExcelLib: ExcelWorkbookFactory,
+  options: AttackSurfaceExportOptions = {},
 ): ExcelJS.Workbook {
   const workbook = new ExcelLib.Workbook();
   workbook.creator = "ThreatSumm4ry";
   workbook.created = new Date();
 
-  const overview = workbook.addWorksheet("Overview", { properties: { tabColor: { argb: `FF${BRAND}` } } });
-  overview.mergeCells("A1:D1");
-  overview.getCell("A1").value = "ThreatSumm4ry Attack Surface";
-  overview.getCell("A1").font = { bold: true, size: 18, color: { argb: `FF${INK}` } };
-  overview.mergeCells("A2:D2");
-  overview.getCell("A2").value = `Generated ${result.generatedAt} - Query ${result.query}`;
-  overview.getCell("A2").font = { size: 10, color: { argb: "FF64748B" } };
-  overview.getRow(4).values = ["Metric", "Value"];
-  headerFill(overview, 4, 2);
-  [
-    ["Query kind", result.queryKind],
-    ["Limit", result.limit],
-    ["Active validation", result.activeValidation ? "Yes" : "No"],
-    ["Assets", result.summary.totalAssets],
-    ["Services", result.summary.totalServices],
-    ["Critical / High", result.summary.criticalHighFindings],
-    ["TCP open", result.summary.activelyConfirmedOpen],
-    ["Warnings", result.warnings.join(" | ") || "-"],
-  ].forEach((row) => overview.addRow(row));
-  overview.getColumn(1).width = 24;
-  overview.getColumn(2).width = 70;
+  const investida = options.investida?.trim() || "";
+  const findings = result.findings;
 
-  const findings = workbook.addWorksheet("Findings", {
-    properties: { tabColor: { argb: `FF${INK}` } },
-    views: [{ state: "frozen", ySplit: 1 }],
-  });
-  const columns: ExportColumn[] = [
-    { header: "Finding ID", key: "id", width: 30 },
-    { header: "Service Key", key: "serviceKey", width: 24 },
-    { header: "Risk", key: "risk", width: 12 },
-    { header: "Score", key: "riskScore", width: 8 },
-    { header: "IP", key: "ip", width: 16 },
-    { header: "Port", key: "port", width: 8 },
-    { header: "Transport", key: "transport", width: 10 },
-    { header: "Service", key: "service", width: 18 },
-    { header: "Product", key: "product", width: 22 },
-    { header: "Version", key: "version", width: 18 },
-    { header: "Organization", key: "organization", width: 28 },
-    { header: "ASN", key: "asn", width: 14 },
-    { header: "Country", key: "country", width: 16 },
-    { header: "City", key: "city", width: 20 },
-    { header: "Sources", key: "sources", width: 18 },
-    { header: "Observed", key: "observedAt", width: 24 },
-    { header: "TCP Status", key: "validation", width: 18 },
-    { header: "Risk Reason Count", key: "riskReasonCount", width: 18 },
-    { header: "CVE Count", key: "cveCount", width: 12 },
-    { header: "Hostname Count", key: "hostnameCount", width: 16 },
-    { header: "Tag Count", key: "tagCount", width: 12 },
-  ];
-  findings.columns = columns;
-  headerFill(findings, 1, columns.length);
-  result.findings.forEach((finding) => {
-    const row = findings.addRow({
-      id: finding.id,
-      serviceKey: serviceKey(finding),
-      risk: finding.risk,
-      riskScore: finding.riskScore,
-      ip: finding.ip,
-      port: finding.port,
-      transport: finding.transport,
-      service: finding.service || "",
-      product: finding.product || "",
-      version: finding.version || "",
-      organization: finding.organization || "",
-      asn: finding.asn || "",
-      country: finding.country || "",
-      city: finding.city || "",
-      sources: sources(finding),
-      observedAt: finding.observedAt || "",
-      validation: finding.validation.status,
-      riskReasonCount: finding.riskReasons.length,
-      cveCount: finding.cves.length,
-      hostnameCount: finding.hostnames.length,
-      tagCount: finding.tags.length,
-    });
-    row.getCell("risk").font = { bold: true, color: { argb: `FF${RISK_HEX[finding.risk]}` } };
-  });
-  findings.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: columns.length } };
-  findings.eachRow((row, rowNumber) => {
-    if (rowNumber > 1) row.alignment = { vertical: "top", wrapText: true };
-  });
-
-  addStructuredSheet(
+  addSheet(
     workbook,
-    "Assets",
+    "Base de dados",
     [
-      { header: "IP", key: "ip", width: 16 },
-      { header: "Service Count", key: "serviceCount", width: 14 },
-      { header: "Critical", key: "critical", width: 10 },
-      { header: "High", key: "high", width: 10 },
-      { header: "Medium", key: "medium", width: 10 },
-      { header: "Low", key: "low", width: 10 },
-      { header: "Max Score", key: "maxScore", width: 10 },
-      { header: "Organization", key: "organization", width: 28 },
-      { header: "ASN", key: "asn", width: 14 },
-      { header: "Country", key: "country", width: 16 },
-      { header: "City", key: "city", width: 20 },
-      { header: "Hostnames", key: "hostnames", width: 40 },
-      { header: "Sources", key: "sources", width: 18 },
+      { header: "Investida", key: "investida", width: 19 },
+      { header: "Data da Varredura", key: "scanDate", width: 33.9 },
+      { header: "Query", key: "query", width: 38.8 },
+      { header: "Grau de Exposição", key: "risk", width: 25.7 },
+      { header: "IP", key: "ip", width: 27.1 },
+      { header: "Porta", key: "port", width: 15.5 },
+      { header: "Serviço", key: "service", width: 21.5 },
+      { header: "Observação", key: "note", width: 37 },
+      { header: "ASN", key: "asn", width: 23.2 },
+      { header: "Hostnames", key: "hostnames", width: 88.8 },
+      { header: "Organização", key: "organization", width: 19.5 },
+      { header: "País", key: "country", width: 11.8 },
+      // O modelo traz 255 (autoajuste em cima de um banner gigante); 60 mantém
+      // a coluna legível sem esconder nada — o texto continua inteiro na célula.
+      { header: "Banner", key: "banner", width: 60 },
+      { header: "Validação TCP (Ativa)", key: "validation", width: 18.7 },
+      { header: "Detalhe Validação", key: "validationDetail", width: 29.8 },
     ],
-    buildAssets(result.findings),
-    BRAND,
-  );
-
-  addStructuredSheet(
-    workbook,
-    "Services",
-    [
-      { header: "Finding ID", key: "id", width: 30 },
-      { header: "Service Key", key: "serviceKey", width: 24 },
-      { header: "IP", key: "ip", width: 16 },
-      { header: "Port", key: "port", width: 8 },
-      { header: "Transport", key: "transport", width: 10 },
-      { header: "Risk", key: "risk", width: 12 },
-      { header: "Service", key: "service", width: 18 },
-      { header: "Product", key: "product", width: 22 },
-      { header: "Version", key: "version", width: 18 },
-      { header: "Organization", key: "organization", width: 28 },
-      { header: "ASN", key: "asn", width: 14 },
-      { header: "Sources", key: "sources", width: 18 },
-      { header: "Observed", key: "observedAt", width: 24 },
-    ],
-    result.findings.map((finding) => ({
-      id: finding.id,
-      serviceKey: serviceKey(finding),
-      ip: finding.ip,
-      port: finding.port,
-      transport: finding.transport,
-      risk: finding.risk,
-      service: finding.service || "",
-      product: finding.product || "",
-      version: finding.version || "",
-      organization: finding.organization || "",
-      asn: finding.asn || "",
-      sources: sources(finding),
-      observedAt: finding.observedAt || "",
-    })),
-  );
-
-  addStructuredSheet(
-    workbook,
-    "CVEs",
-    [
-      { header: "Finding ID", key: "id", width: 30 },
-      { header: "Service Key", key: "serviceKey", width: 24 },
-      { header: "IP", key: "ip", width: 16 },
-      { header: "Port", key: "port", width: 8 },
-      { header: "CVE", key: "cve", width: 18 },
-      { header: "Risk", key: "risk", width: 12 },
-      { header: "Product", key: "product", width: 22 },
-      { header: "Version", key: "version", width: 18 },
-    ],
-    result.findings.flatMap((finding) => finding.cves.map((cve) => ({
-      id: finding.id,
-      serviceKey: serviceKey(finding),
-      ip: finding.ip,
-      port: finding.port,
-      cve,
-      risk: finding.risk,
-      product: finding.product || "",
-      version: finding.version || "",
-    }))),
-    RISK_HEX.critical,
-  );
-
-  addStructuredSheet(
-    workbook,
-    "Hostnames",
-    [
-      { header: "Finding ID", key: "id", width: 30 },
-      { header: "Service Key", key: "serviceKey", width: 24 },
-      { header: "IP", key: "ip", width: 16 },
-      { header: "Port", key: "port", width: 8 },
-      { header: "Hostname", key: "hostname", width: 36 },
-    ],
-    result.findings.flatMap((finding) => finding.hostnames.map((hostname) => ({
-      id: finding.id,
-      serviceKey: serviceKey(finding),
-      ip: finding.ip,
-      port: finding.port,
-      hostname,
-    }))),
-    BRAND,
-  );
-
-  addStructuredSheet(
-    workbook,
-    "Tags",
-    [
-      { header: "Finding ID", key: "id", width: 30 },
-      { header: "Service Key", key: "serviceKey", width: 24 },
-      { header: "IP", key: "ip", width: 16 },
-      { header: "Port", key: "port", width: 8 },
-      { header: "Tag", key: "tag", width: 24 },
-      { header: "Risk", key: "risk", width: 12 },
-    ],
-    result.findings.flatMap((finding) => finding.tags.map((tag) => ({
-      id: finding.id,
-      serviceKey: serviceKey(finding),
-      ip: finding.ip,
-      port: finding.port,
-      tag,
-      risk: finding.risk,
-    }))),
-    BRAND,
-  );
-
-  addStructuredSheet(
-    workbook,
-    "Evidence",
-    [
-      { header: "Finding ID", key: "id", width: 30 },
-      { header: "Service Key", key: "serviceKey", width: 24 },
-      { header: "IP", key: "ip", width: 16 },
-      { header: "Port", key: "port", width: 8 },
-      { header: "Evidence Type", key: "type", width: 16 },
-      { header: "Evidence", key: "evidence", width: 90 },
-    ],
-    result.findings.flatMap((finding) => [
-      ...finding.riskReasons.map((reason) => ({
-        id: finding.id,
-        serviceKey: serviceKey(finding),
+    findings.map((finding) => {
+      const validation = validationPt(finding);
+      return {
+        investida,
+        scanDate: scanDate(finding.observedAt),
+        query: finding.sourceQuery || result.query,
+        risk: RISK_PT[finding.risk],
         ip: finding.ip,
         port: finding.port,
-        type: "risk_reason",
-        evidence: reason,
-      })),
-      ...(finding.bannerSnippet ? [{
-        id: finding.id,
-        serviceKey: serviceKey(finding),
-        ip: finding.ip,
-        port: finding.port,
-        type: "banner",
-        evidence: finding.bannerSnippet,
-      }] : []),
-    ]),
+        service: serviceName(finding),
+        note: finding.riskReasons.map(reasonPt).join(" "),
+        asn: finding.asn || "",
+        hostnames: finding.hostnames.join(", "),
+        organization: finding.organization || "",
+        country: finding.country || "",
+        banner: finding.bannerSnippet || "",
+        validation: validation.status,
+        validationDetail: validation.detail,
+      };
+    }),
   );
 
-  addStructuredSheet(
-    workbook,
-    "Validation",
-    [
-      { header: "Finding ID", key: "id", width: 30 },
-      { header: "Service Key", key: "serviceKey", width: 24 },
-      { header: "IP", key: "ip", width: 16 },
-      { header: "Port", key: "port", width: 8 },
-      { header: "Attempted", key: "attempted", width: 12 },
-      { header: "Status", key: "status", width: 18 },
-      { header: "Detail", key: "detail", width: 60 },
-    ],
-    result.findings.map((finding) => ({
-      id: finding.id,
-      serviceKey: serviceKey(finding),
-      ip: finding.ip,
-      port: finding.port,
-      attempted: finding.validation.attempted,
-      status: finding.validation.status,
-      detail: finding.validation.detail || "",
-    })),
-  );
+  // Aba de CVEs só existe quando há CVE — planilha sem aba vazia.
+  const cveRows = findings.flatMap((finding) => finding.cves.map((cve) => ({
+    investida,
+    scanDate: scanDate(finding.observedAt),
+    cve,
+    risk: RISK_PT[finding.risk],
+    ip: finding.ip,
+    port: finding.port,
+    service: serviceName(finding),
+    version: finding.version || "",
+    organization: finding.organization || "",
+    country: finding.country || "",
+  })));
 
-  const risks = workbook.addWorksheet("Risk Summary");
-  risks.getRow(1).values = ["Risk", "Count", "Percent"];
-  headerFill(risks, 1, 3, BRAND);
-  (["critical", "high", "medium", "low"] as AttackSurfaceRisk[]).forEach((risk) => {
-    const count = result.summary.byRisk[risk] || 0;
-    const row = risks.addRow([risk, count, percent(count, result.summary.totalServices)]);
-    row.getCell(1).font = { bold: true, color: { argb: `FF${RISK_HEX[risk]}` } };
+  if (cveRows.length > 0) {
+    addSheet(
+      workbook,
+      "CVEs",
+      [
+        { header: "Investida", key: "investida", width: 19 },
+        { header: "Data da Varredura", key: "scanDate", width: 33.9 },
+        { header: "CVE", key: "cve", width: 20 },
+        { header: "Grau de Exposição", key: "risk", width: 25.7 },
+        { header: "IP", key: "ip", width: 27.1 },
+        { header: "Porta", key: "port", width: 15.5 },
+        { header: "Serviço", key: "service", width: 21.5 },
+        { header: "Versão", key: "version", width: 18 },
+        { header: "Organização", key: "organization", width: 19.5 },
+        { header: "País", key: "country", width: 11.8 },
+      ],
+      cveRows,
+    );
+  }
+
+  const charts = workbook.addWorksheet("Gráficos", {
+    properties: { tabColor: { argb: `FF${HEADER_FILL}` } },
   });
-  risks.getColumn(1).width = 14;
-  risks.getColumn(2).width = 12;
-  risks.getColumn(3).width = 12;
+  charts.getColumn(1).width = 46;
+  charts.getColumn(2).width = 14;
+  charts.getColumn(3).width = 10;
 
-  addStructuredSheet(
-    workbook,
-    "Warnings",
-    [{ header: "Warning", key: "warning", width: 120 }],
-    result.warnings.map((warning) => ({ warning })),
-    RISK_HEX.medium,
+  const total = findings.length;
+  let cursor = 1;
+  cursor = addChartBlock(
+    charts,
+    "Distribuição por Grau de Exposição",
+    "Grau de Exposição",
+    RISK_ORDER.map((risk) => [RISK_PT[risk], result.summary.byRisk[risk] || 0] as [string, number]),
+    total,
+    cursor,
   );
+  cursor = addChartBlock(charts, "Top 15 Portas", "Porta", rankBy(findings, (f) => String(f.port), 15), total, cursor);
+  cursor = addChartBlock(charts, "Top 15 Serviços", "Serviço", rankBy(findings, serviceName, 15), total, cursor);
+  cursor = addChartBlock(charts, "Top 15 Organizações", "Organização", rankBy(findings, (f) => f.organization || "", 15), total, cursor);
+  cursor = addChartBlock(charts, "Top 15 Ativos por Serviços Expostos", "IP", rankBy(findings, (f) => f.ip, 15), total, cursor);
+  if (cveRows.length > 0) {
+    const cveCounts = new Map<string, number>();
+    findings.forEach((finding) => finding.cves.forEach((cve) => cveCounts.set(cve, (cveCounts.get(cve) || 0) + 1)));
+    const topCves = Array.from(cveCounts.entries())
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+      .slice(0, 15);
+    addChartBlock(charts, "Top 15 CVEs", "CVE", topCves, cveRows.length, cursor);
+  }
 
   return workbook;
 }

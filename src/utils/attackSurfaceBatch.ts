@@ -18,9 +18,11 @@ export const mergeAttackSurfaceResponses = (responses: AttackSurfaceResponse[]):
     response.warnings.forEach((warning) => warnings.add(warning));
     providers.shodan ||= response.summary.providers.shodan;
     providers.censys ||= response.summary.providers.censys === true;
+    // Shodan mostra lookup de host como `ip:x.x.x.x`; a busca já vem formatada.
+    const sourceQuery = response.queryKind === "host" ? `ip:${response.query}` : response.query;
     response.findings.forEach((item) => {
       const key = findingKey(item);
-      if (!seen.has(key)) seen.set(key, item);
+      if (!seen.has(key)) seen.set(key, { ...item, sourceQuery });
     });
   }
 

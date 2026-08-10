@@ -1419,6 +1419,9 @@ export interface AttackSurfaceFinding {
         status: AttackSurfaceValidationStatus;
         detail: string | null;
     };
+    // Query que originou o achado, carimbada na junção do lote (o `query` da
+    // resposta some quando N respostas viram uma só). Só o export usa.
+    sourceQuery?: string;
 }
 
 export interface AttackSurfaceSummary {

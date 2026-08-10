@@ -105,6 +105,8 @@ const riskSortValue: Record<AttackSurfaceRisk, number> = {
 const MIN_LOADING_MS = 5000;
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
+const INVESTIDA_KEY = "threatsumm4ry.attackSurface.investida";
+
 // Shodan's fixed search page size, not an application cap.
 const PAGE_SIZE = 100;
 
@@ -150,6 +152,8 @@ export default function AttackSurface() {
   const [result, setResult] = useState<Awaited<ReturnType<typeof fetchAttackSurface>> | null>(null);
   const [progress, setProgress] = useState("");
   const [credits, setCredits] = useState<ShodanCreditStatus | null>(null);
+  // Investida sai em toda linha do XLSX e quase nunca muda entre varreduras.
+  const [investida, setInvestida] = useState(() => localStorage.getItem(INVESTIDA_KEY) || "");
 
   useEffect(() => {
     setFeatureMode(routeMode);
@@ -235,7 +239,7 @@ export default function AttackSurface() {
     if (!result) return;
     setIsExporting(true);
     try {
-      await exportAttackSurfaceExcel(result);
+      await exportAttackSurfaceExcel(result, { investida });
       toast.success(pt ? "XLSX gerado." : "XLSX generated.");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : pt ? "Falha ao gerar XLSX." : "Failed to generate XLSX.");
@@ -392,6 +396,16 @@ export default function AttackSurface() {
                 onChange={(event) => void importTxt(event.target.files?.[0])}
               />
               <div className="flex flex-wrap items-center gap-3">
+                <Input
+                  value={investida}
+                  onChange={(event) => {
+                    setInvestida(event.target.value);
+                    localStorage.setItem(INVESTIDA_KEY, event.target.value);
+                  }}
+                  placeholder={pt ? "Investida (vai no XLSX)" : "Investida (goes in the XLSX)"}
+                  className="h-9 w-52"
+                  aria-label={pt ? "Investida" : "Investida"}
+                />
                 {credits && (
                   <Badge variant="outline" className="h-9 gap-1.5 font-normal">
                     <Radar className="h-3.5 w-3.5" />
