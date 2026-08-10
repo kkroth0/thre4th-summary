@@ -257,6 +257,36 @@ test('runAttackSurfaceScan keeps every host service before active validation', a
   assert.equal(result.summary.activelyConfirmedOpen, 5);
 });
 
+test('a Shodan 404 on a host lookup is an empty result, not a failed scan', async () => {
+  const notFound = new Error('Request failed with status code 404');
+  notFound.response = { status: 404, data: { error: 'No information available for that IP.' } };
+
+  const result = await runAttackSurfaceScan(
+    { mode: 'guided', targetType: 'ip', target: '200.185.25.2', limit: 50 },
+    {
+      axiosClient: { async get() { throw notFound; } },
+      shodanApiKey: 'shodan-key',
+    },
+  );
+
+  assert.deepEqual(result.findings, []);
+  assert.equal(result.summary.totalAssets, 0);
+  assert.deepEqual(result.warnings, ['Shodan has no data for one or more targets']);
+});
+
+test('a non-404 Shodan failure still fails the scan', async () => {
+  const serverError = new Error('Request failed with status code 502');
+  serverError.response = { status: 502 };
+
+  await assert.rejects(
+    runAttackSurfaceScan(
+      { mode: 'guided', targetType: 'ip', target: '8.8.8.8', limit: 50 },
+      { axiosClient: { async get() { throw serverError; } }, shodanApiKey: 'shodan-key' },
+    ),
+    /502/,
+  );
+});
+
 test('getShodanCreditStatus exposes only the plan and remaining query credits', async () => {
   const result = await getShodanCreditStatus({
     shodanApiKey: 'shodan-key',

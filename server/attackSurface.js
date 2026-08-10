@@ -422,12 +422,21 @@ export const runAttackSurfaceScan = async (input = {}, deps = {}) => {
   const queryPlan = buildAttackSurfaceQuery(input);
   const page = clampPage(input.page);
   let shodanResponse;
+  let missingHostData = false;
 
   if (queryPlan.kind === 'host') {
-    shodanResponse = await axiosClient.get(`https://api.shodan.io/shodan/host/${queryPlan.ip}`, {
-      params: { key: shodanApiKey },
-      timeout: 15000,
-    });
+    try {
+      shodanResponse = await axiosClient.get(`https://api.shodan.io/shodan/host/${queryPlan.ip}`, {
+        params: { key: shodanApiKey },
+        timeout: 15000,
+      });
+    } catch (error) {
+      // 404 no lookup de host é "o Shodan não tem nada sobre esse IP" — resultado
+      // legítimo de varredura, não falha. Num lote de centenas de IPs isso é o
+      // caso comum; tratar como erro derrubava o alvo e sujava a watchlist.
+      if (error?.response?.status !== 404) throw error;
+      missingHostData = true;
+    }
   } else {
     shodanResponse = await axiosClient.get('https://api.shodan.io/shodan/host/search', {
       params: { key: shodanApiKey, query: queryPlan.query, limit: queryPlan.limit, page },
@@ -440,7 +449,9 @@ export const runAttackSurfaceScan = async (input = {}, deps = {}) => {
     ? normalizeShodanHost(shodanData)
     : (Array.isArray(shodanData.matches) ? shodanData.matches.flatMap((match) => normalizeShodanHost(match)) : []);
 
-  const warnings = [];
+  // Mensagem sem o IP de propósito: a junção do lote guarda avisos num Set, então
+  // 200 alvos sem dado viram uma linha só em vez de 200.
+  const warnings = missingHostData ? ['Shodan has no data for one or more targets'] : [];
   const providers = { shodan: true };
 
   if (input.activeValidation === true) {
