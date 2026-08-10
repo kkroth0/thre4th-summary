@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import type { AttackSurfaceFinding, AttackSurfaceResponse, AttackSurfaceRisk } from "@/services/threatApi";
-import { mergeAttackSurfaceResponses } from "./attackSurfaceBatch";
+import { abortsBatch, mergeAttackSurfaceResponses } from "./attackSurfaceBatch";
 
 const finding = (ip: string, port: number, risk: AttackSurfaceRisk): AttackSurfaceFinding => ({
   id: `${ip}:${port}/tcp:0`,
@@ -59,4 +59,12 @@ test("merges pages, deduplicates services, and rebuilds summary totals", () => {
   assert.equal(result?.summary.criticalHighFindings, 2);
   assert.deepEqual(result?.summary.byRisk, { critical: 1, high: 1, medium: 0, low: 1 });
   assert.equal(result?.summary.totalObserved, 4);
+});
+
+test("only a terminal Shodan error aborts the batch", () => {
+  assert.equal(abortsBatch('Attack Surface API error: 404 Not Found - {"error":"Resource not found"}'), false);
+  assert.equal(abortsBatch("Attack Surface API error: 429 Too Many Requests"), false);
+  assert.equal(abortsBatch("Attack Surface API error: 401 Unauthorized"), true);
+  assert.equal(abortsBatch("Attack Surface API error: 403 Forbidden"), true);
+  assert.equal(abortsBatch("Insufficient query credits"), true);
 });

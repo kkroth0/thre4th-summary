@@ -50,7 +50,7 @@ import {
   fetchAttackSurfaceCredits,
 } from "@/services/threatApi";
 import { exportAttackSurfaceExcel } from "@/utils/attackSurfaceExcel";
-import { mergeAttackSurfaceResponses } from "@/utils/attackSurfaceBatch";
+import { abortsBatch, mergeAttackSurfaceResponses } from "@/utils/attackSurfaceBatch";
 import { parseAttackSurfaceTargets, type AttackSurfaceImportedTarget } from "@/utils/attackSurfaceImport";
 import { cn } from "@/lib/utils";
 
@@ -114,10 +114,6 @@ const PAGE_SIZE = 100;
 // por página além da primeira: um /8 sem teto zera a cota num alvo só. Lookup
 // de IP não pagina, então um lote de IPs não encosta nisto.
 const MAX_PAGES_PER_TARGET = 10;
-
-// Shodan denies paid pagination with these once credits or rate limits run out.
-const isCreditError = (message: string) =>
-  /\b(401|403|429)\b/.test(message) || /credit|rate limit/i.test(message);
 
 const importedToInput = (
   imported: AttackSurfaceImportedTarget,
@@ -307,11 +303,11 @@ export default function AttackSurface() {
       } catch (error) {
         const message = error instanceof Error ? error.message : "Attack Surface API error";
         batchWarnings.push(`${label}: ${message}`);
-        if (isCreditError(message)) {
+        if (abortsBatch(message)) {
           stopped = true;
           batchWarnings.push(pt
-            ? "Coleta interrompida: creditos Shodan esgotados ou limite atingido."
-            : "Collection stopped: Shodan credits exhausted or rate limit reached.");
+            ? "Coleta interrompida: creditos Shodan esgotados ou chave sem acesso."
+            : "Collection stopped: Shodan credits exhausted or key without access.");
         }
       }
     }

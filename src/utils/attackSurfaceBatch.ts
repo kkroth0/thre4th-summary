@@ -4,6 +4,13 @@ const riskOrder: Record<AttackSurfaceRisk, number> = { critical: 4, high: 3, med
 
 const findingKey = ({ ip, port, transport }: AttackSurfaceFinding) => `${ip}:${port}/${transport}`;
 
+// Só chave inválida (401), acesso negado (403) e crédito zerado abortam o lote:
+// todo alvo seguinte falharia igual. 429 não entra — o gate do servidor já
+// reespaça e repete, então um 429 que escapou é transitório e custa só o alvo
+// dele. E 404 é "o Shodan não conhece esse IP", que nem erro é.
+export const abortsBatch = (message: string) =>
+  /\b(401|403)\b/.test(message) || /credit/i.test(message);
+
 export const mergeAttackSurfaceResponses = (responses: AttackSurfaceResponse[]): AttackSurfaceResponse | null => {
   const latest = responses.at(-1);
   if (!latest) return null;
