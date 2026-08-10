@@ -105,7 +105,7 @@ const riskSortValue: Record<AttackSurfaceRisk, number> = {
 const MIN_LOADING_MS = 5000;
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
-const INVESTIDA_KEY = "threatsumm4ry.attackSurface.investida";
+const INVESTIDA_STORAGE = "threatsumm4ry.attackSurface.investida";
 
 // Shodan's fixed search page size, not an application cap.
 const PAGE_SIZE = 100;
@@ -153,7 +153,7 @@ export default function AttackSurface() {
   const [progress, setProgress] = useState("");
   const [credits, setCredits] = useState<ShodanCreditStatus | null>(null);
   // Investida sai em toda linha do XLSX e quase nunca muda entre varreduras.
-  const [investida, setInvestida] = useState(() => localStorage.getItem(INVESTIDA_KEY) || "");
+  const [investida, setInvestida] = useState(() => localStorage.getItem(INVESTIDA_STORAGE) || "");
 
   useEffect(() => {
     setFeatureMode(routeMode);
@@ -400,7 +400,7 @@ export default function AttackSurface() {
                   value={investida}
                   onChange={(event) => {
                     setInvestida(event.target.value);
-                    localStorage.setItem(INVESTIDA_KEY, event.target.value);
+                    localStorage.setItem(INVESTIDA_STORAGE, event.target.value);
                   }}
                   placeholder={pt ? "Investida (vai no XLSX)" : "Investida (goes in the XLSX)"}
                   className="h-9 w-52"
