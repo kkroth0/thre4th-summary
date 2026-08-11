@@ -16,12 +16,30 @@ const isEarlyDoc = (title) => /\bEarly\b/i.test(title || '');
 //
 //   Edge/Chromium — Google Chrome CVEs restated. 922 of July 2026's entries.
 //   Azure Linux (CBL-Mariner) — the distro's OSS package stream (kernel, clamav,
-//   perl, ...). 329 of August 2026's 751 entries, and zero Chromium that month,
+//   perl, ...). 331 of August 2026's 751 entries, and zero Chromium that month,
 //   so the title-only test used to let every one of them through.
-const isChromiumVuln = (title) => /chromium/i.test(title || '');
-const isAzureLinuxVuln = (productNames) =>
-    productNames.length > 0 && productNames.every(n => /azure linux|cbl-mariner/i.test(n));
-const isUpstreamVuln = (title, productNames) => isChromiumVuln(title) || isAzureLinuxVuln(productNames);
+// Neither stream is reliably identifiable from the title alone, so both tests
+// fall back to the affected products.
+
+// MSRC usually writes a descriptive title; when it does not, the entry is a bare
+// CVE id and only the product says what the CVE is.
+const isUndescribed = (title) => !title || /^CVE-\d{4}-\d+$/i.test(title.trim());
+
+// The distro package stream ships under two naming shapes in the same document:
+// "azl3 <pkg> <ver> on Azure Linux 3.0" and the bare "cbl2 <pkg> <ver>", which
+// carries no distro name at all. Matching only the distro text missed 319 of
+// April 2026's 737 entries, every one of them a CBL-Mariner 2.0 package.
+const isDistroPackage = (name) => /^(azl|cbl)\d+\s/i.test(name) || /azure linux|cbl-mariner/i.test(name);
+const isAzureLinuxVuln = (productNames) => productNames.length > 0 && productNames.every(isDistroPackage);
+
+// Chrome CVEs restated for Edge. "Microsoft Edge for Android" bugs are Microsoft's
+// own code and keep counting — only an entry with no description of its own, on
+// nothing but Chromium-based Edge, is a restatement.
+const isChromiumVuln = (title, productNames = []) =>
+    /chromium/i.test(title || '') ||
+    (isUndescribed(title) && productNames.length > 0 && productNames.every(n => /chromium/i.test(n)));
+
+const isUpstreamVuln = (title, productNames) => isChromiumVuln(title, productNames) || isAzureLinuxVuln(productNames);
 
 const stripHtml = (str) => (str || '').replace(/<[^>]*>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim();
 

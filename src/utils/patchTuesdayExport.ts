@@ -329,39 +329,10 @@ const DECK = { blue: '1565C0', navy: '172033', slate: '526274', pale: 'F3F6FA', 
 
 export type PptxFactory = new () => PptxGenJS;
 
-const SEVERITY_PT: Record<string, string> = {
-    Critical: 'Crítica',
-    Important: 'Importante',
-    Moderate: 'Moderada',
-    Low: 'Baixa',
-    Unknown: 'Sem classificação',
-};
-
-// MSRC publishes impact and exploitability in English closed phrases. Translating
-// here keeps the API stable and the deck in PT-BR.
-const IMPACT_PT: Record<string, string> = {
-    'Remote Code Execution': 'Execução remota de código',
-    'Elevation of Privilege': 'Elevação de privilégio',
-    'Information Disclosure': 'Divulgação de informações',
-    'Denial of Service': 'Negação de serviço',
-    'Spoofing': 'Falsificação (spoofing)',
-    'Security Feature Bypass': 'Bypass de recurso de segurança',
-    'Tampering': 'Adulteração',
-    'Other': 'Outras',
-};
-
 const FAMILY_PT: Record<string, string> = {
     'Azure & Cloud': 'Azure e nuvem',
     'Developer Tools & .NET': 'Ferramentas de desenvolvimento e .NET',
     'Other Microsoft Products': 'Outros produtos Microsoft',
-};
-
-const EXPLOITABILITY_PT: Record<string, string> = {
-    'Exploitation Detected': 'Exploração detectada',
-    'Exploitation More Likely': 'Exploração mais provável',
-    'Exploitation Less Likely': 'Exploração menos provável',
-    'Exploitation Unlikely': 'Exploração improvável',
-    'N/A': 'Não informada',
 };
 
 const pt = (map: Record<string, string>, value: string) => map[value] || value;
@@ -425,7 +396,7 @@ const addExecutiveSummarySlide = (pptx: PptxGenJS, s: PatchTuesdaySummary): void
         slide.addText(`• ${item}`, { x: 0.9, y: 2.25 + index * 0.55, w: 11.4, h: 0.45, fontSize: 14, color: DECK.slate })
     );
     slide.addText(
-        `Críticas: ${t.critical} · Importantes: ${t.important} · Sob exploração: ${t.exploited}`,
+        `Critical: ${t.critical} · Important: ${t.important} · Sob exploração ativa: ${t.exploited}`,
         { x: 0.9, y: 2.5 + priorities.length * 0.55, w: 11.4, h: 0.4, fontSize: 16, bold: true, color: SEVERITY_HEX.Critical }
     );
 };
@@ -437,11 +408,12 @@ const addConsolidatedSlide = (pptx: PptxGenJS, s: PatchTuesdaySummary): void => 
     slide.addText(`Total de CVEs: ${t.total}`, { x: 0.6, y: 0.88, w: 3, h: 0.3, fontSize: 12, bold: true, color: DECK.blue });
 
     // Empty severities are dropped: an unused legend entry reads as a data gap.
+    // MSRC's own rating names, kept in English like everywhere else in the deck.
     const severities = ([
-        ['Crítica', t.critical, SEVERITY_HEX.Critical],
-        ['Importante', t.important, SEVERITY_HEX.Important],
-        ['Moderada', t.moderate, SEVERITY_HEX.Moderate],
-        ['Baixa', t.low, SEVERITY_HEX.Low],
+        ['Critical', t.critical, SEVERITY_HEX.Critical],
+        ['Important', t.important, SEVERITY_HEX.Important],
+        ['Moderate', t.moderate, SEVERITY_HEX.Moderate],
+        ['Low', t.low, SEVERITY_HEX.Low],
         ['Sem classificação', t.unknown, SEVERITY_HEX.Unknown],
     ] as [string, number, string][]).filter(([, value]) => value > 0);
     slide.addChart(
@@ -458,7 +430,7 @@ const addConsolidatedSlide = (pptx: PptxGenJS, s: PatchTuesdaySummary): void => 
     const impacts = s.byImpact.slice(0, 7);
     slide.addChart(
         pptx.ChartType.bar,
-        [{ name: 'CVEs', labels: impacts.map((i) => pt(IMPACT_PT, i.name)), values: impacts.map((i) => i.count) }],
+        [{ name: 'CVEs', labels: impacts.map((i) => i.name), values: impacts.map((i) => i.count) }],
         {
             x: 6.7, y: 1.25, w: 6, h: 4.9,
             barDir: 'bar', chartColors: [DECK.blue],
@@ -498,9 +470,9 @@ const addHighlightsSlide = (pptx: PptxGenJS, s: PatchTuesdaySummary): void => {
         ),
         ...highlights.map((v) => [
             cell(v.cve, { bold: true }),
-            cell(pt(SEVERITY_PT, v.severity), { bold: true, color: SEVERITY_HEX[v.severity] || DECK.slate }),
+            cell(v.severity, { bold: true, color: SEVERITY_HEX[v.severity] || DECK.slate }),
             cell(v.cvss == null ? '—' : v.cvss.toFixed(1), { bold: true }),
-            cell(pt(IMPACT_PT, v.impact)),
+            cell(v.impact),
             cell(statusPt(v), { color: v.exploited ? SEVERITY_HEX.Critical : DECK.slate }),
             cell(condenseTitle(v.title)),
         ]),
@@ -518,9 +490,9 @@ const addHighlightsSlide = (pptx: PptxGenJS, s: PatchTuesdaySummary): void => {
                 [
                     v.cve,
                     `Título completo: ${v.title}`,
-                    `Severidade: ${pt(SEVERITY_PT, v.severity)}${v.cvss == null ? '' : ` · CVSS ${v.cvss.toFixed(1)}`}`,
-                    `Impacto: ${pt(IMPACT_PT, v.impact)} · Família: ${pt(FAMILY_PT, v.family)}`,
-                    `Avaliação de exploração: ${pt(EXPLOITABILITY_PT, v.exploitability)}`,
+                    `Severidade: ${v.severity}${v.cvss == null ? '' : ` · CVSS ${v.cvss.toFixed(1)}`}`,
+                    `Impacto: ${v.impact} · Família: ${pt(FAMILY_PT, v.family)}`,
+                    `Avaliação de exploração: ${v.exploitability}`,
                     v.kbs.length ? `KBs: ${v.kbs.map((k) => `KB${k.kb}`).join(', ')}` : 'Sem KB associada',
                 ].join('\n')
             )
@@ -642,110 +614,122 @@ export async function exportPatchTuesdayPPTX(summary: PatchTuesdaySummary): Prom
 //  Excel  (exceljs)
 // =============================================================================
 
-export async function exportPatchTuesdayExcel(summary: PatchTuesdaySummary): Promise<void> {
-    const { default: ExcelLib } = await import('exceljs');
+// Same sheet standard as the attack-surface export: dark red header band, white
+// bold Calibri 14, thin border, frozen header row, autofilter, and no colour on
+// the data rows — whoever reads it filters by column instead.
+// Labels are PT-BR; the values MSRC publishes (severity, impact, exploitability)
+// stay in English, since those are the canonical terms people search for.
+const SHEET_HEADER = 'C00000';
+const SHEET_BORDER = { style: 'thin' as const };
+
+export interface ExcelWorkbookFactory {
+    Workbook: new () => ExcelJS.Workbook;
+}
+
+const styleHeaderRow = (ws: ExcelJS.Worksheet, row: number, lastCol: number) => {
+    const r = ws.getRow(row);
+    for (let c = 1; c <= lastCol; c++) {
+        const cell = r.getCell(c);
+        cell.font = { name: 'Calibri', bold: true, size: 14, color: { argb: 'FFFFFFFF' } };
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: `FF${SHEET_HEADER}` } };
+        cell.alignment = { horizontal: 'left', vertical: 'top' };
+        cell.border = { top: SHEET_BORDER, left: SHEET_BORDER, bottom: SHEET_BORDER, right: SHEET_BORDER };
+    }
+    r.height = 18.5;
+};
+
+export function buildPatchTuesdayWorkbook(summary: PatchTuesdaySummary, ExcelLib: ExcelWorkbookFactory): ExcelJS.Workbook {
     const wb = new ExcelLib.Workbook();
     wb.creator = 'ThreatSumm4ry';
+    wb.company = '';
     wb.created = new Date();
-
-    const headerFill = (ws: ExcelJS.Worksheet, row: number, lastCol: number, color = INK) => {
-        const r = ws.getRow(row);
-        for (let c = 1; c <= lastCol; c++) {
-            const cell = r.getCell(c);
-            cell.font = { bold: true, color: { argb: `FF${color === INK ? 'FFFFFF' : 'FFFFFF'}` } };
-            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: `FF${color}` } };
-            cell.alignment = { vertical: 'middle' };
-            cell.border = { bottom: { style: 'thin', color: { argb: 'FFCBD5E1' } } };
-        }
-        r.height = 20;
-    };
-
-    // ---- Overview ----
-    const ov = wb.addWorksheet('Overview', { properties: { tabColor: { argb: 'FF2563EB' } } });
-    ov.mergeCells('A1:D1');
-    ov.getCell('A1').value = summary.title || 'Microsoft Security Updates';
-    ov.getCell('A1').font = { bold: true, size: 18, color: { argb: 'FF0F172A' } };
-    ov.mergeCells('A2:D2');
-    ov.getCell('A2').value = `Release ${fmtDate(summary.initialReleaseDate)}  ·  Source: MSRC CVRF v3.0  ·  Generated ${new Date().toLocaleString('en-US')}`;
-    ov.getCell('A2').font = { size: 10, color: { argb: 'FF64748B' } };
-    ov.addRow([]);
-
     const t = summary.totals;
-    const kpiStart = 4;
-    ov.getRow(kpiStart).values = ['Metric', 'Value'];
-    headerFill(ov, kpiStart, 2);
-    const kpiRows: [string, number][] = [
-        ['Total CVEs', t.total],
+
+    // ---- Resumo ----
+    const resumo = wb.addWorksheet('Resumo', { properties: { tabColor: { argb: `FF${SHEET_HEADER}` } } });
+    resumo.mergeCells('A1:B1');
+    resumo.getCell('A1').value = `Microsoft Patch Tuesday — ${fmtMonthPt(summary.initialReleaseDate)}`;
+    resumo.getCell('A1').font = { name: 'Calibri', bold: true, size: 12, color: { argb: `FF${SHEET_HEADER}` } };
+    resumo.mergeCells('A2:B2');
+    resumo.getCell('A2').value = `Publicado em ${fmtDatePt(summary.initialReleaseDate)} · Fonte oficial Microsoft (MSRC) · Gerado em ${new Date().toLocaleString('pt-BR')}`;
+    resumo.getCell('A2').font = { name: 'Calibri', size: 10 };
+    resumo.addRow([]);
+
+    resumo.getRow(4).values = ['Indicador', 'Quantidade'];
+    styleHeaderRow(resumo, 4, 2);
+    ([
+        ['Total de CVEs', t.total],
         ['Critical', t.critical],
         ['Important', t.important],
         ['Moderate', t.moderate],
         ['Low', t.low],
-        ['Unrated', t.unknown],
-        ['Actively Exploited', t.exploited],
-        ['Publicly Disclosed', t.disclosed],
+        ['Sem classificação', t.unknown],
+        ['Sob exploração ativa', t.exploited],
+        ['Divulgadas publicamente', t.disclosed],
         ['Exploitation More Likely', t.exploitMoreLikely],
-        ['Upstream (Chromium / Azure Linux, excluded)', t.upstream],
-    ];
-    kpiRows.forEach((r) => ov.addRow(r));
-    ov.getColumn(1).width = 32;
-    ov.getColumn(2).width = 14;
-    ov.getColumn(3).width = 20;
-    ov.getColumn(4).width = 20;
+        ['Código upstream (Chromium/Edge e pacotes do Azure Linux, fora da contagem)', t.upstream],
+    ] as [string, number][]).forEach((row) => resumo.addRow(row));
+    resumo.getColumn(1).width = 62;
+    resumo.getColumn(2).width = 14;
 
-    // ---- Breakdown sheets ----
-    const breakdown = (name: string, label: string, rows: { name: string; count: number }[]) => {
-        const ws = wb.addWorksheet(name);
-        ws.getRow(1).values = [label, 'CVEs', 'Share'];
-        headerFill(ws, 1, 3, '2563EB');
+    // ---- Abas de distribuição ----
+    const distribuicao = (sheetName: string, label: string, rows: NamedCount[]) => {
+        const ws = wb.addWorksheet(sheetName, { views: [{ state: 'frozen', ySplit: 1 }] });
+        ws.getRow(1).values = [label, 'CVEs', 'Participação'];
+        styleHeaderRow(ws, 1, 3);
         rows.forEach((r) => ws.addRow([r.name, r.count, t.total ? r.count / t.total : 0]));
-        ws.getColumn(1).width = 34;
+        ws.getColumn(1).width = 38;
         ws.getColumn(2).width = 12;
-        ws.getColumn(3).width = 12;
+        ws.getColumn(3).width = 16;
         ws.getColumn(3).numFmt = '0.0%';
         ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: 3 } };
     };
-    breakdown('By Severity', 'Severity', [
+    distribuicao('Por Severidade', 'Severity', [
         { name: 'Critical', count: t.critical },
         { name: 'Important', count: t.important },
         { name: 'Moderate', count: t.moderate },
         { name: 'Low', count: t.low },
-        { name: 'Unrated', count: t.unknown },
+        { name: 'Sem classificação', count: t.unknown },
     ]);
-    breakdown('By Impact', 'Impact / Category', summary.byImpact);
-    breakdown('By Product Family', 'Product Family', summary.byFamily);
+    distribuicao('Por Impacto', 'Impact', summary.byImpact);
+    distribuicao('Por Família de Produto', 'Família de produto', summary.byFamily);
 
-    // ---- Full CVE catalog ----
+    // ---- Base de dados ----
     const cols = [
-        { header: 'CVE', key: 'cve', width: 18 },
-        { header: 'Severity', key: 'severity', width: 12 },
-        { header: 'CVSS', key: 'cvss', width: 8 },
-        { header: 'Impact', key: 'impact', width: 24 },
-        { header: 'Product Family', key: 'family', width: 22 },
-        { header: 'Exploited', key: 'exploited', width: 10 },
-        { header: 'Publicly Disclosed', key: 'disclosed', width: 16 },
-        { header: 'Exploitability', key: 'exploitability', width: 22 },
-        { header: 'CWE', key: 'cwe', width: 34 },
-        { header: 'Affected Products', key: 'productCount', width: 14 },
-        { header: 'KB Articles', key: 'kbs', width: 30 },
-        { header: 'Title', key: 'title', width: 52 },
-        { header: 'Description', key: 'description', width: 70 },
-        { header: 'CVSS Vector', key: 'vector', width: 40 },
+        { header: 'CVE', key: 'cve', width: 20 },
+        { header: 'Severity', key: 'severity', width: 14 },
+        { header: 'CVSS', key: 'cvss', width: 9 },
+        { header: 'Impact', key: 'impact', width: 26 },
+        { header: 'Família de Produto', key: 'family', width: 26 },
+        { header: 'Origem', key: 'origem', width: 20 },
+        { header: 'Sob Exploração Ativa', key: 'exploited', width: 20 },
+        { header: 'Divulgada Publicamente', key: 'disclosed', width: 22 },
+        { header: 'Exploitability', key: 'exploitability', width: 26 },
+        { header: 'CWE', key: 'cwe', width: 36 },
+        { header: 'Produtos Afetados', key: 'productCount', width: 18 },
+        { header: 'Artigos KB', key: 'kbs', width: 32 },
+        { header: 'Título', key: 'title', width: 54 },
+        { header: 'Descrição', key: 'description', width: 70 },
+        { header: 'Vetor CVSS', key: 'vector', width: 42 },
     ];
-    const cve = wb.addWorksheet('All CVEs', {
-        properties: { tabColor: { argb: 'FF0F172A' } },
+    const base = wb.addWorksheet('Base de dados', {
+        properties: { tabColor: { argb: `FF${SHEET_HEADER}` } },
         views: [{ state: 'frozen', ySplit: 1 }],
     });
-    cve.columns = cols;
-    headerFill(cve, 1, cols.length);
+    base.columns = cols;
+    styleHeaderRow(base, 1, cols.length);
     summary.vulnerabilities.forEach((v) => {
-        const row = cve.addRow({
+        base.addRow({
             cve: v.cve,
             severity: v.severity,
             cvss: v.cvss ?? '',
             impact: v.impact,
             family: v.family,
-            exploited: v.exploited ? 'Yes' : 'No',
-            disclosed: v.publiclyDisclosed ? 'Yes' : 'No',
+            // The one column that explains why the sheet has more rows than the
+            // headline count: upstream entries are shipped, but marked.
+            origem: v.upstream ? 'Upstream republicado' : 'Microsoft',
+            exploited: v.exploited ? 'Sim' : 'Não',
+            disclosed: v.publiclyDisclosed ? 'Sim' : 'Não',
             exploitability: v.exploitability,
             cwe: v.cwe,
             productCount: v.productCount,
@@ -754,13 +738,15 @@ export async function exportPatchTuesdayExcel(summary: PatchTuesdaySummary): Pro
             description: v.description,
             vector: v.vector,
         });
-        const sevCell = row.getCell('severity');
-        const h = SEVERITY_HEX[v.severity];
-        if (h) sevCell.font = { bold: true, color: { argb: `FF${h}` } };
-        if (v.exploited) row.getCell('exploited').font = { bold: true, color: { argb: 'FFDC2626' } };
     });
-    cve.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: cols.length } };
+    base.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: cols.length } };
 
+    return wb;
+}
+
+export async function exportPatchTuesdayExcel(summary: PatchTuesdaySummary): Promise<void> {
+    const { default: ExcelLib } = await import('exceljs');
+    const wb = buildPatchTuesdayWorkbook(summary, ExcelLib);
     const buf = await wb.xlsx.writeBuffer();
     triggerDownload(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), `${baseFilename(summary)}.xlsx`);
 }

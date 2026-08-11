@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createRequire } from "node:module";
 import type { PatchTuesdaySummary, PatchVulnerability } from "@/services/msrcApi";
-import { buildPatchTuesdayPresentation } from "./patchTuesdayExport";
+import { buildPatchTuesdayPresentation, buildPatchTuesdayWorkbook } from "./patchTuesdayExport";
 
 const cve = (over: Partial<PatchVulnerability> = {}): PatchVulnerability => ({
     cve: "CVE-2026-68820",
@@ -70,8 +70,11 @@ test("o deck sai em PT-BR, no padrão executivo, sem identificar a consultoria",
     assert.match(xml, /Sumário executivo/);
     assert.match(xml, /Conclusão e recomendações/);
     assert.match(xml, /agosto de 2026/);
-    assert.match(xml, /Execução remota de código/, "impactos do MSRC traduzidos");
-    assert.doesNotMatch(xml, /Elevation of Privilege<\/a:t>/, "nenhum rótulo de impacto cru na tela");
+    // Severity and impact are the terms people search for; they stay as MSRC
+    // publishes them even though the surrounding deck is PT-BR.
+    assert.match(xml, /Remote Code Execution/, "impacto do MSRC preservado");
+    assert.match(xml, /Critical/, "severidade do MSRC preservada");
+    assert.doesNotMatch(xml, /Execução remota de código/, "termo técnico não traduzido");
 
     // Whoever presents this puts their own name on it.
     for (const identifier of [/\bEY\b/i, /Ernst\s*&\s*Young/i, /\bcliente\b/i, /\bconsultoria\b/i]) {
@@ -92,8 +95,8 @@ test("o número da capa é o da Microsoft e o deck explica o que ficou de fora",
 
 test("severidades zeradas somem da rosca em vez de virarem fatia vazia", async () => {
     const { all: xml } = await buildXml(sample);
-    assert.match(xml, /Moderada/, "moderate=1 aparece");
-    assert.doesNotMatch(xml, /Baixa/, "low=0 é omitida");
+    assert.match(xml, /Moderate/, "moderate=1 aparece");
+    assert.doesNotMatch(xml, /<a:t>Low<\/a:t>/, "low=0 é omitida");
 });
 
 // The only geometry that moves with the data: the executive summary drops a
@@ -111,6 +114,58 @@ test("o sumário executivo cabe na página mesmo com todos os marcadores", () =>
     for (const o of placed) {
         assert.ok(o.y + o.h <= 7.05, `elemento em y=${o.y} invade o rodapé`);
         assert.ok(o.x + o.w <= 13.333, `elemento em x=${o.x} passa da margem direita`);
+    }
+});
+
+test("a planilha sai no padrão de folha, em PT-BR, com os termos do MSRC intactos", async () => {
+    const runtimeRequire = createRequire(`${process.cwd()}/package.json`);
+    const ExcelJS = runtimeRequire("exceljs") as typeof import("exceljs");
+    const wb = buildPatchTuesdayWorkbook(
+        { ...sample, vulnerabilities: [cve(), cve({ cve: "CVE-2026-64572", upstream: true, family: "Other Microsoft Products" })] },
+        ExcelJS
+    );
+
+    assert.deepEqual(wb.worksheets.map((ws) => ws.name), ["Resumo", "Por Severidade", "Por Impacto", "Por Família de Produto", "Base de dados"]);
+
+    const base = wb.getWorksheet("Base de dados")!;
+    const header = base.getRow(1);
+    assert.equal(header.getCell(1).value, "CVE");
+    assert.equal(header.getCell(5).value, "Família de Produto", "rótulos em PT-BR");
+    assert.equal(header.getCell(2).value, "Severity", "termo do MSRC preservado");
+    assert.equal(header.getCell(4).value, "Impact");
+
+    // Dark red band, white bold Calibri 14, bordered, frozen, filterable.
+    const style = header.getCell(1);
+    assert.deepEqual(style.font, { name: "Calibri", bold: true, size: 14, color: { argb: "FFFFFFFF" } });
+    assert.equal((style.fill as { fgColor: { argb: string } }).fgColor.argb, "FFC00000");
+    assert.ok(style.border?.bottom);
+    assert.deepEqual(base.views, [{ state: "frozen", ySplit: 1 }]);
+    assert.ok(base.autoFilter);
+
+    // Values: MSRC terms untouched, our own labels in PT-BR.
+    assert.equal(base.getRow(2).getCell(2).value, "Important");
+    assert.equal(base.getRow(2).getCell(4).value, "Elevation of Privilege");
+    assert.equal(base.getRow(2).getCell(6).value, "Microsoft");
+    assert.equal(base.getRow(2).getCell(7).value, "Sim", "booleano em PT-BR");
+    assert.equal(base.getRow(3).getCell(6).value, "Upstream republicado", "linhas upstream vão marcadas, não sumidas");
+
+    // No colour on data rows — the reader filters by column instead.
+    assert.equal(base.getRow(2).getCell(2).fill, undefined);
+    assert.equal(base.getRow(2).getCell(2).font, undefined);
+});
+
+test("a planilha não identifica a consultoria em nenhum metadado", async () => {
+    const runtimeRequire = createRequire(`${process.cwd()}/package.json`);
+    const JSZip = runtimeRequire("jszip") as typeof import("jszip");
+    const ExcelJS = runtimeRequire("exceljs") as typeof import("exceljs");
+    const bytes = await buildPatchTuesdayWorkbook(sample, ExcelJS).xlsx.writeBuffer();
+    const zip = await JSZip.loadAsync(bytes as ArrayBuffer);
+    const files = Object.values(zip.files).filter((f) => !f.dir && /\.xml$/.test(f.name));
+    const xml = (await Promise.all(files.map((f) => f.async("string")))).join("\n");
+
+    assert.match(xml, /Fonte oficial Microsoft/);
+    for (const identifier of [/\bEY\b/i, /Ernst\s*&\s*Young/i, /\bcliente\b/i, /\bconsultoria\b/i]) {
+        assert.doesNotMatch(xml, identifier, String(identifier));
     }
 });
 

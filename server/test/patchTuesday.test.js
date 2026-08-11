@@ -78,8 +78,13 @@ test('excludes the Azure Linux package stream, which no title test catches', () 
 test('identifies Azure Linux packages by product, not by title', () => {
   assert.equal(isAzureLinuxVuln(['azl3 clamav 1.5.3-1 on Azure Linux 3.0']), true);
   assert.equal(isAzureLinuxVuln(['CBL-Mariner 2.0']), true);
+  // The CBL-Mariner 2.0 stream names packages without naming the distro at all.
+  // Matching only "Azure Linux"/"CBL-Mariner" missed 319 of April 2026's entries.
+  assert.equal(isAzureLinuxVuln(['cbl2 net-snmp 5.9.4-1']), true);
+  assert.equal(isAzureLinuxVuln(['cbl2 libdwarf 0.9.0-3', 'azl3 libdwarf 0.9.0-1 on Azure Linux 3.0']), true);
   assert.equal(isAzureLinuxVuln(['Windows 11', 'azl3 perl 5.38.2-514 on Azure Linux 3.0']), false);
   assert.equal(isAzureLinuxVuln(['Azure Storage Explorer']), false, 'a real Microsoft product on Azure');
+  assert.equal(isAzureLinuxVuln(['Windows Subsystem for Linux (WSL2)']), false, "Microsoft's own code");
   assert.equal(isAzureLinuxVuln([]), false, 'no products is not evidence of upstream');
 });
 
@@ -102,6 +107,14 @@ test('surfaces exploited and disclosed CVEs above everything else', () => {
 
 test('identifies Chromium restatements without catching first-party Edge bugs', () => {
   assert.equal(isChromiumVuln('Microsoft Edge (Chromium-based) Spoofing Vulnerability'), true);
-  // Edge for Android is Microsoft's own code, not a restated Chrome CVE.
+  // Edge for Android is Microsoft's own code, not a restated Chrome CVE — even
+  // when MSRC files it under the generic Chromium-based Edge product.
   assert.equal(isChromiumVuln('Microsoft Edge for Android Information Disclosure Vulnerability'), false);
+  assert.equal(isChromiumVuln('Microsoft Edge for Android Information Disclosure Vulnerability', ['Microsoft Edge (Chromium-based)']), false);
+  // July 2026 shipped one entry whose title is just its own CVE id. With no
+  // description of its own and nothing but Chromium-based Edge affected, the
+  // product is the only thing identifying it as a restatement.
+  assert.equal(isChromiumVuln('CVE-2026-13862', ['Microsoft Edge (Chromium-based)']), true);
+  assert.equal(isChromiumVuln('', ['Microsoft Edge (Chromium-based)']), true);
+  assert.equal(isChromiumVuln('CVE-2026-13862', ['Windows 11']), false, 'an untitled Windows CVE is still Microsoft\'s');
 });
