@@ -1,9 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { isEarlyDoc, isChromiumVuln, normalizeCvrf } from '../patchTuesday.js';
+import { isEarlyDoc, isChromiumVuln, isAzureLinuxVuln, normalizeCvrf } from '../patchTuesday.js';
 
 // Minimal CVRF shape. Threat types: 0 = impact, 1 = exploit status, 3 = severity.
-const vuln = (cve, { title = '', severity, impact = 'Elevation of Privilege', exploit = '' } = {}) => ({
+// product '1' = Windows 11, '2' = an Azure Linux package.
+const vuln = (cve, { title = '', severity, impact = 'Elevation of Privilege', exploit = '', products = ['1'] } = {}) => ({
   CVE: cve,
   Title: { Value: title || `${cve} title` },
   Threats: [
@@ -11,13 +12,18 @@ const vuln = (cve, { title = '', severity, impact = 'Elevation of Privilege', ex
     { Type: 1, Description: { Value: exploit } },
     ...(severity ? [{ Type: 3, Description: { Value: severity } }] : [])
   ],
-  ProductStatuses: [{ Type: 3, ProductID: ['1'] }]
+  ProductStatuses: [{ Type: 3, ProductID: products }]
 });
 
 const cvrf = (title, vulnerabilities) => ({
   DocumentTitle: { Value: title },
   DocumentTracking: { Identification: { ID: { Value: '2026-Jul' } }, CurrentReleaseDate: '2026-07-14T07:00:00' },
-  ProductTree: { FullProductName: [{ ProductID: '1', Value: 'Windows 11' }] },
+  ProductTree: {
+    FullProductName: [
+      { ProductID: '1', Value: 'Windows 11' },
+      { ProductID: '2', Value: 'azl3 kernel 6.6.143.1-1 on Azure Linux 3.0' }
+    ]
+  },
   Vulnerability: vulnerabilities
 });
 
@@ -28,7 +34,7 @@ test('flags the pre-release draft that shares the real Patch Tuesday id', () => 
   assert.equal(isEarlyDoc('July 2026 Security Updates'), false);
 });
 
-test('counts Chromium restatements separately instead of in the headline totals', () => {
+test('counts upstream republications separately instead of in the headline totals', () => {
   const doc = cvrf('July 2026 Security Updates', [
     vuln('CVE-2026-1', { severity: 'Critical' }),
     vuln('CVE-2026-2', { severity: 'Important' }),
@@ -41,10 +47,40 @@ test('counts Chromium restatements separately instead of in the headline totals'
   const { totals, vulnerabilities } = normalizeCvrf(doc);
 
   assert.equal(totals.total, 2, 'headline total is Microsoft-only');
-  assert.equal(totals.chromium, 2, 'Chromium counted on its own line');
+  assert.equal(totals.upstream, 2, 'Chromium counted on its own line');
   assert.equal(totals.unknown, 0, 'Chromium must not create an Unknown bucket');
   assert.equal(totals.critical, 1);
   assert.equal(vulnerabilities.length, 4, 'every CVE is still available to the table');
+});
+
+test('excludes the Azure Linux package stream, which no title test catches', () => {
+  // August 2026: 751 entries in the document, 329 of them Azure Linux packages
+  // and *zero* Chromium. The title-only filter passed all 329 through, so the
+  // page headlined 751 against the portals' ~420.
+  const doc = cvrf('August 2026 Security Updates', [
+    vuln('CVE-2026-1', { severity: 'Critical' }),
+    // Rated Important by MSRC and titled like any upstream commit — nothing but
+    // the affected product identifies it as not-Microsoft's-code.
+    vuln('CVE-2026-2', { severity: 'Important', title: 'sctp: don\'t free the ASCONF\'s own transport', products: ['2'] }),
+    vuln('CVE-2026-3', { severity: 'Important', title: 'btrfs: reject free space cache with more entries than pages', products: ['2'] }),
+    // Affects Windows *and* an Azure Linux package: Microsoft's own bug, counted.
+    vuln('CVE-2026-4', { severity: 'Moderate', products: ['1', '2'] })
+  ]);
+
+  const { totals } = normalizeCvrf(doc);
+
+  assert.equal(totals.total, 2, 'Azure Linux packages stay out of the headline');
+  assert.equal(totals.upstream, 2);
+  assert.equal(totals.important, 0, 'their MSRC severity must not inflate the buckets either');
+  assert.equal(totals.moderate, 1, 'a shared Windows/Azure Linux CVE is still Microsoft\'s');
+});
+
+test('identifies Azure Linux packages by product, not by title', () => {
+  assert.equal(isAzureLinuxVuln(['azl3 clamav 1.5.3-1 on Azure Linux 3.0']), true);
+  assert.equal(isAzureLinuxVuln(['CBL-Mariner 2.0']), true);
+  assert.equal(isAzureLinuxVuln(['Windows 11', 'azl3 perl 5.38.2-514 on Azure Linux 3.0']), false);
+  assert.equal(isAzureLinuxVuln(['Azure Storage Explorer']), false, 'a real Microsoft product on Azure');
+  assert.equal(isAzureLinuxVuln([]), false, 'no products is not evidence of upstream');
 });
 
 test('surfaces exploited and disclosed CVEs above everything else', () => {
@@ -61,7 +97,7 @@ test('surfaces exploited and disclosed CVEs above everything else', () => {
   assert.equal(totals.disclosed, 1);
   assert.equal(topCves[0].cve, 'CVE-2026-ZERODAY', 'an exploited 0-day leads the list');
   assert.equal(topCves[1].cve, 'CVE-2026-DISCLOSED');
-  assert.equal(topCves.at(-1).cve, 'CVE-2026-CHROME', 'Chromium noise sinks to the bottom');
+  assert.equal(topCves.at(-1).cve, 'CVE-2026-CHROME', 'upstream noise sinks to the bottom');
 });
 
 test('identifies Chromium restatements without catching first-party Edge bugs', () => {

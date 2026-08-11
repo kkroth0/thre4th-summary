@@ -10,9 +10,9 @@ export interface PatchTuesdayMonth {
 }
 
 export interface PatchTuesdayTotals {
-    // Microsoft's own patch set. Chromium restatements are excluded from every
-    // field here and counted in `chromium` instead, so these are the numbers
-    // that describe what Microsoft actually shipped this month.
+    // Microsoft's own patch set. Upstream republications (Chromium, Azure Linux
+    // packages) are excluded from every field here and counted in `upstream`
+    // instead, so these are the numbers that describe what Microsoft shipped.
     total: number;
     critical: number;
     important: number;
@@ -22,7 +22,7 @@ export interface PatchTuesdayTotals {
     exploited: number;
     disclosed: number;
     exploitMoreLikely: number;
-    chromium: number;
+    upstream: number;
 }
 
 export interface NamedCount {
@@ -42,7 +42,7 @@ export interface PatchVulnerability {
     exploited: boolean;
     publiclyDisclosed: boolean;
     exploitability: string; // Exploitation More Likely / Less Likely / Unlikely / N/A
-    chromium: boolean; // Google Chrome CVE restated by Microsoft, not a Microsoft bug
+    upstream: boolean; // Chrome CVE or Azure Linux package, republished by Microsoft — not a Microsoft bug
     family: string;
     productCount: number;
     kbs: { kb: string; url: string }[];

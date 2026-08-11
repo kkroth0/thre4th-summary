@@ -77,9 +77,10 @@ const PatchTuesday = () => {
     const [fCvss, setFCvss] = useState("0"); // minimum base score threshold
     const [search, setSearch] = useState("");
     const [page, setPage] = useState(1);
-    // Chromium entries are restated Chrome CVEs, not Microsoft bugs. They are ~40%
-    // of a document and drown the real patch set, so the table hides them by default.
-    const [showChromium, setShowChromium] = useState(false);
+    // Upstream entries — restated Chrome CVEs and Azure Linux packages — are not
+    // Microsoft bugs. They are 40-70% of a document and drown the real patch set,
+    // so the table hides them by default.
+    const [showUpstream, setShowUpstream] = useState(false);
     const PAGE_SIZE = 25;
 
     // Load available Patch Tuesday months once
@@ -133,7 +134,7 @@ const PatchTuesday = () => {
     // Reset to first page whenever filters or the loaded month change
     useEffect(() => {
         setPage(1);
-    }, [fSeverity, fImpact, fStatus, fCvss, search, selectedId, showChromium]);
+    }, [fSeverity, fImpact, fStatus, fCvss, search, selectedId, showUpstream]);
 
     // Apply all active filters to the full vulnerability catalog
     const filtered = useMemo(() => {
@@ -141,7 +142,7 @@ const PatchTuesday = () => {
         const q = search.trim().toLowerCase();
         const minCvss = parseFloat(fCvss);
         return summary.vulnerabilities.filter((v) => {
-            if (v.chromium && !showChromium) return false;
+            if (v.upstream && !showUpstream) return false;
             if (fSeverity !== "ALL" && v.severity !== fSeverity) return false;
             if (fImpact !== "ALL" && v.impact !== fImpact) return false;
             if (minCvss > 0 && (v.cvss ?? 0) < minCvss) return false;
@@ -153,7 +154,7 @@ const PatchTuesday = () => {
             if (q && !(v.cve.toLowerCase().includes(q) || v.title.toLowerCase().includes(q))) return false;
             return true;
         });
-    }, [summary, fSeverity, fImpact, fStatus, fCvss, search, showChromium]);
+    }, [summary, fSeverity, fImpact, fStatus, fCvss, search, showUpstream]);
 
     // The month's actual news: what Microsoft says is already being exploited or is
     // public. Everything else in the document is scheduled maintenance.
@@ -201,7 +202,7 @@ const PatchTuesday = () => {
 
     const t = summary?.totals;
 
-    // Every figure here is Microsoft-only; Chromium restatements are reported apart.
+    // Every figure here is Microsoft-only; upstream republications are reported apart.
     const kpis = t
         ? [
               { label: isPt ? "CVEs Microsoft" : "Microsoft CVEs", value: t.total, icon: Bug, color: "text-primary" },
@@ -237,7 +238,7 @@ const PatchTuesday = () => {
                   ]
                 : []),
             "",
-            `${t.chromium} ${isPt ? "CVEs de Chromium/Edge republicados pela Microsoft (não contabilizados acima)" : "Chromium/Edge CVEs restated by Microsoft (not counted above)"}`,
+            `${t.upstream} ${isPt ? "CVEs de código upstream (Chromium/Edge, pacotes do Azure Linux) apenas republicados pela Microsoft (não contabilizados acima)" : "upstream CVEs (Chromium/Edge, Azure Linux packages) merely republished by Microsoft (not counted above)"}`,
         ];
 
         try {
@@ -390,14 +391,14 @@ const PatchTuesday = () => {
                                 })}
                             </div>
 
-                            {/* Chromium noise, reported apart from the headline numbers */}
-                            {t && t.chromium > 0 && (
+                            {/* Upstream noise, reported apart from the headline numbers */}
+                            {t && t.upstream > 0 && (
                                 <div className="flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl border border-border/50 bg-muted/30 text-xs text-muted-foreground">
                                     <Chrome className="h-4 w-4 shrink-0 text-muted-foreground/70" />
                                     <span>
                                         {isPt
-                                            ? `Mais ${t.chromium} CVEs de Chromium/Edge que a Microsoft apenas republica do Google. Não entram nos números acima.`
-                                            : `A further ${t.chromium} Chromium/Edge CVEs that Microsoft merely restates from Google. Not counted above.`}
+                                            ? `Mais ${t.upstream} CVEs de código upstream — Chromium/Edge e pacotes do Azure Linux — que a Microsoft apenas republica. Não entram nos números acima.`
+                                            : `A further ${t.upstream} upstream CVEs — Chromium/Edge and Azure Linux packages — that Microsoft merely republishes. Not counted above.`}
                                     </span>
                                 </div>
                             )}
@@ -484,26 +485,26 @@ const PatchTuesday = () => {
                                     <h2 className="text-sm font-bold">{isPt ? "Explorador de CVEs" : "CVE Explorer"}</h2>
                                     <span className="text-[11px] text-muted-foreground">
                                         {isPt
-                                            ? `${filtered.length} de ${showChromium ? summary.vulnerabilities.length : summary.totals.total} CVEs`
-                                            : `${filtered.length} of ${showChromium ? summary.vulnerabilities.length : summary.totals.total} CVEs`}
+                                            ? `${filtered.length} de ${showUpstream ? summary.vulnerabilities.length : summary.totals.total} CVEs`
+                                            : `${filtered.length} of ${showUpstream ? summary.vulnerabilities.length : summary.totals.total} CVEs`}
                                     </span>
-                                    {summary.totals.chromium > 0 && (
+                                    {summary.totals.upstream > 0 && (
                                         <Button
                                             variant="outline"
-                                            onClick={() => setShowChromium((v) => !v)}
+                                            onClick={() => setShowUpstream((v) => !v)}
                                             className={cn(
                                                 "ml-auto h-8 rounded-lg text-xs font-semibold gap-2",
-                                                showChromium && "bg-muted"
+                                                showUpstream && "bg-muted"
                                             )}
                                         >
                                             <Chrome className="h-3.5 w-3.5" />
-                                            {showChromium
+                                            {showUpstream
                                                 ? isPt
-                                                    ? "Ocultar Chromium"
-                                                    : "Hide Chromium"
+                                                    ? "Ocultar upstream"
+                                                    : "Hide upstream"
                                                 : isPt
-                                                  ? `Incluir Chromium (${summary.totals.chromium})`
-                                                  : `Include Chromium (${summary.totals.chromium})`}
+                                                  ? `Incluir upstream (${summary.totals.upstream})`
+                                                  : `Include upstream (${summary.totals.upstream})`}
                                         </Button>
                                     )}
                                 </div>

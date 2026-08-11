@@ -10,11 +10,18 @@ const SEVERITY_RANK = { Critical: 4, Important: 3, Moderate: 2, Low: 1 };
 // hiding both exploited zero-days).
 const isEarlyDoc = (title) => /\bEarly\b/i.test(title || '');
 
-// Edge/Chromium entries are Google Chrome CVEs that Microsoft merely restates.
-// They are 40% of a typical document and carry no MSRC severity (427 of 467 in
-// July 2026), so folding them into the headline counts inflates the total and
-// manufactures a large "Unknown" bucket. Counted separately instead.
+// Two streams in a CVRF document are upstream code Microsoft republishes, not
+// bugs it fixed in its own products. Neither belongs in the headline count —
+// that is why the portals report ~420 for a month whose document holds 751.
+//
+//   Edge/Chromium — Google Chrome CVEs restated. 922 of July 2026's entries.
+//   Azure Linux (CBL-Mariner) — the distro's OSS package stream (kernel, clamav,
+//   perl, ...). 329 of August 2026's 751 entries, and zero Chromium that month,
+//   so the title-only test used to let every one of them through.
 const isChromiumVuln = (title) => /chromium/i.test(title || '');
+const isAzureLinuxVuln = (productNames) =>
+    productNames.length > 0 && productNames.every(n => /azure linux|cbl-mariner/i.test(n));
+const isUpstreamVuln = (title, productNames) => isChromiumVuln(title) || isAzureLinuxVuln(productNames);
 
 const stripHtml = (str) => (str || '').replace(/<[^>]*>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim();
 
@@ -51,7 +58,7 @@ const normalizeCvrf = (doc) => {
         productNameById[p.ProductID] = p.Value;
     }
 
-    const totals = { total: 0, critical: 0, important: 0, moderate: 0, low: 0, unknown: 0, exploited: 0, disclosed: 0, exploitMoreLikely: 0, chromium: 0 };
+    const totals = { total: 0, critical: 0, important: 0, moderate: 0, low: 0, unknown: 0, exploited: 0, disclosed: 0, exploitMoreLikely: 0, upstream: 0 };
     const byImpact = {};
     const byFamily = {};
     const vulnerabilities = [];
@@ -59,7 +66,10 @@ const normalizeCvrf = (doc) => {
     for (const v of (doc.Vulnerability || [])) {
         if (!v.CVE) continue;
         const threats = v.Threats || [];
-        const chromium = isChromiumVuln(v.Title?.Value);
+
+        const affectedIds = (v.ProductStatuses || []).find(s => s.Type === 3)?.ProductID || [];
+        const productNames = affectedIds.map(id => productNameById[id]).filter(Boolean);
+        const upstream = isUpstreamVuln(v.Title?.Value, productNames);
 
         // Highest severity across products (Threat Type 3)
         let severity = null, sevRank = 0;
@@ -81,8 +91,6 @@ const normalizeCvrf = (doc) => {
             if ((c.BaseScore || 0) > cvss) { cvss = c.BaseScore; vector = c.Vector || ''; }
         }
 
-        const affectedIds = (v.ProductStatuses || []).find(s => s.Type === 3)?.ProductID || [];
-        const productNames = affectedIds.map(id => productNameById[id]).filter(Boolean);
         const family = classifyFamily(v.Title?.Value, productNames);
 
         // KB / vendor fixes (Remediation Type 2)
@@ -96,10 +104,10 @@ const normalizeCvrf = (doc) => {
         const description = stripHtml((v.Notes || []).find(n => n.Type === 2)?.Value).slice(0, 600);
         const cwe = Array.isArray(v.CWE) ? (v.CWE[0]?.Value || '') : (v.CWE?.Value || '');
 
-        // Tallies. Chromium restatements are counted on their own line only, so
+        // Tallies. Upstream republications are counted on their own line only, so
         // every headline number below describes Microsoft's own patch set.
-        if (chromium) {
-            totals.chromium++;
+        if (upstream) {
+            totals.upstream++;
         } else {
             totals.total++;
             if (severity === 'Critical') totals.critical++;
@@ -115,7 +123,7 @@ const normalizeCvrf = (doc) => {
         }
 
         vulnerabilities.push({
-            chromium,
+            upstream,
             cve: v.CVE,
             title: v.Title?.Value || '',
             description,
@@ -134,10 +142,10 @@ const normalizeCvrf = (doc) => {
         });
     }
 
-    // Sort by exploited, then disclosed, then CVSS desc. Chromium restatements
+    // Sort by exploited, then disclosed, then CVSS desc. Upstream republications
     // sink below everything else so topCves stays Microsoft's own signal.
     vulnerabilities.sort((a, b) =>
-        (a.chromium - b.chromium) ||
+        (a.upstream - b.upstream) ||
         (b.exploited - a.exploited) ||
         (b.publiclyDisclosed - a.publiclyDisclosed) ||
         ((b.cvss || 0) - (a.cvss || 0))
@@ -158,4 +166,4 @@ const normalizeCvrf = (doc) => {
     };
 };
 
-export { SEVERITY_RANK, isEarlyDoc, isChromiumVuln, classifyFamily, parseExploitStatus, normalizeCvrf };
+export { SEVERITY_RANK, isEarlyDoc, isChromiumVuln, isAzureLinuxVuln, isUpstreamVuln, classifyFamily, parseExploitStatus, normalizeCvrf };
