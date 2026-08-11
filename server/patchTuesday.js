@@ -21,9 +21,12 @@ const isEarlyDoc = (title) => /\bEarly\b/i.test(title || '');
 // Neither stream is reliably identifiable from the title alone, so both tests
 // fall back to the affected products.
 
-// MSRC usually writes a descriptive title; when it does not, the entry is a bare
-// CVE id and only the product says what the CVE is.
-const isUndescribed = (title) => !title || /^CVE-\d{4}-\d+$/i.test(title.trim());
+// An MSRC-authored title always leads with the product ("Windows ... Vulnerability").
+// A title that leads with a CVE id is carrying the upstream project's own bug
+// description instead — empty, the bare id, or the id plus Chrome's wording
+// ("CVE-2026-19137 Use after free in WebGL"). All three mean MSRC wrote nothing
+// of its own about this entry.
+const isUndescribed = (title) => !title || /^CVE-\d{4}-\d+\b/i.test(title.trim());
 
 // The distro package stream ships under two naming shapes in the same document:
 // "azl3 <pkg> <ver> on Azure Linux 3.0" and the bare "cbl2 <pkg> <ver>", which

@@ -111,10 +111,12 @@ test('identifies Chromium restatements without catching first-party Edge bugs', 
   // when MSRC files it under the generic Chromium-based Edge product.
   assert.equal(isChromiumVuln('Microsoft Edge for Android Information Disclosure Vulnerability'), false);
   assert.equal(isChromiumVuln('Microsoft Edge for Android Information Disclosure Vulnerability', ['Microsoft Edge (Chromium-based)']), false);
-  // July 2026 shipped one entry whose title is just its own CVE id. With no
-  // description of its own and nothing but Chromium-based Edge affected, the
-  // product is the only thing identifying it as a restatement.
-  assert.equal(isChromiumVuln('CVE-2026-13862', ['Microsoft Edge (Chromium-based)']), true);
+  // Restatements that carry Chrome's own bug wording instead of an MSRC title.
+  // The August 2026 document gained 38 of these in a same-day revision; every
+  // one leads with its CVE id, which MSRC never does for its own bugs.
+  assert.equal(isChromiumVuln('CVE-2026-19137 Use after free in WebGL', ['Microsoft Edge (Chromium-based)']), true);
+  assert.equal(isChromiumVuln('CVE-2026-19138 Heap buffer overflow in CrashReporting', ['Microsoft Edge (Chromium-based)']), true);
+  assert.equal(isChromiumVuln('CVE-2026-13862', ['Microsoft Edge (Chromium-based)']), true, 'bare id, no description at all');
   assert.equal(isChromiumVuln('', ['Microsoft Edge (Chromium-based)']), true);
   assert.equal(isChromiumVuln('CVE-2026-13862', ['Windows 11']), false, 'an untitled Windows CVE is still Microsoft\'s');
 });
