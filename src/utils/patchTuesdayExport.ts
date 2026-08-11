@@ -43,9 +43,8 @@ function drawSeverityBar(doc: jsPDF, x: number, y: number, w: number, totals: Pa
         { label: 'Important', value: totals.important, hex: SEVERITY_HEX.Important },
         { label: 'Moderate', value: totals.moderate, hex: SEVERITY_HEX.Moderate },
         { label: 'Low', value: totals.low, hex: SEVERITY_HEX.Low },
-        // Was "Unrated/Edge" back when unrated CVEs were overwhelmingly Chromium
-        // restatements. Those are now excluded from totals, so this is genuinely
-        // just Microsoft CVEs that MSRC left unrated.
+        // Genuinely just Microsoft CVEs that MSRC left unrated — upstream
+        // republications are excluded from totals before they get here.
         { label: 'Unrated', value: totals.unknown, hex: SEVERITY_HEX.Unknown },
     ];
     const total = totals.total || 1;
@@ -317,151 +316,327 @@ const severityCellColor = (data: CellHookData, col: number) => {
 // =============================================================================
 //  PPTX  (pptxgenjs)
 // =============================================================================
+// Executive deck standard, the same one the SAP Security Patch Day deck follows:
+// PT-BR, navy cover, thin blue rule, numbered slides, capa → sumário executivo →
+// consolidado → famílias → highlights → recomendações → referências. Metadata
+// carries no company name (pptx.company stays blank) — the deck is handed over
+// and presented under the reader's own name.
+// The palette is duplicated rather than imported from sapPatchExport: that module
+// pulls its analysis dependency along, and this file exists to keep the export
+// toolchain out of the Patch Tuesday route chunk.
 
-export async function exportPatchTuesdayPPTX(summary: PatchTuesdaySummary): Promise<void> {
-    const { default: PptxGenLib } = await import('pptxgenjs');
-    const pptx = new PptxGenLib();
-    pptx.defineLayout({ name: 'WIDE', width: 13.333, height: 7.5 });
-    pptx.layout = 'WIDE';
-    pptx.author = 'ThreatSumm4ry';
-    pptx.company = 'ThreatSumm4ry';
-    pptx.title = `${summary.title} — Patch Tuesday`;
+const DECK = { blue: '1565C0', navy: '172033', slate: '526274', pale: 'F3F6FA', border: 'DCE3EE', white: 'FFFFFF' } as const;
 
-    const W = 13.333;
-    const t = summary.totals;
+export type PptxFactory = new () => PptxGenJS;
 
-    // Master with footer
-    pptx.defineSlideMaster({
-        title: 'BASE',
-        background: { color: 'FFFFFF' },
-        objects: [
-            { rect: { x: 0, y: 7.05, w: W, h: 0.45, fill: { color: 'F1F5F9' } } },
-            { text: { text: 'ThreatSumm4ry · Microsoft Patch Tuesday Summary', options: { x: 0.4, y: 7.05, w: 8, h: 0.45, fontSize: 9, color: MUTED, valign: 'middle' } } },
-        ],
-        slideNumber: { x: 12.4, y: 7.05, w: 0.6, h: 0.45, fontSize: 9, color: MUTED },
-    });
+const SEVERITY_PT: Record<string, string> = {
+    Critical: 'Crítica',
+    Important: 'Importante',
+    Moderate: 'Moderada',
+    Low: 'Baixa',
+    Unknown: 'Sem classificação',
+};
 
-    // ---- Slide 1: Title ----
-    const s1 = pptx.addSlide();
-    s1.background = { color: INK };
-    s1.addShape(pptx.ShapeType.rect, { x: 0, y: 3.4, w: W, h: 0.08, fill: { color: BRAND } });
-    s1.addText('MICROSOFT PATCH TUESDAY', { x: 0.7, y: 2.1, w: 12, h: 0.5, fontSize: 18, color: '93C5FD', bold: true, charSpacing: 3 });
-    s1.addText(summary.title || 'Security Updates', { x: 0.7, y: 2.6, w: 12, h: 1, fontSize: 40, color: 'FFFFFF', bold: true });
-    s1.addText(
-        [
-            { text: `Release date: ${fmtDate(summary.initialReleaseDate)}`, options: { breakLine: true } },
-            { text: `${t.total} CVEs  ·  ${t.critical} Critical  ·  ${t.exploited} Exploited  ·  ${t.disclosed} Publicly Disclosed`, options: {} },
-        ],
-        { x: 0.7, y: 3.7, w: 12, h: 1, fontSize: 16, color: 'CBD5E1' }
+// MSRC publishes impact and exploitability in English closed phrases. Translating
+// here keeps the API stable and the deck in PT-BR.
+const IMPACT_PT: Record<string, string> = {
+    'Remote Code Execution': 'Execução remota de código',
+    'Elevation of Privilege': 'Elevação de privilégio',
+    'Information Disclosure': 'Divulgação de informações',
+    'Denial of Service': 'Negação de serviço',
+    'Spoofing': 'Falsificação (spoofing)',
+    'Security Feature Bypass': 'Bypass de recurso de segurança',
+    'Tampering': 'Adulteração',
+    'Other': 'Outras',
+};
+
+const FAMILY_PT: Record<string, string> = {
+    'Azure & Cloud': 'Azure e nuvem',
+    'Developer Tools & .NET': 'Ferramentas de desenvolvimento e .NET',
+    'Other Microsoft Products': 'Outros produtos Microsoft',
+};
+
+const EXPLOITABILITY_PT: Record<string, string> = {
+    'Exploitation Detected': 'Exploração detectada',
+    'Exploitation More Likely': 'Exploração mais provável',
+    'Exploitation Less Likely': 'Exploração menos provável',
+    'Exploitation Unlikely': 'Exploração improvável',
+    'N/A': 'Não informada',
+};
+
+const pt = (map: Record<string, string>, value: string) => map[value] || value;
+
+const fmtMonthPt = (iso: string | null): string => {
+    if (!iso) return 'Ciclo mais recente';
+    const d = new Date(iso);
+    return isNaN(d.getTime()) ? 'Ciclo mais recente' : d.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+};
+
+const fmtDatePt = (iso: string | null): string => {
+    if (!iso) return 'Ciclo mais recente';
+    const d = new Date(iso);
+    return isNaN(d.getTime()) ? 'Ciclo mais recente' : d.toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
+};
+
+const statusPt = (v: PatchVulnerability): string => {
+    const tags: string[] = [];
+    if (v.exploited) tags.push('Explorada');
+    if (v.publiclyDisclosed) tags.push('Divulgada');
+    return tags.length ? tags.join(' / ') : '—';
+};
+
+const deckTitle = (slide: PptxGenJS.Slide, text: string) =>
+    slide.addText(text, { x: 0.55, y: 0.35, w: 12.2, h: 0.45, fontSize: 23, bold: true, color: DECK.navy });
+
+const addCoverSlide = (pptx: PptxGenJS, s: PatchTuesdaySummary): void => {
+    const t = s.totals;
+    const slide = pptx.addSlide();
+    slide.background = { color: DECK.navy };
+    slide.addText('Microsoft Patch Tuesday', { x: 0.7, y: 2.15, w: 12, h: 0.65, fontSize: 32, bold: true, color: DECK.white });
+    slide.addText('Avaliação de riscos de vulnerabilidades', { x: 0.7, y: 2.9, w: 12, h: 0.45, fontSize: 20, color: DECK.white });
+    slide.addText(`${fmtMonthPt(s.initialReleaseDate)} · ${fmtDatePt(s.initialReleaseDate)}`, { x: 0.7, y: 3.42, w: 12, h: 0.4, fontSize: 16, color: DECK.blue });
+    slide.addText(`${t.total} CVEs · ${t.critical} críticas · ${t.exploited} sob exploração ativa`, { x: 0.7, y: 3.95, w: 12, h: 0.45, fontSize: 15, color: DECK.border });
+    slide.addText('Fonte oficial Microsoft (MSRC)', { x: 0.7, y: 6.45, w: 12, h: 0.3, fontSize: 10, color: DECK.slate });
+};
+
+const addExecutiveSummarySlide = (pptx: PptxGenJS, s: PatchTuesdaySummary): void => {
+    const t = s.totals;
+    const slide = pptx.addSlide({ masterName: 'EXECUTIVO' });
+    deckTitle(slide, 'Sumário executivo');
+    slide.addText(
+        `A Microsoft corrigiu ${t.total} vulnerabilidades em ${fmtMonthPt(s.initialReleaseDate)}, sendo ${t.critical} críticas e ${t.important} importantes.`,
+        { x: 0.7, y: 1.15, w: 11.9, h: 0.8, fontSize: 18, color: DECK.navy }
     );
-    s1.addText('Source: Microsoft Security Response Center (MSRC) CVRF v3.0', { x: 0.7, y: 6.4, w: 12, h: 0.4, fontSize: 11, color: '64748B' });
 
-    // ---- Slide 2: Executive KPIs ----
-    const s2 = pptx.addSlide({ masterName: 'BASE' });
-    slideHeading(pptx, s2, 'Executive Summary');
-    const cards = [
-        { label: 'Total CVEs', value: t.total, color: BRAND },
-        { label: 'Critical', value: t.critical, color: SEVERITY_HEX.Critical },
-        { label: 'Important', value: t.important, color: SEVERITY_HEX.Important },
-        { label: 'Exploited', value: t.exploited, color: 'B91C1C' },
-        { label: 'Publicly Disclosed', value: t.disclosed, color: '7C3AED' },
-        { label: 'Exploitation More Likely', value: t.exploitMoreLikely, color: 'C2410C' },
-    ];
-    const cw = 3.9, ch = 1.7, cgap = 0.35;
-    cards.forEach((c, i) => {
-        const col = i % 3, row = Math.floor(i / 3);
-        const x = 0.7 + col * (cw + cgap);
-        const yy = 1.7 + row * (ch + 0.35);
-        s2.addShape(pptx.ShapeType.roundRect, { x, y: yy, w: cw, h: ch, rectRadius: 0.08, fill: { color: 'F8FAFC' }, line: { color: 'E2E8F0', width: 1 } });
-        s2.addText(String(c.value), { x, y: yy + 0.2, w: cw, h: 0.9, fontSize: 40, bold: true, color: c.color, align: 'center' });
-        s2.addText(c.label.toUpperCase(), { x, y: yy + 1.15, w: cw, h: 0.4, fontSize: 11, color: MUTED, align: 'center', charSpacing: 1 });
-    });
+    const priorities: string[] = [];
+    if (t.exploited > 0) priorities.push(`${t.exploited} CVE(s) já sob exploração ativa — correção emergencial em 24 a 48 horas.`);
+    if (t.disclosed > 0) priorities.push(`${t.disclosed} CVE(s) divulgadas publicamente — detalhes de exploração podem já estar circulando.`);
+    if (t.exploitMoreLikely > 0) priorities.push(`${t.exploitMoreLikely} CVE(s) classificadas pela Microsoft como de exploração mais provável.`);
+    const topFamily = s.byFamily[0];
+    if (topFamily) priorities.push(`${pt(FAMILY_PT, topFamily.name)} concentra o maior volume do ciclo, com ${topFamily.count} CVE(s).`);
+    // The number the audience will compare against the press coverage. Saying why
+    // it differs on the slide is cheaper than answering it live.
+    if (t.upstream > 0) {
+        priorities.push(
+            `${t.upstream} CVEs de código upstream (Chromium/Edge e pacotes do Azure Linux) ficaram fora da contagem: são republicações da Microsoft, não correções em produtos próprios.`
+        );
+    }
+    priorities.forEach((item, index) =>
+        slide.addText(`• ${item}`, { x: 0.9, y: 2.25 + index * 0.55, w: 11.4, h: 0.45, fontSize: 14, color: DECK.slate })
+    );
+    slide.addText(
+        `Críticas: ${t.critical} · Importantes: ${t.important} · Sob exploração: ${t.exploited}`,
+        { x: 0.9, y: 2.5 + priorities.length * 0.55, w: 11.4, h: 0.4, fontSize: 16, bold: true, color: SEVERITY_HEX.Critical }
+    );
+};
 
-    // ---- Slide 3: Severity + Impact charts ----
-    const s3 = pptx.addSlide({ masterName: 'BASE' });
-    slideHeading(pptx, s3, 'Severity & Impact Breakdown');
-    s3.addChart(
+const addConsolidatedSlide = (pptx: PptxGenJS, s: PatchTuesdaySummary): void => {
+    const t = s.totals;
+    const slide = pptx.addSlide({ masterName: 'EXECUTIVO' });
+    deckTitle(slide, 'Consolidado de vulnerabilidades');
+    slide.addText(`Total de CVEs: ${t.total}`, { x: 0.6, y: 0.88, w: 3, h: 0.3, fontSize: 12, bold: true, color: DECK.blue });
+
+    // Empty severities are dropped: an unused legend entry reads as a data gap.
+    const severities = ([
+        ['Crítica', t.critical, SEVERITY_HEX.Critical],
+        ['Importante', t.important, SEVERITY_HEX.Important],
+        ['Moderada', t.moderate, SEVERITY_HEX.Moderate],
+        ['Baixa', t.low, SEVERITY_HEX.Low],
+        ['Sem classificação', t.unknown, SEVERITY_HEX.Unknown],
+    ] as [string, number, string][]).filter(([, value]) => value > 0);
+    slide.addChart(
         pptx.ChartType.doughnut,
-        [{
-            name: 'Severity',
-            labels: ['Critical', 'Important', 'Moderate', 'Low', 'Unrated/Edge'],
-            values: [t.critical, t.important, t.moderate, t.low, t.unknown],
-        }],
+        [{ name: 'Severidade', labels: severities.map((x) => x[0]), values: severities.map((x) => x[1]) }],
         {
-            x: 0.7, y: 1.7, w: 5.6, h: 4.8,
-            chartColors: [SEVERITY_HEX.Critical, SEVERITY_HEX.Important, SEVERITY_HEX.Moderate, SEVERITY_HEX.Low, SEVERITY_HEX.Unknown],
-            showLegend: true, legendPos: 'b', showTitle: true, title: 'By Severity', titleFontSize: 14,
+            x: 0.6, y: 1.25, w: 5.7, h: 4.9,
+            chartColors: severities.map((x) => x[2]),
+            showLegend: true, legendPos: 'b', showTitle: true, title: 'Por severidade', titleFontSize: 13,
             showValue: true, dataLabelFontSize: 9, holeSize: 55,
         }
     );
-    const topImpacts = summary.byImpact.slice(0, 7);
-    s3.addChart(
+
+    const impacts = s.byImpact.slice(0, 7);
+    slide.addChart(
         pptx.ChartType.bar,
-        [{ name: 'CVEs', labels: topImpacts.map((i) => i.name), values: topImpacts.map((i) => i.count) }],
+        [{ name: 'CVEs', labels: impacts.map((i) => pt(IMPACT_PT, i.name)), values: impacts.map((i) => i.count) }],
         {
-            x: 6.7, y: 1.7, w: 6, h: 4.8,
-            barDir: 'bar', chartColors: [BRAND],
-            showTitle: true, title: 'By Impact', titleFontSize: 14,
+            x: 6.7, y: 1.25, w: 6, h: 4.9,
+            barDir: 'bar', chartColors: [DECK.blue],
+            showTitle: true, title: 'Por tipo de impacto', titleFontSize: 13,
             showValue: true, dataLabelFontSize: 9, catAxisLabelFontSize: 9, valAxisHidden: true,
         }
     );
+};
 
-    // ---- Slide 4: Product families ----
-    const s4 = pptx.addSlide({ masterName: 'BASE' });
-    slideHeading(pptx, s4, 'Affected Product Families');
-    const fams = summary.byFamily.slice(0, 10);
-    s4.addChart(
+const addFamiliesSlide = (pptx: PptxGenJS, s: PatchTuesdaySummary): void => {
+    const slide = pptx.addSlide({ masterName: 'EXECUTIVO' });
+    deckTitle(slide, 'Famílias de produtos afetadas');
+    const fams = s.byFamily.slice(0, 10);
+    slide.addChart(
         pptx.ChartType.bar,
-        [{ name: 'CVEs', labels: fams.map((f) => f.name), values: fams.map((f) => f.count) }],
+        [{ name: 'CVEs', labels: fams.map((f) => pt(FAMILY_PT, f.name)), values: fams.map((f) => f.count) }],
         {
-            x: 0.7, y: 1.7, w: 12, h: 4.9,
-            barDir: 'bar', chartColors: ['1E3A8A'],
+            x: 0.6, y: 1.1, w: 12.2, h: 5.3,
+            barDir: 'bar', chartColors: [DECK.navy],
             showValue: true, dataLabelFontSize: 10, catAxisLabelFontSize: 11, valAxisHidden: true,
         }
     );
+};
 
-    // ---- Slide 5: Priority CVEs table ----
-    const s5 = pptx.addSlide({ masterName: 'BASE' });
-    slideHeading(pptx, s5, 'Priority CVEs');
-    const headerRow = ['CVE', 'Sev', 'CVSS', 'Impact', 'Status', 'Title'].map((h) => ({
-        text: h, options: { bold: true, color: 'FFFFFF', fill: { color: INK }, fontSize: 11, valign: 'middle' as const },
-    }));
-    const rows = summary.topCves.slice(0, 10).map((v) => [
-        { text: v.cve, options: { fontSize: 9, bold: true } },
-        { text: v.severity.slice(0, 4), options: { fontSize: 9, color: SEVERITY_HEX[v.severity] || MUTED, bold: true } },
-        { text: String(v.cvss ?? '-'), options: { fontSize: 9 } },
-        { text: v.impact, options: { fontSize: 9 } },
-        { text: exploitTag(v), options: { fontSize: 9, color: v.exploited ? SEVERITY_HEX.Critical : MUTED } },
-        { text: v.title, options: { fontSize: 8.5 } },
-    ]);
-    s5.addTable([headerRow, ...rows], {
-        x: 0.5, y: 1.7, w: 12.3, colW: [1.7, 0.9, 0.9, 2.1, 1.7, 5.0],
-        border: { type: 'solid', color: 'E2E8F0', pt: 0.5 },
-        rowH: 0.4, valign: 'middle', autoPage: false,
+// A title long enough to wrap breaks the fixed row height, so it is condensed and
+// the untruncated text goes to the speaker notes.
+const condenseTitle = (title: string, max = 78) => (title.length > max ? `${title.slice(0, max - 1)}…` : title);
+
+const addHighlightsSlide = (pptx: PptxGenJS, s: PatchTuesdaySummary): void => {
+    const slide = pptx.addSlide({ masterName: 'EXECUTIVO' });
+    deckTitle(slide, 'Highlights de vulnerabilidades');
+    const highlights = s.topCves.slice(0, 12);
+    const cell = (text: string, options: PptxGenJS.TableCell['options'] = {}): PptxGenJS.TableCell => ({ text, options });
+    const rows: PptxGenJS.TableRow[] = [
+        ['CVE', 'Severidade', 'CVSS', 'Impacto', 'Situação', 'Título'].map((text) =>
+            cell(text, { bold: true, color: DECK.white, fill: { color: DECK.blue } })
+        ),
+        ...highlights.map((v) => [
+            cell(v.cve, { bold: true }),
+            cell(pt(SEVERITY_PT, v.severity), { bold: true, color: SEVERITY_HEX[v.severity] || DECK.slate }),
+            cell(v.cvss == null ? '—' : v.cvss.toFixed(1), { bold: true }),
+            cell(pt(IMPACT_PT, v.impact)),
+            cell(statusPt(v), { color: v.exploited ? SEVERITY_HEX.Critical : DECK.slate }),
+            cell(condenseTitle(v.title)),
+        ]),
+    ];
+    slide.addTable(rows, {
+        x: 0.45, y: 1.05, w: 12.45, colW: [1.65, 1.35, 0.7, 2.4, 1.5, 4.85],
+        fontSize: highlights.length <= 10 ? 8.5 : 7.5, margin: 0.02,
+        autoPage: false, breakLine: false, valign: 'middle',
+        border: { type: 'solid', color: DECK.border, pt: 0.5 },
+        fill: { color: DECK.white }, color: DECK.navy, bold: false,
+    });
+    slide.addNotes(
+        highlights
+            .map((v) =>
+                [
+                    v.cve,
+                    `Título completo: ${v.title}`,
+                    `Severidade: ${pt(SEVERITY_PT, v.severity)}${v.cvss == null ? '' : ` · CVSS ${v.cvss.toFixed(1)}`}`,
+                    `Impacto: ${pt(IMPACT_PT, v.impact)} · Família: ${pt(FAMILY_PT, v.family)}`,
+                    `Avaliação de exploração: ${pt(EXPLOITABILITY_PT, v.exploitability)}`,
+                    v.kbs.length ? `KBs: ${v.kbs.map((k) => `KB${k.kb}`).join(', ')}` : 'Sem KB associada',
+                ].join('\n')
+            )
+            .join('\n\n')
+    );
+};
+
+const addRecommendationsSlide = (pptx: PptxGenJS, s: PatchTuesdaySummary): void => {
+    const t = s.totals;
+    const slide = pptx.addSlide({ masterName: 'EXECUTIVO' });
+    deckTitle(slide, 'Conclusão e recomendações');
+    const recommendations: { title: string; body: string }[] = [];
+    if (t.exploited > 0) {
+        recommendations.push({
+            title: 'Corrigir o que já está sendo explorado',
+            body: `${t.exploited} CVE(s) com exploração confirmada pela Microsoft. Tratar como incidente: janela emergencial de 24 a 48 horas, fora do ciclo normal de mudanças.`,
+        });
+    }
+    if (t.disclosed > 0) {
+        recommendations.push({
+            title: 'Revisar as divulgadas publicamente',
+            body: `${t.disclosed} CVE(s) tiveram detalhes publicados antes da correção. Assumir que prova de conceito já circula e antecipar a aplicação.`,
+        });
+    }
+    recommendations.push({
+        title: 'Planejar o ciclo regular',
+        body: `Distribuir ${t.critical} correções críticas e ${t.important} importantes pelo parque afetado, respeitando as janelas de controle de mudanças.`,
+    });
+    if (t.exploitMoreLikely > 0) {
+        recommendations.push({
+            title: 'Acompanhar as de exploração provável',
+            body: `${t.exploitMoreLikely} CVE(s) marcadas como de exploração mais provável. Priorizar acima do restante do ciclo, mesmo sem exploração observada.`,
+        });
+    }
+    recommendations.push({
+        title: 'Validar cobertura por KB',
+        body: 'Conferir a aplicabilidade de cada KB por família de produto usando a planilha anexa, que traz os links do Catálogo de Atualizações da Microsoft.',
+    });
+    recommendations.push({
+        title: 'Comunicar escopo e prazos',
+        body: 'Alinhar com as áreas responsáveis o alcance das correções e as datas de aplicação, usando este consolidado como referência única do ciclo.',
+    });
+    recommendations.forEach((item, index) => {
+        const col = index % 2;
+        const row = Math.floor(index / 2);
+        const x = 0.65 + col * 6.15;
+        const y = 1.15 + row * 1.75;
+        slide.addText(item.title, { x, y, w: 5.75, h: 0.3, fontSize: 13, bold: true, color: DECK.blue });
+        slide.addText(item.body, { x, y: y + 0.38, w: 5.75, h: 0.95, fontSize: 10, color: DECK.slate, breakLine: false });
+    });
+};
+
+const addReferencesSlide = (pptx: PptxGenJS, s: PatchTuesdaySummary): void => {
+    const slide = pptx.addSlide({ masterName: 'EXECUTIVO' });
+    deckTitle(slide, 'Referências');
+    slide.addText('Fonte oficial Microsoft (MSRC)', { x: 0.7, y: 1.15, w: 11.8, h: 0.35, fontSize: 15, bold: true, color: DECK.blue });
+    const links = [
+        `https://msrc.microsoft.com/update-guide/releaseNote/${s.id}`,
+        `https://api.msrc.microsoft.com/cvrf/v3.0/cvrf/${s.id}`,
+        'https://catalog.update.microsoft.com/',
+        ...s.topCves.slice(0, 12).map((v) => `https://msrc.microsoft.com/update-guide/vulnerability/${v.cve}`),
+    ];
+    const maxRows = 12;
+    const columns = Math.max(1, Math.ceil(links.length / maxRows));
+    const rows = Math.ceil(links.length / columns);
+    const gap = 0.22;
+    const columnW = (11.8 - gap * (columns - 1)) / columns;
+    const fontSize = Math.max(5.5, 10 - (columns - 1) * 1.25);
+    const step = rows <= 1 ? 0 : Math.min(0.38, 4.35 / (rows - 1));
+    const textH = Math.min(0.28, step || 0.28);
+    links.forEach((link, index) => {
+        const column = Math.floor(index / rows);
+        const row = index % rows;
+        slide.addText(link, {
+            x: 0.7 + column * (columnW + gap), y: 1.7 + row * step, w: columnW, h: textH,
+            fontSize, color: DECK.slate, fit: 'shrink', breakLine: false, hyperlink: { url: link },
+        });
+    });
+    slide.addText(`Gerado em ${new Date().toLocaleString('pt-BR')}`, { x: 0.7, y: 6.35, w: 11.8, h: 0.3, fontSize: 9, color: DECK.slate });
+};
+
+export function buildPatchTuesdayPresentation(summary: PatchTuesdaySummary, PptxLib: PptxFactory): PptxGenJS {
+    const pptx = new PptxLib();
+    pptx.defineLayout({ name: 'PT_EXECUTIVO', width: 13.333, height: 7.5 });
+    pptx.layout = 'PT_EXECUTIVO';
+    pptx.author = 'ThreatSumm4ry';
+    pptx.company = '';
+    (pptx as PptxGenJS & { lang: string }).lang = 'pt-BR';
+    pptx.subject = 'Relatório automático do Microsoft Patch Tuesday';
+    pptx.title = `Microsoft Patch Tuesday — ${fmtMonthPt(summary.initialReleaseDate)}`;
+    pptx.defineSlideMaster({
+        title: 'EXECUTIVO',
+        background: { color: DECK.white },
+        objects: [
+            { rect: { x: 0, y: 0, w: 13.333, h: 0.08, fill: { color: DECK.blue }, line: { color: DECK.blue } } },
+            { text: { text: 'Microsoft Patch Tuesday', options: { x: 0.45, y: 7.08, w: 4, h: 0.25, fontSize: 8, color: DECK.slate } } },
+            { text: { text: fmtMonthPt(summary.initialReleaseDate), options: { x: 5, y: 7.08, w: 3.3, h: 0.25, fontSize: 8, color: DECK.slate, align: 'center' } } },
+        ],
+        slideNumber: { x: 12.35, y: 7.08, w: 0.5, h: 0.25, fontSize: 8, color: DECK.slate },
     });
 
-    // ---- Slide 6: Recommendations ----
-    const s6 = pptx.addSlide({ masterName: 'BASE' });
-    slideHeading(pptx, s6, 'Recommended Actions');
-    const recs: string[] = [];
-    if (t.exploited > 0) recs.push(`Prioritize the ${t.exploited} actively exploited CVE(s) for emergency patching within 24-48h.`);
-    if (t.disclosed > 0) recs.push(`Review the ${t.disclosed} publicly disclosed CVE(s) — exploit details may already be circulating.`);
-    recs.push(`Deploy ${t.critical} Critical and ${t.important} Important updates across affected fleets following change-control windows.`);
-    if (t.exploitMoreLikely > 0) recs.push(`Track the ${t.exploitMoreLikely} CVE(s) flagged "Exploitation More Likely" by Microsoft for accelerated rollout.`);
-    recs.push('Validate KB applicability per product family and confirm via the Microsoft Update Catalog links in the Excel/PDF export.');
-    recs.push('Communicate scope and timelines to stakeholders using this consolidated summary.');
-    s6.addText(
-        recs.map((r) => ({ text: r, options: { bullet: { code: '2022' }, paraSpaceAfter: 12 } })),
-        { x: 0.8, y: 1.8, w: 11.7, h: 4.8, fontSize: 16, color: INK, valign: 'top' }
-    );
-
-    await pptx.writeFile({ fileName: `${baseFilename(summary)}.pptx` });
+    addCoverSlide(pptx, summary);
+    addExecutiveSummarySlide(pptx, summary);
+    addConsolidatedSlide(pptx, summary);
+    addFamiliesSlide(pptx, summary);
+    addHighlightsSlide(pptx, summary);
+    addRecommendationsSlide(pptx, summary);
+    addReferencesSlide(pptx, summary);
+    return pptx;
 }
 
-const slideHeading = (pptx: PptxGenJS, slide: PptxGenJS.Slide, text: string) => {
-    slide.addText(text, { x: 0.7, y: 0.5, w: 12, h: 0.7, fontSize: 26, bold: true, color: INK });
-    slide.addShape(pptx.ShapeType.rect, { x: 0.72, y: 1.25, w: 1.6, h: 0.06, fill: { color: BRAND } });
-};
+export async function exportPatchTuesdayPPTX(summary: PatchTuesdaySummary): Promise<void> {
+    const { default: PptxGenLib } = await import('pptxgenjs');
+    const pptx = buildPatchTuesdayPresentation(summary, PptxGenLib);
+    await pptx.writeFile({ fileName: `${baseFilename(summary)}.pptx` });
+}
 
 // =============================================================================
 //  Excel  (exceljs)
@@ -505,10 +680,11 @@ export async function exportPatchTuesdayExcel(summary: PatchTuesdaySummary): Pro
         ['Important', t.important],
         ['Moderate', t.moderate],
         ['Low', t.low],
-        ['Unrated / Edge (Chromium)', t.unknown],
+        ['Unrated', t.unknown],
         ['Actively Exploited', t.exploited],
         ['Publicly Disclosed', t.disclosed],
         ['Exploitation More Likely', t.exploitMoreLikely],
+        ['Upstream (Chromium / Azure Linux, excluded)', t.upstream],
     ];
     kpiRows.forEach((r) => ov.addRow(r));
     ov.getColumn(1).width = 32;
@@ -533,7 +709,7 @@ export async function exportPatchTuesdayExcel(summary: PatchTuesdaySummary): Pro
         { name: 'Important', count: t.important },
         { name: 'Moderate', count: t.moderate },
         { name: 'Low', count: t.low },
-        { name: 'Unrated / Edge', count: t.unknown },
+        { name: 'Unrated', count: t.unknown },
     ]);
     breakdown('By Impact', 'Impact / Category', summary.byImpact);
     breakdown('By Product Family', 'Product Family', summary.byFamily);
