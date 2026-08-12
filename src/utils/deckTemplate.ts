@@ -25,16 +25,24 @@ export const DECK = {
     green: '2DB757', // chart bars
 } as const;
 
-// Office resident fonts. A font PowerPoint does not have gets substituted, and
-// the substitute's metrics move every line and every box on the slide — that is
-// the "deck opened broken" report. Calibri and Calibri Light ship with Office on
-// Windows and Mac, and the workbook already uses Calibri, so both artifacts read
-// as one report.
-export const FONT = 'Calibri';
-export const FONT_LIGHT = 'Calibri Light';
+// A font PowerPoint does not have gets substituted, and the substitute's metrics
+// move every line and every box on the slide — that is the "deck opened broken"
+// report. Franklin Gothic ships with Office on Windows and is the closest thing
+// in it to the Overpass this template was drawn in: both are American gothics,
+// and Book/Medium gives back the two weights the layout is built on.
+//
+// ponytail: Windows-only bet. Franklin Gothic is not guaranteed on Office for
+// Mac; if the deck ever has to survive one, Arial is the everywhere-safe swap
+// (one weight) and Calibri/Calibri Light the safe two-weight one.
+export const FONT = 'Franklin Gothic Medium';
+export const FONT_LIGHT = 'Franklin Gothic Book';
 
 // Every font this deck is allowed to name. Anything else risks substitution.
 export const DECK_FONTS = [FONT, FONT_LIGHT];
+
+// The workbook stays on Calibri: it is Excel's own default, so a sheet opens
+// looking like a sheet on any machine, Mac included.
+export const SHEET_FONT = 'Calibri';
 
 // PowerPoint re-lays text out with its own metrics, so a fixed box is only safe
 // when it also carries autofit: `fit: 'shrink'` emits <a:normAutofit/>, which is
@@ -306,7 +314,7 @@ export const SHEET_BORDER = { style: 'thin' as const };
 export const SHEET_TAB = { tabColor: { argb: `FF${SHEET_HEADER_TEXT}` } };
 
 // Excel's own hyperlink look, so a link reads as a link without a theme.
-export const LINK_FONT = { name: 'Calibri', color: { argb: 'FF0563C1' }, underline: true } as const;
+export const LINK_FONT = { name: SHEET_FONT, color: { argb: 'FF0563C1' }, underline: true } as const;
 
 // Deterministic from the CVE id, so a sheet builds them locally instead of
 // asking a feed for a link it already knows how to write.
@@ -317,7 +325,7 @@ export const styleHeaderRow = (ws: ExcelJS.Worksheet, row: number, lastCol: numb
     const r = ws.getRow(row);
     for (let c = 1; c <= lastCol; c++) {
         const cell = r.getCell(c);
-        cell.font = { name: 'Calibri', bold: true, size: 14, color: { argb: `FF${SHEET_HEADER_TEXT}` } };
+        cell.font = { name: SHEET_FONT, bold: true, size: 14, color: { argb: `FF${SHEET_HEADER_TEXT}` } };
         cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: `FF${SHEET_HEADER}` } };
         cell.alignment = { horizontal: 'left', vertical: 'top' };
         cell.border = { top: SHEET_BORDER, left: SHEET_BORDER, bottom: SHEET_BORDER, right: SHEET_BORDER };

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createRequire } from "node:module";
 import type { SapPatchSummary } from "@/services/sapApi";
+import { DECK_FONTS } from "./deckTemplate";
 import { buildSapPatchPresentation, buildSapPatchWorkbook, sapPatchBaseFilename, sapPatchExcelFilename } from "./sapPatchExport";
 
 const sample: SapPatchSummary = {
@@ -77,13 +78,13 @@ test("o deck SAP sai no gabarito: 6 slides, canvas 16:9 e fonte do Office", asyn
     assertInsideTemplate(buildSapPatchPresentation(withNoteCount(34), loadPptx()) as never);
 
     const { all: xml, slides } = await buildXml(sample);
-    assert.match(xml, /typeface="Calibri"/);
+    assert.match(xml, new RegExp(`typeface="${DECK_FONTS[0]}"`));
 
     // A font PowerPoint does not have is substituted, and the substitute's metrics
     // move every box on the slide. Only Office-resident fonts may be named.
     // Só os slides: o tema traz a tabela de fallback por script do próprio OOXML.
     const typefaces = new Set([...slides.matchAll(/typeface="([^"]*)"/g)].map((m) => m[1]));
-    assert.deepEqual([...typefaces].filter((f) => f && !["Calibri", "Calibri Light"].includes(f)), [], "fonte fora do Office");
+    assert.deepEqual([...typefaces].filter((f) => f && !DECK_FONTS.includes(f)), [], "fonte fora do Office");
 
     // And a fixed box only holds if it also tells PowerPoint to shrink on overflow.
     const bodies = slides.match(/<a:bodyPr[^>]*(?:\/>|>)/g) ?? [];
