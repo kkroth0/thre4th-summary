@@ -11,7 +11,7 @@ import type ExcelJS from 'exceljs';
 import type { PatchTuesdaySummary, PatchVulnerability, PatchTuesdayTotals, NamedCount } from '@/services/msrcApi';
 import {
     DECK, FONT, FONT_LIGHT, LINK_FONT, SHEET_BORDER, SHEET_HEADER, SHEET_HEADER_TEXT, SHEET_TAB,
-    attachmentNote, condenseTitle, contentSlide, coverSlide, darkBarChart, deckMetadata, gradientBar,
+    attachmentNote, condenseTitle, deckText, contentSlide, coverSlide, darkBarChart, deckMetadata, gradientBar,
     highlightCard, kpiPill, msrcCveUrl, nvdCveUrl, scrubXml, styleHeaderRow, workbookMetadata,
     fmtMonthPt, fmtLongDatePt, fmtShortDatePt, monthSlashYear, type PptxFactory,
 } from './deckTemplate';
@@ -375,7 +375,7 @@ const addExecutiveSummarySlide = (pptx: PptxGenJS, s: PatchTuesdaySummary): void
 
     // Header band, gradient like the rule but tall enough to carry the cycle name.
     gradientBar(pptx, slide, 0.469, 0.871, 8.968, 0.295);
-    slide.addText(`Microsoft Patch Tuesday (${monthSlashYear(s.initialReleaseDate)})`, {
+    deckText(slide, `Microsoft Patch Tuesday (${monthSlashYear(s.initialReleaseDate)})`, {
         x: 0.539, y: 0.871, w: 8.828, h: 0.295,
         fontFace: FONT, fontSize: 12, bold: true, color: DECK.ink, valign: 'middle',
     });
@@ -404,7 +404,7 @@ const addExecutiveSummarySlide = (pptx: PptxGenJS, s: PatchTuesdaySummary): void
             options: light,
         });
     }
-    slide.addText(opening, { x: 0.477, y: 1.242, w: 8.968, h: 0.984, lineSpacingMultiple: 1.25, valign: 'middle' });
+    deckText(slide, opening, { x: 0.477, y: 1.242, w: 8.968, h: 0.984, lineSpacingMultiple: 1.25, valign: 'middle' });
 
     slide.addShape(pptx.ShapeType.roundRect, {
         x: 0.469, y: 2.46, w: 4.211, h: 2.332,
@@ -415,8 +415,8 @@ const addExecutiveSummarySlide = (pptx: PptxGenJS, s: PatchTuesdaySummary): void
         rectRadius: 0.048, fill: { color: DECK.cardAlt }, line: { color: DECK.cardLine, width: 0.8 },
     });
     const cardLabel = { fontFace: FONT_LIGHT, fontSize: 12, bold: true, color: DECK.accent, valign: 'middle' as const };
-    slide.addText('Produtos Afetados x Número de CVEs:', { x: 0.574, y: 2.572, w: 3.82, h: 0.25, ...cardLabel });
-    slide.addText('Prioridades imediatas', { x: 5.187, y: 2.581, w: 2.1, h: 0.225, ...cardLabel });
+    deckText(slide, 'Produtos Afetados x Número de CVEs:', { x: 0.574, y: 2.572, w: 3.82, h: 0.25, ...cardLabel });
+    deckText(slide, 'Prioridades imediatas', { x: 5.187, y: 2.581, w: 2.1, h: 0.225, ...cardLabel });
 
     darkBarChart(pptx, slide, s.byFamily.slice(0, 8).map((f) => ({ ...f, name: pt(FAMILY_PT, f.name) })), { x: 0.5, y: 2.86, w: 4.1, h: 1.86 }, DECK.cardAlt);
 
@@ -438,7 +438,7 @@ const addExecutiveSummarySlide = (pptx: PptxGenJS, s: PatchTuesdaySummary): void
     priorities.push(
         'Validar a aplicação dos patches nos ativos afetados, acompanhar falhas de instalação e tratar rapidamente sistemas sem suporte, exceções ou atualizações pendentes.'
     );
-    slide.addText(
+    deckText(slide, 
         priorities.map((text) => ({ text, options: { breakLine: true, paraSpaceAfter: 6 } })),
         { x: 5.187, y: 2.822, w: 4.047, h: 1.95, fontFace: FONT_LIGHT, fontSize: 8, color: DECK.white, lineSpacingMultiple: 1.15 }
     );
@@ -481,11 +481,11 @@ const addConsolidatedSlide = (pptx: PptxGenJS, s: PatchTuesdaySummary): void => 
     gradientBar(pptx, slide, 4.742, 0.806, 0.038, 4.304, true);
 
     const sectionLabel = { fontFace: FONT, fontSize: 9, bold: true, color: DECK.accent, valign: 'middle' as const };
-    slide.addText('Distribuição de CVEs:', { x: 0.481, y: 1.288, w: 2.849, h: 0.225, ...sectionLabel });
+    deckText(slide, 'Distribuição de CVEs:', { x: 0.481, y: 1.288, w: 2.849, h: 0.225, ...sectionLabel });
     darkBarChart(pptx, slide, s.byImpact.slice(0, 7), { x: 0.55, y: 1.474, w: 3.943, h: 1.691 }, DECK.panel);
 
-    slide.addText('Descrição Executiva da Vulnerabilidade:', { x: 0.481, y: 3.13, w: 2.849, h: 0.225, ...sectionLabel });
-    slide.addText(
+    deckText(slide, 'Descrição Executiva da Vulnerabilidade:', { x: 0.481, y: 3.13, w: 2.849, h: 0.225, ...sectionLabel });
+    deckText(slide, 
         IMPACT_GLOSSARY.map((text) => ({ text, options: { breakLine: true, bullet: true } })),
         { x: 0.469, y: 3.32, w: 4.441, h: 1.826, fontFace: FONT_LIGHT, fontSize: 8, color: DECK.white }
     );
@@ -501,26 +501,26 @@ const addConsolidatedSlide = (pptx: PptxGenJS, s: PatchTuesdaySummary): void => 
         });
         slide.addShape(pptx.ShapeType.rect, { x, y, w: 1.096, h: 0.062, fill: { color: DECK.red }, line: { type: 'none' } });
         slide.addShape(pptx.ShapeType.rect, { x: x + 0.006, y: 1.728, w: 1.09, h: 0.05, fill: { color: DECK.red }, line: { type: 'none' } });
-        slide.addText(v.cve, {
+        deckText(slide, v.cve, {
             x: x + 0.057, y: 1.511, w: 0.981, h: 0.145,
             fontFace: FONT_LIGHT, fontSize: 8, bold: true, color: DECK.accent, valign: 'middle',
             hyperlink: { url: msrcCveUrl(v.cve) },
         });
-        slide.addText(pt(FAMILY_PT, v.family), {
+        deckText(slide, pt(FAMILY_PT, v.family), {
             x: x + 0.057, y: 1.837, w: 0.981, h: 0.121,
             fontFace: FONT_LIGHT, fontSize: 8, bold: true, color: DECK.white, valign: 'middle', fit: 'shrink',
         });
-        slide.addText(v.exploited ? 'Exploração ativa' : 'Publicamente divulgada', {
+        deckText(slide, v.exploited ? 'Exploração ativa' : 'Publicamente divulgada', {
             x: x + 0.057, y: 1.94, w: 0.981, h: 0.106,
             fontFace: FONT_LIGHT, fontSize: 5, bold: true, italic: true, color: DECK.muted, valign: 'middle',
         });
-        slide.addText(condenseTitle(v.title, 120), {
+        deckText(slide, condenseTitle(v.title, 120), {
             x: x + 0.057, y: 2.109, w: 0.981, h: 0.347,
             fontFace: FONT_LIGHT, fontSize: 5, color: DECK.white, valign: 'middle', fit: 'shrink',
         });
     });
 
-    slide.addText(
+    deckText(slide, 
         [
             ...criticalImpactMix(s).map((r) => ({
                 text: `${r.count} ${r.name}`,
@@ -538,7 +538,7 @@ const addConsolidatedSlide = (pptx: PptxGenJS, s: PatchTuesdaySummary): void => 
 
 const addHighlightsSlide = (pptx: PptxGenJS, s: PatchTuesdaySummary): void => {
     const slide = contentSlide(pptx, 'Highlights: Vulnerabilidades Críticas', 4, s.initialReleaseDate);
-    slide.addText('Seleção orientada ao risco corporativo e à exploração observada:', {
+    deckText(slide, 'Seleção orientada ao risco corporativo e à exploração observada:', {
         x: 0.413, y: 0.715, w: 8.807, h: 0.379,
         fontFace: FONT_LIGHT, fontSize: 9, bold: true, color: DECK.white,
     });
@@ -554,20 +554,20 @@ const addHighlightsSlide = (pptx: PptxGenJS, s: PatchTuesdaySummary): void => {
         const x = cols[i % 3];
         const y = i < 3 ? 1.065 : 3.09;
         highlightCard(pptx, slide, { x, y, w: cardW, h: 1.815 });
-        slide.addText(v.cve, {
+        deckText(slide, v.cve, {
             x: x + 0.109, y: y + 0.21, w: cardW - 0.22, h: 0.225,
             fontFace: FONT_LIGHT, fontSize: 11, bold: true, color: DECK.red,
             hyperlink: { url: msrcCveUrl(v.cve) },
         });
-        slide.addText(pt(FAMILY_PT, v.family), {
+        deckText(slide, pt(FAMILY_PT, v.family), {
             x: x + 0.109, y: y + 0.51, w: cardW - 0.22, h: 0.187,
             fontFace: FONT_LIGHT, fontSize: 9, bold: true, color: DECK.white, fit: 'shrink',
         });
-        slide.addText(`${pt(IMPACT_SHORT, v.impact)} | ${statusPt(v)}`, {
+        deckText(slide, `${pt(IMPACT_SHORT, v.impact)} | ${statusPt(v)}`, {
             x: x + 0.137, y: y + 0.741, w: cardW - 0.27, h: 0.165,
             fontFace: FONT_LIGHT, fontSize: 7, bold: true, color: DECK.muted,
         });
-        slide.addText(condenseTitle(v.title, 130), {
+        deckText(slide, condenseTitle(v.title, 130), {
             x: x + 0.137, y: y + 1.012, w: cardW - 0.27, h: 0.54,
             fontFace: FONT_LIGHT, fontSize: 8, color: DECK.white, fit: 'shrink',
         });

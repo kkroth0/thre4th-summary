@@ -25,8 +25,28 @@ export const DECK = {
     green: '2DB757', // chart bars
 } as const;
 
-export const FONT = 'Overpass';
-export const FONT_LIGHT = 'Overpass Light';
+// Office resident fonts. A font PowerPoint does not have gets substituted, and
+// the substitute's metrics move every line and every box on the slide — that is
+// the "deck opened broken" report. Calibri and Calibri Light ship with Office on
+// Windows and Mac, and the workbook already uses Calibri, so both artifacts read
+// as one report.
+export const FONT = 'Calibri';
+export const FONT_LIGHT = 'Calibri Light';
+
+// Every font this deck is allowed to name. Anything else risks substitution.
+export const DECK_FONTS = [FONT, FONT_LIGHT];
+
+// PowerPoint re-lays text out with its own metrics, so a fixed box is only safe
+// when it also carries autofit: `fit: 'shrink'` emits <a:normAutofit/>, which is
+// what makes PowerPoint shrink a long title into its card instead of spilling it
+// over the next one. Every text box in the deck goes through here to get it.
+export const deckText = (
+    slide: PptxGenJS.Slide,
+    content: string | PptxGenJS.TextProps[],
+    options: PptxGenJS.TextPropsOptions = {}
+): void => {
+    slide.addText(content as string, { fontFace: FONT, wrap: true, fit: 'shrink', ...options });
+};
 
 export const CANVAS = { w: 10, h: 5.625 }; // LAYOUT_16x9, the reference canvas
 
@@ -160,7 +180,7 @@ export const coverSlide = (pptx: PptxGenJS, report: string, date: string | null)
     const slide = pptx.addSlide();
     slide.background = { data: DECK_COVER_BG, path: 'preencoded.jpg' };
     logoPlate(pptx, slide, 8.428, 0, 1.571, 5.625);
-    slide.addText(
+    deckText(slide, 
         [
             { text: report, options: { breakLine: true } },
             { text: '', options: { breakLine: true } },
@@ -168,11 +188,11 @@ export const coverSlide = (pptx: PptxGenJS, report: string, date: string | null)
         ],
         { x: 0.67, y: 2.066, w: 4.654, h: 1.292, fontFace: FONT, fontSize: 24, color: DECK.white, lineSpacingMultiple: 0.85 }
     );
-    slide.addText(`Consolidado - ${monthSlashYear(date)}`, {
+    deckText(slide, `Consolidado - ${monthSlashYear(date)}`, {
         x: 0.67, y: 3.529, w: 4.269, h: 0.588,
         fontFace: FONT, fontSize: 14, bold: true, italic: true, color: DECK.white,
     });
-    slide.addText(fmtLongDatePt(date), {
+    deckText(slide, fmtLongDatePt(date), {
         x: 0.67, y: 4.288, w: 4.024, h: 0.202,
         fontFace: FONT, fontSize: 14, color: DECK.white,
     });
@@ -186,23 +206,23 @@ export const contentSlide = (pptx: PptxGenJS, title: string, page: number, date:
         x: 0.264, y: 0.234, w: 9.472, h: 5.151,
         rectRadius: 0.106, fill: { color: DECK.panel }, line: { type: 'none' },
     });
-    slide.addText(title, {
+    deckText(slide, title, {
         x: 0.539, y: 0.483, w: 8.9, h: 0.471,
         fontFace: FONT, fontSize: 21, bold: true, color: DECK.accent,
     });
     gradientBar(pptx, slide, 0.55, 0.969, 7.07, 0.07);
 
     const footer = { h: 0.101, fontFace: FONT_LIGHT, fontSize: 6, color: DECK.white, align: 'center' as const, valign: 'middle' as const };
-    slide.addText(fmtShortDatePt(date), { x: 0.816, y: 5.405, w: 1.046, ...footer });
-    slide.addText('Cyber Threat Intelligence & Cyber Threat Hunting', { x: 1.862, y: 5.405, w: 3.137, ...footer });
-    slide.addText(String(page), { x: 0.398, y: 5.405, w: 0.418, ...footer });
+    deckText(slide, fmtShortDatePt(date), { x: 0.816, y: 5.405, w: 1.046, ...footer });
+    deckText(slide, 'Cyber Threat Intelligence & Cyber Threat Hunting', { x: 1.862, y: 5.405, w: 3.137, ...footer });
+    deckText(slide, String(page), { x: 0.398, y: 5.405, w: 0.418, ...footer });
 
     logoPlate(pptx, slide, 8.428, 4.997, 1.571, 0.628);
     return slide;
 };
 
 export const attachmentNote = (slide: PptxGenJS.Slide, y = 4.96): void => {
-    slide.addText('A Listagem de Vulnerabilidades encontra-se no arquivo anexado ao e-mail.', {
+    deckText(slide, 'A Listagem de Vulnerabilidades encontra-se no arquivo anexado ao e-mail.', {
         x: 0.469, y, w: 6.936, h: 0.227,
         fontFace: FONT, fontSize: 9, bold: true, italic: true, color: DECK.white,
     });
@@ -246,9 +266,9 @@ export const kpiPill = (
     const pill = { fill: { color: DECK.amber }, line: { type: 'none' as const } };
     const text = { fontFace: FONT, bold: true, color: DECK.ink, align: 'center' as const, valign: 'middle' as const };
     slide.addShape(pptx.ShapeType.rect, { x: box.x, y: box.y, w: box.vw, h: box.h, ...pill });
-    slide.addText(value, { x: box.x, y: box.y, w: box.vw, h: box.h, fontSize: box.valueSize, ...text });
+    deckText(slide, value, { x: box.x, y: box.y, w: box.vw, h: box.h, fontSize: box.valueSize, ...text });
     slide.addShape(pptx.ShapeType.rect, { x: box.x + box.vw + 0.031, y: box.y, w: box.lw, h: box.h, ...pill });
-    slide.addText(label, { x: box.x + box.vw + 0.031, y: box.y, w: box.lw, h: box.h, fontSize: 12, ...text });
+    deckText(slide, label, { x: box.x + box.vw + 0.031, y: box.y, w: box.lw, h: box.h, fontSize: 12, ...text });
 };
 
 // A highlight card: red rule on top, then whatever the report puts inside it.

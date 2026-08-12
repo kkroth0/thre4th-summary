@@ -10,7 +10,7 @@ import type { SapPatchSummary } from '@/services/sapApi';
 import { buildSapReportAnalysis, type AnalyzedSapNote, type SapReportAnalysis } from './sapPatchAnalysis';
 import {
     DECK, FONT, FONT_LIGHT, LINK_FONT, SHEET_HEADER, SHEET_TAB,
-    attachmentNote, condenseTitle, contentSlide, coverSlide, darkBarChart, deckMetadata, gradientBar,
+    attachmentNote, condenseTitle, deckText, contentSlide, coverSlide, darkBarChart, deckMetadata, gradientBar,
     highlightCard, kpiPill, nvdCveUrl, scrubXml, styleHeaderRow, workbookMetadata,
     fmtMonthPt, monthSlashYear, type PptxFactory,
 } from './deckTemplate';
@@ -150,7 +150,7 @@ const CATEGORY_EXPLANATIONS: Record<string, string> = {
 
 const addCoverSlide = (pptx: PptxGenJS, summary: SapPatchSummary): void => {
     const slide = coverSlide(pptx, REPORT, summary.releaseDate);
-    slide.addText('Avaliação de riscos de vulnerabilidades', {
+    deckText(slide, 'Avaliação de riscos de vulnerabilidades', {
         x: 0.67, y: 4.53, w: 4.654, h: 0.202,
         fontFace: FONT_LIGHT, fontSize: 11, color: DECK.white,
     });
@@ -161,14 +161,14 @@ const addExecutiveSummarySlide = (pptx: PptxGenJS, summary: SapPatchSummary, ana
 
     // Header band, gradient like the rule but tall enough to carry the cycle name.
     gradientBar(pptx, slide, 0.469, 0.871, 8.968, 0.295);
-    slide.addText(`${REPORT} (${monthSlashYear(summary.releaseDate)})`, {
+    deckText(slide, `${REPORT} (${monthSlashYear(summary.releaseDate)})`, {
         x: 0.539, y: 0.871, w: 8.828, h: 0.295,
         fontFace: FONT, fontSize: 12, bold: true, color: DECK.ink, valign: 'middle',
     });
 
     const light = { fontFace: FONT_LIGHT, fontSize: 9, color: DECK.white };
     const strong = { fontFace: FONT, fontSize: 9, color: DECK.white, bold: true };
-    slide.addText(
+    deckText(slide, 
         [
             { text: `O ciclo de ${fmtMonthPt(summary.releaseDate)} publica `, options: light },
             { text: `${summary.summary.total} notas de segurança`, options: strong },
@@ -189,8 +189,8 @@ const addExecutiveSummarySlide = (pptx: PptxGenJS, summary: SapPatchSummary, ana
         rectRadius: 0.048, fill: { color: DECK.cardAlt }, line: { color: DECK.cardLine, width: 0.8 },
     });
     const cardLabel = { fontFace: FONT_LIGHT, fontSize: 12, bold: true, color: DECK.accent, valign: 'middle' as const };
-    slide.addText('Categorias x Número de Notas:', { x: 0.574, y: 2.572, w: 3.82, h: 0.25, ...cardLabel });
-    slide.addText('Prioridades imediatas', { x: 5.187, y: 2.581, w: 2.1, h: 0.225, ...cardLabel });
+    deckText(slide, 'Categorias x Número de Notas:', { x: 0.574, y: 2.572, w: 3.82, h: 0.25, ...cardLabel });
+    deckText(slide, 'Prioridades imediatas', { x: 5.187, y: 2.581, w: 2.1, h: 0.225, ...cardLabel });
 
     darkBarChart(
         pptx, slide,
@@ -199,7 +199,7 @@ const addExecutiveSummarySlide = (pptx: PptxGenJS, summary: SapPatchSummary, ana
         DECK.cardAlt
     );
 
-    slide.addText(
+    deckText(slide, 
         analysis.immediatePriorities.map((text) => ({ text, options: { breakLine: true, paraSpaceAfter: 6 } })),
         { x: 5.187, y: 2.822, w: 4.047, h: 1.95, fontFace: FONT_LIGHT, fontSize: 8, color: DECK.white, lineSpacingMultiple: 1.15 }
     );
@@ -217,7 +217,7 @@ const addConsolidatedSlide = (pptx: PptxGenJS, summary: SapPatchSummary, analysi
     gradientBar(pptx, slide, 4.742, 0.806, 0.038, 4.304, true);
 
     const sectionLabel = { fontFace: FONT, fontSize: 9, bold: true, color: DECK.accent, valign: 'middle' as const };
-    slide.addText(`Total de notas: ${summary.summary.total}`, { x: 0.481, y: 1.288, w: 2.849, h: 0.225, ...sectionLabel });
+    deckText(slide, `Total de notas: ${summary.summary.total}`, { x: 0.481, y: 1.288, w: 2.849, h: 0.225, ...sectionLabel });
     darkBarChart(
         pptx, slide,
         analysis.categoryCounts.slice(0, 7).map(({ category, count }) => ({ name: category, count })),
@@ -225,8 +225,8 @@ const addConsolidatedSlide = (pptx: PptxGenJS, summary: SapPatchSummary, analysi
         DECK.panel
     );
 
-    slide.addText('Descrição Executiva da Vulnerabilidade:', { x: 0.481, y: 3.13, w: 2.849, h: 0.225, ...sectionLabel });
-    slide.addText(
+    deckText(slide, 'Descrição Executiva da Vulnerabilidade:', { x: 0.481, y: 3.13, w: 2.849, h: 0.225, ...sectionLabel });
+    deckText(slide, 
         analysis.categoryCounts.map(({ category }) => ({
             text: `${category}: ${CATEGORY_EXPLANATIONS[category] ?? ''}`.trim(),
             options: { breakLine: true, bullet: true },
@@ -245,26 +245,26 @@ const addConsolidatedSlide = (pptx: PptxGenJS, summary: SapPatchSummary, analysi
         });
         slide.addShape(pptx.ShapeType.rect, { x, y, w: 1.096, h: 0.062, fill: { color: DECK.red }, line: { type: 'none' } });
         slide.addShape(pptx.ShapeType.rect, { x: x + 0.006, y: 1.728, w: 1.09, h: 0.05, fill: { color: DECK.red }, line: { type: 'none' } });
-        slide.addText(`SAP Note ${note.note}`, {
+        deckText(slide, `SAP Note ${note.note}`, {
             x: x + 0.057, y: 1.511, w: 0.981, h: 0.145,
             fontFace: FONT_LIGHT, fontSize: 8, bold: true, color: DECK.accent, valign: 'middle', fit: 'shrink',
             ...(note.noteUrl ? { hyperlink: { url: note.noteUrl } } : {}),
         });
-        slide.addText(note.product, {
+        deckText(slide, note.product, {
             x: x + 0.057, y: 1.837, w: 0.981, h: 0.121,
             fontFace: FONT_LIGHT, fontSize: 8, bold: true, color: DECK.white, valign: 'middle', fit: 'shrink',
         });
-        slide.addText(`${priorityLabel(note.priority)} · CVSS ${cvssLabel(note.cvss)}`, {
+        deckText(slide, `${priorityLabel(note.priority)} · CVSS ${cvssLabel(note.cvss)}`, {
             x: x + 0.057, y: 1.94, w: 0.981, h: 0.106,
             fontFace: FONT_LIGHT, fontSize: 5, bold: true, italic: true, color: DECK.muted, valign: 'middle',
         });
-        slide.addText(condenseTitle(note.title, 120), {
+        deckText(slide, condenseTitle(note.title, 120), {
             x: x + 0.057, y: 2.109, w: 0.981, h: 0.347,
             fontFace: FONT_LIGHT, fontSize: 5, color: DECK.white, valign: 'middle', fit: 'shrink',
         });
     });
 
-    slide.addText(
+    deckText(slide, 
         [
             ...analysis.categoryCounts.slice(0, 4).map(({ category, count }) => ({
                 text: `${count} ${category}`,
@@ -282,7 +282,7 @@ const addConsolidatedSlide = (pptx: PptxGenJS, summary: SapPatchSummary, analysi
 
 const addHighlightsSlide = (pptx: PptxGenJS, summary: SapPatchSummary, analysis: SapReportAnalysis): void => {
     const slide = contentSlide(pptx, 'Highlights de vulnerabilidades', 4, summary.releaseDate);
-    slide.addText('Seleção orientada ao risco corporativo e à severidade publicada pela SAP:', {
+    deckText(slide, 'Seleção orientada ao risco corporativo e à severidade publicada pela SAP:', {
         x: 0.413, y: 0.715, w: 8.807, h: 0.379,
         fontFace: FONT_LIGHT, fontSize: 9, bold: true, color: DECK.white,
     });
@@ -297,20 +297,20 @@ const addHighlightsSlide = (pptx: PptxGenJS, summary: SapPatchSummary, analysis:
         const x = cols[index % 3];
         const y = index < 3 ? 1.065 : 3.09;
         highlightCard(pptx, slide, { x, y, w: cardW, h: 1.815 });
-        slide.addText(`SAP Note ${note.note}${note.isUpdate ? ' · atualizada' : ''}`, {
+        deckText(slide, `SAP Note ${note.note}${note.isUpdate ? ' · atualizada' : ''}`, {
             x: x + 0.109, y: y + 0.21, w: cardW - 0.22, h: 0.225,
             fontFace: FONT_LIGHT, fontSize: 11, bold: true, color: DECK.red, fit: 'shrink',
             ...(note.noteUrl ? { hyperlink: { url: note.noteUrl } } : {}),
         });
-        slide.addText(note.product, {
+        deckText(slide, note.product, {
             x: x + 0.109, y: y + 0.51, w: cardW - 0.22, h: 0.187,
             fontFace: FONT_LIGHT, fontSize: 9, bold: true, color: DECK.white, fit: 'shrink',
         });
-        slide.addText(`${allCves(note)} | ${priorityLabel(note.priority)} | CVSS ${cvssLabel(note.cvss)}`, {
+        deckText(slide, `${allCves(note)} | ${priorityLabel(note.priority)} | CVSS ${cvssLabel(note.cvss)}`, {
             x: x + 0.137, y: y + 0.741, w: cardW - 0.27, h: 0.165,
             fontFace: FONT_LIGHT, fontSize: 7, bold: true, color: DECK.muted, fit: 'shrink',
         });
-        slide.addText(condenseTitle(note.title, 130), {
+        deckText(slide, condenseTitle(note.title, 130), {
             x: x + 0.137, y: y + 1.012, w: cardW - 0.27, h: 0.54,
             fontFace: FONT_LIGHT, fontSize: 8, color: DECK.white, fit: 'shrink',
         });
@@ -346,11 +346,11 @@ const addRecommendationsSlide = (pptx: PptxGenJS, summary: SapPatchSummary, anal
             x, y, w: 4.3, h: 1.2,
             rectRadius: 0.048, fill: { color: DECK.cardAlt }, line: { color: DECK.cardLine, width: 0.8 },
         });
-        slide.addText(item.title, {
+        deckText(slide, item.title, {
             x: x + 0.13, y: y + 0.11, w: 4.04, h: 0.24,
             fontFace: FONT, fontSize: 10, bold: true, color: DECK.accent, fit: 'shrink',
         });
-        slide.addText(item.body, {
+        deckText(slide, item.body, {
             x: x + 0.13, y: y + 0.4, w: 4.04, h: 0.7,
             fontFace: FONT_LIGHT, fontSize: 8, color: DECK.white, fit: 'shrink',
         });
@@ -359,7 +359,7 @@ const addRecommendationsSlide = (pptx: PptxGenJS, summary: SapPatchSummary, anal
 
 const addReferencesSlide = (pptx: PptxGenJS, summary: SapPatchSummary, analysis: SapReportAnalysis): void => {
     const slide = contentSlide(pptx, 'Referências', 6, summary.releaseDate);
-    slide.addText('Fonte oficial SAP', {
+    deckText(slide, 'Fonte oficial SAP', {
         x: 0.469, y: 0.715, w: 8.807, h: 0.3,
         fontFace: FONT, fontSize: 11, bold: true, color: DECK.accent,
     });
@@ -377,14 +377,14 @@ const addReferencesSlide = (pptx: PptxGenJS, summary: SapPatchSummary, analysis:
     links.forEach((link, index) => {
         const column = Math.floor(index / rows);
         const row = index % rows;
-        slide.addText(link, {
+        deckText(slide, link, {
             x: 0.469 + column * (columnW + gap), y: 1.1 + row * step, w: columnW, h: textH,
             fontFace: FONT_LIGHT, fontSize, color: DECK.white, fit: 'shrink', breakLine: false,
             hyperlink: { url: link },
         });
     });
 
-    slide.addText(`Gerado em ${new Date().toLocaleString('pt-BR')}`, {
+    deckText(slide, `Gerado em ${new Date().toLocaleString('pt-BR')}`, {
         x: 0.469, y: 4.7, w: 8.807, h: 0.2,
         fontFace: FONT_LIGHT, fontSize: 8, color: DECK.muted,
     });

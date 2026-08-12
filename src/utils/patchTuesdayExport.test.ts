@@ -96,27 +96,63 @@ test("o número da capa é o da Microsoft e o deck explica o que ficou de fora",
     assert.doesNotMatch(xml, /<a:t>[^<]*751[^<]*<\/a:t>/, "a contagem bruta do documento não aparece em lugar nenhum");
 });
 
-// The deck is a transcription of the reference template: four slides on the
-// 10 × 5.625in canvas, Overpass throughout, nothing hanging off the artboard.
-test("o deck reproduz o gabarito: 4 slides, canvas 16:9 e fonte Overpass", async () => {
-    const runtimeRequire = createRequire(`${process.cwd()}/package.json`);
-    const PptxGenJS = runtimeRequire("pptxgenjs") as typeof import("pptxgenjs").default;
-    const pptx = buildPatchTuesdayPresentation(sample, PptxGenJS) as unknown as {
-        slides: { _slideObjects: { options?: { x?: number; y?: number; w?: number; h?: number } }[] }[];
-    };
 
-    assert.equal(pptx.slides.length, 4, "capa + sumário + consolidado + highlights");
+// The dark panel is the drawing area of every content slide; the footer strip and
+// the logo plate are the only things allowed below it. An element outside those
+// bounds is the "deck opened broken" report, so both reports assert it.
+const PANEL = { x: 0.264, y: 0.234, w: 9.472, h: 5.151 };
+type Positioned = { options?: { x?: number; y?: number; w?: number; h?: number } };
+const assertInsideTemplate = (pptx: { slides: { _slideObjects: Positioned[] }[] }) => {
     for (const [index, slide] of pptx.slides.entries()) {
         for (const o of slide._slideObjects.map((obj) => obj.options)) {
             if (o?.x == null || o?.y == null || o.w == null || o.h == null) continue;
-            assert.ok(o.x + o.w <= 10.001, `slide ${index + 1}: elemento em x=${o.x} passa da margem direita`);
-            assert.ok(o.y + o.h <= 5.626, `slide ${index + 1}: elemento em y=${o.y} passa do rodapé`);
+            const right = o.x + o.w;
+            const bottom = o.y + o.h;
+            assert.ok(right <= 10.001, `slide ${index + 1}: elemento em x=${o.x} passa da margem direita`);
+            assert.ok(bottom <= 5.626, `slide ${index + 1}: elemento em y=${o.y} passa do rodapé`);
+            if (index === 0 || o.y >= 4.99) continue; // capa e faixa de rodapé
+            assert.ok(o.x >= PANEL.x - 0.001 && right <= PANEL.x + PANEL.w + 0.001, `slide ${index + 1}: x=${o.x} sai do painel`);
+            assert.ok(bottom <= PANEL.y + PANEL.h + 0.001, `slide ${index + 1}: y=${o.y} sai do painel`);
         }
     }
+};
 
-    const { all: xml } = await buildXml(sample);
-    assert.match(xml, /typeface="Overpass"/);
-    assert.doesNotMatch(xml, /typeface="Inter/, "a fonte base do gabarito é Overpass");
+// The deck is a transcription of the reference template: four slides on the
+// 10 × 5.625in canvas, Office fonts throughout, nothing hanging off the artboard.
+test("o deck reproduz o gabarito: 4 slides, canvas 16:9 e fonte do Office", async () => {
+    const runtimeRequire = createRequire(`${process.cwd()}/package.json`);
+    const PptxGenJS = runtimeRequire("pptxgenjs") as typeof import("pptxgenjs").default;
+    const pptx = buildPatchTuesdayPresentation(sample, PptxGenJS) as unknown as { slides: { _slideObjects: Positioned[] }[] };
+
+    assert.equal(pptx.slides.length, 4, "capa + sumário + consolidado + highlights");
+    assertInsideTemplate(pptx);
+    // And it holds with a crowded cycle of long names, not just the tidy sample.
+    const crowded = {
+        ...sample,
+        byImpact: Array.from({ length: 7 }, (_, i) => ({ name: `Impacto com nome bem longo ${i}`, count: 100 - i * 9 })),
+        byFamily: Array.from({ length: 8 }, (_, i) => ({ name: `Família de produto bem longa ${i}`, count: 90 - i * 8 })),
+        topCves: Array.from({ length: 8 }, (_, i) => cve({ cve: `CVE-2026-${6000 + i}`, title: "y".repeat(140), publiclyDisclosed: true })),
+        vulnerabilities: Array.from({ length: 8 }, (_, i) => cve({ cve: `CVE-2026-${6000 + i}`, title: "y".repeat(140), publiclyDisclosed: true })),
+    };
+    assertInsideTemplate(buildPatchTuesdayPresentation(crowded, PptxGenJS) as never);
+
+    const { all: xml, slides } = await buildXml(sample);
+    assert.match(xml, /typeface="Calibri"/);
+
+    // A font PowerPoint does not have is substituted, and the substitute's metrics
+    // move every box on the slide. Only Office-resident fonts may be named.
+    // Só os slides: o tema traz a tabela de fallback por script do próprio OOXML.
+    const typefaces = new Set([...slides.matchAll(/typeface="([^"]*)"/g)].map((m) => m[1]));
+    assert.deepEqual([...typefaces].filter((f) => f && !["Calibri", "Calibri Light"].includes(f)), [], "fonte fora do Office");
+
+    // And a fixed box only holds if it also tells PowerPoint to shrink on overflow.
+    const bodies = slides.match(/<a:bodyPr[^>]*(?:\/>|>)/g) ?? [];
+    const withText = slides.split("<p:txBody>").slice(1);
+    assert.ok(withText.length > 0, "o deck tem caixas de texto");
+    for (const body of withText) {
+        assert.match(body.slice(0, 400), /<a:normAutofit/, "caixa de texto sem autofit vaza no PowerPoint");
+    }
+    assert.ok(bodies.length >= withText.length);
 });
 
 test("os indicadores do consolidado saem do sumário, não de contagem própria", async () => {

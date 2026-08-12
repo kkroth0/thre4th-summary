@@ -44,27 +44,55 @@ const buildXml = async (summary: SapPatchSummary) => {
     return { all: await read(/\.xml$/), slides: await read(/^ppt\/slides\/.+\.xml$/), notes: await read(/^ppt\/notesSlides\/.+\.xml$/) };
 };
 
-// The SAP deck is the same template the Patch Tuesday deck uses: six slides on
-// the 10 × 5.625in canvas, Overpass throughout, nothing hanging off the artboard.
-test("o deck SAP sai no gabarito: 6 slides, canvas 16:9 e fonte Overpass", async () => {
-    const pptx = buildSapPatchPresentation(sample, loadPptx()) as unknown as {
-        layout: string;
-        slides: { _slideObjects: { options?: { x?: number; y?: number; w?: number; h?: number } }[] }[];
-    };
 
-    assert.equal(pptx.slides.length, 6, "capa + sumário + consolidado + highlights + recomendações + referências");
-    assert.equal(pptx.layout, "LAYOUT_16x9");
+// The dark panel is the drawing area of every content slide; the footer strip and
+// the logo plate are the only things allowed below it. An element outside those
+// bounds is the "deck opened broken" report, so both reports assert it.
+const PANEL = { x: 0.264, y: 0.234, w: 9.472, h: 5.151 };
+type Positioned = { options?: { x?: number; y?: number; w?: number; h?: number } };
+const assertInsideTemplate = (pptx: { slides: { _slideObjects: Positioned[] }[] }) => {
     for (const [index, slide] of pptx.slides.entries()) {
         for (const o of slide._slideObjects.map((obj) => obj.options)) {
             if (o?.x == null || o?.y == null || o.w == null || o.h == null) continue;
-            assert.ok(o.x + o.w <= 10.001, `slide ${index + 1}: elemento em x=${o.x} passa da margem direita`);
-            assert.ok(o.y + o.h <= 5.626, `slide ${index + 1}: elemento em y=${o.y} passa do rodapé`);
+            const right = o.x + o.w;
+            const bottom = o.y + o.h;
+            assert.ok(right <= 10.001, `slide ${index + 1}: elemento em x=${o.x} passa da margem direita`);
+            assert.ok(bottom <= 5.626, `slide ${index + 1}: elemento em y=${o.y} passa do rodapé`);
+            if (index === 0 || o.y >= 4.99) continue; // capa e faixa de rodapé
+            assert.ok(o.x >= PANEL.x - 0.001 && right <= PANEL.x + PANEL.w + 0.001, `slide ${index + 1}: x=${o.x} sai do painel`);
+            assert.ok(bottom <= PANEL.y + PANEL.h + 0.001, `slide ${index + 1}: y=${o.y} sai do painel`);
         }
     }
+};
 
-    const { all: xml } = await buildXml(sample);
-    assert.match(xml, /typeface="Overpass"/);
-    assert.doesNotMatch(xml, /typeface="Inter/, "a fonte base do gabarito é Overpass");
+// The SAP deck is the same template the Patch Tuesday deck uses: six slides on
+// the 10 × 5.625in canvas, Office fonts throughout, nothing hanging off the artboard.
+test("o deck SAP sai no gabarito: 6 slides, canvas 16:9 e fonte do Office", async () => {
+    const pptx = buildSapPatchPresentation(sample, loadPptx()) as unknown as { layout: string; slides: { _slideObjects: Positioned[] }[] };
+
+    assert.equal(pptx.slides.length, 6, "capa + sumário + consolidado + highlights + recomendações + referências");
+    assert.equal(pptx.layout, "LAYOUT_16x9");
+    assertInsideTemplate(pptx);
+    // And it holds with a full cycle of long titles, not just the tidy sample.
+    assertInsideTemplate(buildSapPatchPresentation(withNoteCount(34), loadPptx()) as never);
+
+    const { all: xml, slides } = await buildXml(sample);
+    assert.match(xml, /typeface="Calibri"/);
+
+    // A font PowerPoint does not have is substituted, and the substitute's metrics
+    // move every box on the slide. Only Office-resident fonts may be named.
+    // Só os slides: o tema traz a tabela de fallback por script do próprio OOXML.
+    const typefaces = new Set([...slides.matchAll(/typeface="([^"]*)"/g)].map((m) => m[1]));
+    assert.deepEqual([...typefaces].filter((f) => f && !["Calibri", "Calibri Light"].includes(f)), [], "fonte fora do Office");
+
+    // And a fixed box only holds if it also tells PowerPoint to shrink on overflow.
+    const bodies = slides.match(/<a:bodyPr[^>]*(?:\/>|>)/g) ?? [];
+    const withText = slides.split("<p:txBody>").slice(1);
+    assert.ok(withText.length > 0, "o deck tem caixas de texto");
+    for (const body of withText) {
+        assert.match(body.slice(0, 400), /<a:normAutofit/, "caixa de texto sem autofit vaza no PowerPoint");
+    }
+    assert.ok(bodies.length >= withText.length);
 });
 
 test("o deck SAP sai em PT-BR, na sequência do relatório, sem identificar a consultoria", async () => {
