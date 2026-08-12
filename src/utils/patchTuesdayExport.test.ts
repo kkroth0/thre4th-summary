@@ -198,6 +198,61 @@ test("a planilha não identifica a consultoria em nenhum metadado", async () => 
     }
 });
 
+// eslint-disable-next-line no-control-regex
+const CONTROL_CHARS = /[\u0000-\u0008\u000b\u000c\u000e-\u001f]/;
+
+// The deck is opened in Microsoft PowerPoint, which is far stricter than
+// LibreOffice: a dangling rId, a part with no content type, or a stray `&`
+// coming from an MSRC title all produce the "needs repair" dialog instead of a
+// slide. MSRC titles are attacker-influenced free text, so they get fuzzed here.
+test("o pacote abre no PowerPoint: rIds resolvem, partes declaradas, texto escapado", async () => {
+    const runtimeRequire = createRequire(`${process.cwd()}/package.json`);
+    const JSZip = runtimeRequire("jszip") as typeof import("jszip");
+    const PptxGenJS = runtimeRequire("pptxgenjs") as typeof import("pptxgenjs").default;
+    const ExcelJS = runtimeRequire("exceljs") as typeof import("exceljs");
+    const hostile = 'Windows <Shell> & "Print" Spooler \u0007 Elevation of Privilege';
+    const fuzzed = {
+        ...sample,
+        title: hostile,
+        topCves: [cve({ title: hostile })],
+        byFamily: [{ name: hostile, count: 3 }],
+        vulnerabilities: [cve({ title: hostile, family: hostile })],
+    };
+    const bytes = await buildPatchTuesdayPresentation(fuzzed, PptxGenJS).write({ outputType: "nodebuffer" });
+    const zip = await JSZip.loadAsync(bytes as ArrayBuffer);
+    const part = (name: string) => zip.file(name)?.async("string") ?? Promise.resolve("");
+
+    const types = await part("[Content_Types].xml");
+    const parts = Object.keys(zip.files).filter((n) => !zip.files[n].dir && n.endsWith(".xml") && !n.includes("/_rels/"));
+    assert.ok(parts.some((n) => /^ppt\/slides\/slide\d+\.xml$/.test(n)), "o pacote tem slides");
+
+    // The workbook is the attachment that ships with the deck; Excel is just as
+    // strict about the package, and it reads the same MSRC free text.
+    const xlsx = await JSZip.loadAsync(
+        (await buildPatchTuesdayWorkbook(fuzzed, ExcelJS).xlsx.writeBuffer()) as ArrayBuffer
+    );
+    for (const file of Object.values(xlsx.files).filter((f) => !f.dir && /\.xml$/.test(f.name))) {
+        assert.doesNotMatch(await file.async("string"), CONTROL_CHARS, `${file.name}: controle inválido no xlsx`);
+    }
+
+    for (const name of parts) {
+        const xml = await part(name);
+        // Every relationship the part points at has to exist in its own .rels.
+        const rels = await part(name.replace(/([^/]+)$/, "_rels/$1.rels"));
+        const declared = new Set([...rels.matchAll(/\bId="([^"]+)"/g)].map((m) => m[1]));
+        for (const [, id] of xml.matchAll(/r:(?:id|embed|link|pict)="([^"]+)"/g)) {
+            assert.ok(declared.has(id), `${name}: ${id} não existe em _rels`);
+        }
+        // Slides, notes and charts need an explicit content type; the generic
+        // Default Extension="xml" is not enough for PowerPoint to render them.
+        if (/^ppt\/(slides|notesSlides|charts)\//.test(name)) {
+            assert.ok(types.includes(`PartName="/${name}"`), `${name}: sem Override em [Content_Types].xml`);
+        }
+        assert.doesNotMatch(xml, /&(?!amp;|lt;|gt;|quot;|apos;|#\d+;|#x[0-9a-fA-F]+;)/, `${name}: & solto quebra o XML`);
+        assert.doesNotMatch(xml, CONTROL_CHARS, `${name}: caractere de controle inválido em XML 1.0`);
+    }
+});
+
 test("títulos longos são condensados no slide e preservados nas notas", async () => {
     const long = "A".repeat(140);
     const { slides, notes } = await buildXml({ ...sample, topCves: [cve({ title: long })] });

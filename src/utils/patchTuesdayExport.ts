@@ -802,7 +802,23 @@ const addHighlightsSlide = (pptx: PptxGenJS, s: PatchTuesdaySummary): void => {
     attachmentNote(slide);
 };
 
-export function buildPatchTuesdayPresentation(summary: PatchTuesdaySummary, PptxLib: PptxFactory): PptxGenJS {
+// MSRC titles and product names are free text we do not control. XML 1.0 has no
+// legal representation for the C0 controls (not even `&#x7;`), so one of them in
+// a title is enough for PowerPoint and Excel to declare the file corrupt and
+// offer to repair it. Both builders scrub their input before writing anything.
+// eslint-disable-next-line no-control-regex
+const XML_ILLEGAL = /[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g;
+const scrubXml = <T>(v: T): T =>
+    typeof v === 'string'
+        ? (v.replace(XML_ILLEGAL, '') as T)
+        : Array.isArray(v)
+          ? (v.map(scrubXml) as T)
+          : v && typeof v === 'object'
+            ? (Object.fromEntries(Object.entries(v).map(([k, x]) => [k, scrubXml(x)])) as T)
+            : v;
+
+export function buildPatchTuesdayPresentation(rawSummary: PatchTuesdaySummary, PptxLib: PptxFactory): PptxGenJS {
+    const summary = scrubXml(rawSummary);
     const pptx = new PptxLib();
     pptx.layout = 'LAYOUT_16x9'; // 10 × 5.625in, the reference deck's exact canvas
     pptx.author = 'ThreatSumm4ry';
@@ -862,7 +878,8 @@ const styleHeaderRow = (ws: ExcelJS.Worksheet, row: number, lastCol: number) => 
     r.height = 18.5;
 };
 
-export function buildPatchTuesdayWorkbook(summary: PatchTuesdaySummary, ExcelLib: ExcelWorkbookFactory): ExcelJS.Workbook {
+export function buildPatchTuesdayWorkbook(rawSummary: PatchTuesdaySummary, ExcelLib: ExcelWorkbookFactory): ExcelJS.Workbook {
+    const summary = scrubXml(rawSummary);
     const wb = new ExcelLib.Workbook();
     wb.creator = 'ThreatSumm4ry';
     wb.company = '';
