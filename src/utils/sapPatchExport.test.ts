@@ -2,122 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createRequire } from "node:module";
 import type { SapPatchSummary } from "@/services/sapApi";
-import { buildSapPatchPresentation, buildSapPatchWorkbook, sapPatchBaseFilename, type ExcelWorkbookFactory } from "./sapPatchExport";
-
-class FakeCell {
-    value: unknown;
-    font: unknown;
-    fill: unknown;
-    alignment: unknown;
-    border: unknown;
-}
-
-class FakeRow {
-    cells = new Map<number | string, FakeCell>();
-    height = 0;
-
-    set values(values: unknown[]) {
-        values.forEach((value, index) => { this.getCell(index + 1).value = value; });
-    }
-
-    getCell(key: number | string) {
-        if (!this.cells.has(key)) this.cells.set(key, new FakeCell());
-        return this.cells.get(key)!;
-    }
-}
-
-class FakeWorksheet {
-    columns: Array<{ header: string; key: string; width: number }> = [];
-    rows = new Map<number, FakeRow>();
-    views: unknown[] = [];
-    autoFilter: unknown;
-    merges: string[] = [];
-
-    constructor(public name: string) {}
-    mergeCells(range: string) { this.merges.push(range); }
-    getCell(address: string) {
-        const match = /^([A-Z]+)(\d+)$/.exec(address);
-        if (!match) return this.getRow(1).getCell(address);
-        const column = match[1].split("").reduce((value, letter) => value * 26 + letter.charCodeAt(0) - 64, 0);
-        return this.getRow(Number(match[2])).getCell(column);
-    }
-    getRow(rowNumber: number) {
-        if (!this.rows.has(rowNumber)) this.rows.set(rowNumber, new FakeRow());
-        return this.rows.get(rowNumber)!;
-    }
-    addRow(values: Record<string, unknown> | unknown[]) {
-        const row = this.getRow(Math.max(0, ...this.rows.keys()) + 1);
-        if (Array.isArray(values)) row.values = values;
-        else this.columns.forEach((column, index) => { row.getCell(index + 1).value = values[column.key]; });
-        return row;
-    }
-    getColumn(index: number) { return this.columns[index - 1] ?? { width: 0 }; }
-}
-
-class FakeWorkbook {
-    creator = "";
-    company = "";
-    subject = "";
-    title = "";
-    language = "";
-    created: Date | null = null;
-    writeBufferCalls = 0;
-    xlsx = { writeBuffer: async () => { this.writeBufferCalls += 1; return new Uint8Array([1, 2, 3]); } };
-    worksheets: FakeWorksheet[] = [];
-    addWorksheet(name: string, options?: { views?: unknown[] }) {
-        const sheet = new FakeWorksheet(name);
-        sheet.views = options?.views ?? [];
-        this.worksheets.push(sheet);
-        return sheet;
-    }
-    getWorksheet(name: string) { return this.worksheets.find((sheet) => sheet.name === name); }
-}
-
-const FakeExcelLib = { Workbook: FakeWorkbook } as unknown as ExcelWorkbookFactory;
-
-function collectFakeArtifactText(pptx: FakePptx, workbook: FakeWorkbook) {
-    return JSON.stringify([pptx, workbook], (_key, value) =>
-        value instanceof Map ? [...value.entries()] : value
-    );
-}
-
-class FakeSlide {
-    texts: string[] = [];
-    textEntries: Array<{ text: string; options: Record<string, unknown> }> = [];
-    tables: Array<{ rows: Array<Array<{ text: string }>>; options: Record<string, unknown> }> = [];
-    shapes: Array<{ type: unknown; options: Record<string, unknown> }> = [];
-    charts: Array<{ type: unknown; data: unknown[]; options: Record<string, unknown> }> = [];
-    background: unknown;
-    notes: string[] = [];
-    addText(text: string | Array<{ text: string }>, options: Record<string, unknown> = {}) {
-        const value = typeof text === "string" ? text : text.map((run) => run.text).join("");
-        this.texts.push(value);
-        this.textEntries.push({ text: value, options });
-    }
-    addTable(rows: Array<Array<{ text: string }>>, options: Record<string, unknown>) { this.tables.push({ rows, options }); }
-    addShape(type: unknown, options: Record<string, unknown>) { this.shapes.push({ type, options }); }
-    addChart(type: unknown, data: unknown[], options: Record<string, unknown>) { this.charts.push({ type, data, options }); }
-    addNotes(notes: string) { this.notes.push(notes); }
-    addTextBox() {}
-}
-
-class FakePptx {
-    static ShapeType = { rect: "rect", roundRect: "roundRect", line: "line" };
-    static ChartType = { bar: "bar" };
-    ShapeType = FakePptx.ShapeType;
-    ChartType = FakePptx.ChartType;
-    slides: FakeSlide[] = [];
-    masters: unknown[] = [];
-    author = "";
-    company = "";
-    subject = "";
-    title = "";
-    lang = "";
-    layout = "";
-    defineLayout() {}
-    defineSlideMaster(master: unknown) { this.masters.push(master); }
-    addSlide() { const slide = new FakeSlide(); this.slides.push(slide); return slide; }
-}
+import { buildSapPatchPresentation, buildSapPatchWorkbook, sapPatchBaseFilename, sapPatchExcelFilename } from "./sapPatchExport";
 
 const sample: SapPatchSummary = {
     url: "https://support.sap.example/security-patch-day/july-2026",
@@ -129,158 +14,6 @@ const sample: SapPatchSummary = {
     ],
     summary: { total: 3, byPriority: { "Hot News": 1, High: 1, Medium: 1 }, hotNews: 1, high: 1, maxCvss: 9.9, cveCount: 2 },
 };
-
-const julySummary: SapPatchSummary = {
-    url: "https://support.sap.example/security-patch-day/july-2026",
-    releaseDate: "2026-07-14",
-    notes: [
-        { note: "700001", noteUrl: "https://me.sap.example/notes/700001", title: "Remote code execution in SAP NetWeaver", cves: ["CVE-2026-7001"], priority: "Critical", cvss: 9.8, cvssVector: "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H", isUpdate: false },
-        { note: "700002", noteUrl: "https://me.sap.example/notes/700002", title: "Missing authorization check in SAP S/4HANA", cves: ["CVE-2026-7002"], priority: "High", cvss: 8.1, cvssVector: null, isUpdate: false },
-        { note: "700003", noteUrl: "https://me.sap.example/notes/700003", title: "Information disclosure in SAP UI5", cves: ["CVE-2026-7003"], priority: "Medium", cvss: 6.5, cvssVector: null, isUpdate: true },
-        { note: "700004", noteUrl: "https://me.sap.example/notes/700004", title: "Denial of service in SAP HANA", cves: [], priority: "Low", cvss: null, cvssVector: null, isUpdate: false },
-    ],
-    summary: { total: 4, byPriority: { Critical: 1, High: 1, Medium: 1, Low: 1 }, hotNews: 0, high: 1, maxCvss: 9.8, cveCount: 3 },
-};
-
-test("artefatos mantêm sequência, pt-BR e neutralidade", () => {
-    const pptx = buildSapPatchPresentation(julySummary, FakePptx as never) as unknown as FakePptx;
-    const workbook = buildSapPatchWorkbook(julySummary, FakeExcelLib) as unknown as FakeWorkbook;
-    pptx.masters.push({ reviewMarker: "metadado exclusivo do master" });
-    pptx.slides[2].charts[0].data.push({ name: "rótulo exclusivo do gráfico" });
-    pptx.slides[0].textEntries[0].options.hyperlink = { url: "https://metadata.example/pptx-option" };
-    const corpus = collectFakeArtifactText(pptx, workbook);
-
-    assert.deepEqual(pptx.slides.map((slide) => slide.texts[0]), [
-        "SAP Security Patch Day",
-        "Sumário executivo",
-        "Consolidado de vulnerabilidades",
-        "Highlights de vulnerabilidades",
-        "Conclusão e recomendações",
-        "Referências",
-    ]);
-    assert.equal(pptx.lang, "pt-BR");
-    assert.equal(workbook.language, "pt-BR");
-    assert.match(corpus, /Visão executiva/);
-    assert.match(corpus, /metadado exclusivo do master/);
-    assert.match(corpus, /rótulo exclusivo do gráfico/);
-    assert.match(corpus, /https:\/\/metadata\.example\/pptx-option/);
-    assert.doesNotMatch(corpus, /customer|executive summary|security updates/i);
-    assert.doesNotMatch(corpus, /cliente|consultoria/i);
-});
-
-test("cria workbook executivo em pt-BR com duas abas", () => {
-    const workbook = buildSapPatchWorkbook(sample, FakeExcelLib) as unknown as FakeWorkbook;
-    assert.deepEqual(workbook.worksheets.map((sheet) => sheet.name), ["Visão executiva", "Notas de segurança"]);
-    assert.equal(workbook.creator, "ThreatSumm4ry");
-    assert.deepEqual(workbook.getWorksheet("Notas de segurança")?.columns.map((column) => column.header), [
-        "Nota", "CVE", "Título", "CVSS", "Prioridade", "Categoria", "Produto/Componente", "Atualização", "Vetor CVSS", "URL da SAP Note",
-    ]);
-});
-
-test("preenche notas analisadas, links, filtros, fallbacks e metadados", () => {
-    const workbook = buildSapPatchWorkbook(sample, FakeExcelLib) as unknown as FakeWorkbook;
-    const notes = workbook.getWorksheet("Notas de segurança")!;
-    const first = notes.getRow(2);
-    assert.deepEqual(first.getCell(1).value, { text: sample.notes[0].note, hyperlink: sample.notes[0].noteUrl });
-    assert.equal(first.getCell(2).value, sample.notes[0].cves[0]);
-    assert.equal(first.getCell(6).value, "RCE / Corrupção de memória");
-    assert.equal(first.getCell(7).value, "SAP NetWeaver AS Java");
-    assert.deepEqual(first.getCell(10).value, { text: sample.notes[0].noteUrl, hyperlink: sample.notes[0].noteUrl });
-    assert.equal(notes.getRow(4).getCell(2).value, "Não informada");
-    assert.equal(notes.getRow(4).getCell(4).value, "Não informado");
-    assert.deepEqual(notes.autoFilter, { from: { row: 1, column: 1 }, to: { row: 1, column: 10 } });
-    assert.deepEqual(notes.views, [{ state: "frozen", ySplit: 1 }]);
-    assert.equal(workbook.company, "");
-    assert.equal(workbook.language, "pt-BR");
-    assert.ok(workbook.created instanceof Date);
-    assert.equal(workbook.subject, "Relatório automático do SAP Security Patch Day");
-    assert.equal((workbook as unknown as { description: string }).description, "Avaliação automática de riscos de vulnerabilidades SAP.");
-    assert.match(workbook.title, /julho de 2026/);
-});
-
-test("estiliza todo o conteúdo executivo com fundo branco, borda e texto grafite", () => {
-    const workbook = buildSapPatchWorkbook(sample, FakeExcelLib) as unknown as FakeWorkbook;
-    const executive = workbook.getWorksheet("Visão executiva")!;
-    assert.equal(executive.getCell("A2").value, "Data do ciclo");
-    assert.equal(executive.getCell("B2").value, sample.releaseDate);
-    assert.equal(executive.getCell("A3").value, "Fonte");
-    assert.deepEqual(executive.getCell("B3").value, { text: "Fonte oficial SAP", hyperlink: sample.url });
-    assert.equal(executive.getRow(6).getCell(1).value, "Total de notas");
-    assert.equal(executive.getRow(12).getCell(1).value, "Distribuição por prioridade");
-    assert.equal(executive.getRow(17).getCell(1).value, "Distribuição por categoria");
-    assert.equal(executive.getRow(22).getCell(1).value, "Top 3");
-    assert.equal(executive.getRow(23).getCell(3).value, "Crítica (Hot News)");
-    assert.deepEqual(executive.views, [{ state: "frozen", ySplit: 5 }]);
-    assert.deepEqual(executive.autoFilter, { from: { row: 5, column: 1 }, to: { row: 10, column: 2 } });
-
-    for (const [rowNumber, columnCount] of [[2, 2], [3, 2], [6, 2], [13, 2], [18, 2], [23, 4]]) {
-        for (let column = 1; column <= columnCount; column++) {
-            const cell = executive.getRow(rowNumber).getCell(column);
-            assert.deepEqual(cell.fill, { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFFFFF" } });
-            assert.equal((cell.font as { color: { argb: string } }).color.argb, "FF172033");
-            assert.equal((cell.border as { bottom: { color: { argb: string } } }).bottom.color.argb, "FFDCE3EE");
-        }
-    }
-});
-
-test("preserva fallbacks e campos operacionais sem criar links sem destino", () => {
-    const edgeSummary: SapPatchSummary = {
-        ...sample,
-        notes: [{ ...sample.notes[0], note: "200001", noteUrl: "", title: "Issue in unnamed component", cves: [], cvss: null, cvssVector: null, isUpdate: true }],
-        summary: { total: 1, byPriority: { High: 1 }, hotNews: 0, high: 1, maxCvss: 0, cveCount: 0 },
-    };
-    const workbook = buildSapPatchWorkbook(edgeSummary, FakeExcelLib) as unknown as FakeWorkbook;
-    const row = workbook.getWorksheet("Notas de segurança")!.getRow(2);
-    assert.equal(row.getCell(1).value, "200001");
-    assert.equal(row.getCell(2).value, "Não informada");
-    assert.equal(row.getCell(4).value, "Não informado");
-    assert.equal(row.getCell(7).value, "Componente SAP não especificado");
-    assert.equal(row.getCell(8).value, "Sim");
-    assert.equal(row.getCell(9).value, "Não informado");
-    assert.equal(row.getCell(10).value, "Não informada");
-});
-
-test("expõe writeBuffer no workbook construído", async () => {
-    const workbook = buildSapPatchWorkbook(sample, FakeExcelLib) as unknown as FakeWorkbook;
-    assert.deepEqual(await workbook.xlsx.writeBuffer(), new Uint8Array([1, 2, 3]));
-    assert.equal(workbook.writeBufferCalls, 1);
-});
-
-test("cria seis slides na sequência aprovada e com metadados neutros", () => {
-    const pptx = buildSapPatchPresentation(sample, FakePptx as never) as unknown as FakePptx;
-    assert.equal(pptx.slides.length, 6);
-    assert.deepEqual(pptx.slides.map((slide) => slide.texts[0]), [
-        "SAP Security Patch Day",
-        "Sumário executivo",
-        "Consolidado de vulnerabilidades",
-        "Highlights de vulnerabilidades",
-        "Conclusão e recomendações",
-        "Referências",
-    ]);
-    assert.equal(pptx.author, "ThreatSumm4ry");
-    assert.equal(pptx.lang, "pt-BR");
-    assert.equal(pptx.company, "");
-    assert.equal(pptx.layout, "SAP_EXECUTIVO");
-    assert.equal(pptx.masters.length, 1);
-});
-
-test("inclui conteúdo, fallbacks, tabela completa e linguagem neutra", () => {
-    const pptx = buildSapPatchPresentation(sample, FakePptx as never) as unknown as FakePptx;
-    const allText = pptx.slides.flatMap((slide) => slide.texts).join("\n");
-    assert.match(allText, /Não informada/);
-    assert.match(allText, /9\.9/);
-    assert.match(allText, /Não informado/);
-    assert.match(allText, /Fonte oficial SAP/);
-    assert.doesNotMatch(allText, /cliente|consultoria/i);
-    assert.equal(pptx.slides[3].tables.length, 1);
-    assert.equal(pptx.slides[3].tables[0].rows.length, sample.notes.length + 1);
-    assert.equal(pptx.slides[3].tables[0].options.fontSize, 8);
-});
-
-test("deriva o nome-base mensal e aplica fallback em português", () => {
-    assert.equal(sapPatchBaseFilename(sample), "SAP-Security-Patch-Day-2026-07");
-    assert.equal(sapPatchBaseFilename({ ...sample, releaseDate: null }), "SAP-Security-Patch-Day-mais-recente");
-});
 
 const withNoteCount = (count: number): SapPatchSummary => ({
     ...sample,
@@ -294,100 +27,267 @@ const withNoteCount = (count: number): SapPatchSummary => ({
     summary: { ...sample.summary, total: count },
 });
 
-test("registra gráfico nativo, três cards e master executivo dentro da área útil", () => {
-    const pptx = buildSapPatchPresentation(sample, FakePptx as never) as unknown as FakePptx;
-    const consolidated = pptx.slides[2];
-    assert.equal(consolidated.charts.length, 1);
-    assert.equal(consolidated.charts[0].type, FakePptx.ChartType.bar);
-    assert.equal(consolidated.shapes.filter((shape) => shape.type === FakePptx.ShapeType.roundRect).length, 3);
-    assert.match(JSON.stringify(pptx.masters[0]), /SAP Security Patch Day/);
-    for (const entry of consolidated.textEntries) {
-        assert.ok(Number(entry.options.y ?? 0) + Number(entry.options.h ?? 0) < 7.05);
+const runtimeRequire = createRequire(`${process.cwd()}/package.json`);
+const loadPptx = () => runtimeRequire("pptxgenjs") as typeof import("pptxgenjs").default;
+const loadExcel = () => runtimeRequire("exceljs") as typeof import("exceljs");
+const loadZip = () => runtimeRequire("jszip") as typeof import("jszip");
+
+// Slides and speaker notes are separate parts of the package, so a test can say
+// "this text is on the slide but not in the notes".
+const buildXml = async (summary: SapPatchSummary) => {
+    const bytes = await buildSapPatchPresentation(summary, loadPptx()).write({ outputType: "nodebuffer" });
+    const zip = await loadZip().loadAsync(bytes as ArrayBuffer);
+    const read = async (pattern: RegExp) => {
+        const files = Object.values(zip.files).filter((file) => !file.dir && pattern.test(file.name));
+        return (await Promise.all(files.map((file) => file.async("string")))).join("\n");
+    };
+    return { all: await read(/\.xml$/), slides: await read(/^ppt\/slides\/.+\.xml$/), notes: await read(/^ppt\/notesSlides\/.+\.xml$/) };
+};
+
+// The SAP deck is the same template the Patch Tuesday deck uses: six slides on
+// the 10 × 5.625in canvas, Overpass throughout, nothing hanging off the artboard.
+test("o deck SAP sai no gabarito: 6 slides, canvas 16:9 e fonte Overpass", async () => {
+    const pptx = buildSapPatchPresentation(sample, loadPptx()) as unknown as {
+        layout: string;
+        slides: { _slideObjects: { options?: { x?: number; y?: number; w?: number; h?: number } }[] }[];
+    };
+
+    assert.equal(pptx.slides.length, 6, "capa + sumário + consolidado + highlights + recomendações + referências");
+    assert.equal(pptx.layout, "LAYOUT_16x9");
+    for (const [index, slide] of pptx.slides.entries()) {
+        for (const o of slide._slideObjects.map((obj) => obj.options)) {
+            if (o?.x == null || o?.y == null || o.w == null || o.h == null) continue;
+            assert.ok(o.x + o.w <= 10.001, `slide ${index + 1}: elemento em x=${o.x} passa da margem direita`);
+            assert.ok(o.y + o.h <= 5.626, `slide ${index + 1}: elemento em y=${o.y} passa do rodapé`);
+        }
+    }
+
+    const { all: xml } = await buildXml(sample);
+    assert.match(xml, /typeface="Overpass"/);
+    assert.doesNotMatch(xml, /typeface="Inter/, "a fonte base do gabarito é Overpass");
+});
+
+test("o deck SAP sai em PT-BR, na sequência do relatório, sem identificar a consultoria", async () => {
+    const { all: xml, slides } = await buildXml(sample);
+
+    for (const title of ["SAP Security Patch Day", "Sumário executivo", "Consolidado de vulnerabilidades", "Highlights de vulnerabilidades", "Conclusão e recomendações", "Referências"]) {
+        assert.match(slides, new RegExp(`<a:t>${title}</a:t>`), title);
+    }
+    assert.match(xml, /Cyber Threat Intelligence and Hunting/);
+    assert.match(xml, /Avaliação de riscos de vulnerabilidades/);
+    assert.match(xml, /14 de Julho de 2026/, "a capa usa a data por extenso do gabarito");
+    assert.match(xml, /Fonte oficial SAP/);
+    // Severity terms SAP publishes stay as published even though the deck is PT-BR.
+    assert.match(xml, /Hot News/, "severidade da SAP preservada");
+
+    for (const identifier of [/\bEY\b/i, /Ernst\s*&\s*Young/i, /\bcliente\b/i, /\bconsultoria\b/i, /executive summary/i]) {
+        assert.doesNotMatch(xml, identifier, String(identifier));
     }
 });
 
-test("contém 40 notas em uma tabela integral com escala, margens e títulos de até 100 caracteres", () => {
-    const pptx = buildSapPatchPresentation(withNoteCount(40), FakePptx as never) as unknown as FakePptx;
-    const tables = pptx.slides[3].tables;
-    assert.equal(tables.length, 2);
-    assert.deepEqual(tables.map((table) => table.rows.length), [21, 21]);
-    for (const table of tables) {
-        assert.equal(table.options.fontSize, 7);
-        assert.equal(table.options.rowH, undefined);
-        assert.ok(Number(table.options.margin) <= 0.03);
-        assert.equal(table.options.autoPage, false);
+test("os indicadores do consolidado saem do resumo da SAP, não de contagem própria", async () => {
+    const { slides } = await buildXml(sample);
+    for (const label of ["NOTAS DE SEGURANÇA", "NOTAS CRÍTICAS \\(HOT NEWS\\)", "CVSS MÁXIMO DO CICLO"]) {
+        assert.match(slides, new RegExp(`<a:t>${label}</a:t>`));
     }
-    for (const row of tables.flatMap((table) => table.rows.slice(1))) {
-        assert.ok(row[1].text.length <= 100);
-        assert.match(row[1].text, /…/);
-    }
+    assert.match(slides, /<a:t>3<\/a:t>/, "total do ciclo");
+    assert.match(slides, /<a:t>1<\/a:t>/, "hot news");
+    assert.match(slides, /<a:t>9\.9<\/a:t>/, "CVSS máximo");
+    assert.match(slides, /Total de notas: 3/);
+    assert.match(slides, /RCE \/ Corrupção de memória:/);
 });
 
-test("mantém fonte de 7 pt para qualquer volume acima de 20 notas", () => {
-    for (const count of [21, 40]) {
-        const pptx = buildSapPatchPresentation(withNoteCount(count), FakePptx as never) as unknown as FakePptx;
-        assert.equal(pptx.slides.length, 6);
-        assert.equal(pptx.slides[3].tables[0].options.fontSize, 7, `${count} notas`);
-    }
+test("títulos longos são condensados no card e preservados nas notas", async () => {
+    const long = "A".repeat(160);
+    const { slides, notes } = await buildXml({
+        ...sample,
+        notes: [{ ...sample.notes[0], title: long, cves: ["CVE-2026-1001", "CVE-2026-1002"], isUpdate: true }],
+        summary: { ...sample.summary, total: 1, cveCount: 2 },
+    });
+    assert.doesNotMatch(slides, new RegExp("A{160}"), "o card não recebe o título inteiro");
+    assert.match(slides, new RegExp("A{129}…"), "condensado no card de highlight");
+    assert.match(notes, new RegExp("Título completo: A{160}"), "íntegro nas notas do apresentador");
+    assert.match(slides, /CVE-2026-1001, CVE-2026-1002/, "todas as CVEs da nota");
+    assert.match(slides, /atualizada/);
 });
 
-test("preserva todas as CVEs, atualização, severidade e títulos completos nas notas do slide", () => {
-    const multi = { ...sample, notes: [{ ...sample.notes[0], cves: ["CVE-2026-1001", "CVE-2026-1002"], title: "T".repeat(160), isUpdate: true }], summary: { ...sample.summary, total: 1, cveCount: 2 } };
-    const pptx = buildSapPatchPresentation(multi, FakePptx as never) as unknown as FakePptx;
-    const slide = pptx.slides[3];
-    const corpus = JSON.stringify(slide);
-    assert.match(corpus, /CVE-2026-1001, CVE-2026-1002/);
-    assert.match(corpus, /atualizada/);
-    assert.match(corpus, /DC2626/);
-    assert.match(slide.notes.join("\n"), new RegExp("T{160}"));
-    const workbook = buildSapPatchWorkbook(multi, FakeExcelLib) as unknown as FakeWorkbook;
-    assert.equal(workbook.getWorksheet("Notas de segurança")!.getRow(2).getCell(2).value, "CVE-2026-1001, CVE-2026-1002");
+// Six cards is what the grid holds; the rest of the cycle ships in the workbook,
+// and every note still reaches the presenter through the speaker notes.
+test("o grid leva 6 notas e as demais vão para as notas do apresentador e o anexo", async () => {
+    const { slides, notes } = await buildXml(withNoteCount(30));
+    const onSlides = new Set(slides.match(/SAP Note 2000\d\d/g) ?? []);
+    // Top 3 e highlights partem da mesma lista ordenada, então os três primeiros
+    // cards do consolidado repetem os três primeiros highlights — 6 notas ao todo.
+    assert.equal(onSlides.size, 6, "as 6 notas de maior severidade");
+    assert.match(notes, /SAP Note 200029/, "a última nota chega ao apresentador pelas notas");
+    assert.equal(new Set(notes.match(/SAP Note 2000\d\d/g) ?? []).size, 30, "todas as notas do ciclo");
+    assert.match(slides, /A Listagem de Vulnerabilidades encontra-se no arquivo anexado ao e-mail\./);
 });
 
-test("capa e consolidado incluem os textos executivos aprovados", () => {
-    const pptx = buildSapPatchPresentation(sample, FakePptx as never) as unknown as FakePptx;
-    assert.match(pptx.slides[0].texts.join("\n"), /Avaliação de riscos de vulnerabilidades/);
-    assert.match(pptx.slides[0].texts.join("\n"), /14 de julho de 2026/);
-    const consolidated = pptx.slides[2].texts.join("\n");
-    assert.match(consolidated, /Total de notas: 3/);
-    assert.match(consolidated, /RCE \/ Corrupção de memória:/);
-});
-
-test("gera ZIPs PPTX e XLSX reais com metadados e conteúdo neutros", async () => {
-    const runtimeRequire = createRequire(`${process.cwd()}/package.json`);
-    const JSZip = runtimeRequire("jszip") as typeof import("jszip");
-    const PptxGenJS = runtimeRequire("pptxgenjs") as typeof import("pptxgenjs").default;
-    const ExcelJS = runtimeRequire("exceljs") as typeof import("exceljs");
-    const pptx = buildSapPatchPresentation(sample, PptxGenJS);
-    const pptxBytes = await pptx.write({ outputType: "nodebuffer" });
-    const workbook = buildSapPatchWorkbook(sample, ExcelJS);
-    const xlsxBytes = await workbook.xlsx.writeBuffer();
-    const privateDenylist = [/\bEY\b/i, /Ernst\s*&\s*Young/i, /\bcliente\b/i, /\bclient\b/i, /\bconsultoria\b/i];
-    for (const [format, bytes] of [["PPTX", pptxBytes], ["XLSX", xlsxBytes]] as const) {
-        const zip = await JSZip.loadAsync(bytes as ArrayBuffer);
-        const xml = (await Promise.all(Object.values(zip.files).filter((file) => !file.dir && /\.xml$/.test(file.name)).map((file) => file.async("string")))).join("\n");
-        assert.match(xml, /ThreatSumm4ry/);
-        assert.match(xml, /Avaliação|SAP Security Patch Day/);
-        for (const privateIdentifier of privateDenylist) assert.doesNotMatch(xml, privateIdentifier, `${format}: ${privateIdentifier}`);
-    }
-});
-
-test("distribui referências deduplicadas em colunas sem colidir com geração ou rodapé", () => {
+test("as referências deduplicadas cabem no canvas e não colidem com o rodapé", () => {
     const summary = withNoteCount(30);
     summary.notes[29].noteUrl = summary.notes[0].noteUrl;
-    const pptx = buildSapPatchPresentation(summary, FakePptx as never) as unknown as FakePptx;
-    const slide = pptx.slides[5];
-    const generated = slide.textEntries.find((entry) => entry.text.startsWith("Gerado em"));
+    const pptx = buildSapPatchPresentation(summary, loadPptx()) as unknown as {
+        slides: { _slideObjects: { text?: unknown; options?: { x?: number; y?: number; w?: number; h?: number; hyperlink?: { url: string } } }[] }[];
+    };
+    const objects = pptx.slides[5]._slideObjects;
+    const links = objects.filter((o) => o.options?.hyperlink);
     const expected = new Set([summary.url, ...summary.notes.map((note) => note.noteUrl)]);
-    const links = slide.textEntries.filter((entry) => typeof entry.options.hyperlink === "object");
+
     assert.equal(links.length, expected.size);
-    assert.equal(new Set(links.map((entry) => entry.text)).size, expected.size);
-    assert.ok(new Set(links.map((entry) => entry.options.x)).size >= 2);
-    assert.ok(generated);
+    assert.ok(new Set(links.map((o) => o.options!.x)).size >= 2, "distribuídas em colunas");
     for (const link of links) {
-        const bottom = Number(link.options.y) + Number(link.options.h);
-        assert.ok(bottom < Number(generated.options.y));
-        assert.ok(bottom < 7.05);
-        assert.ok(Number(link.options.x) + Number(link.options.w) <= 13.333);
+        assert.ok(link.options!.y! + link.options!.h! < 4.7, "acima da linha de geração");
+        assert.ok(link.options!.x! + link.options!.w! <= 10.001);
+    }
+});
+
+test("a planilha SAP sai no padrão de folha, em PT-BR, com os termos da SAP intactos", async () => {
+    const workbook = buildSapPatchWorkbook(sample, loadExcel());
+
+    assert.deepEqual(workbook.worksheets.map((sheet) => sheet.name), ["Visão executiva", "Notas de segurança"]);
+
+    const notes = workbook.getWorksheet("Notas de segurança")!;
+    const header = notes.getRow(1);
+    assert.deepEqual(
+        (notes.columns ?? []).map((column) => column.header),
+        ["Nota", "CVE", "NVD", "Título", "CVSS", "Prioridade", "Categoria", "Produto/Componente", "Atualização", "Vetor CVSS", "URL da SAP Note"]
+    );
+
+    // Black band, yellow bold Calibri 14, bordered, frozen, filterable.
+    const style = header.getCell(1);
+    assert.deepEqual(style.font, { name: "Calibri", bold: true, size: 14, color: { argb: "FFFFE600" } });
+    assert.equal((style.fill as { fgColor: { argb: string } }).fgColor.argb, "FF000000");
+    assert.ok(style.border?.bottom);
+    assert.deepEqual(notes.views, [{ state: "frozen", ySplit: 1 }]);
+    assert.deepEqual(notes.autoFilter, { from: { row: 1, column: 1 }, to: { row: 1, column: 11 } });
+    assert.equal(notes.properties.tabColor?.argb, "FFFFE600", "abas amarelas");
+
+    // The note links to SAP, and every CVE carries its NVD reference.
+    const first = notes.getRow(2);
+    assert.deepEqual(first.getCell(1).value, { text: "100001", hyperlink: "https://me.sap.example/notes/100001" });
+    assert.deepEqual(first.getCell(3).value, { text: "NVD", hyperlink: "https://nvd.nist.gov/vuln/detail/CVE-2026-1001" });
+    assert.deepEqual(first.getCell(3).font, { name: "Calibri", color: { argb: "FF0563C1" }, underline: true });
+
+    // Values: our labels in PT-BR, fallbacks where SAP published nothing.
+    assert.equal(first.getCell(2).value, "CVE-2026-1001");
+    assert.equal(first.getCell(6).value, "Crítica (Hot News)");
+    assert.equal(first.getCell(7).value, "RCE / Corrupção de memória");
+    assert.equal(first.getCell(8).value, "SAP NetWeaver AS Java");
+    assert.equal(first.getCell(9).value, "Não", "booleano em PT-BR");
+    assert.equal(first.getCell(10).value, "Não informado");
+
+    // No colour on data rows — the reader filters by column instead.
+    assert.equal(first.getCell(4).fill, undefined);
+    assert.equal(first.getCell(4).font, undefined);
+
+    assert.equal(sapPatchBaseFilename(sample), "SAP-Security-Patch-Day-2026-07");
+    assert.equal(sapPatchExcelFilename(sample), "SAP-Security-Patch-Day-2026-07.xlsx");
+    assert.equal(sapPatchBaseFilename({ ...sample, releaseDate: null }), "SAP-Security-Patch-Day-mais-recente");
+});
+
+test("a visão executiva mantém indicadores, blocos e cabeçalhos no padrão", () => {
+    const executive = buildSapPatchWorkbook(sample, loadExcel()).getWorksheet("Visão executiva")!;
+
+    assert.equal(executive.getCell("A2").value, "Data do ciclo");
+    assert.equal(executive.getCell("B2").value, sample.releaseDate);
+    assert.deepEqual(executive.getCell("B3").value, { text: "Fonte oficial SAP", hyperlink: sample.url });
+    assert.equal(executive.getRow(5).getCell(1).value, "Indicador");
+    assert.equal(executive.getRow(6).getCell(1).value, "Total de notas");
+    assert.equal(executive.getRow(12).getCell(1).value, "Distribuição por prioridade");
+    assert.equal(executive.getRow(17).getCell(1).value, "Distribuição por categoria");
+    assert.equal(executive.getRow(22).getCell(1).value, "Top 3");
+    assert.equal(executive.getRow(23).getCell(3).value, "Crítica (Hot News)");
+    assert.deepEqual(executive.views, [{ state: "frozen", ySplit: 5 }]);
+    assert.equal(executive.properties.tabColor?.argb, "FFFFE600");
+
+    // Every block header wears the black band, not just the first one.
+    for (const row of [5, 12, 17, 22]) {
+        assert.equal(
+            (executive.getRow(row).getCell(1).fill as { fgColor: { argb: string } }).fgColor.argb,
+            "FF000000",
+            `linha ${row}`
+        );
+    }
+});
+
+test("os fallbacks não criam link sem destino", () => {
+    const edge: SapPatchSummary = {
+        ...sample,
+        notes: [{ ...sample.notes[0], note: "200001", noteUrl: "", title: "Issue in unnamed component", cves: [], cvss: null, cvssVector: null, isUpdate: true }],
+        summary: { total: 1, byPriority: { High: 1 }, hotNews: 0, high: 1, maxCvss: 0, cveCount: 0 },
+    };
+    const row = buildSapPatchWorkbook(edge, loadExcel()).getWorksheet("Notas de segurança")!.getRow(2);
+    assert.equal(row.getCell(1).value, "200001");
+    assert.equal(row.getCell(2).value, "Não informada");
+    assert.equal(row.getCell(3).value, "Não informada");
+    assert.equal(row.getCell(3).font, undefined, "sem estilo de link onde não há link");
+    assert.equal(row.getCell(5).value, "Não informado");
+    assert.equal(row.getCell(8).value, "Componente SAP não especificado");
+    assert.equal(row.getCell(9).value, "Sim");
+    assert.equal(row.getCell(10).value, "Não informado");
+    assert.equal(row.getCell(11).value, "Não informada");
+});
+
+test("os artefatos SAP não identificam a consultoria em nenhum metadado", async () => {
+    const workbook = buildSapPatchWorkbook(sample, loadExcel());
+    const xlsxZip = await loadZip().loadAsync((await workbook.xlsx.writeBuffer()) as ArrayBuffer);
+    const files = Object.values(xlsxZip.files).filter((f) => !f.dir && /\.xml$/.test(f.name));
+    const xml = (await Promise.all(files.map((f) => f.async("string")))).join("\n");
+
+    assert.match(xml, /ThreatSumm4ry/);
+    assert.match(xml, /Fonte oficial SAP/);
+    assert.equal(workbook.company, "");
+    assert.equal(workbook.subject, "Relatório automático do SAP Security Patch Day");
+    assert.match(workbook.title, /julho de 2026/);
+    for (const identifier of [/\bEY\b/i, /Ernst\s*&\s*Young/i, /\bcliente\b/i, /\bconsultoria\b/i]) {
+        assert.doesNotMatch(xml, identifier, String(identifier));
+    }
+});
+
+// eslint-disable-next-line no-control-regex
+const CONTROL_CHARS = /[\u0000-\u0008\u000b\u000c\u000e-\u001f]/;
+
+// SAP note titles are free text we do not control, and PowerPoint is far stricter
+// than LibreOffice: a dangling rId, a part with no content type, or a stray `&`
+// all produce the "needs repair" dialog instead of a slide.
+test("o pacote SAP abre no PowerPoint: rIds resolvem, partes declaradas, texto escapado", async () => {
+    const hostile = 'SAP <NetWeaver> \u0026 "AS Java" \u0007 Remote Code Execution';
+    const fuzzed: SapPatchSummary = {
+        ...sample,
+        url: sample.url,
+        notes: sample.notes.map((note) => ({ ...note, title: hostile })),
+    };
+    const zip = await loadZip().loadAsync(
+        (await buildSapPatchPresentation(fuzzed, loadPptx()).write({ outputType: "nodebuffer" })) as ArrayBuffer
+    );
+    const part = (name: string) => zip.file(name)?.async("string") ?? Promise.resolve("");
+
+    const types = await part("[Content_Types].xml");
+    const parts = Object.keys(zip.files).filter((n) => !zip.files[n].dir && n.endsWith(".xml") && !n.includes("/_rels/"));
+    assert.ok(parts.some((n) => /^ppt\/slides\/slide\d+\.xml$/.test(n)), "o pacote tem slides");
+
+    const xlsx = await loadZip().loadAsync(
+        (await buildSapPatchWorkbook(fuzzed, loadExcel()).xlsx.writeBuffer()) as ArrayBuffer
+    );
+    for (const file of Object.values(xlsx.files).filter((f) => !f.dir && /\.xml$/.test(f.name))) {
+        assert.doesNotMatch(await file.async("string"), CONTROL_CHARS, `${file.name}: controle inválido no xlsx`);
+    }
+
+    for (const name of parts) {
+        const xml = await part(name);
+        // Every relationship the part points at has to exist in its own .rels.
+        const rels = await part(name.replace(/([^/]+)$/, "_rels/$1.rels"));
+        const declared = new Set([...rels.matchAll(/\bId="([^"]+)"/g)].map((m) => m[1]));
+        for (const [, id] of xml.matchAll(/r:(?:id|embed|link|pict)="([^"]+)"/g)) {
+            assert.ok(declared.has(id), `${name}: ${id} não existe em _rels`);
+        }
+        // Slides, notes and charts need an explicit content type; the generic
+        // Default Extension="xml" is not enough for PowerPoint to render them.
+        if (/^ppt\/(slides|notesSlides|charts)\//.test(name)) {
+            assert.ok(types.includes(`PartName="/${name}"`), `${name}: sem Override em [Content_Types].xml`);
+        }
+        assert.doesNotMatch(xml, /&(?!amp;|lt;|gt;|quot;|apos;|#\d+;|#x[0-9a-fA-F]+;)/, `${name}: & solto quebra o XML`);
+        assert.doesNotMatch(xml, CONTROL_CHARS, `${name}: caractere de controle inválido em XML 1.0`);
     }
 });

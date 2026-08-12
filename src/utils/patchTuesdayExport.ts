@@ -9,7 +9,12 @@ import type { CellHookData } from 'jspdf-autotable';
 import type PptxGenJS from 'pptxgenjs';
 import type ExcelJS from 'exceljs';
 import type { PatchTuesdaySummary, PatchVulnerability, PatchTuesdayTotals, NamedCount } from '@/services/msrcApi';
-import { DECK_COVER_BG, DECK_PANEL_BG } from './patchTuesdayDeckArt';
+import {
+    DECK, FONT, FONT_LIGHT, LINK_FONT, SHEET_BORDER, SHEET_HEADER, SHEET_HEADER_TEXT, SHEET_TAB,
+    attachmentNote, condenseTitle, contentSlide, coverSlide, darkBarChart, deckMetadata, gradientBar,
+    highlightCard, kpiPill, msrcCveUrl, nvdCveUrl, scrubXml, styleHeaderRow, workbookMetadata,
+    fmtMonthPt, fmtLongDatePt, fmtShortDatePt, monthSlashYear, type PptxFactory,
+} from './deckTemplate';
 
 // ---- Shared palette / helpers -------------------------------------------------
 
@@ -325,26 +330,6 @@ const severityCellColor = (data: CellHookData, col: number) => {
 // Metadata carries no company name (pptx.company stays blank) — the deck is
 // handed over and presented under the reader's own name.
 
-const DECK = {
-    panel: '1A1A24', // dark panel that covers all but a thin frame of the artwork
-    card: '242731', // highlight cards
-    cardAlt: '222530', // the two wide cards on the executive summary
-    cardLine: '454957',
-    accent: 'FFE600', // section titles
-    amber: 'FFC000', // KPI pills
-    red: 'E53935', // card rules and CVE identifiers
-    muted: 'B7BAC5',
-    white: 'FFFFFF',
-    ink: '1A1A24', // text on the amber pills
-    logo: '2E2E38', // the reserved logo plate, bottom right
-    green: '2DB757', // chart bars
-} as const;
-
-const FONT = 'Overpass';
-const FONT_LIGHT = 'Overpass Light';
-
-export type PptxFactory = new () => PptxGenJS;
-
 const FAMILY_PT: Record<string, string> = {
     'Azure & Cloud': 'Azure e nuvem',
     'Developer Tools & .NET': 'Ferramentas de desenvolvimento e .NET',
@@ -362,188 +347,16 @@ const IMPACT_SHORT: Record<string, string> = {
 
 const pt = (map: Record<string, string>, value: string) => map[value] || value;
 
-const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
-
-const fmtMonthPt = (iso: string | null): string => {
-    if (!iso) return 'Ciclo mais recente';
-    const d = new Date(iso);
-    return isNaN(d.getTime()) ? 'Ciclo mais recente' : d.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
-};
-
-const fmtDatePt = (iso: string | null): string => {
-    if (!iso) return 'Ciclo mais recente';
-    const d = new Date(iso);
-    return isNaN(d.getTime()) ? 'Ciclo mais recente' : d.toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
-};
-
-// "12 de agosto de 2026" → "12 de Agosto de 2026", the cover's own capitalisation.
-const fmtLongDatePt = (iso: string | null): string =>
-    fmtDatePt(iso).replace(/ de (\p{Ll})/u, (_, letter: string) => ` de ${letter.toUpperCase()}`);
-
-// dd/mm/yyyy, the form the slide footer uses.
-const fmtShortDatePt = (iso: string | null): string => {
-    if (!iso) return '';
-    const d = new Date(iso);
-    return isNaN(d.getTime()) ? '' : d.toLocaleDateString('pt-BR');
-};
-
-// "agosto de 2026" → "Agosto/2026", the form the cover and the header band use.
-const monthSlashYear = (iso: string | null): string => {
-    if (!iso) return 'Ciclo mais recente';
-    const d = new Date(iso);
-    if (isNaN(d.getTime())) return 'Ciclo mais recente';
-    return `${capitalize(d.toLocaleDateString('pt-BR', { month: 'long' }))}/${d.getFullYear()}`;
-};
-
 const statusPt = (v: PatchVulnerability): string => {
     if (v.exploited) return 'Explor. ativa';
     if (v.publiclyDisclosed) return 'Pública';
     return v.severity === 'Critical' ? 'Crítica' : v.severity;
 };
 
-// ---- Template chrome ---------------------------------------------------------
-
-// The accent rule runs yellow → magenta → cyan. pptxgenjs has no gradient fill,
-// so it is painted as abutting slices of the interpolated colour; at 0.07in tall
-// the seams are not resolvable.
-const GRADIENT_STOPS: [number, string][] = [
-    [0, 'FFE600'],
-    [0.46, 'FFE600'],
-    [0.66, 'FF32FF'],
-    [1, '32FFFF'],
-];
-
-const mixHex = (from: string, to: string, t: number): string =>
-    [0, 2, 4]
-        .map((o) => {
-            const a = parseInt(from.substr(o, 2), 16);
-            const b = parseInt(to.substr(o, 2), 16);
-            return Math.round(a + (b - a) * t)
-                .toString(16)
-                .padStart(2, '0');
-        })
-        .join('')
-        .toUpperCase();
-
-const gradientAt = (t: number): string => {
-    for (let i = 1; i < GRADIENT_STOPS.length; i++) {
-        const [p0, c0] = GRADIENT_STOPS[i - 1];
-        const [p1, c1] = GRADIENT_STOPS[i];
-        if (t <= p1) return p1 === p0 ? c1 : mixHex(c0, c1, (t - p0) / (p1 - p0));
-    }
-    return GRADIENT_STOPS[GRADIENT_STOPS.length - 1][1];
-};
-
-const GRADIENT_SLICES = 40;
-
-const gradientBar = (
-    pptx: PptxGenJS,
-    slide: PptxGenJS.Slide,
-    x: number,
-    y: number,
-    w: number,
-    h: number,
-    vertical = false
-): void => {
-    const span = (vertical ? h : w) / GRADIENT_SLICES;
-    for (let i = 0; i < GRADIENT_SLICES; i++) {
-        slide.addShape(pptx.ShapeType.rect, {
-            x: vertical ? x : x + i * span,
-            y: vertical ? y + i * span : y,
-            w: vertical ? w : span + 0.005, // overlap so no hairline shows between slices
-            h: vertical ? span + 0.005 : h,
-            fill: { color: gradientAt(i / (GRADIENT_SLICES - 1)) },
-            line: { type: 'none' },
-        });
-    }
-};
-
-const contentSlide = (pptx: PptxGenJS, s: PatchTuesdaySummary, title: string, pageNumber: number): PptxGenJS.Slide => {
-    const slide = pptx.addSlide();
-    slide.background = { data: DECK_PANEL_BG, path: 'preencoded.jpg' };
-    slide.addShape(pptx.ShapeType.roundRect, {
-        x: 0.264, y: 0.234, w: 9.472, h: 5.151,
-        rectRadius: 0.106, fill: { color: DECK.panel }, line: { type: 'none' },
-    });
-    slide.addText(title, {
-        x: 0.539, y: 0.483, w: 8.9, h: 0.471,
-        fontFace: FONT, fontSize: 21, bold: true, color: DECK.accent,
-    });
-    gradientBar(pptx, slide, 0.55, 0.969, 7.07, 0.07);
-
-    const footer = { h: 0.101, fontFace: FONT_LIGHT, fontSize: 6, color: DECK.white, align: 'center' as const, valign: 'middle' as const };
-    slide.addText(fmtShortDatePt(s.initialReleaseDate), { x: 0.816, y: 5.405, w: 1.046, ...footer });
-    slide.addText('Cyber Threat Intelligence & Cyber Threat Hunting', { x: 1.862, y: 5.405, w: 3.137, ...footer });
-    slide.addText(String(pageNumber), { x: 0.398, y: 5.405, w: 0.418, ...footer });
-
-    // Reserved plate, bottom right: the presenter drops their own mark in here.
-    slide.addShape(pptx.ShapeType.rect, {
-        x: 8.428, y: 4.997, w: 1.571, h: 0.628,
-        fill: { color: DECK.logo }, line: { color: DECK.accent, width: 0.75 },
-    });
-    return slide;
-};
-
-const attachmentNote = (slide: PptxGenJS.Slide): void => {
-    slide.addText('A Listagem de Vulnerabilidades encontra-se no arquivo anexado ao e-mail.', {
-        x: 0.469, y: 4.96, w: 6.936, h: 0.227,
-        fontFace: FONT, fontSize: 9, bold: true, italic: true, color: DECK.white,
-    });
-};
-
-// A bar chart drawn straight onto a dark surface: the plot has to be painted the
-// same colour as whatever sits behind it, or it shows up as a white block.
-const darkBarChart = (
-    pptx: PptxGenJS,
-    slide: PptxGenJS.Slide,
-    rows: NamedCount[],
-    box: { x: number; y: number; w: number; h: number },
-    surface: string
-): void => {
-    // Charted bottom-up, so the largest count reads at the top of the axis.
-    const data = [...rows].reverse();
-    slide.addChart(
-        pptx.ChartType.bar,
-        [{ name: 'CVEs', labels: data.map((r) => pt(FAMILY_PT, r.name)), values: data.map((r) => r.count) }],
-        {
-            ...box,
-            barDir: 'bar', barGapWidthPct: 45, chartColors: [DECK.green],
-            showLegend: false, showTitle: false,
-            showValue: true, dataLabelColor: DECK.white, dataLabelFontFace: FONT, dataLabelFontSize: 7,
-            catAxisLabelColor: DECK.white, catAxisLabelFontFace: FONT_LIGHT, catAxisLabelFontSize: 7,
-            catAxisLineShow: false, valAxisHidden: true,
-            catGridLine: { style: 'none' }, valGridLine: { style: 'none' },
-            chartArea: { fill: { color: surface }, border: { pt: 0, color: surface } },
-            plotArea: { fill: { color: surface }, border: { pt: 0, color: surface } },
-        }
-    );
-};
-
 // ---- Slides ------------------------------------------------------------------
 
 const addCoverSlide = (pptx: PptxGenJS, s: PatchTuesdaySummary): void => {
-    const slide = pptx.addSlide();
-    slide.background = { data: DECK_COVER_BG, path: 'preencoded.jpg' };
-    slide.addShape(pptx.ShapeType.rect, {
-        x: 8.428, y: 0, w: 1.571, h: 5.625,
-        fill: { color: DECK.logo }, line: { color: DECK.accent, width: 0.75 },
-    });
-    slide.addText(
-        [
-            { text: 'Microsoft Patch Tuesday', options: { breakLine: true } },
-            { text: '', options: { breakLine: true } },
-            { text: 'Cyber Threat Intelligence and Hunting' },
-        ],
-        { x: 0.67, y: 2.066, w: 4.654, h: 1.292, fontFace: FONT, fontSize: 24, color: DECK.white, lineSpacingMultiple: 0.85 }
-    );
-    slide.addText(`Consolidado - ${monthSlashYear(s.initialReleaseDate)}`, {
-        x: 0.67, y: 3.529, w: 4.269, h: 0.588,
-        fontFace: FONT, fontSize: 14, bold: true, italic: true, color: DECK.white,
-    });
-    slide.addText(fmtLongDatePt(s.initialReleaseDate), {
-        x: 0.67, y: 4.288, w: 4.024, h: 0.202,
-        fontFace: FONT, fontSize: 14, color: DECK.white,
-    });
+    coverSlide(pptx, 'Microsoft Patch Tuesday', s.initialReleaseDate);
 };
 
 // Zero-days are the CVEs Microsoft flags as exploited or already public. The full
@@ -557,7 +370,7 @@ const zeroDays = (s: PatchTuesdaySummary): PatchVulnerability[] => {
 
 const addExecutiveSummarySlide = (pptx: PptxGenJS, s: PatchTuesdaySummary): void => {
     const t = s.totals;
-    const slide = contentSlide(pptx, s, 'Sumário Executivo', 2);
+    const slide = contentSlide(pptx, 'Sumário Executivo', 2, s.initialReleaseDate);
     const zds = zeroDays(s);
 
     // Header band, gradient like the rule but tall enough to carry the cycle name.
@@ -605,7 +418,7 @@ const addExecutiveSummarySlide = (pptx: PptxGenJS, s: PatchTuesdaySummary): void
     slide.addText('Produtos Afetados x Número de CVEs:', { x: 0.574, y: 2.572, w: 3.82, h: 0.25, ...cardLabel });
     slide.addText('Prioridades imediatas', { x: 5.187, y: 2.581, w: 2.1, h: 0.225, ...cardLabel });
 
-    darkBarChart(pptx, slide, s.byFamily.slice(0, 8), { x: 0.5, y: 2.86, w: 4.1, h: 1.86 }, DECK.cardAlt);
+    darkBarChart(pptx, slide, s.byFamily.slice(0, 8).map((f) => ({ ...f, name: pt(FAMILY_PT, f.name) })), { x: 0.5, y: 2.86, w: 4.1, h: 1.86 }, DECK.cardAlt);
 
     const priorities: string[] = [];
     if (t.exploited > 0) {
@@ -656,24 +469,9 @@ const IMPACT_GLOSSARY = [
     'Elevation of Privilege: obtenção de permissões superiores às originalmente concedidas.',
 ];
 
-const kpiPill = (
-    pptx: PptxGenJS,
-    slide: PptxGenJS.Slide,
-    value: string,
-    label: string,
-    box: { x: number; y: number; vw: number; lw: number; h: number; valueSize: number }
-): void => {
-    const pill = { fill: { color: DECK.amber }, line: { type: 'none' as const } };
-    const text = { fontFace: FONT, bold: true, color: DECK.ink, align: 'center' as const, valign: 'middle' as const };
-    slide.addShape(pptx.ShapeType.rect, { x: box.x, y: box.y, w: box.vw, h: box.h, ...pill });
-    slide.addText(value, { x: box.x, y: box.y, w: box.vw, h: box.h, fontSize: box.valueSize, ...text });
-    slide.addShape(pptx.ShapeType.rect, { x: box.x + box.vw + 0.031, y: box.y, w: box.lw, h: box.h, ...pill });
-    slide.addText(label, { x: box.x + box.vw + 0.031, y: box.y, w: box.lw, h: box.h, fontSize: 12, ...text });
-};
-
 const addConsolidatedSlide = (pptx: PptxGenJS, s: PatchTuesdaySummary): void => {
     const t = s.totals;
-    const slide = contentSlide(pptx, s, 'Consolidado de Vulnerabilidades', 3);
+    const slide = contentSlide(pptx, 'Consolidado de Vulnerabilidades', 3, s.initialReleaseDate);
     const zds = zeroDays(s);
 
     kpiPill(pptx, slide, String(t.total), 'VULNERABILIDADES', { x: 0.477, y: 0.822, vw: 0.641, lw: 2.665, h: 0.354, valueSize: 15 });
@@ -706,7 +504,7 @@ const addConsolidatedSlide = (pptx: PptxGenJS, s: PatchTuesdaySummary): void => 
         slide.addText(v.cve, {
             x: x + 0.057, y: 1.511, w: 0.981, h: 0.145,
             fontFace: FONT_LIGHT, fontSize: 8, bold: true, color: DECK.accent, valign: 'middle',
-            hyperlink: { url: `https://msrc.microsoft.com/update-guide/vulnerability/${v.cve}` },
+            hyperlink: { url: msrcCveUrl(v.cve) },
         });
         slide.addText(pt(FAMILY_PT, v.family), {
             x: x + 0.057, y: 1.837, w: 0.981, h: 0.121,
@@ -738,12 +536,8 @@ const addConsolidatedSlide = (pptx: PptxGenJS, s: PatchTuesdaySummary): void => 
     );
 };
 
-// A title long enough to wrap breaks the fixed card height, so it is condensed and
-// the untruncated text goes to the speaker notes.
-const condenseTitle = (title: string, max = 78) => (title.length > max ? `${title.slice(0, max - 1)}…` : title);
-
 const addHighlightsSlide = (pptx: PptxGenJS, s: PatchTuesdaySummary): void => {
-    const slide = contentSlide(pptx, s, 'Highlights: Vulnerabilidades Críticas', 4);
+    const slide = contentSlide(pptx, 'Highlights: Vulnerabilidades Críticas', 4, s.initialReleaseDate);
     slide.addText('Seleção orientada ao risco corporativo e à exploração observada:', {
         x: 0.413, y: 0.715, w: 8.807, h: 0.379,
         fontFace: FONT_LIGHT, fontSize: 9, bold: true, color: DECK.white,
@@ -759,16 +553,11 @@ const addHighlightsSlide = (pptx: PptxGenJS, s: PatchTuesdaySummary): void => {
     highlights.forEach((v, i) => {
         const x = cols[i % 3];
         const y = i < 3 ? 1.065 : 3.09;
-        slide.addShape(pptx.ShapeType.roundRect, {
-            x, y, w: cardW, h: 1.815,
-            rectRadius: 0.038, fill: { color: DECK.card }, line: { color: DECK.red, width: 0.8 },
-            shadow: { type: 'outer', color: '000000', opacity: 0.18, blur: 3, offset: 0.5, angle: 45 },
-        });
-        slide.addShape(pptx.ShapeType.rect, { x, y, w: cardW, h: 0.096, fill: { color: DECK.red }, line: { type: 'none' } });
+        highlightCard(pptx, slide, { x, y, w: cardW, h: 1.815 });
         slide.addText(v.cve, {
             x: x + 0.109, y: y + 0.21, w: cardW - 0.22, h: 0.225,
             fontFace: FONT_LIGHT, fontSize: 11, bold: true, color: DECK.red,
-            hyperlink: { url: `https://msrc.microsoft.com/update-guide/vulnerability/${v.cve}` },
+            hyperlink: { url: msrcCveUrl(v.cve) },
         });
         slide.addText(pt(FAMILY_PT, v.family), {
             x: x + 0.109, y: y + 0.51, w: cardW - 0.22, h: 0.187,
@@ -802,30 +591,10 @@ const addHighlightsSlide = (pptx: PptxGenJS, s: PatchTuesdaySummary): void => {
     attachmentNote(slide);
 };
 
-// MSRC titles and product names are free text we do not control. XML 1.0 has no
-// legal representation for the C0 controls (not even `&#x7;`), so one of them in
-// a title is enough for PowerPoint and Excel to declare the file corrupt and
-// offer to repair it. Both builders scrub their input before writing anything.
-// eslint-disable-next-line no-control-regex
-const XML_ILLEGAL = /[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g;
-const scrubXml = <T>(v: T): T =>
-    typeof v === 'string'
-        ? (v.replace(XML_ILLEGAL, '') as T)
-        : Array.isArray(v)
-          ? (v.map(scrubXml) as T)
-          : v && typeof v === 'object'
-            ? (Object.fromEntries(Object.entries(v).map(([k, x]) => [k, scrubXml(x)])) as T)
-            : v;
-
 export function buildPatchTuesdayPresentation(rawSummary: PatchTuesdaySummary, PptxLib: PptxFactory): PptxGenJS {
     const summary = scrubXml(rawSummary);
     const pptx = new PptxLib();
-    pptx.layout = 'LAYOUT_16x9'; // 10 × 5.625in, the reference deck's exact canvas
-    pptx.author = 'ThreatSumm4ry';
-    pptx.company = '';
-    (pptx as PptxGenJS & { lang: string }).lang = 'pt-BR';
-    pptx.subject = 'Relatório automático do Microsoft Patch Tuesday';
-    pptx.title = `Microsoft Patch Tuesday — ${fmtMonthPt(summary.initialReleaseDate)}`;
+    deckMetadata(pptx, 'Microsoft Patch Tuesday', summary.initialReleaseDate);
 
     addCoverSlide(pptx, summary);
     addExecutiveSummarySlide(pptx, summary);
@@ -849,50 +618,26 @@ export async function exportPatchTuesdayPPTX(summary: PatchTuesdaySummary): Prom
 // data rows — whoever reads it filters by column instead.
 // Labels are PT-BR; the values MSRC publishes (severity, impact, exploitability)
 // stay in English, since those are the canonical terms people search for.
-const SHEET_HEADER = '000000';
-const SHEET_HEADER_TEXT = 'FFE600';
-const SHEET_BORDER = { style: 'thin' as const };
-
-// Both URLs are deterministic from the CVE id, so the sheet builds them locally
-// instead of asking MSRC for a link it already knows how to write.
-export const msrcCveUrl = (cve: string) => `https://msrc.microsoft.com/update-guide/vulnerability/${cve}`;
-export const nvdCveUrl = (cve: string) => `https://nvd.nist.gov/vuln/detail/${cve}`;
-
 export const patchTuesdayExcelFilename = (s: PatchTuesdaySummary) => `Patch-Tuesday-Microsoft-${s.id || 'report'}.xlsx`;
-
-const LINK_FONT = { name: 'Calibri', color: { argb: 'FF0563C1' }, underline: true } as const;
 
 export interface ExcelWorkbookFactory {
     Workbook: new () => ExcelJS.Workbook;
 }
 
-const styleHeaderRow = (ws: ExcelJS.Worksheet, row: number, lastCol: number) => {
-    const r = ws.getRow(row);
-    for (let c = 1; c <= lastCol; c++) {
-        const cell = r.getCell(c);
-        cell.font = { name: 'Calibri', bold: true, size: 14, color: { argb: `FF${SHEET_HEADER_TEXT}` } };
-        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: `FF${SHEET_HEADER}` } };
-        cell.alignment = { horizontal: 'left', vertical: 'top' };
-        cell.border = { top: SHEET_BORDER, left: SHEET_BORDER, bottom: SHEET_BORDER, right: SHEET_BORDER };
-    }
-    r.height = 18.5;
-};
 
 export function buildPatchTuesdayWorkbook(rawSummary: PatchTuesdaySummary, ExcelLib: ExcelWorkbookFactory): ExcelJS.Workbook {
     const summary = scrubXml(rawSummary);
     const wb = new ExcelLib.Workbook();
-    wb.creator = 'ThreatSumm4ry';
-    wb.company = '';
-    wb.created = new Date();
+    workbookMetadata(wb, 'Microsoft Patch Tuesday', summary.initialReleaseDate, 'Patch Tuesday, Microsoft, CVE, MSRC');
     const t = summary.totals;
 
     // ---- Resumo ----
-    const resumo = wb.addWorksheet('Resumo', { properties: { tabColor: { argb: `FF${SHEET_HEADER_TEXT}` } } });
+    const resumo = wb.addWorksheet('Resumo', { properties: SHEET_TAB });
     resumo.mergeCells('A1:B1');
     resumo.getCell('A1').value = `Microsoft Patch Tuesday — ${fmtMonthPt(summary.initialReleaseDate)}`;
     resumo.getCell('A1').font = { name: 'Calibri', bold: true, size: 12, color: { argb: `FF${SHEET_HEADER}` } };
     resumo.mergeCells('A2:B2');
-    resumo.getCell('A2').value = `Publicado em ${fmtDatePt(summary.initialReleaseDate)} · Fonte oficial Microsoft (MSRC) · Gerado em ${new Date().toLocaleString('pt-BR')}`;
+    resumo.getCell('A2').value = `Publicado em ${fmtLongDatePt(summary.initialReleaseDate)} · Fonte oficial Microsoft (MSRC) · Gerado em ${new Date().toLocaleString('pt-BR')}`;
     resumo.getCell('A2').font = { name: 'Calibri', size: 10 };
     resumo.addRow([]);
 
@@ -956,7 +701,7 @@ export function buildPatchTuesdayWorkbook(rawSummary: PatchTuesdaySummary, Excel
         { header: 'Vetor CVSS', key: 'vector', width: 42 },
     ];
     const base = wb.addWorksheet('Base de dados', {
-        properties: { tabColor: { argb: `FF${SHEET_HEADER_TEXT}` } },
+        properties: SHEET_TAB,
         views: [{ state: 'frozen', ySplit: 1 }],
     });
     base.columns = cols;
