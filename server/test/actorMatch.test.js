@@ -8,7 +8,7 @@ const index = buildActorIndex([
     { id: 'a3', name: 'Scattered Spider', aliases: ['UNC3944'] },
     { id: 'a4', name: '[Unnamed group]', aliases: [] },
     { id: 'a5', name: 'AIZ', aliases: ['XY'] },
-    { id: 'a6', name: 'Russian Cyber Criminal Group', aliases: [] },
+    { id: 'a6', name: 'Russian Angry Hackers Did It', aliases: [] },
 ]);
 
 const ids = (text) => matchActors(text, index).map((hit) => hit.id).sort();
@@ -69,14 +69,14 @@ test('ator antes de período final é achado', () => {
 });
 
 test('nomes com mais de quatro palavras são achados', () => {
-    assert.deepEqual(ids('Russian Cyber Criminal Group is active'), ['a6']);
-    assert.deepEqual(ids('Russian Cyber Criminal Group operates worldwide.'), ['a6']);
+    assert.deepEqual(ids('Russian Angry Hackers Did It is active'), ['a6']);
+    assert.deepEqual(ids('Russian Angry Hackers Did It operates worldwide.'), ['a6']);
 });
 
 test('contexto não vaza de uma frase para a outra (ator também)', () => {
     // Verify sentence scoping still works even with period-stripping
-    assert.deepEqual(ids('A new ransomware gang emerged. Russian Cyber Criminal Group did not.'), ['a6']);
-    assert.deepEqual(ids('A new group emerged. Russian Cyber Criminal Group was mentioned.'), ['a6']);
+    assert.deepEqual(ids('A new ransomware gang emerged. Russian Angry Hackers Did It was mentioned.'), ['a6']);
+    assert.deepEqual(ids('A new group emerged. Russian Angry Hackers Did It operates.'), ['a6']);
 });
 
 test('texto vazio ou nulo não quebra', () => {

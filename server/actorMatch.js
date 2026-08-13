@@ -19,7 +19,7 @@ const normalize = (value) =>
     String(value || '')
         .toLowerCase()
         .normalize('NFD')
-        .replace(/[̀-ͯ]/g, '')
+        .replace(/\p{Mn}/gu, '')
         .trim();
 
 // Hyphens and digits belong to the name (storm-0558, apt-c-36), so they survive.
