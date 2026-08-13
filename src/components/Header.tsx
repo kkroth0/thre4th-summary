@@ -33,6 +33,7 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { BrandMark } from "@/components/BrandMark";
+import { actorPageCopy } from "@/pages/actorsView";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { cn } from "@/lib/utils";
@@ -132,7 +133,7 @@ export function useNavCatalog() {
         },
         {
           path: "/atores",
-          label: tr({ pt: "Grupos de Ataque", en: "Threat Actors", es: "Grupos de Ataque", fr: "Groupes d'Attaque" }),
+          label: actorPageCopy(language).title,
           description: pt ? "Como agem, quem visam e por quais nomes aparecem." : "How they operate, who they target, what names they use.",
           icon: Users,
         },

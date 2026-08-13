@@ -102,3 +102,16 @@ export function topTechniques<A extends Actor>(
     .sort((a, b) => b.actors - a.actors || a.id.localeCompare(b.id))
     .slice(0, limit);
 }
+
+// The page and the nav item have to agree, so the label lives here instead of
+// being spelled out in both — this page used to be named differently.
+const ACTOR_PAGE_TITLES: Record<string, string> = {
+  pt: "Atores de Ameaça",
+  en: "Threat Actors",
+  es: "Actores de Amenaza",
+  fr: "Acteurs de Menace",
+};
+
+export const actorPageCopy = (language: string) => ({
+  title: ACTOR_PAGE_TITLES[language] ?? ACTOR_PAGE_TITLES.en,
+});
