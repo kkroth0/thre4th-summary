@@ -75,9 +75,13 @@ test('contexto não vaza de uma frase para a outra', () => {
     assert.deepEqual(ids('A new ransomware gang emerged. Akira Kurosawa died in 1998.'), []);
 });
 
-test('nome curto demais e placeholder ficam fora do índice', () => {
-    assert.deepEqual(ids('AIZ group claimed it'), []);
-    assert.deepEqual(ids('XY group claimed it'), []);
+test('três caracteres é o piso, não o corte', () => {
+    assert.deepEqual(ids('AIZ group claimed it'), ['a5'], 'AIZ tem 3 e fica');
+    assert.deepEqual(ids('XY group claimed it'), [], 'XY tem 2 e sai');
+    assert.deepEqual(ids('AIZ released a statement'), [], 'palavra comum ainda exige contexto');
+});
+
+test('o placeholder de grupo sem nome fica fora do índice', () => {
     assert.deepEqual(ids('[Unnamed group] did it'), []);
 });
 
@@ -268,8 +272,15 @@ test('uma história entra em todas as categorias que bateram', () => {
         cves: ['CVE-2025-61882'],
         actors: [{ id: 'a1', name: 'Cl0p', via: 'context' }],
     }));
-    assert.deepEqual(result.categories, ['Ransomware', 'APTs', 'Vulnerabilities']);
+    assert.deepEqual(result.categories, ['Ransomware', 'Vulnerabilities']);
     assert.equal(result.primary, 'Ransomware', 'a principal sai da precedência');
+});
+
+// Cl0p é gangue de ransomware, não APT: um match por contexto não é atribuição
+// forte o bastante para carimbar APTs. Só codinome ou nome composto carimba.
+test('match por contexto não promove a história a APTs', () => {
+    const byContext = categorize(item({ title: 'The Akira gang leaked it', actors: [{ id: 'a', name: 'Akira', via: 'context' }] }));
+    assert.ok(!byContext.categories.includes('APTs'));
 });
 
 test('APTs vem do match distintivo ou de termo nation-state', () => {
@@ -453,6 +464,8 @@ test('ator em comum sem termo raro em comum não une', () => {
     assert.equal(stories.length, 2);
 });
 
+// rareTerms deixa {cl0p, oracle} nos dois títulos: 'exploits', 'flaw', 'abused',
+// 'ransomware' e 'zero-day' são vocabulário comum e não contam.
 test('Jaccard alto dos termos raros une', () => {
     const stories = mergeIntoStories([], [
         item({ title: 'Cl0p exploits Oracle EBS zero-day', link: 'https://a.example/1' }),
@@ -475,10 +488,13 @@ test('história em silêncio há mais de 14 dias não recebe item novo', () => {
     assert.equal(merged.length, 2);
 });
 
+// A ponte precisa de evidência real dos dois lados: CVE com a primeira
+// história, e ator MAIS um termo raro (oracle) com a segunda. Só o nome do
+// ator em comum não une — é o que o teste anterior garante.
 test('um item que faz a ponte funde duas histórias e mantém o id da mais antiga', () => {
     const seed = mergeIntoStories([], [
         item({ title: 'Oracle EBS emergency patch published', link: 'https://a.example/1', cves: ['CVE-1'], pubDate: daysBefore(3) }),
-        item({ title: 'Cl0p leak site lists new victims', link: 'https://b.example/2', actors: [{ id: 'a1', name: 'Cl0p', matched: 'Cl0p', via: 'context' }], pubDate: daysBefore(2) }),
+        item({ title: 'Cl0p leak site lists Oracle victims', link: 'https://b.example/2', actors: [{ id: 'a1', name: 'Cl0p', matched: 'Cl0p', via: 'context' }], pubDate: daysBefore(2) }),
     ], NOW);
     assert.equal(seed.length, 2);
     const oldestId = seed.find((s) => s.sources[0].link === 'https://a.example/1').id;
@@ -508,7 +524,9 @@ test('a história herda título e score do item de maior score', () => {
 });
 
 test('histórias além da retenção são podadas', () => {
-    const ancient = mergeIntoStories([], [item({ title: 'Old story about Fortra GoAnywhere', link: 'https://a.example/1' })], new Date(NOW.getTime() - (STORY_RETENTION_DAYS + 5) * 86400000));
+    const long = STORY_RETENTION_DAYS + 5;
+    const ancient = mergeIntoStories([], [item({ title: 'Old story about Fortra GoAnywhere', link: 'https://a.example/1', pubDate: daysBefore(long) })], new Date(NOW.getTime() - long * 86400000));
+    assert.equal(ancient.length, 1, 'a história existia antes da poda');
     assert.equal(mergeIntoStories(ancient, [], NOW).length, 0);
 });
 
@@ -575,6 +593,8 @@ const COMMON_CTI = new Set([
     'exploit', 'exploits', 'exploited', 'exploitation', 'exploracao', 'critical', 'critico', 'critica',
     'warns', 'warning', 'alerta', 'alertam', 'says', 'said', 'novo', 'nova', 'released', 'reveals',
     'bug', 'bugs', 'issue', 'issues', 'code', 'codigo', 'data', 'dados', 'users', 'usuarios',
+    // Sit in a large share of CTI headlines, so they carry no grouping signal.
+    'ransomware', 'zero-day', '0-day', 'abuse', 'abused', 'abusing', 'targeting', 'targeted',
 ]);
 
 const normalize = (value) =>
@@ -601,15 +621,23 @@ const overlaps = (a, b) => [...a].some((value) => b.has(value));
 
 const storyId = (link) => crypto.createHash('sha1').update(String(link || '')).digest('hex').slice(0, 12);
 
-const signals = (story) => ({
-    cves: new Set(story.cves),
-    actors: new Set(story.actors.map((actor) => actor.id)),
-    rare: new Set(story.sources.flatMap((source) => rareTerms(source.title))),
-});
+const signals = (story) => {
+    const rare = new Set(story.sources.flatMap((source) => rareTerms(source.title)));
+    // The actor's own name is in both headlines by definition — two unrelated
+    // Cl0p stories both say "Cl0p", and that is not evidence they are one story.
+    // Rule 2 needs corroboration from somewhere else in the title.
+    const actorTokens = new Set(story.actors.flatMap((actor) => rareTerms(`${actor.name} ${actor.matched || ''}`)));
+    return {
+        cves: new Set(story.cves),
+        actors: new Set(story.actors.map((actor) => actor.id)),
+        rare,
+        rareBeyondActors: new Set([...rare].filter((term) => !actorTokens.has(term))),
+    };
+};
 
 const isSameStory = (a, b) => {
     if (overlaps(a.cves, b.cves)) return true;
-    if (overlaps(a.actors, b.actors) && overlaps(a.rare, b.rare)) return true;
+    if (overlaps(a.actors, b.actors) && overlaps(a.rareBeyondActors, b.rareBeyondActors)) return true;
     return jaccard(a.rare, b.rare) >= JACCARD_THRESHOLD;
 };
 
@@ -676,11 +704,12 @@ export function mergeIntoStories(stories, items, now) {
         known.add(item.link);
 
         let candidate = newStory(item);
-        const candidateSignals = signals(candidate);
         const rest = [];
         for (const story of result) {
             const active = new Date(story.lastSeen).getTime() >= activeSince;
-            if (active && isSameStory(signals(story), candidateSignals)) {
+            // Recomputed each round: absorbing one story hands the candidate a CVE
+            // or an actor that can make the next story match too.
+            if (active && isSameStory(signals(story), signals(candidate))) {
                 candidate = absorb(story, candidate);
             } else {
                 rest.push(story);
