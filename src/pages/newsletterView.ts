@@ -134,7 +134,7 @@ export const groupAdvisoriesIntoStories = <T extends StorySource>(advisories: T[
 
   const cards = [...byStory.values()];
   for (const card of cards) {
-    card.categories.sort((a, b) => NEWS_CATEGORY_ORDER.indexOf(a as never) - NEWS_CATEGORY_ORDER.indexOf(b as never));
+    card.categories.sort((a, b) => (NEWS_CATEGORY_ORDER as readonly string[]).indexOf(a) - (NEWS_CATEGORY_ORDER as readonly string[]).indexOf(b));
     card.primaryCategory = card.categories[0] ?? null;
   }
   return cards.sort((a, b) => b.lastSeen.localeCompare(a.lastSeen));

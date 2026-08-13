@@ -85,6 +85,15 @@ test("filtro por categoria e por ator", () => {
   assert.equal(filterStoryCards(cards, { category: "", actor: "" }).length, 2);
 });
 
+test("categorias são ordenadas pela precedência, não pela ordem de inserção", () => {
+  const cards = groupAdvisoriesIntoStories([
+    advisory({ storyId: "s1", link: "https://a.example/1", categories: ["Microsoft"] }),
+    advisory({ storyId: "s1", link: "https://b.example/2", categories: ["Ransomware"] }),
+  ]);
+  assert.deepEqual(cards[0].categories, ["Ransomware", "Microsoft"], "categorias em ordem de precedência");
+  assert.equal(cards[0].primaryCategory, "Ransomware", "categoria primária é a de maior precedência");
+});
+
 test("a ordem das categorias é a mesma do servidor", () => {
   assert.deepEqual(NEWS_CATEGORY_ORDER, [
     "Ransomware", "APTs", "Data Leaks", "OT/ICS", "Vulnerabilities", "Malware", "Microsoft",
