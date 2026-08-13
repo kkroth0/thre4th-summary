@@ -13,7 +13,11 @@ const NATION_STATE = /\b(?:nation[- ]state|state[- ]sponsored|state sponsored|ad
 const DATA_LEAK = /\b(?:data breach|data leak|breached|vazamento de dados|vazamento|exposed \d[\d.,]* (?:records|customers|users))\b/i;
 const OT_ICS = /\b(?:ot\/ics|ics\/ot|\bics\b|scada|\bplc\b|\bhmi\b|modbus|opc ua|profinet|dnp3|purdue|safety instrumented|siemens s7|simatic|rockwell|allen[- ]bradley|schneider electric|codesys)\b/i;
 const VULN_CLASS = /\b(?:remote code execution|\brce\b|arbitrary code|authentication bypass|auth bypass|privilege escalation|deserialization|path traversal|sql injection|zero[- ]day|0-day|actively exploited|exploited in the wild|proof[- ]of[- ]concept)\b/i;
-const MICROSOFT = /\b(?:microsoft|windows|exchange server|exchange online|\bexchange\b|sharepoint|azure|entra id|active directory|office 365|microsoft 365|\bteams\b|outlook|defender|hyper-v)\b/i;
+// exchange/teams/outlook/defender are ordinary CTI-headline words on their own
+// ("crypto exchange", "red teams", "threat outlook", "a defender perspective"),
+// so only the qualified forms count — same treatment as the other alternatives
+// here, which are already unambiguous.
+const MICROSOFT = /\b(?:microsoft|windows|exchange server|exchange online|sharepoint|azure|entra id|active directory|office 365|microsoft 365|microsoft teams|microsoft defender|windows defender|microsoft outlook|outlook\.com|hyper-v)\b/i;
 
 // Malware families that are not ransomware — ransomware has its own bucket.
 const MALWARE_THREATS = new Set(['Trojan', 'Infostealer', 'Wiper', 'Backdoor', 'Botnet', 'Spyware', 'Rootkit']);

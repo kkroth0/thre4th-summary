@@ -84,3 +84,24 @@ test('texto vazio ou nulo não quebra', () => {
     assert.deepEqual(matchActors(null, index), []);
     assert.deepEqual(buildActorIndex(null).distinctive.size, 0);
 });
+
+// Fix 4: hyper-common single-word aliases (play, silence, tick, platinum,
+// mirage, venom, cleaver) stay out of the common tier entirely — the context
+// terms meant to gate them (group, gang, campaign, threat actors...) are
+// themselves ordinary CTI vocabulary, so the two-tier rule alone still let
+// them false-positive.
+const stoplistIndex = buildActorIndex([
+    { id: 'g1040', name: 'Play', aliases: [] },
+    { id: 'g0091', name: 'Silence', aliases: [] },
+    { id: 'g0003', name: 'Cleaver', aliases: ['Play Ransomware'] },
+]);
+const stoplistIds = (text) => matchActors(text, stoplistIndex).map((hit) => hit.id).sort();
+
+test('aliases da stoplist não casam mesmo com termo de contexto na frase', () => {
+    assert.deepEqual(stoplistIds('Threat actors play a long game against telecom operators'), []);
+    assert.deepEqual(stoplistIds('The gang kept a strange silence after the breach campaign'), []);
+});
+
+test('aliases da stoplist continuam casando como parte de um nome multi-palavra', () => {
+    assert.deepEqual(stoplistIds('Play Ransomware group claims a new victim'), ['g0003']);
+});

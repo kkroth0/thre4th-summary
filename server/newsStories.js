@@ -90,7 +90,10 @@ const newStory = (item) => ({
     lastSeen: item.pubDate,
     cves: [...(item.cves || [])],
     actors: [...(item.actors || [])],
-    categories: [...(item.categories || [])],
+    // item.newsCategories is the navigation bucket list from categorize();
+    // item.categories is scoreArticle's unrelated CTI scoring labels — do not
+    // read that one here.
+    categories: [...(item.newsCategories || [])],
     primaryCategory: item.primaryCategory || null,
     score: item.score || 0,
     sources: [{

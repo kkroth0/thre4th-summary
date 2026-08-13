@@ -44,7 +44,7 @@ interface Advisory {
   // CTI relevance enrichment (from the specialized collector)
   score?: number;
   severity?: string; // Critical | High | Medium | Low
-  categories?: string[];
+  categories?: string[]; // CTI scoring labels from scoreArticle — unrelated to navigation
   cves?: string[];
   cvss?: number | null;
   reasons?: string[]; // why it scored — surfaced as a tooltip
@@ -61,6 +61,7 @@ interface Advisory {
   // Agrupamento e atribuição, vindos do servidor
   storyId?: string | null;
   actors?: { id: string; name: string; matched?: string; via?: string }[];
+  newsCategories?: string[]; // navigation buckets from categorize(), distinct from `categories` above
   primaryCategory?: string | null;
 }
 
@@ -210,6 +211,7 @@ const Newsletter = () => {
             score: typeof item.score === "number" ? item.score : undefined,
             severity: typeof item.severity === "string" ? (item.severity as string) : undefined,
             categories: Array.isArray(item.categories) ? (item.categories as string[]) : undefined,
+            newsCategories: Array.isArray(item.newsCategories) ? (item.newsCategories as string[]) : undefined,
             cves: Array.isArray(item.cves) ? (item.cves as string[]) : undefined,
             cvss: typeof item.cvss === "number" ? item.cvss : undefined,
             reasons: Array.isArray(item.reasons) ? (item.reasons as string[]) : undefined,

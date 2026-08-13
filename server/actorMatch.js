@@ -13,6 +13,23 @@ export const ACTOR_CONTEXT_TERMS =
 // Below this an "alias" is noise: two letters match half the language.
 const MIN_ALIAS_LENGTH = 3;
 
+// Single-word aliases excluded from the common tier: the context terms that
+// are supposed to vouch for them (group, gang, campaign, threat actor(s)...)
+// are themselves ordinary words in the same CTI sentences, so these still
+// false-positive even with the context requirement in place — e.g. "threat
+// actors play a long game" reads as actor Play (G1040) via context. Each is
+// still matchable through the distinctive tier when it appears as part of a
+// genuinely multi-word name (e.g. "Play Ransomware").
+const COMMON_TIER_STOPLIST = new Set([
+    'play',     // G1040 — "play a long game", "play out"
+    'silence',  // G0091 — "kept in silence", "radio silence"
+    'tick',     // G0060 (BRONZE BUTLER alias) — "tick the box", clock tick
+    'platinum', // G0068 — "platinum" as a tier/grade adjective
+    'mirage',   // G0004 (Ke3chang alias) — "a mirage of security"
+    'venom',    // misp-020d512f (TIDRONE alias) — "venom" in general prose
+    'cleaver',  // G0003 — "cleaver" as an ordinary tool/weapon noun
+]);
+
 const PLACEHOLDER = '[unnamed group]';
 
 const normalize = (value) =>
@@ -46,7 +63,7 @@ export function buildActorIndex(actors) {
                 if (!distinctive.has(key)) distinctive.set(key, { ...entry, via: 'codename' });
             } else if (/\s/.test(alias)) {
                 if (!distinctive.has(key)) distinctive.set(key, { ...entry, via: 'multiword' });
-            } else if (!common.has(key)) {
+            } else if (!COMMON_TIER_STOPLIST.has(key) && !common.has(key)) {
                 common.set(key, { ...entry, via: 'context' });
             }
         }

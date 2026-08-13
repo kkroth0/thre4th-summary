@@ -28,7 +28,7 @@ test("keeps matching advisories from different months", () => {
 
 const advisory = (over: Record<string, unknown> = {}) => ({
   title: "T", description: "", link: "https://a.example/1", pubDate: "2026-08-10T00:00:00.000Z",
-  source: "Feed", storyId: "s1", actors: [], categories: [], primaryCategory: null, cves: [], ...over,
+  source: "Feed", storyId: "s1", actors: [], newsCategories: [], primaryCategory: null, cves: [], ...over,
 });
 
 test("itens da mesma história viram um card só, com as fontes dentro", () => {
@@ -49,8 +49,8 @@ test("item sem storyId continua aparecendo, como card de uma fonte", () => {
 
 test("o card herda categorias e atores da união das fontes", () => {
   const cards = groupAdvisoriesIntoStories([
-    advisory({ link: "https://a.example/1", categories: ["Ransomware"], actors: [{ id: "a1", name: "Cl0p" }] }),
-    advisory({ link: "https://b.example/2", categories: ["Vulnerabilities"], cves: ["CVE-1"] }),
+    advisory({ link: "https://a.example/1", newsCategories: ["Ransomware"], actors: [{ id: "a1", name: "Cl0p" }] }),
+    advisory({ link: "https://b.example/2", newsCategories: ["Vulnerabilities"], cves: ["CVE-1"] }),
   ]);
   assert.deepEqual(cards[0].categories, ["Ransomware", "Vulnerabilities"]);
   assert.deepEqual(cards[0].actors.map((a) => a.id), ["a1"]);
@@ -67,9 +67,9 @@ test("cards são ordenados pela história mais recente", () => {
 
 test("a contagem por categoria conta histórias, não fontes", () => {
   const cards = groupAdvisoriesIntoStories([
-    advisory({ storyId: "s1", link: "https://a.example/1", categories: ["Ransomware"] }),
-    advisory({ storyId: "s1", link: "https://b.example/2", categories: ["Ransomware"] }),
-    advisory({ storyId: "s2", link: "https://c.example/3", categories: ["Ransomware", "Microsoft"] }),
+    advisory({ storyId: "s1", link: "https://a.example/1", newsCategories: ["Ransomware"] }),
+    advisory({ storyId: "s1", link: "https://b.example/2", newsCategories: ["Ransomware"] }),
+    advisory({ storyId: "s2", link: "https://c.example/3", newsCategories: ["Ransomware", "Microsoft"] }),
   ]);
   assert.equal(countByCategory(cards).Ransomware, 2);
   assert.equal(countByCategory(cards).Microsoft, 1);
@@ -77,8 +77,8 @@ test("a contagem por categoria conta histórias, não fontes", () => {
 
 test("filtro por categoria e por ator", () => {
   const cards = groupAdvisoriesIntoStories([
-    advisory({ storyId: "s1", link: "https://a.example/1", categories: ["Ransomware"], actors: [{ id: "a1", name: "Cl0p" }] }),
-    advisory({ storyId: "s2", link: "https://b.example/2", categories: ["Microsoft"] }),
+    advisory({ storyId: "s1", link: "https://a.example/1", newsCategories: ["Ransomware"], actors: [{ id: "a1", name: "Cl0p" }] }),
+    advisory({ storyId: "s2", link: "https://b.example/2", newsCategories: ["Microsoft"] }),
   ]);
   assert.deepEqual(filterStoryCards(cards, { category: "Ransomware", actor: "" }).map((c) => c.storyId), ["s1"]);
   assert.deepEqual(filterStoryCards(cards, { category: "", actor: "a1" }).map((c) => c.storyId), ["s1"]);
@@ -87,8 +87,8 @@ test("filtro por categoria e por ator", () => {
 
 test("categorias são ordenadas pela precedência, não pela ordem de inserção", () => {
   const cards = groupAdvisoriesIntoStories([
-    advisory({ storyId: "s1", link: "https://a.example/1", categories: ["Microsoft"] }),
-    advisory({ storyId: "s1", link: "https://b.example/2", categories: ["Ransomware"] }),
+    advisory({ storyId: "s1", link: "https://a.example/1", newsCategories: ["Microsoft"] }),
+    advisory({ storyId: "s1", link: "https://b.example/2", newsCategories: ["Ransomware"] }),
   ]);
   assert.deepEqual(cards[0].categories, ["Ransomware", "Microsoft"], "categorias em ordem de precedência");
   assert.equal(cards[0].primaryCategory, "Ransomware", "categoria primária é a de maior precedência");

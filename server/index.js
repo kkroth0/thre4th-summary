@@ -1724,20 +1724,23 @@ async function refreshNewsletterFeed() {
             if (ic.ips.length || ic.domains.length || ic.hashes.length || ic.urls.length) item.iocs = ic;
         }
 
-        // Actor attribution and navigation categories, then grouping. Enrichment
-        // must never take the news down with it: on failure the feed still ships,
-        // just without storyId.
-        for (const item of items) {
-            item.actors = matchActors(`${item.title} ${item.description || ''}`, actorIndex);
-            const { categories, primary } = categorize(item);
-            item.categories = categories;
-            item.primaryCategory = primary;
-        }
-
         // Default order: most recent first (the route can re-sort by relevance).
         const unifiedFeed = items.sort((a, b) => new Date(b.pubDate) - new Date(a.pubDate));
 
+        // Actor attribution, navigation categories, then grouping — all one unit
+        // of enrichment. It must never take the news down with it: on failure the
+        // feed still ships, just without storyId/actors/newsCategories. item.categories
+        // is scoreArticle's CTI scoring labels (set above via `...intel`) —
+        // navigation categories go on their own field, newsCategories, so they
+        // don't clobber it.
         try {
+            for (const item of unifiedFeed) {
+                item.actors = matchActors(`${item.title} ${item.description || ''}`, actorIndex);
+                const { categories, primary } = categorize(item);
+                item.newsCategories = categories;
+                item.primaryCategory = primary;
+            }
+
             const stories = mergeIntoStories(newsStoryStore.all(), unifiedFeed, new Date());
             newsStoryStore.save(stories);
             const storyByLink = new Map(stories.flatMap((story) => story.sources.map((source) => [source.link, story.id])));

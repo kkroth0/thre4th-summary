@@ -47,6 +47,20 @@ test('list filtra por categoria, ator e janela de dias', () => {
     assert.equal(store.list({ limit: 1, now }).length, 1);
 });
 
+// Fix 5: if the disk write throws, in-memory state must not have advanced —
+// otherwise a restart rewinds to the old file while callers this process saw
+// the new state, and the gap re-merges into duplicate stories.
+test('save não avança o estado em memória quando a escrita falha', () => {
+    const filePath = tempFile();
+    const store = createStoryStore({ filePath, readFileSync: fs.readFileSync, writeJsonAtomic });
+    store.save([story({ id: 'first' })]);
+
+    const failingWrite = () => { throw new Error('disk full'); };
+    const failingStore = createStoryStore({ filePath, readFileSync: fs.readFileSync, writeJsonAtomic: failingWrite });
+    assert.throws(() => failingStore.save([story({ id: 'second' })]));
+    assert.deepEqual(failingStore.all().map((s) => s.id), ['first'], 'in-memory state stays at the last successful write');
+});
+
 test('get devolve null para id desconhecido', () => {
     const store = createStoryStore({ filePath: tempFile(), readFileSync: fs.readFileSync, writeJsonAtomic });
     assert.equal(store.get('nope'), null);

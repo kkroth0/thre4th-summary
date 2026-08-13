@@ -57,8 +57,39 @@ test('Malware não inclui ransomware, que tem categoria própria', () => {
 });
 
 test('Microsoft reconhece a marca e os produtos', () => {
-    for (const term of ['Microsoft', 'Windows', 'Exchange', 'SharePoint', 'Azure', 'Entra ID', 'Hyper-V']) {
+    for (const term of ['Microsoft', 'Windows', 'Exchange Server', 'SharePoint', 'Azure', 'Entra ID', 'Hyper-V']) {
         assert.ok(categorize(item({ title: `${term} under attack` })).categories.includes('Microsoft'), term);
+    }
+});
+
+// Deferred minor #3: exchange/teams/outlook/defender are ordinary CTI-headline
+// vocabulary on their own — only the qualified Microsoft forms should count.
+test('Microsoft não casa com palavras genéricas do vocabulário de CTI', () => {
+    const falsePositives = [
+        'Lazarus Group linked to the exchange heist',
+        'Crypto exchange Bybit loses $1.5B in largest heist ever',
+        'Red teams increasingly abuse legitimate tooling',
+        'Security teams struggle with alert fatigue',
+        'Threat outlook for 2026: what CISOs should expect',
+        'A defender perspective on detection engineering',
+    ];
+    for (const title of falsePositives) {
+        assert.ok(!categorize(item({ title })).categories.includes('Microsoft'), title);
+    }
+});
+
+test('Microsoft exige a forma qualificada para exchange/teams/outlook/defender', () => {
+    const positives = [
+        'Exchange Server vulnerability under active exploitation',
+        'Exchange Online outage affects tenants',
+        'Attackers target Microsoft Teams users with malware',
+        'New phishing campaign abuses Microsoft Defender alerts',
+        'Windows Defender flagged as vulnerable to bypass',
+        'Microsoft Outlook zero-day exploited in the wild',
+        'Credentials phished via a fake outlook.com login page',
+    ];
+    for (const title of positives) {
+        assert.ok(categorize(item({ title })).categories.includes('Microsoft'), title);
     }
 });
 

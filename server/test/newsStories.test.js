@@ -8,7 +8,31 @@ const daysBefore = (n) => new Date(NOW.getTime() - n * 86400000).toISOString();
 const item = (over = {}) => ({
     title: 'Untitled', description: '', link: `https://x.example/${Math.random()}`,
     source: 'Feed', pubDate: NOW.toISOString(), score: 50, severity: 'High',
-    cves: [], actors: [], categories: [], primaryCategory: null, ...over,
+    cves: [], actors: [], newsCategories: [], primaryCategory: null, ...over,
+});
+
+// Pins the /api/newsletter compatibility promise at the one seam a pure module
+// can see: item.categories is scoreArticle's CTI scoring labels and must never
+// feed story-building — only item.newsCategories (the navigation buckets) may.
+// If the server's enrichment loop regressed to writing navigation categories
+// back onto item.categories (the original bug), this item would arrive with no
+// item.newsCategories, and the story would come back with categories: [] even
+// though categories: [...] is sitting right there — that's the failure this
+// guards against.
+test('a história lê newsCategories, nunca as categorias CTI de scoreArticle', () => {
+    const stories = mergeIntoStories([], [
+        item({
+            title: 'Cl0p exploits Oracle EBS zero-day',
+            link: 'https://a.example/1',
+            // CTI scoring labels from scoreArticle — must survive untouched on the
+            // item and must NOT leak into the story's navigation categories.
+            categories: ['Active Exploitation', 'Malware/Ransomware', 'Critical Vendor'],
+            newsCategories: ['Ransomware', 'Vulnerabilities'],
+        }),
+    ], NOW);
+    assert.equal(stories.length, 1);
+    assert.deepEqual(stories[0].categories, ['Ransomware', 'Vulnerabilities'], 'story categories come from newsCategories');
+    assert.ok(!stories[0].categories.includes('Active Exploitation'), 'CTI scoring labels never reach the story');
 });
 
 test('termos raros descartam stopwords e vocabulário comum de segurança', () => {
@@ -128,8 +152,8 @@ test('primaryCategory segue a precedência, não a ordem de chegada', () => {
     // The merged story should have primaryCategory='Ransomware' and
     // categories in precedence order.
     const stories = mergeIntoStories([], [
-        item({ title: 'Microsoft Exchange vulnerability discovered', link: 'https://a.example/1', cves: ['CVE-1'], categories: ['Microsoft'] }),
-        item({ title: 'Ransomware group exploits Exchange', link: 'https://b.example/2', cves: ['CVE-1'], categories: ['Ransomware'] }),
+        item({ title: 'Microsoft Exchange vulnerability discovered', link: 'https://a.example/1', cves: ['CVE-1'], newsCategories: ['Microsoft'] }),
+        item({ title: 'Ransomware group exploits Exchange', link: 'https://b.example/2', cves: ['CVE-1'], newsCategories: ['Ransomware'] }),
     ], NOW);
     assert.equal(stories.length, 1);
     assert.equal(stories[0].primaryCategory, 'Ransomware', 'primaryCategory deve seguir precedência');

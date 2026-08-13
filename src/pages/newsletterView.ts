@@ -88,7 +88,9 @@ export interface StorySource {
   pubDate: string;
   storyId?: string | null;
   actors?: StoryActor[];
-  categories?: string[];
+  // Navigation buckets from the server's categorize() — not scoreArticle's CTI
+  // scoring labels, which the API keeps on the unrelated `categories` field.
+  newsCategories?: string[];
   primaryCategory?: string | null;
   cves?: string[];
   score?: number;
@@ -122,7 +124,7 @@ export const groupAdvisoriesIntoStories = <T extends StorySource>(
         storyId: key,
         title: item.title,
         primaryCategory: item.primaryCategory ?? null,
-        categories: [...(item.categories ?? [])],
+        categories: [...(item.newsCategories ?? [])],
         actors: [...(item.actors ?? [])],
         cves: [...(item.cves ?? [])],
         lastSeen: item.pubDate,
@@ -134,7 +136,7 @@ export const groupAdvisoriesIntoStories = <T extends StorySource>(
     card.sources.push(item);
     if (item.pubDate > card.lastSeen) card.lastSeen = item.pubDate;
     if ((item.score ?? 0) > card.score) card.score = item.score ?? 0;
-    for (const category of item.categories ?? []) if (!card.categories.includes(category)) card.categories.push(category);
+    for (const category of item.newsCategories ?? []) if (!card.categories.includes(category)) card.categories.push(category);
     for (const cve of item.cves ?? []) if (!card.cves.includes(cve)) card.cves.push(cve);
     for (const actor of item.actors ?? []) if (!card.actors.some((a) => a.id === actor.id)) card.actors.push(actor);
   }

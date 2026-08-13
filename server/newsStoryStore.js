@@ -12,8 +12,12 @@ export function createStoryStore({ filePath, readFileSync, writeJsonAtomic }) {
     return {
         all: () => stories,
         save(next) {
-            stories = Array.isArray(next) ? next : [];
-            writeJsonAtomic(filePath, stories);
+            const value = Array.isArray(next) ? next : [];
+            // Write first: if writeJsonAtomic throws (disk full, EACCES), memory
+            // must not advance past what's actually on disk, or a restart rewinds
+            // and re-merges the gap into duplicate stories.
+            writeJsonAtomic(filePath, value);
+            stories = value;
             return stories;
         },
         get: (id) => stories.find((story) => story.id === id) || null,
