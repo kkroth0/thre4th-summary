@@ -51,6 +51,10 @@ import {
     getCompletedDate,
     selectDailyEdition,
 } from './dailyEditions.js';
+import { buildActorIndex, matchActors } from './actorMatch.js';
+import { categorize } from './newsCategories.js';
+import { mergeIntoStories } from './newsStories.js';
+import { createStoryStore } from './newsStoryStore.js';
 
 // Load the root .env regardless of the process cwd (systemd runs from server/,
 // local dev may not).
@@ -115,6 +119,20 @@ const exposureStore = createWatchlistStore({
 });
 const DAILY_SUMMARIES_PATH = path.join(__dirname, '.daily-summaries.json');
 const dailyEditionStore = createEditionStore({ filePath: DAILY_SUMMARIES_PATH, writeJsonAtomic });
+
+const NEWS_STORIES_PATH = path.join(__dirname, '.news-stories.json');
+const newsStoryStore = createStoryStore({ filePath: NEWS_STORIES_PATH, readFileSync: fs.readFileSync, writeJsonAtomic });
+
+// 1840 names and aliases, indexed once at boot rather than per article.
+const actorIndex = (() => {
+    try {
+        const raw = JSON.parse(fs.readFileSync(path.join(__dirname, 'data', 'actors.json'), 'utf8'));
+        return buildActorIndex(Array.isArray(raw) ? raw : raw.actors);
+    } catch (error) {
+        console.error('actor index unavailable:', error.message);
+        return buildActorIndex([]);
+    }
+})();
 
 // CORS Config
 const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',') || ['http://localhost:8080'];
@@ -1706,8 +1724,27 @@ async function refreshNewsletterFeed() {
             if (ic.ips.length || ic.domains.length || ic.hashes.length || ic.urls.length) item.iocs = ic;
         }
 
+        // Actor attribution and navigation categories, then grouping. Enrichment
+        // must never take the news down with it: on failure the feed still ships,
+        // just without storyId.
+        for (const item of items) {
+            item.actors = matchActors(`${item.title} ${item.description || ''}`, actorIndex);
+            const { categories, primary } = categorize(item);
+            item.categories = categories;
+            item.primaryCategory = primary;
+        }
+
         // Default order: most recent first (the route can re-sort by relevance).
         const unifiedFeed = items.sort((a, b) => new Date(b.pubDate) - new Date(a.pubDate));
+
+        try {
+            const stories = mergeIntoStories(newsStoryStore.all(), unifiedFeed, new Date());
+            newsStoryStore.save(stories);
+            const storyByLink = new Map(stories.flatMap((story) => story.sources.map((source) => [source.link, story.id])));
+            for (const item of unifiedFeed) item.storyId = storyByLink.get(item.link) || null;
+        } catch (error) {
+            console.error('news story grouping failed:', error.message);
+        }
 
         memoryCache.newsletter.data = unifiedFeed;
         memoryCache.newsletter.expiresAt = Date.now() + memoryCache.newsletter.ttl;
@@ -1748,6 +1785,31 @@ app.get('/api/newsletter', requirePremium, async (req, res) => {
         const { status, message } = sanitizeError(error);
         res.status(status).json({ error: message });
     }
+});
+
+// Histórias: o mesmo feed agrupado por assunto, com a linha do tempo de fontes.
+//   GET /api/news/stories?category=Ransomware&actor=<id>&days=30&limit=50
+app.get('/api/news/stories', requirePremium, async (req, res) => {
+    try {
+        if (!memoryCache.newsletter.data) await refreshNewsletterFeed();
+        res.set('Cache-Control', 'public, max-age=300');
+        res.json(newsStoryStore.list({
+            category: (req.query.category || '').toString() || undefined,
+            actor: (req.query.actor || '').toString() || undefined,
+            days: parseInt(req.query.days, 10) || undefined,
+            limit: Math.min(parseInt(req.query.limit, 10) || 200, 500),
+        }));
+    } catch (error) {
+        const { status, message } = sanitizeError(error);
+        res.status(status).json({ error: message });
+    }
+});
+
+app.get('/api/news/stories/:id', requirePremium, (req, res) => {
+    const story = newsStoryStore.get(String(req.params.id));
+    if (!story) return res.status(404).json({ error: 'story not found' });
+    res.set('Cache-Control', 'public, max-age=300');
+    res.json(story);
 });
 
 // ─── Feed Generator · sugestões do boletim diário ─────────────────────────
