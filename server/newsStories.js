@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { NEWS_CATEGORIES } from './newsCategories.js';
 
 // The same story reaches us from Reuters, BleepingComputer and CISA within
 // hours, worded three different ways. De-duplicating by URL — which is all the
@@ -39,7 +40,7 @@ const COMMON_CTI = new Set([
 ]);
 
 const normalize = (value) =>
-    String(value || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+    String(value || '').toLowerCase().normalize('NFD').replace(/\p{Mn}/gu, '');
 
 export function rareTerms(title) {
     const seen = new Set();
@@ -119,11 +120,14 @@ const absorb = (target, extra) => {
     const links = new Set(target.sources.map((source) => source.link));
     for (const source of extra.sources) if (!links.has(source.link)) merged.sources.push(source);
 
-    // Title and primary category follow the loudest source, which is the one a
-    // reader recognises: a CISA directive outranks a two-paragraph writeup.
+    // Title follows the loudest source, which is the one a reader recognises:
+    // a CISA directive outranks a two-paragraph writeup. Primary category
+    // follows precedence order (the first in NEWS_CATEGORIES that matches).
     const loudest = merged.sources.reduce((best, source) => (source.score > best.score ? source : best), merged.sources[0]);
     merged.title = loudest.title;
-    merged.primaryCategory = merged.categories[0] || null;
+    const orderedCategories = NEWS_CATEGORIES.filter((cat) => merged.categories.includes(cat));
+    merged.primaryCategory = orderedCategories[0] || null;
+    merged.categories = orderedCategories;
     return merged;
 };
 

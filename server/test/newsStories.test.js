@@ -121,3 +121,43 @@ test('entrada vazia devolve o estado intacto', () => {
     assert.deepEqual(mergeIntoStories([], [], NOW), []);
     assert.deepEqual(mergeIntoStories(null, null, NOW), []);
 });
+
+test('primaryCategory segue a precedência, não a ordem de chegada', () => {
+    // First item categorised as Microsoft (last in precedence),
+    // second categorised as Ransomware (first in precedence).
+    // The merged story should have primaryCategory='Ransomware' and
+    // categories in precedence order.
+    const stories = mergeIntoStories([], [
+        item({ title: 'Microsoft Exchange vulnerability discovered', link: 'https://a.example/1', cves: ['CVE-1'], categories: ['Microsoft'] }),
+        item({ title: 'Ransomware group exploits Exchange', link: 'https://b.example/2', cves: ['CVE-1'], categories: ['Ransomware'] }),
+    ], NOW);
+    assert.equal(stories.length, 1);
+    assert.equal(stories[0].primaryCategory, 'Ransomware', 'primaryCategory deve seguir precedência');
+    assert.deepEqual(stories[0].categories, ['Ransomware', 'Microsoft'], 'categories deve estar em ordem de precedência');
+});
+
+test('recompute de signals a cada iteração: candidate herda raridade de A e casa com B', () => {
+    // Story A: CVE-1, title "Oracle database" → {database, oracle}
+    // Story B: title "Oracle scandal" → {oracle, scandal}
+    // A vs B: Jaccard({database,oracle}, {oracle,scandal}) = 1/3 ≈ 0.33 < 0.5, separate
+    // Candidate: CVE-1, title "Scandal" → {scandal} only (1 rare term)
+    // Candidate vs B (before absorb): size < MIN_RARE_FOR_JACCARD, returns 0, no match
+    // Candidate matches A via CVE-1, merges
+    // After absorbing A: Candidate has both titles' rare terms: {database, oracle, scandal}
+    // Candidate vs B: Jaccard({database,oracle,scandal}, {oracle,scandal}) = 2/3 ≈ 0.67 >= 0.5
+    const seed = mergeIntoStories([], [
+        item({ title: 'Oracle database', link: 'https://a.example/1', cves: ['CVE-1'], pubDate: daysBefore(1) }),
+        item({ title: 'Oracle scandal', link: 'https://b.example/2', pubDate: daysBefore(1) }),
+    ], NOW);
+    assert.equal(seed.length, 2, 'A and B remain separate: Jaccard = 0.33');
+
+    // Candidate: CVE-1, single rare term {scandal}
+    // Matches A via CVE-1, inherits A's {database, oracle}
+    // After absorbing A, recomputed signals allow match with B
+    const bridged = mergeIntoStories(seed, [item({
+        title: 'Scandal', link: 'https://c.example/3',
+        cves: ['CVE-1'],
+    })], NOW);
+    assert.equal(bridged.length, 1, 'recompute enables candidate to match B after inheriting A rareness');
+    assert.equal(bridged[0].sources.length, 3, 'merged story has all three sources');
+});
