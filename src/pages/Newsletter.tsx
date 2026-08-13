@@ -221,6 +221,9 @@ const Newsletter = () => {
             ttps: Array.isArray(item.ttps) ? (item.ttps as string[]) : undefined,
             assets: Array.isArray(item.assets) ? (item.assets as string[]) : undefined,
             iocs: item.iocs as IocSet | undefined,
+            storyId: typeof item.storyId === "string" || item.storyId === null ? (item.storyId as string | null) : undefined,
+            actors: Array.isArray(item.actors) ? (item.actors as Advisory["actors"]) : undefined,
+            primaryCategory: typeof item.primaryCategory === "string" || item.primaryCategory === null ? (item.primaryCategory as string | null) : undefined,
           }));
           setAdvisories(validated);
         }
@@ -437,8 +440,8 @@ const Newsletter = () => {
   const [actorFilter, setActorFilter] = useState("");
 
   const storyCards = useMemo(
-    () => filterStoryCards(groupAdvisoriesIntoStories(filteredAdvisories), { category: categoryFilter, actor: actorFilter }),
-    [filteredAdvisories, categoryFilter, actorFilter],
+    () => filterStoryCards(groupAdvisoriesIntoStories(filteredAdvisories, { sortByRelevance }), { category: categoryFilter, actor: actorFilter }),
+    [filteredAdvisories, sortByRelevance, categoryFilter, actorFilter],
   );
   const categoryCounts = useMemo(() => countByCategory(groupAdvisoriesIntoStories(filteredAdvisories)), [filteredAdvisories]);
 
@@ -628,6 +631,7 @@ const Newsletter = () => {
                 <button
                   type="button"
                   onClick={() => setCategoryFilter("")}
+                  aria-pressed={categoryFilter === ""}
                   className={`rounded-full border px-3 py-1 text-xs transition ${categoryFilter === "" ? "border-primary bg-primary/10 text-primary" : "text-muted-foreground hover:border-primary/40"}`}
                 >
                   {language === "pt" ? "Todas" : "All"}
@@ -637,6 +641,7 @@ const Newsletter = () => {
                     key={name}
                     type="button"
                     onClick={() => setCategoryFilter(categoryFilter === name ? "" : name)}
+                    aria-pressed={categoryFilter === name}
                     className={`rounded-full border px-3 py-1 text-xs transition ${categoryFilter === name ? "border-primary bg-primary/10 text-primary" : "text-muted-foreground hover:border-primary/40"}`}
                   >
                     {name} <span className="tabular-nums opacity-60">{categoryCounts[name]}</span>
@@ -787,6 +792,7 @@ const Newsletter = () => {
                                   type="button"
                                   onClick={() => setActorFilter(actorFilter === actor.id ? "" : actor.id)}
                                   title={actor.matched && actor.matched !== actor.name ? `${language === "pt" ? "citado como" : "cited as"} ${actor.matched}` : undefined}
+                                  aria-pressed={actorFilter === actor.id}
                                   className={`rounded border px-2 py-0.5 text-[11px] transition ${actorFilter === actor.id ? "border-primary bg-primary/10 text-primary" : "text-muted-foreground hover:border-primary/40"}`}
                                 >
                                   {actor.name}

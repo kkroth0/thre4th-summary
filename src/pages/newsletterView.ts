@@ -91,6 +91,7 @@ export interface StorySource {
   categories?: string[];
   primaryCategory?: string | null;
   cves?: string[];
+  score?: number;
 }
 
 export interface StoryCard<T extends StorySource = StorySource> {
@@ -101,12 +102,16 @@ export interface StoryCard<T extends StorySource = StorySource> {
   actors: StoryActor[];
   cves: string[];
   lastSeen: string;
+  score: number;
   sources: T[];
 }
 
 // An item with no storyId is its own story. The grouping is enrichment: if the
 // server could not group, the reader still sees every headline.
-export const groupAdvisoriesIntoStories = <T extends StorySource>(advisories: T[]): StoryCard<T>[] => {
+export const groupAdvisoriesIntoStories = <T extends StorySource>(
+  advisories: T[],
+  options: { sortByRelevance?: boolean } = {},
+): StoryCard<T>[] => {
   const byStory = new Map<string, StoryCard<T>>();
 
   for (const item of advisories) {
@@ -121,12 +126,14 @@ export const groupAdvisoriesIntoStories = <T extends StorySource>(advisories: T[
         actors: [...(item.actors ?? [])],
         cves: [...(item.cves ?? [])],
         lastSeen: item.pubDate,
+        score: item.score ?? 0,
         sources: [item],
       });
       continue;
     }
     card.sources.push(item);
     if (item.pubDate > card.lastSeen) card.lastSeen = item.pubDate;
+    if ((item.score ?? 0) > card.score) card.score = item.score ?? 0;
     for (const category of item.categories ?? []) if (!card.categories.includes(category)) card.categories.push(category);
     for (const cve of item.cves ?? []) if (!card.cves.includes(cve)) card.cves.push(cve);
     for (const actor of item.actors ?? []) if (!card.actors.some((a) => a.id === actor.id)) card.actors.push(actor);
@@ -137,7 +144,11 @@ export const groupAdvisoriesIntoStories = <T extends StorySource>(advisories: T[
     card.categories.sort((a, b) => (NEWS_CATEGORY_ORDER as readonly string[]).indexOf(a) - (NEWS_CATEGORY_ORDER as readonly string[]).indexOf(b));
     card.primaryCategory = card.categories[0] ?? null;
   }
-  return cards.sort((a, b) => b.lastSeen.localeCompare(a.lastSeen));
+  // Story relevance is its loudest source — same principle the server uses to
+  // pick a story's title. Falls back to lastSeen so order stays deterministic.
+  return options.sortByRelevance
+    ? cards.sort((a, b) => b.score - a.score || b.lastSeen.localeCompare(a.lastSeen))
+    : cards.sort((a, b) => b.lastSeen.localeCompare(a.lastSeen));
 };
 
 export const countByCategory = (cards: StoryCard[]): Record<string, number> => {

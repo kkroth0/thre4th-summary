@@ -99,3 +99,32 @@ test("a ordem das categorias é a mesma do servidor", () => {
     "Ransomware", "APTs", "Data Leaks", "OT/ICS", "Vulnerabilities", "Malware", "Microsoft",
   ]);
 });
+
+test("sem sortByRelevance, os cards continuam em ordem de data (comportamento padrão)", () => {
+  const cards = groupAdvisoriesIntoStories([
+    advisory({ storyId: "old-loud", link: "https://a.example/1", pubDate: "2026-08-01T00:00:00.000Z", score: 90 }),
+    advisory({ storyId: "new-quiet", link: "https://b.example/2", pubDate: "2026-08-11T00:00:00.000Z", score: 10 }),
+  ]);
+  assert.deepEqual(cards.map((c) => c.storyId), ["new-quiet", "old-loud"]);
+});
+
+test("com sortByRelevance, a história de maior score vem primeiro mesmo sendo mais antiga", () => {
+  const cards = groupAdvisoriesIntoStories([
+    advisory({ storyId: "old-loud", link: "https://a.example/1", pubDate: "2026-08-01T00:00:00.000Z", score: 90 }),
+    advisory({ storyId: "new-quiet", link: "https://b.example/2", pubDate: "2026-08-11T00:00:00.000Z", score: 10 }),
+  ], { sortByRelevance: true });
+  assert.deepEqual(cards.map((c) => c.storyId), ["old-loud", "new-quiet"], "maior score vence mesmo sendo a história mais antiga");
+});
+
+test("o score do card é o máximo entre as fontes, não o da primeira", () => {
+  const cards = groupAdvisoriesIntoStories([
+    advisory({ storyId: "s1", link: "https://a.example/1", score: 20 }),
+    advisory({ storyId: "s1", link: "https://b.example/2", score: 75 }),
+  ]);
+  assert.equal(cards[0].score, 75);
+});
+
+test("fonte sem score conta como 0 no score do card", () => {
+  const cards = groupAdvisoriesIntoStories([advisory({ storyId: "s1", link: "https://a.example/1" })]);
+  assert.equal(cards[0].score, 0);
+});
