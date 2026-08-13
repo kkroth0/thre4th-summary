@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { actorHuntCoverage, sortActors, matchActors, topTechniques } from "./actorsView.ts";
+import { actorHuntCoverage, sortActors, matchActors, topTechniques, actorPageCopy } from "./actorsView.ts";
 
 const actors = [
   { id: "alpha", name: "Alpha", country: "BR", technique_count: 2, techniques: ["T1059", "T1078"] },
@@ -41,4 +41,17 @@ test("modelagem: setor pesa o dobro da região e ator sem interseção fica de f
     { id: "T1059.001", actors: 1, covered: true },
     { id: "T1566", actors: 1, covered: false },
   ]);
+});
+
+test("a página se chama Atores de Ameaça em PT e ES", () => {
+  assert.equal(actorPageCopy("pt").title, "Atores de Ameaça");
+  assert.equal(actorPageCopy("es").title, "Actores de Amenaza");
+  assert.equal(actorPageCopy("en").title, "Threat Actors");
+  assert.equal(actorPageCopy("fr").title, "Acteurs de Menace");
+});
+
+test("nenhum idioma ainda chama de grupo de ataque", () => {
+  for (const language of ["pt", "en", "es", "fr"] as const) {
+    assert.doesNotMatch(actorPageCopy(language).title, /grupos? de ataque|groupes? d'attaque/i, language);
+  }
 });

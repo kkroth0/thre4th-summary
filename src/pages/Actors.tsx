@@ -45,7 +45,7 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { cn } from "@/lib/utils";
 import { fetchHunts, type PrivateHunt } from "@/services/threatApi";
 import {
-  actorHuntCoverage, matchActors, sortActors, topTechniques, type OrgProfile,
+  actorHuntCoverage, actorPageCopy, matchActors, sortActors, topTechniques, type OrgProfile,
 } from "./actorsView";
 
 interface ActorListItem {
@@ -87,6 +87,13 @@ interface ActorDetail extends Omit<ActorListItem, "techniques"> {
   techniques: Technique[];
   software: Software[];
   refs: Array<string | Ref>;
+}
+
+interface ActorStory {
+  id: string;
+  title: string;
+  lastSeen: string;
+  sources: { link: string }[];
 }
 
 type SourceFilter = "all" | "attack" | "misp";
@@ -337,6 +344,7 @@ function ActorDetailPanel({
   error,
   pt,
   onRetry,
+  stories,
 }: {
   selected: ActorDetail | null;
   selectedSummary: ActorListItem | undefined;
@@ -344,6 +352,7 @@ function ActorDetailPanel({
   error: boolean;
   pt: boolean;
   onRetry: () => void;
+  stories: ActorStory[];
 }) {
   if (loading) {
     return (
@@ -501,6 +510,37 @@ function ActorDetailPanel({
               );
             })}
           </div>
+        </section>
+      )}
+
+      {stories.length > 0 && (
+        <section>
+          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            {pt ? "Notícias recentes" : "Recent news"}
+          </h3>
+          <ul className="space-y-2">
+            {stories.map((story) => (
+              <li key={story.id} className="text-xs">
+                <span className="text-muted-foreground tabular-nums">
+                  {new Date(story.lastSeen).toLocaleDateString(pt ? "pt-BR" : "en-US")}
+                </span>
+                {" · "}
+                <a
+                  href={story.sources[0]?.link}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="hover:underline"
+                >
+                  {story.title}
+                </a>
+                {story.sources.length > 1 && (
+                  <span className="ml-1 text-muted-foreground">
+                    ({story.sources.length} {pt ? "fontes" : "sources"})
+                  </span>
+                )}
+              </li>
+            ))}
+          </ul>
         </section>
       )}
     </div>
@@ -797,6 +837,23 @@ const Actors = () => {
   const [selected, setSelected] = useState<ActorDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState(false);
+  const [actorStories, setActorStories] = useState<ActorStory[]>([]);
+
+  // Ator sem cobertura de notícias no período é estado normal — o bloco
+  // simplesmente some, sem erro. Cancela ao trocar de ator ou desmontar.
+  useEffect(() => {
+    if (!selectedId) {
+      setActorStories([]);
+      return;
+    }
+    let cancelled = false;
+    setActorStories([]);
+    fetch(`/api/news/stories?actor=${encodeURIComponent(selectedId)}&limit=5`)
+      .then((response) => (response.ok ? response.json() : []))
+      .then((data) => { if (!cancelled) setActorStories(Array.isArray(data) ? data : []); })
+      .catch(() => { if (!cancelled) setActorStories([]); });
+    return () => { cancelled = true; };
+  }, [selectedId]);
 
   useEffect(() => {
     let alive = true;
@@ -934,7 +991,7 @@ const Actors = () => {
               </span>
             </div>
             <h1 className="text-3xl font-semibold tracking-tight">
-              {pt ? "Grupos de Ataque" : "Threat actors"}
+              {actorPageCopy(language).title}
             </h1>
             <p className="mt-2 max-w-2xl leading-relaxed text-muted-foreground">
               {pt
@@ -1202,6 +1259,7 @@ const Actors = () => {
               error={detailError}
               pt={pt}
               onRetry={retrySelected}
+              stories={actorStories}
             />
           )}
         </aside>

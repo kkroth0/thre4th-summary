@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Separator } from "@/components/ui/separator";
-import { filterNewsletterAdvisories, formatNewsletterDate } from "./newsletterView";
+import { NEWS_CATEGORY_ORDER, countByCategory, filterNewsletterAdvisories, filterStoryCards, formatNewsletterDate, groupAdvisoriesIntoStories } from "./newsletterView";
 import { saveKnowledge } from "@/services/threatApi";
 
 interface IocSet {
@@ -44,7 +44,7 @@ interface Advisory {
   // CTI relevance enrichment (from the specialized collector)
   score?: number;
   severity?: string; // Critical | High | Medium | Low
-  categories?: string[];
+  categories?: string[]; // CTI scoring labels from scoreArticle — unrelated to navigation
   cves?: string[];
   cvss?: number | null;
   reasons?: string[]; // why it scored — surfaced as a tooltip
@@ -58,6 +58,11 @@ interface Advisory {
   ttps?: string[];
   assets?: string[];
   iocs?: IocSet;
+  // Agrupamento e atribuição, vindos do servidor
+  storyId?: string | null;
+  actors?: { id: string; name: string; matched?: string; via?: string }[];
+  newsCategories?: string[]; // navigation buckets from categorize(), distinct from `categories` above
+  primaryCategory?: string | null;
 }
 
 const SEVERITY_DOT: Record<string, string> = {
@@ -206,6 +211,7 @@ const Newsletter = () => {
             score: typeof item.score === "number" ? item.score : undefined,
             severity: typeof item.severity === "string" ? (item.severity as string) : undefined,
             categories: Array.isArray(item.categories) ? (item.categories as string[]) : undefined,
+            newsCategories: Array.isArray(item.newsCategories) ? (item.newsCategories as string[]) : undefined,
             cves: Array.isArray(item.cves) ? (item.cves as string[]) : undefined,
             cvss: typeof item.cvss === "number" ? item.cvss : undefined,
             reasons: Array.isArray(item.reasons) ? (item.reasons as string[]) : undefined,
@@ -217,6 +223,9 @@ const Newsletter = () => {
             ttps: Array.isArray(item.ttps) ? (item.ttps as string[]) : undefined,
             assets: Array.isArray(item.assets) ? (item.assets as string[]) : undefined,
             iocs: item.iocs as IocSet | undefined,
+            storyId: typeof item.storyId === "string" || item.storyId === null ? (item.storyId as string | null) : undefined,
+            actors: Array.isArray(item.actors) ? (item.actors as Advisory["actors"]) : undefined,
+            primaryCategory: typeof item.primaryCategory === "string" || item.primaryCategory === null ? (item.primaryCategory as string | null) : undefined,
           }));
           setAdvisories(validated);
         }
@@ -429,6 +438,15 @@ const Newsletter = () => {
     sortByRelevance,
   }), [advisories, searchNews, selectedLayer, selectedSeverity, sortByRelevance, kevOnly]);
 
+  const [categoryFilter, setCategoryFilter] = useState("");
+  const [actorFilter, setActorFilter] = useState("");
+
+  const storyCards = useMemo(
+    () => filterStoryCards(groupAdvisoriesIntoStories(filteredAdvisories, { sortByRelevance }), { category: categoryFilter, actor: actorFilter }),
+    [filteredAdvisories, sortByRelevance, categoryFilter, actorFilter],
+  );
+  const categoryCounts = useMemo(() => countByCategory(groupAdvisoriesIntoStories(filteredAdvisories)), [filteredAdvisories]);
+
   // How many filters are narrowing the feed — drives the badge on the Filters button.
   const activeFilterCount = [
     selectedLayer !== "all",
@@ -611,6 +629,27 @@ const Newsletter = () => {
             {/* News Feed */}
             <div className="space-y-4">
               {/* Loading/Error/News List */}
+              <div className="flex flex-wrap gap-2 pb-3">
+                <button
+                  type="button"
+                  onClick={() => setCategoryFilter("")}
+                  aria-pressed={categoryFilter === ""}
+                  className={`rounded-full border px-3 py-1 text-xs transition ${categoryFilter === "" ? "border-primary bg-primary/10 text-primary" : "text-muted-foreground hover:border-primary/40"}`}
+                >
+                  {language === "pt" ? "Todas" : "All"}
+                </button>
+                {NEWS_CATEGORY_ORDER.filter((name) => categoryCounts[name]).map((name) => (
+                  <button
+                    key={name}
+                    type="button"
+                    onClick={() => setCategoryFilter(categoryFilter === name ? "" : name)}
+                    aria-pressed={categoryFilter === name}
+                    className={`rounded-full border px-3 py-1 text-xs transition ${categoryFilter === name ? "border-primary bg-primary/10 text-primary" : "text-muted-foreground hover:border-primary/40"}`}
+                  >
+                    {name} <span className="tabular-nums opacity-60">{categoryCounts[name]}</span>
+                  </button>
+                ))}
+              </div>
               {loadingNews ? (
                 <div className="space-y-4">
                   {[1, 2, 3].map((n) => (
@@ -627,7 +666,7 @@ const Newsletter = () => {
                   <p className="text-destructive font-medium">{newsError}</p>
                   <p className="text-sm text-muted-foreground mt-1">Please try again later.</p>
                 </div>
-              ) : filteredAdvisories.length === 0 ? (
+              ) : storyCards.length === 0 ? (
                 <div className="p-12 border border-dashed rounded-lg text-center bg-card space-y-4">
                   <BookOpen className="h-12 w-12 text-muted-foreground/50 mx-auto mb-3" />
                   <div>
@@ -644,7 +683,8 @@ const Newsletter = () => {
                 </div>
               ) : (
                 <div className="flex flex-col gap-2.5">
-                  {filteredAdvisories.map((item, idx) => {
+                  {storyCards.map((card, idx) => {
+                    const item = card.sources[0];
                     const enr = enrichment[item.link]?.data;
                     const mCves = mergedField(item, enr, "cves");
                     // Prefer the richer full-article IOCs (enrich) over the
@@ -725,6 +765,43 @@ const Newsletter = () => {
                               {item.title}
                             </a>
                           </h3>
+
+                          {card.sources.length > 1 && (
+                            <details className="mt-2">
+                              <summary className="cursor-pointer text-xs text-muted-foreground hover:text-foreground">
+                                {card.sources.length} {language === "pt" ? "fontes" : "sources"}
+                                {card.cves.length > 0 && ` · ${language === "pt" ? "unida por" : "linked by"} ${card.cves.join(", ")}`}
+                                {card.actors.length > 0 && ` · ${card.actors.map((a) => a.name).join(", ")}`}
+                              </summary>
+                              <ol className="mt-2 space-y-1 border-l pl-3">
+                                {[...card.sources].sort((a, b) => a.pubDate.localeCompare(b.pubDate)).map((source) => (
+                                  <li key={source.link} className="text-xs">
+                                    <span className="text-muted-foreground tabular-nums">{new Date(source.pubDate).toLocaleDateString(language === "pt" ? "pt-BR" : "en-US")}</span>
+                                    {" · "}
+                                    <a href={source.link} target="_blank" rel="noopener noreferrer" className="hover:underline">
+                                      {source.source}: {source.title}
+                                    </a>
+                                  </li>
+                                ))}
+                              </ol>
+                            </details>
+                          )}
+                          {card.actors.length > 0 && (
+                            <div className="mt-2 flex flex-wrap gap-1">
+                              {card.actors.map((actor) => (
+                                <button
+                                  key={actor.id}
+                                  type="button"
+                                  onClick={() => setActorFilter(actorFilter === actor.id ? "" : actor.id)}
+                                  title={actor.matched && actor.matched !== actor.name ? `${language === "pt" ? "citado como" : "cited as"} ${actor.matched}` : undefined}
+                                  aria-pressed={actorFilter === actor.id}
+                                  className={`rounded border px-2 py-0.5 text-[11px] transition ${actorFilter === actor.id ? "border-primary bg-primary/10 text-primary" : "text-muted-foreground hover:border-primary/40"}`}
+                                >
+                                  {actor.name}
+                                </button>
+                              ))}
+                            </div>
+                          )}
 
                           {/* Featured story gets a short teaser under the headline */}
                           {featured && (
