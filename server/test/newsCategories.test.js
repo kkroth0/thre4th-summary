@@ -30,6 +30,7 @@ test('match por contexto não promove a história a APTs', () => {
 
 test('APTs vem do match distintivo ou de termo nation-state', () => {
     assert.deepEqual(categorize(item({ title: 'x', actors: [{ id: 'a', name: 'APT28', via: 'codename' }] })).categories, ['APTs']);
+    assert.deepEqual(categorize(item({ title: 'x', actors: [{ id: 'a', name: 'Scattered Spider', via: 'multiword' }] })).categories, ['APTs']);
     assert.deepEqual(categorize(item({ title: 'A state-sponsored campaign' })).categories, ['APTs']);
 });
 
