@@ -8,6 +8,7 @@ const index = buildActorIndex([
     { id: 'a3', name: 'Scattered Spider', aliases: ['UNC3944'] },
     { id: 'a4', name: '[Unnamed group]', aliases: [] },
     { id: 'a5', name: 'AIZ', aliases: ['XY'] },
+    { id: 'a6', name: 'Russian Cyber Criminal Group', aliases: [] },
 ]);
 
 const ids = (text) => matchActors(text, index).map((hit) => hit.id).sort();
@@ -57,6 +58,25 @@ test('via reporta a regra e o alias que casou', () => {
 
 test('o mesmo ator citado duas vezes aparece uma vez só', () => {
     assert.equal(matchActors('APT28 and Sofacy APT are the same group', index).length, 1);
+});
+
+test('ator antes de período final é achado', () => {
+    assert.deepEqual(ids('Attributed to APT28.'), ['a1'], 'codinome antes de período');
+    assert.deepEqual(ids('Researchers linked the intrusion to Scattered Spider.'), ['a3'], 'nome de duas palavras antes de período');
+    // Same names mid-sentence should still match
+    assert.deepEqual(ids('APT28 was active'), ['a1']);
+    assert.deepEqual(ids('Scattered Spider operates'), ['a3']);
+});
+
+test('nomes com mais de quatro palavras são achados', () => {
+    assert.deepEqual(ids('Russian Cyber Criminal Group is active'), ['a6']);
+    assert.deepEqual(ids('Russian Cyber Criminal Group operates worldwide.'), ['a6']);
+});
+
+test('contexto não vaza de uma frase para a outra (ator também)', () => {
+    // Verify sentence scoping still works even with period-stripping
+    assert.deepEqual(ids('A new ransomware gang emerged. Russian Cyber Criminal Group did not.'), ['a6']);
+    assert.deepEqual(ids('A new group emerged. Russian Cyber Criminal Group was mentioned.'), ['a6']);
 });
 
 test('texto vazio ou nulo não quebra', () => {

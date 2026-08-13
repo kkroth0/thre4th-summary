@@ -13,9 +13,6 @@ export const ACTOR_CONTEXT_TERMS =
 // Below this an "alias" is noise: two letters match half the language.
 const MIN_ALIAS_LENGTH = 3;
 
-// The longest actor name worth looking for, in words.
-const MAX_GRAM = 4;
-
 const PLACEHOLDER = '[unnamed group]';
 
 const normalize = (value) =>
@@ -26,7 +23,13 @@ const normalize = (value) =>
         .trim();
 
 // Hyphens and digits belong to the name (storm-0558, apt-c-36), so they survive.
-const tokenize = (value) => normalize(value).split(/[^a-z0-9.@+-]+/).filter(Boolean);
+// Strip trailing sentence punctuation (., !, ?) but preserve internal punctuation.
+const tokenize = (value) =>
+    normalize(value)
+        .split(/[^a-z0-9.@+-]+/)
+        .filter(Boolean)
+        .map(t => t.replace(/[.!?]+$/, ''))
+        .filter(Boolean);
 
 export function buildActorIndex(actors) {
     const distinctive = new Map();
@@ -48,19 +51,29 @@ export function buildActorIndex(actors) {
             }
         }
     }
-    return { distinctive, common };
+    // Calculate max gram from the longest key in the index.
+    const allKeys = [...distinctive.keys(), ...common.keys()];
+    let maxGram = 4;
+    for (const key of allKeys) {
+        const wordCount = key.split(' ').length;
+        if (wordCount > maxGram) {
+            maxGram = wordCount;
+        }
+    }
+    return { distinctive, common, maxGram };
 }
 
 export function matchActors(text, index) {
     const found = new Map();
     // Sentence-scoped: "A ransomware gang emerged. Akira Kurosawa died." must not
     // let the first sentence's context vouch for the second sentence's noun.
+    const maxGram = (index && index.maxGram) || 4;
     for (const sentence of String(text || '').split(/(?<=[.!?])\s+|[\n\r]+/)) {
         const hasContext = ACTOR_CONTEXT_TERMS.test(sentence);
         const tokens = tokenize(sentence);
         for (let i = 0; i < tokens.length; i++) {
             // Longest gram first, so "Fancy Bear" wins over a hypothetical "Bear".
-            for (let n = Math.min(MAX_GRAM, tokens.length - i); n >= 1; n--) {
+            for (let n = Math.min(maxGram, tokens.length - i); n >= 1; n--) {
                 const gram = tokens.slice(i, i + n).join(' ');
                 const strong = index.distinctive.get(gram);
                 if (strong) {
