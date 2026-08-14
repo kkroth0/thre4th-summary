@@ -42,3 +42,6 @@ server/.*.json
 # trabalho. Sao seus, ficam no disco — so nao sujam o git status.
 2026-*-*.txt
 other-sites-examples/
+
+# Insumo dos mapeamentos de hunting: o artefato versionado é server/data/*.json
+hunting-docs/
