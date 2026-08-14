@@ -62,3 +62,43 @@ test('entrada quebrada nao derruba o parser', () => {
     // Tabela declarada sem coluna nenhuma não entra no catálogo.
     assert.deepEqual(parseSentinelTables(' Vazia_CL\n\n Outra_CL\n\n x (int)\n').map((e) => e.table), ['Outra_CL']);
 });
+
+const CATALOG_CTX = [{
+    table: 'SigninLogs',
+    source: 'Sentinel',
+    columns: [
+        { name: 'AlternateSignInName', type: 'string' },
+        { name: 'TimeGenerated', type: 'datetime' },
+        { name: 'UserPrincipalName', type: 'string' },
+    ],
+}];
+
+const CONTEXT = [{
+    table: 'SigninLogs',
+    purpose: 'Investigar autenticação e risco de conta.',
+    keyFields: [
+        { name: 'TimeGenerated', type: 'datetime', role: 'pivot' },
+        { name: 'UserPrincipalName', type: 'string/bool', role: 'filter' },
+    ],
+}];
+
+test('campo-chave vem antes do resto e leva o papel junto', () => {
+    const rendered = renderCatalogForPrompt(CATALOG_CTX, { context: CONTEXT });
+    const linhas = rendered.split('\n').filter((line) => line.startsWith('  ') && line.includes(':'));
+    assert.match(linhas[0], /TimeGenerated: datetime — pivô temporal/);
+    assert.match(linhas[1], /UserPrincipalName: string — filtro/);
+    assert.match(linhas[2], /AlternateSignInName/, 'coluna comum vai para o fim');
+    assert.match(rendered, /Para que serve: Investigar autenticação/);
+});
+
+test('campo-chave não é cortado pelo teto de colunas', () => {
+    const rendered = renderCatalogForPrompt(CATALOG_CTX, { context: CONTEXT, maxColumns: 1 });
+    assert.match(rendered, /TimeGenerated/);
+    assert.doesNotMatch(rendered, /AlternateSignInName/);
+    assert.match(rendered, /\+2 colunas/);
+});
+
+test('sem contexto a saída é a de hoje', () => {
+    const rendered = renderCatalogForPrompt(CATALOG_CTX, {});
+    assert.equal(rendered, 'SigninLogs (Sentinel)\n  AlternateSignInName: string\n  TimeGenerated: datetime\n  UserPrincipalName: string');
+});

@@ -72,23 +72,45 @@ export function catalogSources(catalog) {
     return [...new Set(catalog.map((entry) => entry.source))].sort();
 }
 
+const ROLE_LABEL = { pivot: 'pivô temporal', filter: 'filtro', metric: 'métrica', parse: 'parsing' };
+
 /**
  * Renderiza o catálogo pro prompt. Filtra por fonte quando pedido: mandar as 53
  * tabelas (3,5 mil colunas) num hunt de Cloudflare só queima contexto e piora a
  * resposta. `maxColumns` corta as tabelas gigantes — a OAT do Trend tem 387
  * colunas e sozinha estoura qualquer janela útil.
+ *
+ * Com `context` (o mapeamento do workspace), a tabela ganha o para-que-serve e
+ * as colunas saem ordenadas por utilidade, com o papel de cada campo-chave.
+ * O corte de `maxColumns` cai no fim da lista, então ordenar é o que garante
+ * que o pivô temporal sobreviva ao corte.
  */
-export function renderCatalogForPrompt(catalog, { sources = [], maxColumns = 60 } = {}) {
+export function renderCatalogForPrompt(catalog, { sources = [], maxColumns = 60, context = [] } = {}) {
     const wanted = new Set(sources.map((source) => source.toLowerCase()));
     const chosen = wanted.size
         ? catalog.filter((entry) => wanted.has(entry.source.toLowerCase()))
         : catalog;
 
+    const contextByTable = new Map(context.map((entry) => [entry.table.toLowerCase(), entry]));
+
     return chosen.map((entry) => {
-        const shown = entry.columns.slice(0, maxColumns);
-        const omitted = entry.columns.length - shown.length;
-        const cols = shown.map((column) => `  ${column.name}: ${column.type}`).join('\n');
+        const info = contextByTable.get(entry.table.toLowerCase());
+        const roleByColumn = new Map((info?.keyFields || []).map((field) => [field.name.toLowerCase(), field.role]));
+
+        const ordered = [
+            ...entry.columns.filter((column) => roleByColumn.has(column.name.toLowerCase())),
+            ...entry.columns.filter((column) => !roleByColumn.has(column.name.toLowerCase())),
+        ];
+        const shown = ordered.slice(0, maxColumns);
+        const omitted = ordered.length - shown.length;
+
+        const cols = shown.map((column) => {
+            const role = roleByColumn.get(column.name.toLowerCase());
+            return `  ${column.name}: ${column.type}${role ? ` — ${ROLE_LABEL[role]}` : ''}`;
+        }).join('\n');
+
+        const purpose = info?.purpose ? `\n  Para que serve: ${info.purpose}` : '';
         const tail = omitted > 0 ? `\n  … +${omitted} colunas` : '';
-        return `${entry.table} (${entry.source})\n${cols}${tail}`;
+        return `${entry.table} (${entry.source})\n${cols}${tail}${purpose}`;
     }).join('\n\n');
 }
