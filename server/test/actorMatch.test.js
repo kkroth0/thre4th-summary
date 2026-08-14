@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { buildActorIndex, matchActors } from '../actorMatch.js';
 
 const index = buildActorIndex([
@@ -104,4 +105,49 @@ test('aliases da stoplist não casam mesmo com termo de contexto na frase', () =
 
 test('aliases da stoplist continuam casando como parte de um nome multi-palavra', () => {
     assert.deepEqual(stoplistIds('Play Ransomware group claims a new victim'), ['g0003']);
+});
+
+// O catálogo real é dado externo: quem manda no comportamento é ele, não o
+// matcher. Estes dois testes seguram as duas pontas do merge do ransomware.live
+// — as marcas que precisam casar e as palavras comuns que não podem casar.
+const catalog = JSON.parse(
+    readFileSync(new URL('../data/actors.json', import.meta.url), 'utf8'),
+).actors;
+const catalogIndex = buildActorIndex(catalog);
+const catalogNames = (text) =>
+    matchActors(text, catalogIndex).map((hit) => hit.name.toLowerCase());
+
+test('o catálogo atribui as marcas de ransomware que dominam o noticiário', () => {
+    for (const [brand, sentence] of [
+        ['lockbit', 'The LockBit ransomware gang leaked 300 GB from the supplier'],
+        ['qilin', 'Qilin ransomware claimed the attack on the hospital'],
+        // O alias grafado com zero é o que aparece na imprensa; o nome é "Clop".
+        ['clop', 'Cl0p is exploiting the managed file transfer flaw, the group said'],
+        ['black basta', 'Black Basta returned with a new social engineering playbook'],
+        ['rhysida', 'Rhysida ransomware published the stolen city records'],
+        ['medusa', 'CISA warned about the Medusa ransomware gang'],
+    ]) {
+        assert.ok(
+            catalogNames(sentence).includes(brand),
+            `${brand} deveria ser atribuído em: ${sentence}`,
+        );
+    }
+});
+
+test('palavra comum de prosa CTI não vira ator', () => {
+    for (const sentence of [
+        'An unknown ransomware group hit the utility',
+        'A global campaign by an unnamed gang targeted airports',
+        'The gang advertises on underground forums',
+        'LockBit hit Royal Mail, the group confirmed',
+        'Threat hunters tracked the campaign for weeks',
+        'The ransomware payload is dropped by a scheduled task',
+    ]) {
+        for (const noise of ['unknown', 'global', 'underground', 'royal', 'hunters', 'payload']) {
+            assert.ok(
+                !catalogNames(sentence).includes(noise),
+                `${noise} não deveria ser atribuído em: ${sentence}`,
+            );
+        }
+    }
 });

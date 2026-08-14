@@ -28,6 +28,19 @@ const COMMON_TIER_STOPLIST = new Set([
     'mirage',   // G0004 (Ke3chang alias) — "a mirage of security"
     'venom',    // misp-020d512f (TIDRONE alias) — "venom" in general prose
     'cleaver',  // G0003 — "cleaver" as an ordinary tool/weapon noun
+
+    // Extortion brands from ransomware.live. Gangs name themselves after
+    // ordinary words far more often than intrusion sets do, and every one of
+    // these reads as prose in a sentence that also carries a context term:
+    // "an unknown ransomware group", "a global campaign", "underground forums",
+    // "LockBit hit Royal Mail", "threat hunters at Sophos", "the payload".
+    // The cost is real — Storm, Chaos and Royal are live brands that now go
+    // unattributed — but a wrong actor chip is worse than a missing one.
+    'aware', 'blackout', 'brotherhood', 'chaos', 'cuba', 'eclipse', 'embargo',
+    'entropy', 'ethics', 'genesis', 'global', 'grief', 'hunters', 'insane',
+    'mortar', 'nevada', 'nova', 'orion', 'pandora', 'payday', 'payload',
+    'quantum', 'radar', 'ramp', 'royal', 'shadow', 'storm', 'sugar', 'titan',
+    'trinity', 'underground', 'unknown', 'unsafe',
 ]);
 
 const PLACEHOLDER = '[unnamed group]';

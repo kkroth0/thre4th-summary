@@ -10,6 +10,10 @@
  *     (relationship_type "uses") — the techniques and software the group uses.
  *   - MISP galaxy `threat-actor.json`: enriches with country, motivation and
  *     extra synonyms, and adds actors that aren't in ATT&CK.
+ *   - ransomware.live `/v2/groups`: the extortion brands. ATT&CK and MISP track
+ *     nation-state intrusion sets and barely name ransomware gangs — LockBit,
+ *     Cl0p, ALPHV, Qilin and ~300 others were simply absent, so news about them
+ *     matched no actor at all.
  *
  * The same STIX bundle also carries every `attack-pattern` and `x-mitre-tactic`,
  * so we emit server/data/attack.json here instead of downloading 35 MB twice
@@ -32,6 +36,7 @@ const ATTACK_URL =
   "enterprise-attack/enterprise-attack.json";
 const MISP_URL =
   "https://raw.githubusercontent.com/MISP/misp-galaxy/main/clusters/threat-actor.json";
+const RANSOMWARE_URL = "https://api.ransomware.live/v2/groups";
 
 // 2-letter country code -> display name (common APT sponsors; fallback = raw value).
 const COUNTRY_NAMES = {
@@ -216,8 +221,68 @@ function mergedKey(names) {
   return names.map(norm).filter(Boolean);
 }
 
+/**
+ * ransomware.live keys groups by slug ("lockbit", "alphv", "cl0p"), but the
+ * description carries the branded casing. The catalog shows the name and the
+ * news feed prints it back to the analyst, so recover the branding when the
+ * prose has it — pick the variant with the most capitals ("LockBit" over a
+ * sentence-initial "Lockbit").
+ *
+ * The slug also swallows the spaces ("blackbasta"), so each character may be
+ * followed by one in the prose. That half matters more than the casing: a
+ * two-word brand lands in the distinctive tier of the news matcher, where it
+ * needs no CTI context term to be attributed.
+ */
+function brandedName(name, description) {
+  if (!name || name !== name.toLowerCase()) return name;
+  const chars = [...name].map((c) => c.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  const re = new RegExp(`(?<![A-Za-z0-9])${chars.join("[ -]?")}(?![A-Za-z0-9])`, "gi");
+  const caps = (s) => (s.match(/[A-Z]/g) || []).length;
+  let best = name;
+  for (const [hit] of String(description || "").matchAll(re)) {
+    if (caps(hit) > caps(best) || (caps(hit) === caps(best) && hit.length > best.length)) {
+      best = hit;
+    }
+  }
+  return best;
+}
+
+async function buildRansomware() {
+  const groups = await fetchJson(RANSOMWARE_URL, "ransomware.live groups");
+  const out = [];
+  for (const g of Array.isArray(groups) ? groups : []) {
+    const name = brandedName(String(g.name || "").trim(), g.description);
+    if (!name) continue;
+    // A technique can hang off two tactics; the actor record wants it once.
+    const techniques = new Map();
+    for (const tactic of g.ttps || []) {
+      for (const t of tactic.techniques || []) {
+        if (!t.technique_id || techniques.has(t.technique_id)) continue;
+        techniques.set(t.technique_id, {
+          id: t.technique_id,
+          name: t.technique_name || "",
+          url: techniqueUrl(t.technique_id),
+        });
+      }
+    }
+    out.push({
+      name,
+      aliases: cleanAliases([g.altname], name),
+      description: cleanDesc(g.description),
+      techniques: [...techniques.values()].sort((a, b) => a.id.localeCompare(b.id)),
+      // `g.locations` holds live DLS onions — deliberately not carried into refs.
+      url: g.url || "",
+    });
+  }
+  return out;
+}
+
 async function main() {
-  const [{ groups: attack, taxonomy }, misp] = await Promise.all([buildAttack(), buildMisp()]);
+  const [{ groups: attack, taxonomy }, misp, ransomware] = await Promise.all([
+    buildAttack(),
+    buildMisp(),
+    buildRansomware(),
+  ]);
 
   // Index MISP actors by every normalized name/alias for enrichment lookup.
   const mispByKey = new Map();
@@ -276,6 +341,29 @@ async function main() {
     });
   }
 
+  // 3) Ransomware brands neither source names. ATT&CK/MISP win on any overlap:
+  // their Akira/Play/RansomHub entries carry techniques and references.
+  const known = new Set(actors.flatMap((a) => mergedKey([a.name, ...a.aliases])));
+  for (const r of ransomware) {
+    const keys = mergedKey([r.name, ...r.aliases]);
+    if (!keys.length || keys.some((k) => known.has(k))) continue;
+    for (const k of keys) known.add(k);
+    actors.push({
+      id: `rl-${norm(r.name)}`,
+      name: r.name,
+      aliases: r.aliases,
+      country: "",
+      motivation: "Extortion",
+      description: r.description,
+      attack_id: "",
+      attack_url: "",
+      techniques: r.techniques,
+      software: [],
+      refs: r.url ? [r.url] : [],
+      source: "ransomware.live",
+    });
+  }
+
   actors.sort((a, b) => a.name.localeCompare(b.name));
 
   const generated_at = new Date().toISOString();
@@ -284,9 +372,11 @@ async function main() {
   writeFileSync(ATTACK_OUT_PATH, JSON.stringify({ generated_at, ...taxonomy }, null, 0), "utf8");
 
   const withAttack = actors.filter((a) => a.attack_id).length;
+  const ransom = actors.filter((a) => a.source === "ransomware.live").length;
   process.stderr.write(
     `Wrote ${actors.length} actors (${withAttack} from ATT&CK, ` +
-    `${actors.length - withAttack} MISP-only) to ${OUT_PATH}\n`,
+    `${actors.length - withAttack - ransom} MISP-only, ` +
+    `${ransom} ransomware.live) to ${OUT_PATH}\n`,
   );
   process.stderr.write(
     `Wrote ${taxonomy.tactics.length} tactics / ${taxonomy.techniques.length} techniques ` +

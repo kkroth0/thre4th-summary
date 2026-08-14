@@ -123,7 +123,7 @@ const dailyEditionStore = createEditionStore({ filePath: DAILY_SUMMARIES_PATH, w
 const NEWS_STORIES_PATH = path.join(__dirname, '.news-stories.json');
 const newsStoryStore = createStoryStore({ filePath: NEWS_STORIES_PATH, readFileSync: fs.readFileSync, writeJsonAtomic });
 
-// 1840 names and aliases, indexed once at boot rather than per article.
+// 2232 names and aliases, indexed once at boot rather than per article.
 const actorIndex = (() => {
     try {
         const raw = JSON.parse(fs.readFileSync(path.join(__dirname, 'data', 'actors.json'), 'utf8'));

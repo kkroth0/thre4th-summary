@@ -96,7 +96,7 @@ interface ActorStory {
   sources: { link: string }[];
 }
 
-type SourceFilter = "all" | "attack" | "misp";
+type SourceFilter = "all" | "attack" | "misp" | "ransomware";
 type SortMode = "techniques" | "name" | "country" | "hunts";
 
 const ALL_COUNTRIES = "__all__";
@@ -115,10 +115,14 @@ const sourceLabel = (source?: string) => {
   if (source.includes("attack") && source.includes("misp")) return "MITRE + MISP";
   if (source.includes("attack")) return "MITRE";
   if (source.includes("misp")) return "MISP";
+  if (source.includes("ransomware.live")) return "Ransomware.live";
   return source;
 };
 
 const sourceClassName = (source?: string) => {
+  if (source?.includes("ransomware.live")) {
+    return "border-rose-500/30 bg-rose-500/10 text-rose-700 dark:text-rose-300";
+  }
   if (source?.includes("attack") && source?.includes("misp")) {
     return "border-sky-500/30 bg-sky-500/10 text-sky-700 dark:text-sky-300";
   }
@@ -918,7 +922,9 @@ const Actors = () => {
       if (sector !== ALL_SECTORS && !(actor.sectors || []).includes(sector)) return false;
       if (target !== ALL_TARGETS && !(actor.targets || []).includes(target)) return false;
       if (sourceFilter === "attack" && !hasAttackMapping(actor.source)) return false;
-      if (sourceFilter === "misp" && hasAttackMapping(actor.source)) return false;
+      // "Só MISP" é MISP sem ATT&CK — as marcas de extorsão têm filtro próprio.
+      if (sourceFilter === "misp" && (hasAttackMapping(actor.source) || !actor.source?.includes("misp"))) return false;
+      if (sourceFilter === "ransomware" && !actor.source?.includes("ransomware.live")) return false;
 
       if (!needle) return true;
       return [
@@ -987,7 +993,7 @@ const Actors = () => {
               </span>
               <span className="soc-chip">
                 <Database className="h-3.5 w-3.5 text-emerald-500" />
-                MITRE + MISP
+                MITRE + MISP + Ransomware.live
               </span>
             </div>
             <h1 className="text-3xl font-semibold tracking-tight">
@@ -1008,6 +1014,7 @@ const Actors = () => {
             <div className="mt-2 flex flex-wrap gap-2">
               <SourceBadge source="attack+misp" />
               <SourceBadge source="misp" />
+              <SourceBadge source="ransomware.live" />
             </div>
           </div>
         </div>
@@ -1093,6 +1100,7 @@ const Actors = () => {
                     <SelectItem value="all">{pt ? "Todas as fontes" : "All sources"}</SelectItem>
                     <SelectItem value="attack">{pt ? "MITRE mapeado" : "MITRE mapped"}</SelectItem>
                     <SelectItem value="misp">{pt ? "Só MISP" : "MISP only"}</SelectItem>
+                    <SelectItem value="ransomware">{pt ? "Só ransomware" : "Ransomware only"}</SelectItem>
                   </SelectContent>
                 </Select>
 
