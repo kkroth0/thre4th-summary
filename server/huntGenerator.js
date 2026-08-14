@@ -23,12 +23,23 @@ export const GENERATOR_SYSTEM = [
     '"notes": como triar o resultado, em português do Brasil.',
     'Se as tabelas disponíveis não permitirem testar a hipótese, devolva "query" vazia',
     'e explique o porquê em "notes". Nunca invente nome de tabela ou de coluna.',
+    'A consulta precisa ter janela temporal explícita (ago() ou between) e um project',
+    'com os campos-chave da tabela — o analista lê a saída, não só roda.',
+    'Prefira os campos marcados como pivô temporal, filtro e métrica.',
 ].join('\n');
 
 /** Monta o prompt do usuário: hipótese + o schema que ele pode usar. */
-export function buildGeneratePrompt({ catalog, hypothesis, sources = [], techniques = [] }) {
-    const schema = renderCatalogForPrompt(catalog, { sources });
+export function buildGeneratePrompt({ catalog, hypothesis, sources = [], techniques = [], context = [], examples = [] }) {
+    const schema = renderCatalogForPrompt(catalog, { sources, context });
     if (!schema) throw new Error('nenhuma tabela disponível para as fontes escolhidas');
+
+    const reference = examples.length
+        ? [
+            '',
+            'Consultas de referência já validadas neste ambiente — siga o formato:',
+            ...examples.map((item) => `# ${item.id} — ${item.question}\n${item.query}`),
+        ].join('\n')
+        : '';
 
     return [
         `Hipótese: ${clean(hypothesis, 2000)}`,
@@ -36,7 +47,46 @@ export function buildGeneratePrompt({ catalog, hypothesis, sources = [], techniq
         '',
         'Tabelas disponíveis (nome, origem e colunas):',
         schema,
+        reference,
     ].filter(Boolean).join('\n');
+}
+
+// Palavra curta e palavra de ligação não dizem do que a hipótese trata.
+const STOPWORDS = new Set(['para', 'com', 'por', 'uma', 'dos', 'das', 'nos', 'nas', 'que', 'sobre', 'entre']);
+
+const words = (text) => String(text ?? '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/\p{Mn}/gu, '')
+    .split(/[^a-z0-9_]+/)
+    .filter((word) => word.length > 3 && !STOPWORDS.has(word));
+
+/**
+ * Até `limit` consultas curadas para servir de exemplo no prompt. O ranking é
+ * contagem de palavra em comum entre a hipótese e a pergunta/objetivo da
+ * consulta — determinístico e sem chamada extra. Exemplo que usa tabela fora
+ * das fontes escolhidas fica de fora: ensinar a consultar o que o analista não
+ * selecionou é pior que não dar exemplo.
+ */
+export function pickExamples({ library = [], hypothesis = '', sources = [], catalog = [], limit = 3 }) {
+    const wanted = new Set(sources.map((source) => source.toLowerCase()));
+    const inScope = new Set(catalog
+        .filter((entry) => !wanted.size || wanted.has(entry.source.toLowerCase()))
+        .map((entry) => entry.table.toLowerCase()));
+    const terms = new Set(words(hypothesis));
+
+    return library
+        .map((item) => {
+            const tables = (item.tables || []).map((table) => table.toLowerCase());
+            const usable = !tables.length || tables.some((table) => inScope.has(table));
+            if (!usable) return null;
+            const overlap = words(`${item.question} ${item.objective}`).filter((word) => terms.has(word)).length;
+            return { item, score: overlap };
+        })
+        .filter((entry) => entry && entry.score > 0)
+        .sort((a, b) => b.score - a.score || a.item.id.localeCompare(b.item.id))
+        .slice(0, limit)
+        .map((entry) => entry.item);
 }
 
 // Onde um nome de tabela aparece em KQL: no começo da consulta, depois de

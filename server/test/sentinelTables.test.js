@@ -84,7 +84,9 @@ const CONTEXT = [{
 
 test('campo-chave vem antes do resto e leva o papel junto', () => {
     const rendered = renderCatalogForPrompt(CATALOG_CTX, { context: CONTEXT });
-    const linhas = rendered.split('\n').filter((line) => line.startsWith('  ') && line.includes(':'));
+    // "Para que serve" também começa com dois espaços e tem ":" — exclui pra sobrar só coluna.
+    const linhas = rendered.split('\n')
+        .filter((line) => line.startsWith('  ') && line.includes(':') && !line.includes('Para que serve'));
     assert.match(linhas[0], /TimeGenerated: datetime — pivô temporal/);
     assert.match(linhas[1], /UserPrincipalName: string — filtro/);
     assert.match(linhas[2], /AlternateSignInName/, 'coluna comum vai para o fim');

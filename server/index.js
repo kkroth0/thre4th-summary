@@ -24,7 +24,7 @@ import { jobSummary, pruneJobsMap } from './feedJobs.js';
 import { parseHearthData } from './hearth.js';
 import { parseSentinelTables, catalogSources } from './sentinelTables.js';
 import { parsePtbrHunt, isHuntPath } from './huntsPtbr.js';
-import { GENERATOR_SYSTEM, buildGeneratePrompt, normalizeGenerated } from './huntGenerator.js';
+import { GENERATOR_SYSTEM, buildGeneratePrompt, normalizeGenerated, pickExamples } from './huntGenerator.js';
 import { normalizeHuntInput, upsertHunt, normalizeRunInput, upsertRun, monthlySummary, withDefaults, overdueHunts, huntSchedule, nextHuntId, huntIdSeq } from './hunts.js';
 import { addKnowledgeItem, normalizeKnowledgeInput } from './knowledge.js';
 import { createWatchlistStore, runDueExposureSnapshots, runExposureSnapshot } from './exposureWatchlist.js';
@@ -3043,6 +3043,19 @@ async function getHearthCatalog() {
 // mas passa pelo mesmo assertSafePublicUrl que o resto.
 const SENTINEL_TABLES_URL = 'https://raw.githubusercontent.com/kkroth0/threat-hunting-ptbr/main/Tables_Data.md';
 
+// Contexto e biblioteca são arquivos do repo, não rede: lê uma vez no boot.
+const huntingRefs = (() => {
+    const read = (file, key) => {
+        try {
+            return JSON.parse(fs.readFileSync(path.join(__dirname, 'data', file), 'utf8'))[key] || [];
+        } catch (error) {
+            console.error(`referência de hunting indisponível (${file}):`, error.message);
+            return [];
+        }
+    };
+    return { context: read('huntingContext.json', 'tables'), library: read('kqlLibrary.json', 'queries') };
+})();
+
 async function getSentinelTables() {
     const cache = memoryCache.sentinelTables;
     if (cache.data && cache.expiresAt > Date.now()) return cache.data;
@@ -3347,7 +3360,10 @@ async function generateQuery({ hypothesis, sources = [], techniques = [] }) {
     if (!process.env.OPENROUTER_API_KEY) throw new Error('OPENROUTER_API_KEY não configurada');
 
     const catalog = await getSentinelTables();
-    const userPrompt = buildGeneratePrompt({ catalog, hypothesis, sources, techniques });
+    const examples = pickExamples({ library: huntingRefs.library, hypothesis, sources, catalog });
+    const userPrompt = buildGeneratePrompt({
+        catalog, hypothesis, sources, techniques, context: huntingRefs.context, examples,
+    });
 
     const response = await axios.post(`${OPENROUTER_BASE_URL}/chat/completions`, {
         model: OPENROUTER_MODEL,
@@ -3370,7 +3386,7 @@ async function generateQuery({ hypothesis, sources = [], techniques = [] }) {
     const raw = response.data?.choices?.[0]?.message?.content;
     if (!raw) throw new Error('modelo não respondeu');
     // Resposta do modelo e entrada nao confiavel como qualquer outra.
-    return normalizeGenerated(JSON.parse(raw), catalog);
+    return { ...normalizeGenerated(JSON.parse(raw), catalog), examplesUsed: examples.map((item) => item.id) };
 }
 
 app.post('/api/hunts/generate', requirePremium, async (req, res) => {

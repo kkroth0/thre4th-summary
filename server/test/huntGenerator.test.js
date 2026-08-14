@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildGeneratePrompt, extractTables, unknownTables, normalizeGenerated } from '../huntGenerator.js';
+import { GENERATOR_SYSTEM, buildGeneratePrompt, extractTables, unknownTables, normalizeGenerated, pickExamples } from '../huntGenerator.js';
 
 const CATALOG = [
     { table: 'Cloudflare_CL', source: 'Cloudflare', columns: [{ name: 'ClientIP_s', type: 'string' }] },
@@ -68,4 +68,60 @@ test('a resposta do modelo e podada e marcada quando alucina', () => {
     // Campo ausente não vira "undefined" na tela.
     assert.equal(normalizeGenerated({}, CATALOG).title, '');
     assert.deepEqual(normalizeGenerated({}, CATALOG).dataSources, []);
+});
+
+const LIBRARY = [
+    { id: 'kql-04-01', question: 'Tráfego de ou para IP', objective: 'Dimensionar conexões e portas',
+      tables: ['CommonSecurityLog'], query: 'CommonSecurityLog | where SourceIP == ip' },
+    { id: 'kql-02-01', question: 'Histórico de login por conta', objective: 'Analisar IP e risco',
+      tables: ['SigninLogs'], query: 'SigninLogs | where UserPrincipalName =~ upn' },
+    { id: 'kql-02-02', question: 'Falhas de múltiplas contas por IP', objective: 'Identificar password spray',
+      tables: ['SigninLogs'], query: 'SigninLogs | where ResultType != 0' },
+];
+
+const CATALOG_REDE = [
+    { table: 'CommonSecurityLog', source: 'Cloudflare', columns: [{ name: 'SourceIP', type: 'string' }] },
+    { table: 'SigninLogs', source: 'Sentinel', columns: [{ name: 'UserPrincipalName', type: 'string' }] },
+];
+
+test('exemplo casa por palavra da hipótese e respeita a fonte escolhida', () => {
+    const picked = pickExamples({
+        library: LIBRARY, hypothesis: 'possível password spray contra contas corporativas',
+        sources: ['Sentinel'], catalog: CATALOG_REDE,
+    });
+    assert.deepEqual(picked.map((item) => item.id), ['kql-02-02']);
+});
+
+test('exemplo de tabela fora da fonte escolhida não entra', () => {
+    const picked = pickExamples({
+        library: LIBRARY, hypothesis: 'tráfego suspeito de portas incomuns',
+        sources: ['Sentinel'], catalog: CATALOG_REDE,
+    });
+    assert.ok(picked.every((item) => item.id !== 'kql-04-01'), 'CommonSecurityLog é Cloudflare, não Sentinel');
+});
+
+test('o teto de exemplos é respeitado e o desempate é estável', () => {
+    const picked = pickExamples({
+        library: LIBRARY, hypothesis: 'login conta IP risco portas conexões',
+        sources: [], catalog: CATALOG_REDE, limit: 2,
+    });
+    assert.equal(picked.length, 2);
+    assert.deepEqual(picked.map((item) => item.id), pickExamples({
+        library: LIBRARY, hypothesis: 'login conta IP risco portas conexões',
+        sources: [], catalog: CATALOG_REDE, limit: 2,
+    }).map((item) => item.id), 'mesma entrada, mesma saída');
+});
+
+test('exemplo escolhido entra no prompt com o id', () => {
+    const prompt = buildGeneratePrompt({
+        catalog: CATALOG_REDE, hypothesis: 'password spray', sources: ['Sentinel'],
+        examples: [LIBRARY[2]],
+    });
+    assert.match(prompt, /kql-02-02/);
+    assert.match(prompt, /SigninLogs \| where ResultType != 0/);
+});
+
+test('o system prompt exige janela e project', () => {
+    assert.match(GENERATOR_SYSTEM, /janela temporal/i);
+    assert.match(GENERATOR_SYSTEM, /project/i);
 });

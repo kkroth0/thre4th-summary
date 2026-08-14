@@ -106,11 +106,11 @@ export function renderCatalogForPrompt(catalog, { sources = [], maxColumns = 60,
 
         const cols = shown.map((column) => {
             const role = roleByColumn.get(column.name.toLowerCase());
-            return `  ${column.name}: ${column.type}${role ? ` — ${ROLE_LABEL[role]}` : ''}`;
+            return `  ${column.name}: ${column.type}${role ? ` — ${ROLE_LABEL[role] || role}` : ''}`;
         }).join('\n');
 
         const purpose = info?.purpose ? `\n  Para que serve: ${info.purpose}` : '';
         const tail = omitted > 0 ? `\n  … +${omitted} colunas` : '';
-        return `${entry.table} (${entry.source})\n${cols}${tail}${purpose}`;
+        return `${entry.table} (${entry.source})${purpose}\n${cols}${tail}`;
     }).join('\n\n');
 }
