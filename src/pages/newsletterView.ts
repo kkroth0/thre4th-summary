@@ -1,4 +1,5 @@
 import type { Language } from "../utils/translations";
+import type { OrgMatch } from "@/utils/orgRelevance";
 
 export interface NewsletterFilterItem {
   title: string;
@@ -94,6 +95,10 @@ export interface StorySource {
   primaryCategory?: string | null;
   cves?: string[];
   score?: number;
+  // Relevância para o perfil ativo. Calculada na tela a cada render e nunca
+  // persistida: é o que faz trocar de perfil reanotar o cache inteiro.
+  orgScore?: number;
+  orgMatches?: OrgMatch[];
 }
 
 export interface StoryCard<T extends StorySource = StorySource> {
@@ -105,6 +110,8 @@ export interface StoryCard<T extends StorySource = StorySource> {
   cves: string[];
   lastSeen: string;
   score: number;
+  orgScore: number;
+  orgMatches: OrgMatch[];
   sources: T[];
 }
 
@@ -112,7 +119,7 @@ export interface StoryCard<T extends StorySource = StorySource> {
 // server could not group, the reader still sees every headline.
 export const groupAdvisoriesIntoStories = <T extends StorySource>(
   advisories: T[],
-  options: { sortByRelevance?: boolean } = {},
+  options: { sortByRelevance?: boolean; sortByOrg?: boolean } = {},
 ): StoryCard<T>[] => {
   const byStory = new Map<string, StoryCard<T>>();
 
@@ -129,6 +136,8 @@ export const groupAdvisoriesIntoStories = <T extends StorySource>(
         cves: [...(item.cves ?? [])],
         lastSeen: item.pubDate,
         score: item.score ?? 0,
+        orgScore: item.orgScore ?? 0,
+        orgMatches: [...(item.orgMatches ?? [])],
         sources: [item],
       });
       continue;
@@ -136,6 +145,10 @@ export const groupAdvisoriesIntoStories = <T extends StorySource>(
     card.sources.push(item);
     if (item.pubDate > card.lastSeen) card.lastSeen = item.pubDate;
     if ((item.score ?? 0) > card.score) card.score = item.score ?? 0;
+    if ((item.orgScore ?? 0) > card.orgScore) card.orgScore = item.orgScore ?? 0;
+    for (const match of item.orgMatches ?? []) {
+      if (!card.orgMatches.some((seen) => seen.kind === match.kind && seen.label === match.label)) card.orgMatches.push(match);
+    }
     for (const category of item.newsCategories ?? []) if (!card.categories.includes(category)) card.categories.push(category);
     for (const cve of item.cves ?? []) if (!card.cves.includes(cve)) card.cves.push(cve);
     for (const actor of item.actors ?? []) if (!card.actors.some((a) => a.id === actor.id)) card.actors.push(actor);
@@ -146,8 +159,11 @@ export const groupAdvisoriesIntoStories = <T extends StorySource>(
     card.categories.sort((a, b) => (NEWS_CATEGORY_ORDER as readonly string[]).indexOf(a) - (NEWS_CATEGORY_ORDER as readonly string[]).indexOf(b));
     card.primaryCategory = card.categories[0] ?? null;
   }
-  // Story relevance is its loudest source — same principle the server uses to
-  // pick a story's title. Falls back to lastSeen so order stays deterministic.
+  // O contexto manda quando pedido; o score do feed é o desempate, e lastSeen
+  // fecha a ordem para ela nunca depender da ordem de chegada.
+  if (options.sortByOrg) {
+    return cards.sort((a, b) => b.orgScore - a.orgScore || b.score - a.score || b.lastSeen.localeCompare(a.lastSeen));
+  }
   return options.sortByRelevance
     ? cards.sort((a, b) => b.score - a.score || b.lastSeen.localeCompare(a.lastSeen))
     : cards.sort((a, b) => b.lastSeen.localeCompare(a.lastSeen));
@@ -161,10 +177,11 @@ export const countByCategory = (cards: StoryCard[]): Record<string, number> => {
 
 export const filterStoryCards = <T extends StorySource>(
   cards: StoryCard<T>[],
-  options: { category: string; actor: string },
+  options: { category: string; actor: string; orgOnly?: boolean },
 ): StoryCard<T>[] =>
   cards.filter((card) => {
     if (options.category && !card.categories.includes(options.category)) return false;
     if (options.actor && !card.actors.some((actor) => actor.id === options.actor)) return false;
+    if (options.orgOnly && card.orgScore <= 0) return false;
     return true;
   });

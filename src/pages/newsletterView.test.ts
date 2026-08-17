@@ -128,3 +128,55 @@ test("fonte sem score conta como 0 no score do card", () => {
   const cards = groupAdvisoriesIntoStories([advisory({ storyId: "s1", link: "https://a.example/1" })]);
   assert.equal(cards[0].score, 0);
 });
+
+const orgItem = (over: Record<string, unknown> = {}) => ({
+  link: "l1", source: "S", title: "T", pubDate: "2026-08-17T00:00:00.000Z",
+  orgScore: 0, orgMatches: [], ...over,
+});
+
+test("a história herda o maior orgScore entre as fontes", () => {
+  const cards = groupAdvisoriesIntoStories([
+    orgItem({ link: "a", storyId: "s1", orgScore: 20, orgMatches: [{ kind: "sector", label: "Energy" }] }),
+    orgItem({ link: "b", storyId: "s1", orgScore: 60, orgMatches: [{ kind: "asset", label: "FortiGate" }] }),
+  ]);
+  assert.equal(cards.length, 1);
+  assert.equal(cards[0].orgScore, 60);
+  assert.deepEqual(cards[0].orgMatches, [
+    { kind: "sector", label: "Energy" },
+    { kind: "asset", label: "FortiGate" },
+  ]);
+});
+
+test("match repetido entre fontes aparece uma vez na história", () => {
+  const cards = groupAdvisoriesIntoStories([
+    orgItem({ link: "a", storyId: "s1", orgScore: 40, orgMatches: [{ kind: "asset", label: "FortiGate" }] }),
+    orgItem({ link: "b", storyId: "s1", orgScore: 40, orgMatches: [{ kind: "asset", label: "FortiGate" }] }),
+  ]);
+  assert.deepEqual(cards[0].orgMatches, [{ kind: "asset", label: "FortiGate" }]);
+});
+
+test("sortByOrg ordena pelo contexto, desempatando pelo score do feed", () => {
+  const cards = groupAdvisoriesIntoStories([
+    orgItem({ link: "a", storyId: "a", orgScore: 10, score: 90 }),
+    orgItem({ link: "b", storyId: "b", orgScore: 70, score: 10 }),
+    orgItem({ link: "c", storyId: "c", orgScore: 70, score: 50 }),
+  ], { sortByOrg: true });
+  assert.deepEqual(cards.map((card) => card.storyId), ["c", "b", "a"]);
+});
+
+test("orgOnly esconde o que está fora do contexto", () => {
+  const cards = groupAdvisoriesIntoStories([
+    orgItem({ link: "a", storyId: "a", orgScore: 40 }),
+    orgItem({ link: "b", storyId: "b", orgScore: 0 }),
+  ]);
+  const filtered = filterStoryCards(cards, { category: "", actor: "", orgOnly: true });
+  assert.deepEqual(filtered.map((card) => card.storyId), ["a"]);
+});
+
+test("sem orgOnly, nada é escondido — o contexto reordena, não filtra", () => {
+  const cards = groupAdvisoriesIntoStories([
+    orgItem({ link: "a", storyId: "a", orgScore: 40 }),
+    orgItem({ link: "b", storyId: "b", orgScore: 0 }),
+  ]);
+  assert.equal(filterStoryCards(cards, { category: "", actor: "" }).length, 2);
+});
