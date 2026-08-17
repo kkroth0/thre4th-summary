@@ -45,10 +45,13 @@ test('OT/ICS reconhece o vocabulário industrial', () => {
     }
 });
 
+// Fornecedores industriais e protocolos OT — vocabulário das fontes de pesquisa
+// (Claroty Team82, Nozomi). Removidas as marcas ambíguas (BMS = Bristol-Myers,
+// Emerson = conglomerado + sobrenome, Honeywell = aeroespacial/EPI, Copeland = sobrenome).
 test('OT/ICS reconhece os fornecedores e protocolos das fontes de pesquisa OT', () => {
     const terms = [
-        'Phoenix Contact', 'Copeland', 'Danfoss', 'EnOcean', 'LonTalk', 'Emerson',
-        'Honeywell', 'Yokogawa', 'Mitsubishi Electric', 'Omron', 'WAGO', 'Beckhoff',
+        'Phoenix Contact', 'Danfoss', 'EnOcean', 'LonTalk',
+        'Yokogawa', 'Mitsubishi Electric', 'Omron', 'WAGO', 'Beckhoff',
         'Moxa', 'Advantech', 'IEC 61850', 'IEC 60870', 'EtherNet/IP', 'BACnet',
         'building management system',
     ];
@@ -57,6 +60,21 @@ test('OT/ICS reconhece os fornecedores e protocolos das fontes de pesquisa OT', 
             categorize(item({ title: `Vulnerabilities found in ${term} controllers` })).categories.includes('OT/ICS'),
             term,
         );
+    }
+});
+
+// Termos descartados por ambiguidade não casam em contexto não-industrial, mesmo
+// quando mencionados — seguindo o padrão de MICROSOFT que também trata as formas
+// genéricas diferente das qualificadas.
+test('OT/ICS não casa com termos ambíguos em contexto não-industrial', () => {
+    const falsePositives = [
+        'Bristol-Myers Squibb (BMS) reports earnings',
+        'Emerson Collective funds new initiative',
+        'Honeywell home security camera flaw exposes feeds',
+        'John Copeland elected to board',
+    ];
+    for (const title of falsePositives) {
+        assert.ok(!categorize(item({ title })).categories.includes('OT/ICS'), title);
     }
 });
 
