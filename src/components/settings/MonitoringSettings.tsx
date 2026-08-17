@@ -14,19 +14,21 @@ import { fetchExposureAssets } from "@/services/threatApi";
 export function MonitoringSettings() {
   const { language } = useLanguage();
   const pt = language === "pt";
-  const [assetCount, setAssetCount] = useState<number | null>(null);
+  // Estado único evita confundir "carregando" com "erro": só vira número
+  // quando a promise resolve, então os dois nunca caem no mesmo ramo do render.
+  const [assetState, setAssetState] = useState<"loading" | "error" | number>("loading");
   const [lastRun, setLastRun] = useState<string | null>(null);
 
   useEffect(() => {
     fetchExposureAssets()
       .then((assets) => {
-        setAssetCount(assets.length);
+        setAssetState(assets.length);
         const runs = assets.map((asset) => asset.lastRunAt).filter(Boolean).sort();
         setLastRun(runs.length ? String(runs[runs.length - 1]) : null);
       })
       // Falha na watchlist não pode derrubar a aba inteira: mostramos estado
       // indisponível e seguimos com o resto do painel funcionando.
-      .catch(() => setAssetCount(null));
+      .catch(() => setAssetState("error"));
   }, []);
 
   return (
@@ -54,11 +56,13 @@ export function MonitoringSettings() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base"><Target className="text-primary" /> {pt ? "Ativos monitorados" : "Monitored assets"}</CardTitle>
           <CardDescription>
-            {assetCount === null
-              ? (pt ? "Watchlist indisponível." : "Watchlist unavailable.")
-              : pt
-                ? `${assetCount} ativo(s) na watchlist${lastRun ? ` · última varredura em ${new Date(lastRun).toLocaleString("pt-BR")}` : ""}.`
-                : `${assetCount} asset(s) on the watchlist${lastRun ? ` · last scan ${new Date(lastRun).toLocaleString("en-US")}` : ""}.`}
+            {assetState === "loading"
+              ? (pt ? "Carregando watchlist…" : "Loading watchlist…")
+              : assetState === "error"
+                ? (pt ? "Watchlist indisponível." : "Watchlist unavailable.")
+                : pt
+                  ? `${assetState} ativo(s) na watchlist${lastRun ? ` · última varredura em ${new Date(lastRun).toLocaleString("pt-BR")}` : ""}.`
+                  : `${assetState} asset(s) on the watchlist${lastRun ? ` · last scan ${new Date(lastRun).toLocaleString("en-US")}` : ""}.`}
           </CardDescription>
         </CardHeader>
         <CardContent>
