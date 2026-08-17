@@ -16,28 +16,28 @@
 
 ## Arquitetura
 
-Três módulos novos no servidor, um hub novo no cliente. O contexto entra no feed **no momento da requisição**, não no refresh: o cache do `refreshNewsletterFeed()` continua único e compartilhado entre todos os usuários, e cada resposta é anotada com o perfil de quem pediu. Isso é o que evita um cache por perfil.
+Dois módulos novos no servidor, dois no cliente. **O servidor não anota notícia nenhuma.** Ele guarda os perfis e devolve, para o perfil ativo, um *modelo de ameaças* compacto; o casamento roda no cliente, sobre os campos que cada item do feed já traz (`actors`, `sectors`, `newsCategories`, título e descrição).
 
 | Módulo | Responsabilidade | Interface |
 |---|---|---|
 | `server/orgProfiles.js` | Validar e persistir perfis | `normalizeProfileInput(input, existing, now, owner)`; `createProfileStore({filePath, readFileSync, writeJsonAtomic})` |
-| `server/orgRelevance.js` | Modelo de ameaças e casamento | `buildThreatModel(profile, actors)` → modelo; `orgRelevance(subject, model)` → `{score, matches}` |
+| `server/orgThreatModel.js` | Derivar o modelo do perfil | `buildThreatModel(profile, actors)` → modelo serializável |
 | `server/scrapeFeeds.js` | Fontes sem RSS | `SCRAPE_SOURCES`; `parseListing(html, source)`; `collectScraped({sources, fetchText, seen, now, maxNew})` |
+| `src/utils/orgRelevance.ts` | Casamento e pesos | `orgRelevance(subject, model)` → `{score, matches}` |
 
 ```
-                      perfil ativo (?profile=<id>)
-                                  ↓
-feeds RSS ─┐                 loadProfile(req)
-raspagem ──┼→ refreshNewsletterFeed()  →  cache único  →  buildThreatModel(perfil, atores)
-           ┘   [já existe]                    ↓                       ↓
-                                        itens/histórias  →  orgRelevance(item, modelo)
-                                                                      ↓
-                                              GET /api/newsletter?profile=…
-                                              GET /api/news/stories?profile=…
-                                                 (+ orgScore, + orgMatches)
+feeds RSS ─┐
+raspagem ──┼→ refreshNewsletterFeed()  →  cache único  →  GET /api/newsletter   ─┐
+           ┘   [já existe]                                                       │
+                                                                                 ↓
+perfis  →  buildThreatModel(perfil, atores)  →  GET …/threat-model  →  orgRelevance(item, modelo)
+                                                                                 ↓
+                                                              orgScore / orgMatches no cliente
 ```
 
-`orgRelevance.js` não conhece disco, rede nem relógio. `orgProfiles.js` cuida do arquivo. É o que torna os pesos testáveis com um perfil literal e um item literal.
+O casamento fica no cliente por três motivos. A tela de Notícias já agrupa histórias no navegador (`groupAdvisoriesIntoStories`) — ela nunca chama `/api/news/stories`. O `localStorage` acumula até 400 itens ao longo de dias, e uma anotação vinda do servidor ficaria velha assim que o usuário trocasse de perfil, enquanto o cálculo local reanota os 400 na hora. E o modelo é pequeno o bastante para trafegar (ids de atores, rótulos, termos das regiões escolhidas).
+
+`orgRelevance.ts` não conhece rede, disco nem relógio. `orgThreatModel.js` é puro sobre o `ACTORS_CACHE`. `orgProfiles.js` cuida do arquivo. É o que torna os pesos testáveis com um perfil literal e um item literal.
 
 ## Perfil da organização
 
@@ -82,35 +82,36 @@ O mínimo de 3 caracteres em ativos existe pelo mesmo motivo documentado em `act
 
 ## Modelo de ameaças
 
-`buildThreatModel(profile, actors)` é uma função pura sobre o `ACTORS_CACHE` que `loadActors()` já mantém em memória (1362 atores, já enriquecidos com `actorTargeting`). Sem I/O novo, sem dado novo:
+`buildThreatModel(profile, actors)` é uma função pura sobre o `ACTORS_CACHE` que `loadActors()` já mantém em memória (1362 atores, já enriquecidos com `actorTargeting`). Sem I/O novo, sem dado novo. O retorno é **JSON puro**, porque viaja até o cliente:
 
 ```js
 {
-  actorIds: Set<string>,      // atores relevantes
-  pinned: Set<string>,        // subconjunto fixado à mão
-  sectors: Set<string>,
-  regions: Set<string>,
+  actorIds: string[],                       // atores relevantes
+  pinnedIds: string[],                      // subconjunto fixado à mão
+  actors: [{id, name, country}],            // para a UI listar quem são
+  sectors: string[],                        // ecoa o perfil
+  regions: [{label, terms: string[]}],      // só as regiões escolhidas, com seus termos
   otPresent: boolean,
-  assetRules: [{label, re}],  // via compileLabelMap do ctiIntel.js
-  techniques: string[],       // união das técnicas dos atores relevantes
+  assets: [{vendor, product}],              // ecoa o perfil
+  techniques: string[],                     // união das técnicas dos atores relevantes
 }
 ```
 
-Um ator é relevante quando `actor.sectors ∩ profile.sectors ≠ ∅` **ou** `actor.targets ∩ profile.regions ≠ ∅`, ou quando está em `profile.actors`. As regras de ativo saem do `compileLabelMap` que já existe em `ctiIntel.js` — a lista de ativos vira `{ 'Fortinet FortiGate': ['fortinet fortigate', 'fortigate'] }` e o matcher é o `matchLabels` de sempre.
+Um ator é relevante quando `actor.sectors ∩ profile.sectors ≠ ∅` **ou** `actor.targets ∩ profile.regions ≠ ∅`, ou quando está em `profile.actors`.
 
-`techniques` não tem consumidor nesta entrega. É exposto na API porque custa uma linha e é a ponte para a biblioteca de hunting, que já indexa por técnica (`attackIndex.js`).
+`regions` carrega os termos (`Brazil` → `['brazil','brazilian']`) porque só o servidor tem o `TARGET_REGIONS` de `actorProfile.js`; mandar apenas as regiões escolhidas mantém o payload em algumas linhas. Setor não precisa de termos: cada item do feed já chega com `item.sectors` carimbado por `scoreArticle`. OT também não: `item.newsCategories` já traz `OT/ICS`.
 
-O modelo é memoizado por `(profileId, updatedAt)`: perfis mudam raramente e o cálculo varre 1362 atores.
+`techniques` não tem consumidor nesta entrega. É exposto porque custa uma linha e é a ponte para a biblioteca de hunting, que já indexa por técnica (`attackIndex.js`).
+
+O modelo é memoizado no servidor por `(profileId, updatedAt)`: perfis mudam raramente e o cálculo varre 1362 atores.
 
 ## Relevância
 
-`orgRelevance(subject, model)` recebe uma forma única, servida tanto por um item do feed quanto por uma história:
+`orgRelevance(subject, model)` roda no cliente, em `src/utils/orgRelevance.ts`, e recebe exatamente os campos que um `Advisory` já tem:
 
-```js
-subject = { text, actors: [{id}], categories: string[], sectors?: string[] }
+```ts
+subject = { title, description, actors?: {id}[], sectors?: string[], newsCategories?: string[] }
 ```
-
-Histórias não guardam `sectors` (o campo é por item, vindo de `scoreArticle`). Em vez de migrar o store, quando `sectors` não vem a função o deriva do `text` com o `SECTOR_RULES` que já está compilado. Um caminho de código, duas origens.
 
 Retorna `{ score, matches }`, com `matches` sendo exatamente o que a UI mostra como chip:
 
@@ -123,9 +124,11 @@ Retorna `{ score, matches }`, com `matches` sendo exatamente o que a UI mostra c
 | perfil tem OT **e** item é OT/ICS | 20 | `{kind:'ot', label:'OT/ICS'}` |
 | região do perfil | 15 | `{kind:'region', label:'Brasil'}` |
 
-Soma limitada a 100. Um ator conta uma vez só, pelo maior peso. `orgScore: 0` com `matches: []` é resposta legítima e significa "fora do contexto" — não é erro.
+Soma limitada a 100. Um ator conta uma vez só, pelo maior peso. Casamento de ativo e de região é por **fronteira de palavra**, sobre texto normalizado sem acento e em minúsculas, no molde do `normalize` de `actorMatch.js` — `SAP` não casa dentro de `sapphire`. `score: 0` com `matches: []` é resposta legítima e significa "fora do contexto" — não é erro.
 
-`orgScore` é um campo **separado** de `score`. Somar no `score` existente mudaria a severidade (`severityFromScore`), os filtros de `minScore` e o boletim diário de quem não tem perfil nenhum.
+`orgScore` é um campo **separado** de `score`, calculado na tela e nunca persistido no `localStorage`. Somar no `score` existente mudaria a severidade, os filtros de `minScore` e a experiência de quem não tem perfil nenhum. Não persistir é o que garante que trocar de perfil reanota os 400 itens em cache sem nenhuma invalidação.
+
+Numa história (`StoryCard`), `orgScore` é o máximo entre suas fontes e `orgMatches` é a união, de-duplicada por `kind:label` — agregado em `groupAdvisoriesIntoStories`, junto de `score`, `cves` e `actors`, que já são agregados ali.
 
 ## Rotas
 
@@ -137,7 +140,7 @@ Todas exigem sessão autenticada; as de perfil não exigem premium, porque confi
 | `POST /api/org/profiles` | cria (409 no limite de 10) |
 | `PATCH /api/org/profiles/:id` | atualiza |
 | `DELETE /api/org/profiles/:id` | remove |
-| `GET /api/org/profiles/:id/threat-model` | `{actors:[{id,name,country,sectors,targets}], techniques}` |
+| `GET /api/org/profiles/:id/threat-model` | o modelo serializável descrito acima |
 | `GET /api/org/vocab` | `{sectors, regions}` — alimenta os selects da UI |
 | `GET /api/org/asset-suggestions` | produtos já detectados no watchlist do usuário |
 
@@ -145,13 +148,9 @@ Todas exigem sessão autenticada; as de perfil não exigem premium, porque confi
 
 `/api/org/asset-suggestions` varre os snapshots do watchlist do usuário no servidor e devolve `[{product, version, seenOn:[label]}]` de-duplicado por produto. Existe para o botão de importação não fazer N+1 no navegador — os produtos ficam em `finding.product` dentro dos snapshots, um por ativo, e hoje só há rota por ativo (`/api/exposure-watchlist/assets/:id/snapshots`). O Shodan raramente traz o fabricante separado, então a sugestão vem com `vendor` vazio e `product` preenchido; o usuário completa se quiser.
 
-`GET /api/newsletter` e `GET /api/news/stories` ganham:
+**`GET /api/newsletter` e `GET /api/news/stories` não mudam em nada.** Nenhum parâmetro novo, nenhum campo novo, nenhuma bifurcação por usuário no cache do feed. É a consequência de calcular no cliente, e o principal motivo para fazê-lo assim.
 
-- `?profile=<id>` — se o perfil for do usuário autenticado, cada item/história ganha `orgScore` e `orgMatches`. Perfil inexistente ou de outro dono: **ignorado em silêncio**, resposta normal sem os campos. Um id velho no `localStorage` não pode quebrar o feed.
-- `?sort=org` — ordena por `orgScore`, desempatando por `score` e depois por data.
-- `?orgOnly=1` — mantém só o que tem `orgScore > 0`. Sem efeito quando não há perfil.
-
-Numa história, `orgScore` é o máximo entre suas fontes e `orgMatches` é a união dos matches, de-duplicada por `kind:label`.
+Um `activeId` velho no `localStorage` apontando para um perfil apagado responde 404 em `/api/org/profiles/:id/threat-model`; o cliente trata como "sem perfil", limpa o `activeId` e segue com o feed normal.
 
 ## Configurações de Monitoramento
 
@@ -163,7 +162,7 @@ Aba nova em `/settings?section=monitoring`, dentro do `Tabs` que `Settings.tsx` 
 
 ### Perfil ativo, compartilhado
 
-`src/hooks/useOrgProfile.ts` expõe `{ profiles, activeId, setActiveId, active }`, com `activeId` em `localStorage` sob `org.activeProfile`. É a peça que torna o contexto reaproveitável: cada consumidor futuro é uma chamada ao hook mais um parâmetro na query.
+`src/hooks/useOrgProfile.ts` expõe `{ profiles, activeId, setActiveId, active, model, loading }`, com `activeId` em `localStorage` sob `org.activeProfile` e `model` buscado do endpoint de threat model sempre que `activeId` muda. É a peça que torna o contexto reaproveitável: cada consumidor futuro é uma chamada ao hook mais uma chamada a `orgRelevance`.
 
 **Nesta entrega, o único consumidor é Notícias.** Ficam registrados como próximos passos, cada um de custo aproximado de uma linha, **fora do escopo**: Patch Tuesday/SAP (destacar CVEs dos vendors do perfil), Hunting (priorizar as técnicas do modelo), Boletim diário (ordenar sugestões pelo contexto), Threat Map (recorte pelas regiões).
 
@@ -214,20 +213,23 @@ O `OT_ICS` de `newsCategories.js` ganha os fornecedores e protocolos que essas f
 - Perfil inválido → 400 com mensagem pública específica (qual campo, qual limite). Nunca 500.
 - Limite de 10 perfis → 409.
 - Perfil de outro dono → 404.
-- `?profile=` inválido no feed → ignorado, resposta normal. O feed nunca falha por causa do contexto.
-- `orgRelevance` lançando por qualquer motivo → o item sai sem `orgScore`, como o `try/catch` que já protege o agrupamento de histórias em `refreshNewsletterFeed`.
+- Perfil ativo apagado ou threat model indisponível → a tela de Notícias funciona sem contexto: sem chip, sem a ordenação nova, com o toggle desabilitado. O feed nunca falha por causa do contexto.
 - Raspagem: erro de rede, HTML mudado ou zero âncoras → `feedHealth` registra e a fonte devolve `[]`.
 - `.org-profiles.json` e `.scrape-seen.json` corrompidos → store vazio, log, segue.
 
 ## Testes
 
-Node test runner, no molde dos 22 arquivos que já existem em `server/test/`:
+Servidor (`npm run test:server`, Node test runner, no molde dos 22 arquivos em `server/test/`):
 
 - `orgProfiles.test.js` — validação por campo, limites, rejeição de vocabulário inválido, isolamento entre donos, store com `fs` falso.
-- `orgRelevance.test.js` — cada peso isolado; ator contado uma vez; teto de 100; perfil vazio dá score 0; derivação de setor a partir do texto quando `sectors` não vem; ativo curto não casa dentro de outra palavra.
+- `orgThreatModel.test.js` — ator entra por setor, por região e por fixação; ator irrelevante fica fora; `regions` carrega os termos só das regiões escolhidas; perfil vazio dá modelo vazio.
 - `scrapeFeeds.test.js` — `parseListing` contra HTML fixo salvo das três páginas (`server/test/fixtures/`); partida a frio não emite; segunda rodada emite só o novo; teto de itens novos respeitado.
 - `newsCategories.test.js` — casos novos para os fornecedores OT acrescentados.
-- `newsletterView.test.ts` — ordenação por `orgScore` e filtro `orgOnly`.
+
+Cliente (`npm run test:unit`, esbuild + Node test runner, no molde dos `.test.ts` em `src/utils/`):
+
+- `orgRelevance.test.ts` — cada peso isolado; ator contado uma vez pelo maior peso; teto de 100; modelo vazio dá score 0; ativo de 3 letras não casa dentro de outra palavra; região casa sem acento.
+- `newsletterView.test.ts` — agregação de `orgScore`/`orgMatches` na história, ordenação por contexto e filtro "só o meu contexto".
 
 ## Fora de escopo
 
