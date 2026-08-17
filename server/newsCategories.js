@@ -11,7 +11,7 @@ export const NEWS_CATEGORIES = [
 const RANSOMWARE = /\b(?:ransomware|double extortion|dupla extors[aã]o|leak site|data leak site|ransom note)\b/i;
 const NATION_STATE = /\b(?:nation[- ]state|state[- ]sponsored|state sponsored|advanced persistent threat|cyber ?espionage|espionagem)\b/i;
 const DATA_LEAK = /\b(?:data breach|data leak|breached|vazamento de dados|vazamento|exposed \d[\d.,]* (?:records|customers|users))\b/i;
-const OT_ICS = /\b(?:ot\/ics|ics\/ot|\bics\b|scada|\bplc\b|\bhmi\b|modbus|opc ua|profinet|dnp3|purdue|safety instrumented|siemens s7|simatic|rockwell|allen[- ]bradley|schneider electric|codesys)\b/i;
+const OT_ICS = /\b(?:ot\/ics|ics\/ot|\bics\b|scada|\bplc\b|\bhmi\b|modbus|opc ua|profinet|dnp3|purdue|safety instrumented|siemens s7|simatic|rockwell|allen[- ]bradley|schneider electric|codesys|phoenix contact|copeland|danfoss|enocean|lontalk|emerson|honeywell|yokogawa|mitsubishi electric|omron|wago|beckhoff|moxa|advantech|iec ?6(?:1850|0870)|ethernet\/ip|bacnet|building management system|\bbms\b)\b/i;
 const VULN_CLASS = /\b(?:remote code execution|\brce\b|arbitrary code|authentication bypass|auth bypass|privilege escalation|deserialization|path traversal|sql injection|zero[- ]day|0-day|actively exploited|exploited in the wild|proof[- ]of[- ]concept)\b/i;
 // exchange/teams/outlook/defender are ordinary CTI-headline words on their own
 // ("crypto exchange", "red teams", "threat outlook", "a defender perspective"),

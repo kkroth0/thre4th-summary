@@ -45,6 +45,21 @@ test('OT/ICS reconhece o vocabulário industrial', () => {
     }
 });
 
+test('OT/ICS reconhece os fornecedores e protocolos das fontes de pesquisa OT', () => {
+    const terms = [
+        'Phoenix Contact', 'Copeland', 'Danfoss', 'EnOcean', 'LonTalk', 'Emerson',
+        'Honeywell', 'Yokogawa', 'Mitsubishi Electric', 'Omron', 'WAGO', 'Beckhoff',
+        'Moxa', 'Advantech', 'IEC 61850', 'IEC 60870', 'EtherNet/IP', 'BACnet',
+        'building management system',
+    ];
+    for (const term of terms) {
+        assert.ok(
+            categorize(item({ title: `Vulnerabilities found in ${term} controllers` })).categories.includes('OT/ICS'),
+            term,
+        );
+    }
+});
+
 test('Vulnerabilities vem de CVE, de classe de falha ou de exploração ativa', () => {
     assert.ok(categorize(item({ title: 'x', cves: ['CVE-2026-1'] })).categories.includes('Vulnerabilities'));
     assert.ok(categorize(item({ title: 'Remote code execution in the parser' })).categories.includes('Vulnerabilities'));
