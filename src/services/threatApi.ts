@@ -1,6 +1,7 @@
 /// <reference types="vite/client" />
 import { ThreatIntelligenceResult, VendorData, TimelineEvent } from "@/types/threat-intelligence";
 import { detectAnalyzerQueryType, isPublicIpv6, type AnalyzerQueryType } from "@/utils/iocExtract";
+import type { OrgThreatModel } from '@/utils/orgRelevance';
 
 // Helper to handle response
 const handleResponse = async (response: Response, vendorName: string) => {
@@ -1876,3 +1877,58 @@ export const fetchMonthlyRuns = async (month: string): Promise<MonthlySummary> =
 
 export const fetchJobRelated = async (id: string): Promise<{ hunts: PrivateHunt[]; reports: BoletimJob[] }> =>
     handleResponse(await fetch(`/api/feed/job/${encodeURIComponent(id)}/related`), 'Hunting');
+
+// ─── Contexto da organização ───────────────────────────────────────────────
+export interface OrgAsset { vendor: string; product: string; }
+
+export interface OrgProfile {
+    id: string;
+    name: string;
+    sectors: string[];
+    regions: string[];
+    assets: OrgAsset[];
+    ot: { present: boolean; vendors: string[]; protocols: string[] };
+    actors: string[];
+    createdAt: string;
+    updatedAt: string;
+}
+
+export interface OrgVocab { sectors: string[]; regions: string[]; }
+export interface OrgAssetSuggestion { vendor: string; product: string; versions: string[]; seenOn: string[]; }
+
+const orgError = async (response: Response): Promise<never> => {
+    const body = await response.json().catch(() => ({}));
+    throw new Error(body.error || `Falha na requisição (${response.status})`);
+};
+
+const orgJson = async <T>(url: string, init?: RequestInit): Promise<T> => {
+    const response = await fetch(url, init);
+    if (!response.ok) return orgError(response);
+    return response.json();
+};
+
+export const fetchOrgVocab = (): Promise<OrgVocab> => orgJson('/api/org/vocab');
+
+export const fetchOrgProfiles = async (): Promise<OrgProfile[]> =>
+    (await orgJson<{ profiles: OrgProfile[] }>('/api/org/profiles')).profiles;
+
+const jsonBody = (method: string, profile: Partial<OrgProfile>): RequestInit => ({
+    method,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(profile),
+});
+
+export const createOrgProfile = (profile: Partial<OrgProfile>): Promise<OrgProfile> =>
+    orgJson('/api/org/profiles', jsonBody('POST', profile));
+
+export const updateOrgProfile = (id: string, profile: Partial<OrgProfile>): Promise<OrgProfile> =>
+    orgJson(`/api/org/profiles/${encodeURIComponent(id)}`, jsonBody('PATCH', profile));
+
+export const deleteOrgProfile = (id: string): Promise<{ ok: boolean }> =>
+    orgJson(`/api/org/profiles/${encodeURIComponent(id)}`, { method: 'DELETE' });
+
+export const fetchOrgThreatModel = (id: string): Promise<OrgThreatModel> =>
+    orgJson(`/api/org/profiles/${encodeURIComponent(id)}/threat-model`);
+
+export const fetchOrgAssetSuggestions = async (): Promise<OrgAssetSuggestion[]> =>
+    (await orgJson<{ suggestions: OrgAssetSuggestion[] }>('/api/org/asset-suggestions')).suggestions;
