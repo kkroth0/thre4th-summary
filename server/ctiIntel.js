@@ -404,6 +404,7 @@ export const CTI_FEEDS = [
     { url: 'https://filestore.fortinet.com/fortiguard/rss/ir.xml', source: 'FortiGuard PSIRT', layer: 1, weight_boost: 20 },
     { url: 'https://filestore.fortinet.com/fortiguard/rss/outbreakalert.xml', source: 'FortiGuard Outbreak', layer: 1, weight_boost: 20 },
     { url: 'https://security.paloaltonetworks.com/rss.xml', source: 'Palo Alto PSIRT', layer: 1, weight_boost: 20 },
+    { url: 'https://security.nozominetworks.com/rss.xml', source: 'Nozomi Networks PSIRT', layer: 1, weight_boost: 20 },
     { url: 'https://about.gitlab.com/security-releases.xml', source: 'GitLab Security', layer: 1, weight_boost: 20 },
     { url: 'https://www.jenkins.io/security/advisories/rss.xml', source: 'Jenkins PSIRT', layer: 1, weight_boost: 15 },
     { url: 'https://ubuntu.com/security/notices/rss.xml', source: 'Ubuntu Security Notices', layer: 1, weight_boost: 15 },
