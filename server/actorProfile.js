@@ -13,7 +13,7 @@ import { SECTOR_RULES, compileLabelMap, matchLabels } from './ctiIntel.js';
 const VICTIM_CUE = /\b(target|targets|targeted|targeting|victim|victims|attack|attacks|attacked|campaign|campaigns|compromise|compromised|compromising|intrusion|intrusions|breach|breached|espionage|operations?|focus|focused|against|entities|organizations|organisations|companies|sectors?|industr\w+)\b/i;
 
 // Países e regiões que aparecem como alvo em relatórios de CTI. Rótulo → termos.
-const TARGET_REGIONS = {
+export const TARGET_REGIONS = {
     'United States': ['united states', 'u.s.', 'us government', 'american'],
     Canada: ['canada', 'canadian'],
     Mexico: ['mexico', 'mexican'],
