@@ -19,6 +19,8 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Separator } from "@/components/ui/separator";
 import { NEWS_CATEGORY_ORDER, countByCategory, filterNewsletterAdvisories, filterStoryCards, formatNewsletterDate, groupAdvisoriesIntoStories } from "./newsletterView";
 import { saveKnowledge } from "@/services/threatApi";
+import { useOrgProfile } from "@/hooks/useOrgProfile";
+import { annotateOrg, type OrgMatch } from "@/utils/orgRelevance";
 
 interface IocSet {
   ips?: string[];
@@ -52,6 +54,9 @@ interface Advisory {
   kev?: boolean;
   kevDetails?: KevDetails;
   epss?: number; // 0-1 exploit probability
+  // Preenchidos na tela por annotateOrg; nunca vêm da API nem vão para o cache.
+  orgScore?: number;
+  orgMatches?: OrgMatch[];
   // Deterministic actionable enrichment
   threats?: string[];
   sectors?: string[];
@@ -173,6 +178,9 @@ const Newsletter = () => {
   const [selectedSeverity, setSelectedSeverity] = useState<string>("all");
   const [sortByRelevance, setSortByRelevance] = useState<boolean>(false);
   const [kevOnly, setKevOnly] = useState<boolean>(false);
+  const { profiles: orgProfiles, activeId: orgProfileId, setActiveId: setOrgProfileId, model: orgModel } = useOrgProfile();
+  const [sortByOrg, setSortByOrg] = useState(false);
+  const [orgOnly, setOrgOnly] = useState(false);
   // Links já guardados no Knowledge — só pra desabilitar o botão. A verdade
   // continua no servidor, que de-dup por URL de qualquer jeito.
   const [savedLinks, setSavedLinks] = useState<Set<string>>(new Set());
@@ -430,20 +438,23 @@ const Newsletter = () => {
   };
 
   // Filter Advisories / News
-  const filteredAdvisories = useMemo(() => filterNewsletterAdvisories(advisories, {
+  const filteredAdvisories = useMemo(() => annotateOrg(filterNewsletterAdvisories(advisories, {
     search: searchNews,
     layer: selectedLayer,
     severity: selectedSeverity,
     kevOnly,
     sortByRelevance,
-  }), [advisories, searchNews, selectedLayer, selectedSeverity, sortByRelevance, kevOnly]);
+  }), orgModel), [advisories, searchNews, selectedLayer, selectedSeverity, sortByRelevance, kevOnly, orgModel]);
 
   const [categoryFilter, setCategoryFilter] = useState("");
   const [actorFilter, setActorFilter] = useState("");
 
   const storyCards = useMemo(
-    () => filterStoryCards(groupAdvisoriesIntoStories(filteredAdvisories, { sortByRelevance }), { category: categoryFilter, actor: actorFilter }),
-    [filteredAdvisories, sortByRelevance, categoryFilter, actorFilter],
+    () => filterStoryCards(
+      groupAdvisoriesIntoStories(filteredAdvisories, { sortByRelevance, sortByOrg: sortByOrg && Boolean(orgModel) }),
+      { category: categoryFilter, actor: actorFilter, orgOnly: orgOnly && Boolean(orgModel) },
+    ),
+    [filteredAdvisories, sortByRelevance, sortByOrg, orgModel, categoryFilter, actorFilter, orgOnly],
   );
   const categoryCounts = useMemo(() => countByCategory(groupAdvisoriesIntoStories(filteredAdvisories)), [filteredAdvisories]);
 
@@ -453,12 +464,16 @@ const Newsletter = () => {
     selectedSeverity !== "all",
     sortByRelevance,
     kevOnly,
+    sortByOrg,
+    orgOnly,
   ].filter(Boolean).length;
   const clearFilters = () => {
     setSelectedLayer("all");
     setSelectedSeverity("all");
     setSortByRelevance(false);
     setKevOnly(false);
+    setSortByOrg(false);
+    setOrgOnly(false);
   };
 
   return (
@@ -603,6 +618,32 @@ const Newsletter = () => {
                     </Button>
                   </div>
 
+                  {orgProfiles.length > 0 && (
+                    <div className="space-y-2 border-t pt-3">
+                      <label className="text-xs font-medium text-muted-foreground">
+                        {language === "pt" ? "Contexto da organização" : "Organization context"}
+                      </label>
+                      <select
+                        value={orgProfileId}
+                        onChange={(event) => setOrgProfileId(event.target.value)}
+                        className="w-full rounded-md border bg-background px-2 py-1.5 text-xs"
+                      >
+                        <option value="">{language === "pt" ? "Sem contexto" : "No context"}</option>
+                        {orgProfiles.map((profile) => (
+                          <option key={profile.id} value={profile.id}>{profile.name}</option>
+                        ))}
+                      </select>
+                      <label className="flex items-center gap-2 text-xs">
+                        <input type="checkbox" checked={sortByOrg} disabled={!orgModel} onChange={(event) => setSortByOrg(event.target.checked)} />
+                        {language === "pt" ? "Relevante para mim primeiro" : "Most relevant to me first"}
+                      </label>
+                      <label className="flex items-center gap-2 text-xs">
+                        <input type="checkbox" checked={orgOnly} disabled={!orgModel} onChange={(event) => setOrgOnly(event.target.checked)} />
+                        {language === "pt" ? "Só o meu contexto" : "My context only"}
+                      </label>
+                    </div>
+                  )}
+
                   {activeFilterCount > 0 && (
                     <Button variant="ghost" size="sm" className="h-8 w-full text-xs text-muted-foreground" onClick={clearFilters}>
                       {language === "pt" ? "Limpar filtros" : "Clear filters"}
@@ -733,6 +774,18 @@ const Newsletter = () => {
                               >
                                 {language === "pt" ? "Explorado" : "Exploited"}
                                 {typeof item.epss === "number" && <span className="ml-1 opacity-80">EPSS {Math.round(item.epss * 100)}%</span>}
+                              </Badge>
+                            )}
+                            {card.orgScore > 0 && (
+                              <Badge
+                                variant="outline"
+                                title={language === "pt" ? "Casa com o contexto da organização" : "Matches your organization context"}
+                                className="text-[10px] font-semibold bg-primary/10 text-primary border-primary/30"
+                              >
+                                {language === "pt" ? "Relevante" : "Relevant"}
+                                <span className="ml-1 font-normal opacity-80">
+                                  {card.orgMatches.slice(0, 3).map((match) => match.label).join(" · ")}
+                                </span>
                               </Badge>
                             )}
                             {!item.kev && typeof item.epss === "number" && item.epss >= 0.5 && (
