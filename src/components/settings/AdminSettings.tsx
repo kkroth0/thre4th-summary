@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import { CheckCircle2, Plug, ShieldCheck, Unlock, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import AllowlistManager from "@/components/AllowlistManager";
-import FeedSourcesManager from "@/components/FeedSourcesManager";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
@@ -94,7 +93,6 @@ export function AdminSettings() {
                 {pt ? "Chaves configuradas na .env da VPS. Sem chave, o provedor fica inativo." : "Keys set in the VPS .env. Without a key, the provider is inactive."}
               </div>
             </div>
-            <FeedSourcesManager />
           </div>
 
           <div className="flex flex-col gap-1.5">
