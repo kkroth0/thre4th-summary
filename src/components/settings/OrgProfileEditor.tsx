@@ -1,6 +1,16 @@
 import { useEffect, useState } from "react";
 import { Building2, Download, Loader2, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -34,12 +44,33 @@ export function OrgProfileEditor() {
   const { profiles, activeId, setActiveId, reload } = useOrgProfile();
   const [vocab, setVocab] = useState<OrgVocab>({ sectors: [], regions: [] });
   const [draft, setDraft] = useState<Partial<OrgProfile> | null>(null);
+  // Retrato do rascunho no momento em que foi aberto — compara com `draft`
+  // atual pra saber se há edição não salva antes de trocar ou cancelar.
+  const [draftSnapshot, setDraftSnapshot] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [assetInput, setAssetInput] = useState("");
+  // Ação represada esperando confirmação de descarte (trocar de perfil ou
+  // cancelar com edição suja). Nulo = nenhum diálogo aberto.
+  const [pendingDiscard, setPendingDiscard] = useState<(() => void) | null>(null);
 
   useEffect(() => { fetchOrgVocab().then(setVocab).catch(() => undefined); }, []);
 
-  const edit = (profile: OrgProfile | null) => setDraft(profile ? { ...profile } : { ...EMPTY });
+  const edit = (profile: OrgProfile | null) => {
+    const next = profile ? { ...profile } : { ...EMPTY };
+    setDraft(next);
+    setDraftSnapshot(JSON.stringify(next));
+  };
+
+  // window.confirm trava a aba inteira e ignora tema/fonte/idioma da página
+  // (ver Hunting.tsx) — por isso a confirmação usa AlertDialog controlado,
+  // como as outras confirmações destrutivas do projeto.
+  const requestDiscard = (action: () => void) => {
+    if (draft && JSON.stringify(draft) !== draftSnapshot) {
+      setPendingDiscard(() => action);
+    } else {
+      action();
+    }
+  };
 
   const save = async () => {
     if (!draft) return;
@@ -122,7 +153,7 @@ export function OrgProfileEditor() {
                 {profile.ot.present ? " · OT" : ""}
               </div>
             </div>
-            <Button variant="ghost" size="sm" onClick={() => edit(profile)}>{pt ? "Editar" : "Edit"}</Button>
+            <Button variant="ghost" size="sm" onClick={() => requestDiscard(() => edit(profile))}>{pt ? "Editar" : "Edit"}</Button>
             <Button variant="ghost" size="sm" onClick={() => remove(profile)} aria-label={pt ? "Remover" : "Remove"}><Trash2 /></Button>
           </div>
         ))}
@@ -209,13 +240,32 @@ export function OrgProfileEditor() {
 
             <div className="flex gap-2">
               <Button onClick={save} disabled={saving}>{saving ? <Loader2 className="animate-spin" /> : null} {pt ? "Salvar" : "Save"}</Button>
-              <Button variant="ghost" onClick={() => setDraft(null)}>{pt ? "Cancelar" : "Cancel"}</Button>
+              <Button variant="ghost" onClick={() => requestDiscard(() => setDraft(null))}>{pt ? "Cancelar" : "Cancel"}</Button>
             </div>
           </div>
         ) : (
           <Button variant="outline" className="self-start" onClick={() => edit(null)}><Plus /> {pt ? "Novo perfil" : "New profile"}</Button>
         )}
       </CardContent>
+
+      <AlertDialog open={!!pendingDiscard} onOpenChange={(open) => !open && setPendingDiscard(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{pt ? "Descartar alterações não salvas?" : "Discard unsaved changes?"}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {pt
+                ? "As alterações neste perfil ainda não foram salvas e serão perdidas."
+                : "The changes to this profile haven't been saved and will be lost."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{pt ? "Voltar a editar" : "Keep editing"}</AlertDialogCancel>
+            <AlertDialogAction onClick={() => { pendingDiscard?.(); setPendingDiscard(null); }}>
+              {pt ? "Descartar" : "Discard"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Card>
   );
 }
