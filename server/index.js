@@ -55,6 +55,8 @@ import { buildActorIndex, matchActors } from './actorMatch.js';
 import { categorize } from './newsCategories.js';
 import { mergeIntoStories } from './newsStories.js';
 import { createStoryStore } from './newsStoryStore.js';
+import { ORG_REGIONS, ORG_SECTORS, createProfileStore } from './orgProfiles.js';
+import { buildThreatModel } from './orgThreatModel.js';
 
 // Load the root .env regardless of the process cwd (systemd runs from server/,
 // local dev may not).
@@ -122,6 +124,9 @@ const dailyEditionStore = createEditionStore({ filePath: DAILY_SUMMARIES_PATH, w
 
 const NEWS_STORIES_PATH = path.join(__dirname, '.news-stories.json');
 const newsStoryStore = createStoryStore({ filePath: NEWS_STORIES_PATH, readFileSync: fs.readFileSync, writeJsonAtomic });
+
+const ORG_PROFILES_PATH = path.join(__dirname, '.org-profiles.json');
+const orgProfileStore = createProfileStore({ filePath: ORG_PROFILES_PATH, readFileSync: fs.readFileSync, writeJsonAtomic });
 
 // 2232 names and aliases, indexed once at boot rather than per article.
 const actorIndex = (() => {
@@ -3953,6 +3958,83 @@ const loadActors = () => {
     };
     return ACTORS_CACHE;
 };
+
+// ─── Contexto da organização ───────────────────────────────────────────────
+// Configurar não é consumir, então as rotas de perfil pedem só sessão. A de
+// sugestões lê o watchlist e herda o requirePremium dele.
+const orgError = (res, error) => {
+    if (error && error.status && error.publicMessage) {
+        return res.status(error.status).json({ error: error.publicMessage });
+    }
+    const { status, message } = sanitizeError(error);
+    res.status(status).json({ error: message });
+};
+
+const knownActorIds = () => new Set(loadActors().actors.map((actor) => actor.id));
+
+// Varrer 1362 atores a cada abertura da tela de Notícias é desperdício: o
+// perfil só muda quando alguém edita, e updatedAt já marca isso.
+const threatModelCache = new Map();
+const cachedThreatModel = (profile) => {
+    const key = `${profile.id}:${profile.updatedAt}`;
+    if (!threatModelCache.has(key)) {
+        if (threatModelCache.size > 50) threatModelCache.clear();
+        threatModelCache.set(key, buildThreatModel(profile, loadActors().actors));
+    }
+    return threatModelCache.get(key);
+};
+
+app.get('/api/org/vocab', requireAuth, (_req, res) => {
+    res.set('Cache-Control', 'private, max-age=3600');
+    res.json({ sectors: ORG_SECTORS, regions: ORG_REGIONS });
+});
+
+app.get('/api/org/profiles', requireAuth, (req, res) => {
+    res.json({ profiles: orgProfileStore.list(req.user.sub) });
+});
+
+app.post('/api/org/profiles', requireAuth, (req, res) => {
+    try {
+        res.status(201).json(orgProfileStore.create(req.user, req.body || {}, new Date().toISOString(), knownActorIds()));
+    } catch (error) { orgError(res, error); }
+});
+
+app.patch('/api/org/profiles/:id', requireAuth, (req, res) => {
+    try {
+        res.json(orgProfileStore.update(req.user.sub, String(req.params.id), req.body || {}, new Date().toISOString(), knownActorIds()));
+    } catch (error) { orgError(res, error); }
+});
+
+app.delete('/api/org/profiles/:id', requireAuth, (req, res) => {
+    if (!orgProfileStore.remove(req.user.sub, String(req.params.id))) {
+        return res.status(404).json({ error: 'perfil não encontrado' });
+    }
+    res.json({ ok: true });
+});
+
+app.get('/api/org/profiles/:id/threat-model', requireAuth, (req, res) => {
+    try {
+        res.json(cachedThreatModel(orgProfileStore.get(req.user.sub, String(req.params.id))));
+    } catch (error) { orgError(res, error); }
+});
+
+// Os produtos detectados ficam em finding.product, dentro dos snapshots — um
+// por ativo. Varrer aqui evita um N+1 de requisições no navegador.
+app.get('/api/org/asset-suggestions', requirePremium, (req, res) => {
+    const byProduct = new Map();
+    for (const asset of exposureStore.listAssets(req.user.sub)) {
+        const snapshot = exposureStore.previousSuccessfulSnapshot(req.user.sub, asset.id);
+        for (const finding of snapshot?.findings || []) {
+            const product = String(finding.product || '').trim();
+            if (!product) continue;
+            const entry = byProduct.get(product.toLowerCase()) || { vendor: '', product, versions: [], seenOn: [] };
+            if (finding.version && !entry.versions.includes(finding.version)) entry.versions.push(finding.version);
+            if (!entry.seenOn.includes(asset.label)) entry.seenOn.push(asset.label);
+            byProduct.set(product.toLowerCase(), entry);
+        }
+    }
+    res.json({ suggestions: [...byProduct.values()].sort((a, b) => a.product.localeCompare(b.product)) });
+});
 
 // List (slim) + facets. The client fetches once and searches/filters in-memory.
 app.get('/api/actors', (req, res) => {
