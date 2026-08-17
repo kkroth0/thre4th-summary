@@ -202,7 +202,9 @@ As três páginas são renderizadas no servidor e raspáveis; nenhuma publica fe
 
 **Partida a frio.** Numa fonte `datedItems: false` sem entradas no `.scrape-seen.json`, as URLs da listagem são semeadas em silêncio e **nada é emitido** — só posts vistos a partir dali entram no feed. É o preço de não fabricar data: uma fonte sem datas confiáveis não pode ser retroativa sem mentir sobre quando as coisas aconteceram. As duas fontes da Claroty, que têm data real, emitem normalmente já na primeira rodada.
 
-A raspagem roda dentro do `Promise.allSettled` do refresh, com o mesmo tratamento dos feeds RSS: uma fonte que quebra registra o erro em `feedHealth` e devolve zero itens. Uma mudança de layout do Claroty derruba aquela fonte, nunca o feed.
+A raspagem roda dentro do refresh, com o mesmo tratamento dos feeds RSS: uma fonte que quebra registra o erro em `feedHealth` e devolve zero itens. Uma mudança de layout do Claroty derruba aquela fonte, nunca o feed.
+
+As três aparecem no catálogo de fontes com sua saúde, e podem ser desligadas pelo mesmo interruptor dos feeds RSS. Um raspador quebrado devolve zero itens em silêncio — sem aparecer na tela, ninguém perceberia. A costura é `feedListForClient()`, só de exibição: `catalogFeeds()` e `effectiveFeeds()` ficam intocados, para o coletor de RSS nunca tentar buscar uma página HTML como se fosse feed.
 
 ### Vocabulário OT
 
@@ -233,4 +235,4 @@ Cliente (`npm run test:unit`, esbuild + Node test runner, no molde dos `.test.ts
 
 ## Fora de escopo
 
-Tela própria de modelo de ameaças (o link para `/atores` com os filtros do perfil pré-preenchidos resolve). Sugestão automática de setor a partir do domínio. Perfil compartilhado entre usuários. Ligação do perfil com Patch Tuesday, Hunting, Boletim e Threat Map. Alertas por e-mail quando uma notícia casa com o contexto.
+Tela própria de modelo de ameaças, e também o atalho para `/atores` com os filtros do perfil pré-preenchidos — o endpoint de threat model já devolve os atores relevantes, então a tela pode vir depois sem nada a refazer. Sugestão automática de setor a partir do domínio. Perfil compartilhado entre usuários. Ligação do perfil com Patch Tuesday, Hunting, Boletim e Threat Map. Alertas por e-mail quando uma notícia casa com o contexto.
