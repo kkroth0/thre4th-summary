@@ -1891,7 +1891,12 @@ async function requestDailyNarrative(events, date) {
         messages: [
             {
                 role: 'system',
-                content: 'Voce e um analista senior de CTI. Responda somente JSON em portugues do Brasil com title, summary (3 a 5 fatos) e attentionTopics (2 a 4 temas com title, assessment, recommendedAction opcional e eventIds). Use apenas os fatos e identificadores fornecidos.',
+                content: 'Voce e um analista senior de CTI. Responda somente JSON em portugues do Brasil com title, summary (3 a 5 fatos) e attentionTopics (2 a 4 temas com title, assessment, recommendedAction opcional e eventIds). Use apenas os fatos e identificadores fornecidos. '
+                    // Quem publica o boletim ja monitora o ambiente do leitor: devolver
+                    // esse trabalho pra ele como "recomendacao" cobra do cliente o
+                    // servico que ele contratou. O time nao e nomeado de proposito.
+                    + 'Em recommendedAction, nunca recomende acoes que ja sao servico do time de CTI que publica este boletim: monitorar o ambiente, verificar logs, criar casos de uso de deteccao ou buscar IOCs no ambiente. '
+                    + 'recommendedAction e sempre acao do lado do leitor: aplicar correcao, priorizar por severidade, restringir exposicao, rotacionar credencial, inventariar ativo afetado.',
             },
             { role: 'user', content: JSON.stringify({ date, events: facts }) },
         ],
