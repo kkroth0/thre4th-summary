@@ -4,8 +4,12 @@
 // dentro, pra rota da workstation não carregar nada disso à toa.
 import type PptxGenJS from 'pptxgenjs';
 import type { BoletimJob, BoletimReport } from '@/services/threatApi';
+import {
+    DECK, FONT_LIGHT, contentSlide, deckMetadata, deckText, scrubXml, type PptxFactory,
+} from './deckTemplate';
 
-const COLORS = { blue: '1565C0', navy: '172033', slate: '526274', border: 'DCE3EE', white: 'FFFFFF' } as const;
+// Só o PDF tem paleta própria; o PPTX segue o template do time (deckTemplate).
+const COLORS = { blue: '1565C0', navy: '172033' } as const;
 const rgb = (hex: string): [number, number, number] => [0, 2, 4].map((o) => parseInt(hex.substr(o, 2), 16)) as [number, number, number];
 
 export const boletimFilename = (job: BoletimJob) => {
@@ -163,64 +167,96 @@ export async function exportBoletimPDF(job: BoletimJob): Promise<void> {
 }
 
 // ---- PPTX -----------------------------------------------------------------
-export type PptxFactory = new () => PptxGenJS;
+// Mesmo padrão dos decks de Patch Tuesday e SAP: o boletim usa o template do
+// time (deckTemplate.ts) em vez de um layout próprio — painel escuro sobre a
+// arte, título amarelo sobre a régua em degradê, Franklin Gothic e o rodapé com
+// data, página e a linha do time.
+//
+// Sem capa: o deck abre direto na primeira seção, com o título do boletim numa
+// linha discreta logo abaixo da régua pra dizer de qual boletim se trata. A
+// placa do canto inferior direito continua vazia, como nos outros decks — quem
+// apresenta coloca a própria marca ali, nenhuma logo é embutida.
+export type { PptxFactory };
 
 // Um bloco vira quantos slides forem necessários: seção comprida quebra em
-// "(cont.)" em vez de transbordar pra fora do slide.
-const BULLETS_PER_SLIDE = 9;
-const TABLE_ROWS_PER_SLIDE = 12;
+// "(cont.)" em vez de transbordar pra fora do painel. Os limites são menores
+// que os do layout antigo porque a tela do template é 10 × 5.625in, não 13.3.
+const BULLETS_PER_SLIDE = 8;
+const TABLE_ROWS_PER_SLIDE = 9;
 
-const slideTitle = (slide: PptxGenJS.Slide, title: string) =>
-    slide.addText(title, { x: .55, y: .35, w: 12.2, h: .5, fontSize: 22, bold: true, color: COLORS.navy });
+// Área útil dentro do painel: começa abaixo da régua e para antes do rodapé.
+const BODY = { x: 0.5, w: 8.95, bottom: 4.9 } as const;
 
 const chunk = <T,>(items: T[], size: number): T[][] =>
     items.length ? Array.from({ length: Math.ceil(items.length / size) }, (_, i) => items.slice(i * size, i * size + size)) : [];
 
+// Colunas proporcionais ao conteúdo: um SHA-256 na coluna "Valor" não pode
+// receber a mesma largura de "Tipo", senão a linha quebra em quatro e a tabela
+// transborda o painel. O piso mantém a coluna curta legível.
+export const colWidths = (head: string[], rows: string[][], total: number, min = 0.7): number[] => {
+    const chars = head.map((h, i) => Math.max(h.length, ...rows.map((r) => (r[i] || '').length)));
+    const sum = chars.reduce((a, b) => a + b, 0) || 1;
+    const raw = chars.map((c) => Math.max(min, (c / sum) * total));
+    const scale = total / raw.reduce((a, b) => a + b, 0);
+    return raw.map((w) => w * scale);
+};
+
 export function buildBoletimPresentation(job: BoletimJob, PptxLib: PptxFactory): PptxGenJS {
     const report = job.json;
     if (!report) throw new Error('Relatório sem conteúdo');
+
     const pptx = new PptxLib();
-    pptx.defineLayout({ name: 'BOLETIM', width: 13.333, height: 7.5 });
-    pptx.layout = 'BOLETIM';
-    pptx.author = 'ThreatSumm4ry';
-    pptx.title = report.titulo || job.title || 'Boletim';
+    // A data do rodapé é a da publicação da fonte; caindo pra geração do boletim.
+    const date = report.source_published || report.generated_at || job.createdAt || null;
+    deckMetadata(pptx, 'Boletim de Ameaças', date);
+    const titulo = scrubXml(report.titulo || job.title || job.url);
+    pptx.title = titulo;
     pptx.subject = subtitle(job);
-    pptx.defineSlideMaster({
-        title: 'PADRAO',
-        background: { color: COLORS.white },
-        objects: [
-            { rect: { x: 0, y: 0, w: 13.333, h: .08, fill: { color: COLORS.blue }, line: { color: COLORS.blue } } },
-            { text: { text: report.source_url || '', options: { x: .45, y: 7.08, w: 8, h: .25, fontSize: 8, color: COLORS.slate } } },
-        ],
-        slideNumber: { x: 12.35, y: 7.08, w: .5, h: .25, fontSize: 8, color: COLORS.slate },
-    });
 
-    const cover = pptx.addSlide();
-    cover.background = { color: COLORS.navy };
-    cover.addText(report.titulo || job.title || job.url, { x: .7, y: 2.2, w: 12, h: 1.4, fontSize: 30, bold: true, color: COLORS.white, valign: 'top' });
-    cover.addText(subtitle(job), { x: .7, y: 3.8, w: 12, h: .4, fontSize: 16, color: COLORS.blue });
-    if (report.source_url) cover.addText(report.source_url, { x: .7, y: 6.4, w: 12, h: .3, fontSize: 10, color: COLORS.slate, hyperlink: { url: report.source_url } });
+    let page = 0;
+    const newSlide = (title: string): PptxGenJS.Slide => {
+        const slide = contentSlide(pptx, title, ++page, date);
+        if (page === 1) {
+            deckText(slide, [titulo, subtitle(job)].filter(Boolean).join(' · '), {
+                x: BODY.x, y: 1.06, w: BODY.w, h: 0.22,
+                fontFace: FONT_LIGHT, fontSize: 9, italic: true, color: DECK.muted,
+            });
+        }
+        return slide;
+    };
+    // Só o primeiro slide carrega a linha do título, então só ele começa mais embaixo.
+    const bodyTop = () => (page === 1 ? 1.36 : 1.16);
 
-    for (const part of boletimSections(report)) {
+    for (const part of scrubXml(boletimSections(report))) {
         for (const block of part.blocks) {
             if (block.kind === 'table') {
                 chunk(block.rows, TABLE_ROWS_PER_SLIDE).forEach((rows, index) => {
-                    const slide = pptx.addSlide({ masterName: 'PADRAO' });
-                    slideTitle(slide, index ? `${part.title} (cont.)` : part.title);
+                    const slide = newSlide(index ? `${part.title} (cont.)` : part.title);
                     slide.addTable([
-                        block.head.map((cell) => ({ text: cell, options: { bold: true, color: COLORS.white, fill: { color: COLORS.blue } } })),
-                        ...rows.map((row) => row.map((cell) => ({ text: cell }))),
-                    ], { x: .55, y: 1.1, w: 12.2, fontSize: 10, margin: .05, valign: 'middle', border: { type: 'solid', color: COLORS.border, pt: .5 }, color: COLORS.navy });
+                        block.head.map((cell) => ({ text: cell, options: { bold: true, color: DECK.ink, fill: { color: DECK.accent } } })),
+                        ...rows.map((row) => row.map((cell) => ({ text: cell, options: { color: DECK.white, fill: { color: DECK.card } } }))),
+                    ], {
+                        x: BODY.x, y: bodyTop(), w: BODY.w, colW: colWidths(block.head, rows, BODY.w),
+                        fontFace: FONT_LIGHT, fontSize: 8, margin: 0.04, valign: 'middle',
+                        border: { type: 'solid', color: DECK.cardLine, pt: 0.5 },
+                        autoPage: false,
+                    });
                 });
                 continue;
             }
             const items = block.kind === 'text' ? [block.text] : block.items;
             chunk(items, block.kind === 'text' ? 1 : BULLETS_PER_SLIDE).forEach((group, index) => {
-                const slide = pptx.addSlide({ masterName: 'PADRAO' });
-                slideTitle(slide, index ? `${part.title} (cont.)` : part.title);
-                slide.addText(
+                const slide = newSlide(index ? `${part.title} (cont.)` : part.title);
+                const y = bodyTop();
+                deckText(
+                    slide,
                     group.map((item) => ({ text: item, options: { bullet: block.kind === 'bullets', breakLine: true } })),
-                    { x: .7, y: 1.15, w: 11.9, h: 5.6, fontSize: block.kind === 'text' ? 15 : 14, color: COLORS.navy, valign: 'top' },
+                    {
+                        x: BODY.x, y, w: BODY.w, h: BODY.bottom - y,
+                        fontFace: FONT_LIGHT, fontSize: block.kind === 'text' ? 12 : 11,
+                        color: DECK.white, lineSpacingMultiple: 1.2, valign: 'top',
+                        paraSpaceAfter: block.kind === 'bullets' ? 6 : 0,
+                    }
                 );
             });
         }
