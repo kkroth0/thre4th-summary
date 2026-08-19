@@ -8,10 +8,23 @@ import type { BoletimJob, BoletimReport } from '@/services/threatApi';
 const COLORS = { blue: '1565C0', navy: '172033', slate: '526274', border: 'DCE3EE', white: 'FFFFFF' } as const;
 const rgb = (hex: string): [number, number, number] => [0, 2, 4].map((o) => parseInt(hex.substr(o, 2), 16)) as [number, number, number];
 
+// Nome da casa, o MESMO que o motor gera (url_report.srr_filename): título
+// legível, com acentos e espaços, sem os caracteres que o Windows recusa em nome
+// de arquivo. Os dois lados precisam bater — o analista baixa o JSON aqui e o
+// deck vem do motor, e os dois sentam lado a lado na mesma pasta.
+const SRR_PREFIX = 'SRR - Surface Risk Report';
+
 export const boletimFilename = (job: BoletimJob) => {
-    const name = (job.json?.titulo || job.title || job.url || 'boletim')
-        .normalize('NFKD').replace(/[^\w\s-]/g, '').trim().toLowerCase().replace(/[\s_-]+/g, '-').slice(0, 50);
-    return `boletim-${job.type}-${name || 'boletim'}`;
+    const title = (job.json?.titulo || job.title || job.url || '').trim();
+    const name = `${SRR_PREFIX} - ${title}`
+        .replace(/^[\s-]+|[\s-]+$/g, '')          // título vazio deixa só o prefixo
+        // eslint-disable-next-line no-control-regex
+        .replace(/[<>:"/\\|?*\u0000-\u001f]/g, '')
+        .replace(/\s+/g, ' ')
+        .trim().replace(/[.\s]+$/, '')            // Windows recusa ponto/espaço no fim
+        .slice(0, 120)
+        .trim().replace(/[.\s]+$/, '');
+    return name || SRR_PREFIX;
 };
 
 // ---- Estrutura comum ------------------------------------------------------
