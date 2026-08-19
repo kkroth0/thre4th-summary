@@ -86,11 +86,14 @@ test('varredura devolve só os decks sem job, inclusive o .tmp de gravação int
     const store = { 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee': { id: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee' } };
     const files = [
         'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee.pptx',        // job vivo: fica
+        'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee.pdf',         // idem, o PDF do deck
         'ffffffff-bbbb-4ccc-8ddd-eeeeeeeeeeee.pptx',        // job podado: sai
+        'ffffffff-bbbb-4ccc-8ddd-eeeeeeeeeeee.pdf',         // sai junto
         'ffffffff-bbbb-4ccc-8ddd-eeeeeeeeeeee.pptx.tmp',    // gravação órfã: sai
     ];
     assert.deepEqual(orphanDeckFiles(files, store), [
         'ffffffff-bbbb-4ccc-8ddd-eeeeeeeeeeee.pptx',
+        'ffffffff-bbbb-4ccc-8ddd-eeeeeeeeeeee.pdf',
         'ffffffff-bbbb-4ccc-8ddd-eeeeeeeeeeee.pptx.tmp',
     ]);
     assert.deepEqual(orphanDeckFiles([], store), []);

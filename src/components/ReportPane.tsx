@@ -12,7 +12,7 @@ import { BoletimView } from "@/components/BoletimView";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { downloadBoletimDeck, fetchJobRelated, type BoletimJob, type BoletimReport, type PrivateHunt } from "@/services/threatApi";
 import { buildHuntLink } from "@/pages/dailyBulletinView";
-import { exportBoletimJSON, exportBoletimPDF } from "@/utils/boletimExport";
+import { exportBoletimJSON } from "@/utils/boletimExport";
 
 // Host da URL pra exibição compacta ("fortiguard.com" em vez do link inteiro).
 export const hostOf = (url?: string): string => {
@@ -98,16 +98,15 @@ function ReportRelations({ job, pt }: { job: BoletimJob; pt: boolean }) {
 }
 
 // Um botão só: o formato é escolha de quem exporta, não três botões na toolbar.
-// PDF monta no navegador (lib sob demanda); o PPTX já vem pronto da VPS no
-// template SRR e aqui é só o download — os dois têm espera, daí o "gerando".
+// PPTX e PDF já vêm prontos da VPS (o PDF é o próprio deck convertido) e aqui é
+// só o download; o JSON é local. A espera do download é o que o "gerando" cobre.
 function ExportMenu({ job, pt }: { job: BoletimJob; pt: boolean }) {
   const [busy, setBusy] = useState(false);
   const run = async (format: "json" | "pdf" | "pptx") => {
     setBusy(true);
     try {
       if (format === "json") exportBoletimJSON(job);
-      else if (format === "pdf") await exportBoletimPDF(job);
-      else await downloadBoletimDeck(job);
+      else await downloadBoletimDeck(job, format);
     } catch (error) {
       toast.error((error as Error).message || (pt ? "Falha ao exportar" : "Export failed"));
     } finally {

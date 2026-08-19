@@ -17,11 +17,12 @@ export function isJobId(id) {
 }
 
 /**
- * Nomes de arquivo de deck que não têm mais job. Cobre o job podado e também o
- * deck órfão de um crash entre gravar o arquivo e gravar o store.
+ * Nomes de arquivo de anexo (deck .pptx e PDF) que não têm mais job. Cobre o job
+ * podado e também o arquivo órfão de um crash entre gravar o anexo e gravar o
+ * store — daí o `.tmp` entrar na conta.
  */
 export function orphanDeckFiles(files, store) {
-    return (files || []).filter((file) => !store?.[file.replace(/\.pptx(\.tmp)?$/, '')]);
+    return (files || []).filter((file) => !store?.[file.replace(/\.(pptx|pdf)(\.tmp)?$/, '')]);
 }
 
 /** Metadado do job sem o boletim. A lista carrega isso; o JSON só no detalhe. */

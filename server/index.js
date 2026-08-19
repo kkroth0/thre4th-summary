@@ -155,8 +155,10 @@ app.use(cors(corsOptionsDelegate));
 // Padrão apertado (10kb) p/ todas as rotas; a rota interna autenticada de upload
 // do boletim (POST /api/feed/job/result) usa parser próprio maior (ver abaixo),
 // pois o JSON do boletim gerado pelo motor excede 10kb e dava 413 Payload Too Large.
+// O teto subiu de novo quando o worker passou a mandar deck E PDF no mesmo corpo:
+// ~3 MB de .pptx + ~2 MB de .pdf viram ~7 MB depois do base64, e o JSON vai junto.
 const tightJson = express.json({ limit: '10kb' });
-const bulkJson = express.json({ limit: '15mb' });
+const bulkJson = express.json({ limit: '25mb' });
 app.use((req, res, next) => {
     if (req.method === 'POST' && req.path === '/api/feed/job/result') return bulkJson(req, res, next);
     return tightJson(req, res, next);
@@ -2526,16 +2528,19 @@ async function runExposureSchedulerTick() {
 // job (GET job) e baixa o JSON quando pronto; o PPT é preenchido localmente.
 const JOBS_STORE_PATH = path.join(__dirname, '.feed-jobs.json');
 
-// Deck entregue pelo worker. Vai pro DISCO, não pro store: o .pptx tem ~3 MB e o
-// store é reescrito inteiro a cada saveJobs() — carregar o deck ali dentro
-// transformaria cada gravação de job numa cópia de vários MB.
+// Anexos entregues pelo worker: o deck no template SRR e o PDF dele convertido.
+// Vão pro DISCO, não pro store: juntos passam de 4 MB e o store é reescrito
+// inteiro a cada saveJobs() — carregá-los ali transformaria cada gravação de job
+// numa cópia de vários MB.
 const DECKS_DIR = path.join(__dirname, '.feed-decks');
-const deckPath = (id) => path.join(DECKS_DIR, `${id}.pptx`);
-function saveDeck(id, base64) {
+const DECK_KINDS = { pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+                     pdf: 'application/pdf' };
+const deckPath = (id, kind) => path.join(DECKS_DIR, `${id}.${kind}`);
+function saveDeck(id, kind, base64) {
     fs.mkdirSync(DECKS_DIR, { recursive: true });
-    const tmp = `${deckPath(id)}.tmp`;
+    const tmp = `${deckPath(id, kind)}.tmp`;
     fs.writeFileSync(tmp, Buffer.from(base64, 'base64'));
-    fs.renameSync(tmp, deckPath(id));
+    fs.renameSync(tmp, deckPath(id, kind));
 }
 // Roda junto da poda: apaga do disco os decks que não têm mais job.
 function sweepDecks() {
@@ -2649,22 +2654,24 @@ app.get('/api/feed/jobs', requirePremium, (req, res) => {
 });
 
 // Apaga um boletim do usuário.   DELETE /api/feed/job/:id
-// Deck pronto do boletim (template SRR preenchido na VPS). Premium + dono.
-// GET /api/feed/job/deck?id=...
+// Anexo pronto do boletim: o deck no template SRR preenchido na VPS, ou o PDF
+// dele convertido. Premium + dono.   GET /api/feed/job/deck?id=...&kind=pptx|pdf
 app.get('/api/feed/job/deck', requirePremium, (req, res) => {
     const id = (req.query.id || '').toString();
+    const kind = (req.query.kind || 'pptx').toString();
     const job = jobsStore[id];
     if (!job) return res.status(404).json({ error: 'job não encontrado' });
     if (job.ownerSub !== req.user.sub) return res.status(403).json({ error: 'job pertence a outro usuário' });
-    if (!job.deck || !isJobId(id) || !fs.existsSync(deckPath(id))) {
-        return res.status(404).json({ error: 'deck não disponível para este boletim' });
+    const name = DECK_KINDS[kind] && job.deck?.[kind];
+    if (!name || !isJobId(id) || !fs.existsSync(deckPath(id, kind))) {
+        return res.status(404).json({ error: `${kind} não disponível para este boletim` });
     }
     // O nome vem do motor (url_report.srr_filename), não é remontado aqui: um
     // segundo lugar aplicando a regra de nome já divergiu uma vez.
-    res.type('application/vnd.openxmlformats-officedocument.presentationml.presentation');
+    res.type(DECK_KINDS[kind]);
     res.setHeader('Content-Disposition',
-        `attachment; filename*=UTF-8''${encodeURIComponent(job.deckName || `${id}.pptx`)}`);
-    fs.createReadStream(deckPath(id)).pipe(res);
+        `attachment; filename*=UTF-8''${encodeURIComponent(name)}`);
+    fs.createReadStream(deckPath(id, kind)).pipe(res);
 });
 
 app.delete('/api/feed/job/:id', requirePremium, (req, res) => {
@@ -2672,7 +2679,9 @@ app.delete('/api/feed/job/:id', requirePremium, (req, res) => {
     if (!job) return res.status(404).json({ error: 'job não encontrado' });
     if (job.ownerSub !== req.user.sub) return res.status(403).json({ error: 'job pertence a outro usuário' });
     delete jobsStore[req.params.id];
-    if (isJobId(req.params.id)) fs.rmSync(deckPath(req.params.id), { force: true });
+    if (isJobId(req.params.id)) {
+        for (const kind of Object.keys(DECK_KINDS)) fs.rmSync(deckPath(req.params.id, kind), { force: true });
+    }
     saveJobs();
     res.json({ id: req.params.id, deleted: true });
 });
@@ -2725,16 +2734,19 @@ app.post('/api/feed/job/result', (req, res) => {
         // Indexa na entrega: é o único momento em que o boletim chega. Guardar
         // techniques/cves no job evita varrer o JSON inteiro a cada listagem.
         Object.assign(job, refsOfReport(job.json));
-        // O deck vem preenchido no template SRR pelo worker, que é quem tem os
-        // templates. Falhar em gravá-lo NÃO derruba a entrega: o boletim (JSON)
-        // é o resultado, o deck é um anexo dele.
-        if (typeof req.body.pptx === 'string' && req.body.pptx && isJobId(job.id)) {
+        // Deck e PDF vêm prontos do worker, que é quem tem os templates e o
+        // conversor. Falhar em gravá-los NÃO derruba a entrega: o boletim (JSON)
+        // é o resultado, os anexos são dele.
+        job.deck = job.deck || {};
+        for (const kind of Object.keys(DECK_KINDS)) {
+            const blob = req.body[kind];
+            if (typeof blob !== 'string' || !blob || !isJobId(job.id)) continue;
             try {
-                saveDeck(job.id, req.body.pptx);
-                job.deck = true;
-                job.deckName = String(req.body.pptxName || '').slice(0, 200) || `${job.id}.pptx`;
+                saveDeck(job.id, kind, blob);
+                job.deck[kind] = String(req.body[`${kind}Name`] || '').slice(0, 200)
+                    || `${job.id}.${kind}`;
             } catch (e) {
-                console.error('deck write failed:', e.message);
+                console.error(`${kind} write failed:`, e.message);
             }
         }
     }
