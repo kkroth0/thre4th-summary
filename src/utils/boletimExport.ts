@@ -85,7 +85,13 @@ export function boletimSections(report: BoletimReport): ReportSection[] {
             rows: (r.iocs || []).map((ioc) => [ioc.categoria || '—', ioc.tipo || '—', ioc.valor || '—']),
         }] : []),
         ...section('MITRE ATT&CK', bullets((r.mitre_ttps || []).map((t) => [t.id, t.nome].filter(Boolean).join(' — ')))),
-        ...section('Referências', bullets((r.referencias_coletadas || []).map((ref) => ref.url || ref.titulo || '').filter(Boolean))),
+        // A URL da fonte abre a lista: no PDF ela está no cabeçalho, mas o deck
+        // não tem capa nem rodapé pra ela — sem isso o boletim circula sem dizer
+        // de onde saiu. Dedupe porque o motor às vezes já a devolve coletada.
+        ...section('Referências', bullets([...new Set([
+            ...(filled(r.source_url) ? [r.source_url!] : []),
+            ...(r.referencias_coletadas || []).map((ref) => ref.url || ref.titulo || ''),
+        ])])),
     ];
 }
 

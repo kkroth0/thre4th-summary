@@ -127,3 +127,11 @@ test("o boletim sai no padrão do time, sem capa e sem logo embutida", async () 
     }
   }
 });
+
+test("a url da fonte abre as referências, sem duplicar a que o motor já coletou", () => {
+  const [refs] = boletimSections({
+    source_url: "https://exemplo.test/aviso",
+    referencias_coletadas: [{ url: "https://exemplo.test/aviso" }, { url: "https://nvd.nist.gov/x" }],
+  });
+  assert.deepEqual(refs.blocks, [{ kind: "bullets", items: ["https://exemplo.test/aviso", "https://nvd.nist.gov/x"] }]);
+});
