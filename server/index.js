@@ -20,7 +20,7 @@ import { actorTargeting } from './actorProfile.js';
 import { getShodanCreditStatus, runAttackSurfaceScan } from './attackSurface.js';
 import { shodanAxios } from './shodanGate.js';
 import { groupByField, refsOfReport, relatedTo, techniqueCoverage } from './attackIndex.js';
-import { jobSummary, pruneJobsMap } from './feedJobs.js';
+import { isJobId, jobSummary, orphanDeckFiles, pruneJobsMap } from './feedJobs.js';
 import { parseHearthData } from './hearth.js';
 import { parseSentinelTables, catalogSources } from './sentinelTables.js';
 import { parsePtbrHunt, isHuntPath } from './huntsPtbr.js';
@@ -2525,6 +2525,26 @@ async function runExposureSchedulerTick() {
 // o motor pesado, e devolve o JSON (POST job/result, 🔒). O front faz poll do
 // job (GET job) e baixa o JSON quando pronto; o PPT é preenchido localmente.
 const JOBS_STORE_PATH = path.join(__dirname, '.feed-jobs.json');
+
+// Deck entregue pelo worker. Vai pro DISCO, não pro store: o .pptx tem ~3 MB e o
+// store é reescrito inteiro a cada saveJobs() — carregar o deck ali dentro
+// transformaria cada gravação de job numa cópia de vários MB.
+const DECKS_DIR = path.join(__dirname, '.feed-decks');
+const deckPath = (id) => path.join(DECKS_DIR, `${id}.pptx`);
+function saveDeck(id, base64) {
+    fs.mkdirSync(DECKS_DIR, { recursive: true });
+    const tmp = `${deckPath(id)}.tmp`;
+    fs.writeFileSync(tmp, Buffer.from(base64, 'base64'));
+    fs.renameSync(tmp, deckPath(id));
+}
+// Roda junto da poda: apaga do disco os decks que não têm mais job.
+function sweepDecks() {
+    let files;
+    try { files = fs.readdirSync(DECKS_DIR); } catch { return; }
+    for (const file of orphanDeckFiles(files, jobsStore)) {
+        fs.rmSync(path.join(DECKS_DIR, file), { force: true });
+    }
+}
 function loadJobs() { try { return JSON.parse(fs.readFileSync(JOBS_STORE_PATH, 'utf8')); } catch { return {}; } }
 function saveJobs() { try { writeJsonAtomic(JOBS_STORE_PATH, jobsStore); } catch (e) { console.error('jobs store write failed:', e.message); } }
 let jobsStore = loadJobs();   // { id: { id,url,type,title,status,json,error,createdAt,updatedAt } }
@@ -2534,6 +2554,7 @@ let jobsStore = loadJobs();   // { id: { id,url,type,title,status,json,error,cre
 const REPORTS_PER_OWNER = parseInt(process.env.FEED_REPORTS_PER_OWNER, 10) || 200;
 function pruneJobs() {
     pruneJobsMap(jobsStore, { maxTransient: 100, keptPerOwner: REPORTS_PER_OWNER });
+    sweepDecks();
 }
 
 // Expira jobs presos em 'pending' além do TTL (worker caiu / geração longa demais),
@@ -2628,11 +2649,30 @@ app.get('/api/feed/jobs', requirePremium, (req, res) => {
 });
 
 // Apaga um boletim do usuário.   DELETE /api/feed/job/:id
+// Deck pronto do boletim (template SRR preenchido na VPS). Premium + dono.
+// GET /api/feed/job/deck?id=...
+app.get('/api/feed/job/deck', requirePremium, (req, res) => {
+    const id = (req.query.id || '').toString();
+    const job = jobsStore[id];
+    if (!job) return res.status(404).json({ error: 'job não encontrado' });
+    if (job.ownerSub !== req.user.sub) return res.status(403).json({ error: 'job pertence a outro usuário' });
+    if (!job.deck || !isJobId(id) || !fs.existsSync(deckPath(id))) {
+        return res.status(404).json({ error: 'deck não disponível para este boletim' });
+    }
+    // O nome vem do motor (url_report.srr_filename), não é remontado aqui: um
+    // segundo lugar aplicando a regra de nome já divergiu uma vez.
+    res.type('application/vnd.openxmlformats-officedocument.presentationml.presentation');
+    res.setHeader('Content-Disposition',
+        `attachment; filename*=UTF-8''${encodeURIComponent(job.deckName || `${id}.pptx`)}`);
+    fs.createReadStream(deckPath(id)).pipe(res);
+});
+
 app.delete('/api/feed/job/:id', requirePremium, (req, res) => {
     const job = jobsStore[req.params.id];
     if (!job) return res.status(404).json({ error: 'job não encontrado' });
     if (job.ownerSub !== req.user.sub) return res.status(403).json({ error: 'job pertence a outro usuário' });
     delete jobsStore[req.params.id];
+    if (isJobId(req.params.id)) fs.rmSync(deckPath(req.params.id), { force: true });
     saveJobs();
     res.json({ id: req.params.id, deleted: true });
 });
@@ -2685,6 +2725,18 @@ app.post('/api/feed/job/result', (req, res) => {
         // Indexa na entrega: é o único momento em que o boletim chega. Guardar
         // techniques/cves no job evita varrer o JSON inteiro a cada listagem.
         Object.assign(job, refsOfReport(job.json));
+        // O deck vem preenchido no template SRR pelo worker, que é quem tem os
+        // templates. Falhar em gravá-lo NÃO derruba a entrega: o boletim (JSON)
+        // é o resultado, o deck é um anexo dele.
+        if (typeof req.body.pptx === 'string' && req.body.pptx && isJobId(job.id)) {
+            try {
+                saveDeck(job.id, req.body.pptx);
+                job.deck = true;
+                job.deckName = String(req.body.pptxName || '').slice(0, 200) || `${job.id}.pptx`;
+            } catch (e) {
+                console.error('deck write failed:', e.message);
+            }
+        }
     }
     else return res.status(400).json({ error: 'json ou error obrigatório' });
     job.updatedAt = new Date().toISOString();

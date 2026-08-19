@@ -1,8 +1,12 @@
-// Exportadores do boletim gerado (PDF / PPTX). O JSON continua sendo o formato
+// Exportadores do boletim gerado (PDF / JSON). O JSON continua sendo o formato
 // de origem; aqui ele vira documento pronto pra circular. As libs pesadas
-// (jspdf, jspdf-autotable, pptxgenjs) são tipos aqui e import dinâmico lá
-// dentro, pra rota da workstation não carregar nada disso à toa.
-import type PptxGenJS from 'pptxgenjs';
+// (jspdf, jspdf-autotable) são tipos aqui e import dinâmico lá dentro, pra rota
+// da workstation não carregar nada disso à toa.
+//
+// O PPTX NÃO é montado aqui: o deck do boletim é o template SRR, e template só
+// se preenche com python-pptx — pptxgenjs desenha do zero e não abre um .pptx
+// existente. Quem preenche é o worker na VPS, e o site só baixa o resultado
+// (threatApi.downloadBoletimDeck).
 import type { BoletimJob, BoletimReport } from '@/services/threatApi';
 
 const COLORS = { blue: '1565C0', navy: '172033', slate: '526274', border: 'DCE3EE', white: 'FFFFFF' } as const;
@@ -173,79 +177,6 @@ export async function exportBoletimPDF(job: BoletimJob): Promise<void> {
     }
 
     doc.save(`${boletimFilename(job)}.pdf`);
-}
-
-// ---- PPTX -----------------------------------------------------------------
-export type PptxFactory = new () => PptxGenJS;
-
-// Um bloco vira quantos slides forem necessários: seção comprida quebra em
-// "(cont.)" em vez de transbordar pra fora do slide.
-const BULLETS_PER_SLIDE = 9;
-const TABLE_ROWS_PER_SLIDE = 12;
-
-const slideTitle = (slide: PptxGenJS.Slide, title: string) =>
-    slide.addText(title, { x: .55, y: .35, w: 12.2, h: .5, fontSize: 22, bold: true, color: COLORS.navy });
-
-const chunk = <T,>(items: T[], size: number): T[][] =>
-    items.length ? Array.from({ length: Math.ceil(items.length / size) }, (_, i) => items.slice(i * size, i * size + size)) : [];
-
-export function buildBoletimPresentation(job: BoletimJob, PptxLib: PptxFactory): PptxGenJS {
-    const report = job.json;
-    if (!report) throw new Error('Relatório sem conteúdo');
-    const pptx = new PptxLib();
-    pptx.defineLayout({ name: 'BOLETIM', width: 13.333, height: 7.5 });
-    pptx.layout = 'BOLETIM';
-    pptx.author = 'ThreatSumm4ry';
-    pptx.title = report.titulo || job.title || 'Boletim';
-    pptx.subject = subtitle(job);
-    pptx.defineSlideMaster({
-        title: 'PADRAO',
-        background: { color: COLORS.white },
-        objects: [
-            { rect: { x: 0, y: 0, w: 13.333, h: .08, fill: { color: COLORS.blue }, line: { color: COLORS.blue } } },
-            { text: { text: report.source_url || '', options: { x: .45, y: 7.08, w: 8, h: .25, fontSize: 8, color: COLORS.slate } } },
-        ],
-        slideNumber: { x: 12.35, y: 7.08, w: .5, h: .25, fontSize: 8, color: COLORS.slate },
-    });
-
-    const cover = pptx.addSlide();
-    cover.background = { color: COLORS.navy };
-    cover.addText(report.titulo || job.title || job.url, { x: .7, y: 2.2, w: 12, h: 1.4, fontSize: 30, bold: true, color: COLORS.white, valign: 'top' });
-    cover.addText(subtitle(job), { x: .7, y: 3.8, w: 12, h: .4, fontSize: 16, color: COLORS.blue });
-    if (report.source_url) cover.addText(report.source_url, { x: .7, y: 6.4, w: 12, h: .3, fontSize: 10, color: COLORS.slate, hyperlink: { url: report.source_url } });
-
-    for (const part of boletimSections(report)) {
-        for (const block of part.blocks) {
-            if (block.kind === 'table') {
-                chunk(block.rows, TABLE_ROWS_PER_SLIDE).forEach((rows, index) => {
-                    const slide = pptx.addSlide({ masterName: 'PADRAO' });
-                    slideTitle(slide, index ? `${part.title} (cont.)` : part.title);
-                    slide.addTable([
-                        block.head.map((cell) => ({ text: cell, options: { bold: true, color: COLORS.white, fill: { color: COLORS.blue } } })),
-                        ...rows.map((row) => row.map((cell) => ({ text: cell }))),
-                    ], { x: .55, y: 1.1, w: 12.2, fontSize: 10, margin: .05, valign: 'middle', border: { type: 'solid', color: COLORS.border, pt: .5 }, color: COLORS.navy });
-                });
-                continue;
-            }
-            const items = block.kind === 'text' ? [block.text] : block.items;
-            chunk(items, block.kind === 'text' ? 1 : BULLETS_PER_SLIDE).forEach((group, index) => {
-                const slide = pptx.addSlide({ masterName: 'PADRAO' });
-                slideTitle(slide, index ? `${part.title} (cont.)` : part.title);
-                slide.addText(
-                    group.map((item) => ({ text: item, options: { bullet: block.kind === 'bullets', breakLine: true } })),
-                    { x: .7, y: 1.15, w: 11.9, h: 5.6, fontSize: block.kind === 'text' ? 15 : 14, color: COLORS.navy, valign: 'top' },
-                );
-            });
-        }
-    }
-
-    return pptx;
-}
-
-export async function exportBoletimPPTX(job: BoletimJob): Promise<void> {
-    const { default: PptxGenLib } = await import('pptxgenjs');
-    const pptx = buildBoletimPresentation(job, PptxGenLib);
-    await pptx.writeFile({ fileName: `${boletimFilename(job)}.pptx` });
 }
 
 export function exportBoletimJSON(job: BoletimJob): void {

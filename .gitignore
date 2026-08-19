@@ -35,6 +35,10 @@ dist-ssr
 # .posts.json, .exposure-*.json e .daily-summaries.json rodavam sem ignore.
 server/.*.json
 
+# Decks entregues pelo worker (.pptx no template SRR). Dado de usuário e pesado:
+# fica no disco do servidor, nunca no histórico.
+server/.feed-decks/
+
 # Sessões do visual companion (brainstorming) · mockups locais
 .superpowers/
 

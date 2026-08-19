@@ -1054,6 +1054,11 @@ export interface BoletimJob {
     // Indexados na entrega do worker — ligam o boletim a hunts e outros reports.
     techniques?: string[];
     cves?: string[];
+    // Deck no template SRR, preenchido pelo worker na VPS (é lá que os templates
+    // vivem) e entregue junto do JSON. Boletim antigo, gerado antes disso, não
+    // tem — daí o opcional.
+    deck?: boolean;
+    deckName?: string;
 }
 
 // Lista de boletins do usuário, sem o JSON. O detalhe vem de fetchJob(id).
@@ -1079,6 +1084,23 @@ export const generateBoletim = async (url: string, type: DeckType, title = ''): 
         throw new Error(e.error || `Generate API error: ${r.status}`);
     }
     return r.json();
+};
+
+// Baixa o deck pronto. O .pptx não é montado no browser: ele sai do template SRR
+// preenchido na VPS, que é o único lugar com os templates.
+export const downloadBoletimDeck = async (job: BoletimJob): Promise<void> => {
+    const r = await fetch(`/api/feed/job/deck?id=${encodeURIComponent(job.id)}`);
+    if (!r.ok) {
+        throw new Error(r.status === 404
+            ? 'Este boletim não tem deck: ele foi gerado antes do deck passar a vir pronto da VPS. Gere de novo para obter o PPTX.'
+            : `Falha ao baixar o deck: ${r.status}`);
+    }
+    const url = URL.createObjectURL(await r.blob());
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = job.deckName || `${job.id}.pptx`;
+    a.click();
+    URL.revokeObjectURL(url);
 };
 
 export const fetchJob = async (id: string): Promise<BoletimJob> => {

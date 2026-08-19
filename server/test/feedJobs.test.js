@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { jobSummary, pruneJobsMap } from '../feedJobs.js';
+import { isJobId, jobSummary, orphanDeckFiles, pruneJobsMap } from '../feedJobs.js';
 
 const job = (id, status, ownerSub, day, extra = {}) => ({
     id,
@@ -71,4 +71,27 @@ test('store vazio ou sem nada a podar não quebra', () => {
     const store = mapOf(job('a', 'done', 'u1', 1));
     assert.equal(pruneJobsMap(store), 0);
     assert.equal(Object.keys(store).length, 1);
+});
+
+test('isJobId só aceita UUID — é a guarda contra path traversal no diretório dos decks', () => {
+    assert.equal(isJobId('3f1c2b4a-5d6e-4f70-8a9b-0c1d2e3f4a5b'), true);
+    for (const bad of ['../../etc/passwd', 'deck', '', null, undefined,
+                       '3f1c2b4a-5d6e-4f70-8a9b-0c1d2e3f4a5b/../x',
+                       '../3f1c2b4a-5d6e-4f70-8a9b-0c1d2e3f4a5b']) {
+        assert.equal(isJobId(bad), false, String(bad));
+    }
+});
+
+test('varredura devolve só os decks sem job, inclusive o .tmp de gravação interrompida', () => {
+    const store = { 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee': { id: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee' } };
+    const files = [
+        'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee.pptx',        // job vivo: fica
+        'ffffffff-bbbb-4ccc-8ddd-eeeeeeeeeeee.pptx',        // job podado: sai
+        'ffffffff-bbbb-4ccc-8ddd-eeeeeeeeeeee.pptx.tmp',    // gravação órfã: sai
+    ];
+    assert.deepEqual(orphanDeckFiles(files, store), [
+        'ffffffff-bbbb-4ccc-8ddd-eeeeeeeeeeee.pptx',
+        'ffffffff-bbbb-4ccc-8ddd-eeeeeeeeeeee.pptx.tmp',
+    ]);
+    assert.deepEqual(orphanDeckFiles([], store), []);
 });

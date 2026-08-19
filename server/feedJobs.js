@@ -7,6 +7,23 @@
  * inline no index.js.
  */
 
+/**
+ * Id de job é sempre um UUID (crypto.randomUUID). Validar ANTES de montar
+ * caminho de arquivo é o que impede que um id inventado ("../../etc/passwd")
+ * vire path traversal no diretório dos decks.
+ */
+export function isJobId(id) {
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(id || ''));
+}
+
+/**
+ * Nomes de arquivo de deck que não têm mais job. Cobre o job podado e também o
+ * deck órfão de um crash entre gravar o arquivo e gravar o store.
+ */
+export function orphanDeckFiles(files, store) {
+    return (files || []).filter((file) => !store?.[file.replace(/\.pptx(\.tmp)?$/, '')]);
+}
+
 /** Metadado do job sem o boletim. A lista carrega isso; o JSON só no detalhe. */
 export function jobSummary(job) {
     const { json, ...meta } = job || {};
