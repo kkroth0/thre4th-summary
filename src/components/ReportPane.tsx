@@ -124,8 +124,16 @@ function ExportMenu({ job, pt }: { job: BoletimJob; pt: boolean }) {
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
         <DropdownMenuItem onSelect={() => void run("json")}>JSON</DropdownMenuItem>
-        <DropdownMenuItem onSelect={() => void run("pdf")}>PDF</DropdownMenuItem>
-        <DropdownMenuItem onSelect={() => void run("pptx")}>PowerPoint (PPTX)</DropdownMenuItem>
+        {/* Deck e PDF só existem se o worker os anexou. Boletim antigo não tem, e
+            oferecer o item levaria a um 404 — ou pior, num navegador com a aba
+            velha em memória, a um arquivo montado pelo código antigo, com o nome
+            certo e o conteúdo errado. */}
+        <DropdownMenuItem disabled={!job.deck?.pdf} onSelect={() => void run("pdf")}>
+          PDF{job.deck?.pdf ? "" : pt ? " — indisponível" : " — unavailable"}
+        </DropdownMenuItem>
+        <DropdownMenuItem disabled={!job.deck?.pptx} onSelect={() => void run("pptx")}>
+          PowerPoint (PPTX){job.deck?.pptx ? "" : pt ? " — indisponível" : " — unavailable"}
+        </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   );
