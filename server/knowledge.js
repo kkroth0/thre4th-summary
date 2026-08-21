@@ -6,6 +6,12 @@
  * técnica e CVE, então uma fonte salva encontra hunts e reports que falam do
  * mesmo assunto (ver attackIndex.js).
  *
+ * Seguir, não guardar: o item aponta para a cobertura (`storyId`), não só para
+ * o artigo. A cobertura continua crescendo depois do clique — mergeIntoStories
+ * absorve novos veículos por 14 dias —, então guardamos quantos veículos havia
+ * no momento em que o usuário seguiu (`followedSourceCount`). A diferença entre
+ * aquele número e o de agora é o que a aba mostra como novidade.
+ *
  * Só as funções puras moram aqui; as rotas ficam inline no index.js, no mesmo
  * formato do store de scans salvos.
  */
@@ -43,11 +49,19 @@ export function normalizeKnowledgeInput(input = {}, now = new Date().toISOString
     const scanned = extractRefs(title);
     const published = clean(input.publishedAt, 40);
 
+    // Aceita ids de story do próprio feed: 12 hex (ver storyId em newsStories.js).
+    const storyId = /^[0-9a-f]{12}$/i.test(String(input.storyId || '')) ? String(input.storyId).toLowerCase() : '';
+    const followedSourceCount = Number.isInteger(input.sourceCount) && input.sourceCount > 0
+        ? Math.min(input.sourceCount, 100)
+        : 0;
+
     return {
         id: crypto.randomBytes(6).toString('hex'),
         title,
         url,
         host,
+        storyId,
+        followedSourceCount,
         source: clean(input.source, 120),
         publishedAt: Number.isNaN(Date.parse(published)) ? '' : published,
         savedAt: now,

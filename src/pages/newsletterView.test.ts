@@ -75,14 +75,13 @@ test("a contagem por categoria conta histórias, não fontes", () => {
   assert.equal(countByCategory(cards).Microsoft, 1);
 });
 
-test("filtro por categoria e por ator", () => {
+test("filtro por categoria", () => {
   const cards = groupAdvisoriesIntoStories([
-    advisory({ storyId: "s1", link: "https://a.example/1", newsCategories: ["Ransomware"], actors: [{ id: "a1", name: "Cl0p" }] }),
+    advisory({ storyId: "s1", link: "https://a.example/1", newsCategories: ["Ransomware"] }),
     advisory({ storyId: "s2", link: "https://b.example/2", newsCategories: ["Microsoft"] }),
   ]);
-  assert.deepEqual(filterStoryCards(cards, { category: "Ransomware", actor: "" }).map((c) => c.storyId), ["s1"]);
-  assert.deepEqual(filterStoryCards(cards, { category: "", actor: "a1" }).map((c) => c.storyId), ["s1"]);
-  assert.equal(filterStoryCards(cards, { category: "", actor: "" }).length, 2);
+  assert.deepEqual(filterStoryCards(cards, { category: "Ransomware" }).map((c) => c.storyId), ["s1"]);
+  assert.equal(filterStoryCards(cards, { category: "" }).length, 2);
 });
 
 test("categorias são ordenadas pela precedência, não pela ordem de inserção", () => {

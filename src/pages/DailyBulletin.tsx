@@ -389,7 +389,7 @@ const DailyBulletin: React.FC = () => {
                 </SelectContent>
               </Select>
               <Button onClick={() => { generate(pasteUrl.trim(), pasteType, ""); setPasteUrl(""); }} disabled={!pasteUrl.trim()} className="h-10 shrink-0 gap-2 rounded-sm px-3 sm:px-4">
-                <Sparkles className="h-4 w-4" /> {pt ? "Gerar" : "Generate"}
+                <Sparkles className="h-4 w-4" /> {pt ? "Gerar Boletim" : "Generate Bulletin"}
               </Button>
             </div>
             <div data-testid="report-generator-status-row" className="flex items-center gap-1.5 px-1 text-xs text-muted-foreground">
@@ -574,7 +574,7 @@ const DailyBulletin: React.FC = () => {
                     {s.kev && <ShieldAlert className="h-3.5 w-3.5 text-red-500 shrink-0" aria-label="CISA KEV" />}
                     {s.cves?.[0] && <span className="hidden xl:inline text-[11px] font-mono text-muted-foreground shrink-0">{s.cves[0]}</span>}
                     <Button size="sm" variant="ghost" onClick={() => generate(s.url, s.suggestedType, s.title)} className="h-7 px-2 text-primary shrink-0 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
-                      <Sparkles className="h-3.5 w-3.5 mr-1" /> {pt ? "Gerar" : "Generate"}
+                      <Sparkles className="h-3.5 w-3.5 mr-1" /> {pt ? "Gerar Boletim" : "Generate Bulletin"}
                     </Button>
                   </div>
                 ))}

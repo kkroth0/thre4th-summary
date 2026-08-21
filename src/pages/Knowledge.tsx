@@ -128,10 +128,27 @@ const Knowledge = () => {
                                             <span className="line-clamp-2">{item.title}</span>
                                             <ExternalLink className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                                         </a>
-                                        <p className="mt-1 text-xs text-muted-foreground">
-                                            {[item.source || item.host, shortDate(item.publishedAt, language)]
-                                                .filter((v) => v && v !== "—")
-                                                .join(" · ")}
+                                        <p className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+                                            <span>
+                                                {[item.source || item.host, shortDate(item.publishedAt, language)]
+                                                    .filter((v) => v && v !== "—")
+                                                    .join(" · ")}
+                                            </span>
+                                            {/* A cobertura seguida continua crescendo depois do clique.
+                                                Só destaca quando entrou veículo novo — um contador parado
+                                                em "4 fontes" toda semana vira ruído e some da vista. */}
+                                            {item.sourceCount ? (
+                                                <Badge
+                                                    variant="outline"
+                                                    className={item.newSources
+                                                        ? "border-primary/40 bg-primary/10 text-[10px] font-bold text-primary"
+                                                        : "text-[10px] font-bold text-muted-foreground border-border"}
+                                                >
+                                                    {item.newSources
+                                                        ? (pt ? `+${item.newSources} nova(s) de ${item.sourceCount}` : `+${item.newSources} new of ${item.sourceCount}`)
+                                                        : (pt ? `${item.sourceCount} fontes` : `${item.sourceCount} sources`)}
+                                                </Badge>
+                                            ) : null}
                                         </p>
                                     </TableCell>
                                     <TableCell>
@@ -157,7 +174,7 @@ const Knowledge = () => {
                                     </TableCell>
                                     <TableCell className="text-right">
                                         <div className="flex justify-end gap-1">
-                                            <Button asChild variant="ghost" size="icon" title={pt ? "Gerar relatório" : "Generate report"}>
+                                            <Button asChild variant="ghost" size="icon" title={pt ? "Gerar Boletim" : "Generate Bulletin"}>
                                                 <Link to={`/relatorios?url=${encodeURIComponent(item.url)}`}>
                                                     <FileSearch className="h-4 w-4" />
                                                 </Link>

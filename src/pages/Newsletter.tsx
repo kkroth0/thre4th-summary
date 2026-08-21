@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { Link } from "react-router-dom";
-import { ArrowLeft, Globe, BookOpen, AlertTriangle, Search, Mail, Eye, Sparkles, Filter, CheckCircle2, ChevronRight, ChevronDown, RefreshCw, Calendar, Share2, Loader2, Bookmark } from "lucide-react";
+import { ArrowLeft, Globe, BookOpen, AlertTriangle, Search, Mail, Eye, Sparkles, Filter, ChevronDown, RefreshCw, Calendar, Share2, Loader2, Bookmark } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -17,8 +17,10 @@ import {
 } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Separator } from "@/components/ui/separator";
+import { cn } from "@/lib/utils";
 import { NEWS_CATEGORY_ORDER, countByCategory, filterNewsletterAdvisories, filterStoryCards, formatNewsletterDate, groupAdvisoriesIntoStories } from "./newsletterView";
-import { saveKnowledge } from "@/services/threatApi";
+import type { StoryCard } from "./newsletterView";
+import { generateBoletim, saveKnowledge } from "@/services/threatApi";
 
 interface IocSet {
   ips?: string[];
@@ -65,12 +67,29 @@ interface Advisory {
   primaryCategory?: string | null;
 }
 
-const SEVERITY_DOT: Record<string, string> = {
-  Critical: "bg-red-500",
-  High: "bg-orange-500",
-  Medium: "bg-yellow-500",
-  Low: "bg-slate-400",
+
+// A severidade é a única tag preenchida da linha: ela é o que decide se o card
+// merece atenção, e como contorno se perdia entre as outras. O resto usa tinta
+// suave sobre contorno, todas no mesmo formato.
+// A severidade é o veredito do card e a única cor da parte de cima: contorno
+// tingido na etiqueta. O score numérico não aparece — quem lê o feed decide por
+// "Crítico", não por 92; o número continua no tooltip de `reasons` e na ordenação
+// por relevância.
+const SEVERITY_BADGE: Record<string, string> = {
+  Critical: "bg-red-500/15 text-red-500 border-red-500/40",
+  High: "bg-orange-500/15 text-orange-500 border-orange-500/40",
+  Medium: "bg-yellow-500/15 text-yellow-600 dark:text-yellow-500 border-yellow-500/40",
+  Low: "bg-slate-400/15 text-slate-500 border-slate-400/40",
 };
+
+
+// Nível de severidade é rótulo de interface, não termo técnico — esse traduz.
+const SEVERITY_PT: Record<string, string> = {
+  Critical: "Crítico", High: "Alto", Medium: "Médio", Low: "Baixo",
+};
+
+const severityLabel = (severity: string, language: string): string =>
+  (language === "pt" ? SEVERITY_PT[severity] : severity) || severity;
 
 // Left-accent border + soft tint per severity — carries the visual hierarchy so
 // the eye lands on Critical/High first when scanning the feed.
@@ -108,22 +127,6 @@ interface EnrichData {
   assets?: string[];
   cves?: string[];
 }
-
-// True when an IOC set carries at least one indicator.
-const hasIocs = (i?: IocSet | null): boolean =>
-  !!i && [(i.ips), (i.domains), (i.hashes), (i.urls)].some((a) => (a?.length ?? 0) > 0);
-
-// Defang an indicator for safe copy/paste/export (1.2.3.4 -> 1.2.3[.]4).
-const defang = (s: string): string =>
-  s.replace(/^http/i, "hxxp").replace(/\./g, "[.]");
-
-// Flatten an IOC set into [type, value] rows (values defanged for safety).
-const iocRows = (i: IocSet): Array<[string, string]> => [
-  ...(i.hashes ?? []).map((v) => ["hash", v] as [string, string]),
-  ...(i.ips ?? []).map((v) => ["ip", defang(v)] as [string, string]),
-  ...(i.domains ?? []).map((v) => ["domain", defang(v)] as [string, string]),
-  ...(i.urls ?? []).map((v) => ["url", defang(v)] as [string, string]),
-];
 
 // Prefer the richer full-article enrichment, fall back to the collection-time item
 const mergedField = (item: Advisory, e: EnrichData | undefined, key: "threats" | "sectors" | "ttps" | "assets" | "cves"): string[] =>
@@ -367,37 +370,52 @@ const Newsletter = () => {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [enrichment, setEnrichment] = useState<Record<string, { loading: boolean; data?: EnrichData }>>({});
 
-  const getEnrichment = async (item: Advisory): Promise<EnrichData> => {
-    const cached = enrichment[item.link]?.data;
+  // A cobertura inteira é o contexto: análise e boletim leem todas as fontes.
+  // Escolher quais entram é decisão da tela de geração, não do feed — aqui o
+  // analista está lendo, não montando entregável.
+  const sourcesOf = (card: StoryCard<Advisory>) => card.sources.map((s) => s.link);
+  const enrichKeyOf = (card: StoryCard<Advisory>) => [...sourcesOf(card)].sort().join("|");
+
+  // Chaveada pelo conjunto marcado, não pelo link do artigo: desmarcar uma fonte
+  // é outra análise e tem que refazer, não reaproveitar a anterior.
+  const getEnrichment = async (item: Advisory, urls: string[] = [item.link]): Promise<EnrichData> => {
+    const key = [...urls].sort().join("|");
+    const cached = enrichment[key]?.data;
     if (cached) return cached;
-    setEnrichment(p => ({ ...p, [item.link]: { loading: true } }));
+    setEnrichment(p => ({ ...p, [key]: { loading: true } }));
     try {
       const res = await fetch("/api/newsletter/enrich", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: item.link, lang: language }),
+        body: JSON.stringify({ urls, lang: language }),
       });
       if (!res.ok) throw new Error("enrich failed");
       const data: EnrichData = await res.json();
-      setEnrichment(p => ({ ...p, [item.link]: { loading: false, data } }));
+      setEnrichment(p => ({ ...p, [key]: { loading: false, data } }));
       return data;
     } catch {
       const fallback: EnrichData = { available: false, executiveSummary: item.description, impactMitigation: "" };
-      setEnrichment(p => ({ ...p, [item.link]: { loading: false, data: fallback } }));
+      setEnrichment(p => ({ ...p, [key]: { loading: false, data: fallback } }));
       return fallback;
     }
   };
 
-  const toggleExpand = (item: Advisory) => {
-    setExpanded(p => {
-      const open = !p[item.link];
-      if (open && !enrichment[item.link]) void getEnrichment(item);
-      return { ...p, [item.link]: open };
-    });
+  // O destaque abre sozinho — é o card que o leitor vai ler de qualquer jeito, e
+  // uma chamada de enrich por carga do feed é barata. Abrir todos não seria:
+  // cada painel custa um scrape e uma chamada de LLM.
+  const isExpanded = (card: StoryCard<Advisory>, featured: boolean) =>
+    expanded[card.sources[0].link] ?? featured;
+
+  const toggleExpand = (card: StoryCard<Advisory>, featured: boolean) => {
+    const item = card.sources[0];
+    const open = !isExpanded(card, featured);
+    if (open && !enrichment[enrichKeyOf(card)]) void getEnrichment(item, sourcesOf(card));
+    setExpanded(p => ({ ...p, [item.link]: open }));
   };
 
-  const shareAdvisory = async (item: Advisory) => {
-    const data = enrichment[item.link]?.data ?? (await getEnrichment(item));
+  const shareAdvisory = async (card: StoryCard<Advisory>) => {
+    const item = card.sources[0];
+    const data = enrichment[enrichKeyOf(card)]?.data ?? (await getEnrichment(item, sourcesOf(card)));
     const text = buildShareText(item, data, language);
     try {
       if (navigator.share) {
@@ -411,19 +429,44 @@ const Newsletter = () => {
     }
   };
 
-  // Guarda a fonte no Knowledge. O servidor extrai as técnicas do título e une
-  // com os CVEs que o coletor já tinha achado, então o item já nasce indexado.
-  const keepAdvisory = async (item: Advisory) => {
+  // Enfileira um boletim sobre as fontes marcadas. O job é assíncrono (um worker
+  // na VPS consome a fila), então aqui só confirmamos o enfileiramento — o
+  // acompanhamento é a página de relatórios, que já lista os jobs do usuário.
+  const [boletimBusy, setBoletimBusy] = useState<string | null>(null);
+
+  const makeBoletim = async (card: StoryCard<Advisory>) => {
+    const urls = sourcesOf(card);
+    setBoletimBusy(card.storyId);
+    try {
+      await generateBoletim(urls, card.cves.length ? "vuln" : "campaign", card.title);
+      toast.success(language === "pt"
+        ? `Boletim na fila com ${urls.length} ${urls.length > 1 ? "fontes" : "fonte"} de contexto — acompanhe em Relatórios.`
+        : `Report queued with ${urls.length} source${urls.length > 1 ? "s" : ""} of context — track it in Reports.`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : (language === "pt" ? "Falha ao enfileirar o boletim" : "Failed to queue the report"));
+    } finally {
+      setBoletimBusy(null);
+    }
+  };
+
+  // Segue a cobertura no Knowledge. Vai o storyId e quantos veículos existiam
+  // agora: a cobertura continua crescendo, e é essa diferença que a aba mostra
+  // como novidade. O servidor extrai as técnicas do título e une com os CVEs que
+  // o coletor já tinha achado, então o item já nasce indexado.
+  const keepAdvisory = async (card: StoryCard<Advisory>) => {
+    const item = card.sources[0];
     try {
       await saveKnowledge({
-        title: item.title,
+        title: card.title,
         url: item.link,
         source: item.source,
         publishedAt: item.pubDate,
-        cves: item.cves || [],
+        cves: card.cves,
+        storyId: card.storyId,
+        sourceCount: new Set(card.sources.map((source) => source.source)).size,
       });
       setSavedLinks((prev) => new Set(prev).add(item.link));
-      toast.success(language === "pt" ? "Guardado no Knowledge" : "Saved to Knowledge");
+      toast.success(language === "pt" ? "Seguindo — novas fontes aparecem no Knowledge" : "Following — new sources show up in Knowledge");
     } catch (e) {
       toast.error((e as Error).message);
     }
@@ -439,11 +482,10 @@ const Newsletter = () => {
   }), [advisories, searchNews, selectedLayer, selectedSeverity, sortByRelevance, kevOnly]);
 
   const [categoryFilter, setCategoryFilter] = useState("");
-  const [actorFilter, setActorFilter] = useState("");
 
   const storyCards = useMemo(
-    () => filterStoryCards(groupAdvisoriesIntoStories(filteredAdvisories, { sortByRelevance }), { category: categoryFilter, actor: actorFilter }),
-    [filteredAdvisories, sortByRelevance, categoryFilter, actorFilter],
+    () => filterStoryCards(groupAdvisoriesIntoStories(filteredAdvisories, { sortByRelevance }), { category: categoryFilter }),
+    [filteredAdvisories, sortByRelevance, categoryFilter],
   );
   const categoryCounts = useMemo(() => countByCategory(groupAdvisoriesIntoStories(filteredAdvisories)), [filteredAdvisories]);
 
@@ -685,13 +727,8 @@ const Newsletter = () => {
                 <div className="flex flex-col gap-2.5">
                   {storyCards.map((card, idx) => {
                     const item = card.sources[0];
-                    const enr = enrichment[item.link]?.data;
-                    const mCves = mergedField(item, enr, "cves");
-                    // Prefer the richer full-article IOCs (enrich) over the
-                    // lightweight collection-time set.
-                    const mIocs: IocSet | undefined = hasIocs(enr?.iocs) ? (enr?.iocs ?? undefined) : item.iocs;
-                    const isCisa = item.source.toLowerCase().includes("cisa");
-                    const isBleeping = item.source.toLowerCase().includes("bleeping");
+                    const enrichKey = enrichKeyOf(card);
+                    const enr = enrichment[enrichKey]?.data;
                     // Magazine layout: the first item (top of the current sort —
                     // highest relevance or newest) renders as the featured story.
                     const featured = idx === 0;
@@ -700,260 +737,184 @@ const Newsletter = () => {
                     return (
                       <div
                         key={idx}
-                        className={`rounded-lg border border-l-[3px] bg-card transition-colors flex items-start gap-3 hover:border-border/50 ${accent} ${
-                          featured ? "p-5 shadow-sm ring-1 ring-primary/10" : "p-3"
-                        }`}
+                        className={cn(
+                          "rounded-lg border border-l-[3px] bg-card p-4 transition-colors hover:border-border/50",
+                          accent,
+                          featured && "shadow-sm ring-1 ring-primary/10",
+                        )}
                       >
-                        <div className="flex-1 min-w-0 space-y-1.5">
-                          <div className="flex items-center gap-2 flex-wrap text-xs">
-                            {featured && (
-                              <Badge className="text-[10px] font-bold gap-1 bg-primary text-primary-foreground">
-                                <Sparkles className="h-3 w-3" />
-                                {language === "pt" ? "Destaque" : "Top story"}
-                              </Badge>
-                            )}
-                            {item.severity && (
-                              <span
-                                title={item.reasons?.length ? `${language === "pt" ? "Por quê" : "Why"}: ${item.reasons.join(" · ")}` : undefined}
-                                className={`inline-flex items-center gap-1.5 font-semibold ${item.reasons?.length ? "cursor-help" : ""}`}
-                              >
-                                <span className={`h-2 w-2 rounded-full ${SEVERITY_DOT[item.severity] || SEVERITY_DOT.Low}`} />
-                                {item.severity}
-                                {typeof item.score === "number" && <span className="font-normal text-muted-foreground">{item.score}</span>}
-                              </span>
-                            )}
-                            <span className={`font-medium ${isCisa ? "text-red-500" : isBleeping ? "text-blue-500" : "text-amber-500"}`}>
-                              {item.source}
-                            </span>
-                            {item.kev && (
-                              <Badge
-                                variant="outline"
-                                title={item.kevDetails ? `CISA KEV · ${item.kevDetails.cve}${item.kevDetails.dateAdded ? ` · ${language === "pt" ? "adicionado" : "added"} ${item.kevDetails.dateAdded}` : ""}${item.kevDetails.ransomware ? " · ransomware" : ""}` : "CISA KEV"}
-                                className="text-[10px] font-bold bg-red-600/15 text-red-500 border-red-600/30 cursor-help"
-                              >
-                                {language === "pt" ? "Explorado" : "Exploited"}
-                                {typeof item.epss === "number" && <span className="ml-1 opacity-80">EPSS {Math.round(item.epss * 100)}%</span>}
-                              </Badge>
-                            )}
-                            {!item.kev && typeof item.epss === "number" && item.epss >= 0.5 && (
-                              <Badge
-                                variant="outline"
-                                title={language === "pt" ? "Probabilidade de exploração (FIRST EPSS) nos próximos 30 dias" : "Exploit probability (FIRST EPSS) over the next 30 days"}
-                                className="text-[10px] font-bold bg-orange-500/10 text-orange-500 border-orange-500/20 cursor-help"
-                              >
-                                EPSS {Math.round(item.epss * 100)}%
-                              </Badge>
-                            )}
-                            {(item.cves ?? []).slice(0, 3).map((cve) => (
+                        {/* Severidade e hora, com o chevron do card à direita. A seta
+                            controla o corpo inteiro (sumário + fontes + ações), não um
+                            pedaço: um disclosure por card em vez de um por seção. */}
+                        <div className="flex items-center gap-2.5">
+                          {item.severity && (
+                            <Badge
+                              title={item.reasons?.length ? `${language === "pt" ? "Por quê" : "Why"}: ${item.reasons.join(" · ")}` : undefined}
+                              className={cn(
+                                "rounded px-1.5 py-0 font-mono text-[10px] font-bold uppercase tracking-wider",
+                                SEVERITY_BADGE[item.severity] || SEVERITY_BADGE.Low,
+                                item.reasons?.length && "cursor-help",
+                              )}
+                            >
+                              {severityLabel(item.severity, language)}
+                            </Badge>
+                          )}
+                          <span className="ml-auto font-mono text-xs text-muted-foreground" title={new Date(item.pubDate).toLocaleString()}>
+                            {relTime(item.pubDate, language)}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => toggleExpand(card, featured)}
+                            aria-expanded={isExpanded(card, featured)}
+                            aria-label={language === "pt" ? "Expandir" : "Expand"}
+                            className="text-muted-foreground transition-colors hover:text-foreground"
+                          >
+                            <ChevronDown className={cn("h-4 w-4 transition-transform", !isExpanded(card, featured) && "-rotate-90")} />
+                          </button>
+                        </div>
+
+                        {/* Só a manchete grande recebe o título normalizado e traduzido
+                            pela análise. Os títulos das fontes ficam como o veículo
+                            publicou — é por eles que o analista reencontra a matéria
+                            depois, e traduzir quebraria a busca. */}
+                        <h3 className={cn("mt-2 font-bold text-foreground", featured ? "text-lg leading-snug" : "text-base leading-snug")}>
+                          <a href={item.link} target="_blank" rel="noopener noreferrer" className="hover:text-primary transition-colors">
+                            {enr?.title || item.title}
+                          </a>
+                        </h3>
+
+                        {/* Faixa de identificadores: rótulo apagado, valor legível, um
+                            filete entre os pares. Pílula para cada um enchia a linha de
+                            molduras sem acrescentar informação. */}
+                        {(item.cves?.length || typeof item.epss === "number" || item.kev) && (
+                          <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-xs">
+                            {(item.cves ?? []).slice(0, 2).map((cve) => (
                               <a
                                 key={cve}
                                 href={`https://nvd.nist.gov/vuln/detail/${cve}`}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="font-mono font-semibold text-primary hover:underline"
+                                className="group/cve"
                               >
-                                {cve}
+                                <span className="text-[10px] uppercase tracking-wider text-muted-foreground/70">CVE </span>
+                                <span className="text-foreground/90 group-hover/cve:text-primary">{cve.replace(/^CVE-/i, "")}</span>
                               </a>
                             ))}
-                            <span className="text-muted-foreground ml-auto tabular-nums shrink-0" title={new Date(item.pubDate).toLocaleString()}>
-                              {relTime(item.pubDate, language)}
-                            </span>
+                            {typeof item.epss === "number" && (
+                              <span className="border-l border-border pl-3" title={language === "pt" ? "Probabilidade de exploração em 30 dias (FIRST EPSS)" : "30-day exploit probability (FIRST EPSS)"}>
+                                <span className="text-[10px] uppercase tracking-wider text-muted-foreground/70">EPSS </span>
+                                <span className="text-foreground/90">{Math.round(item.epss * 100)}%</span>
+                              </span>
+                            )}
+                            {item.kev && (
+                              <span className="border-l border-border pl-3" title={item.kevDetails?.dateAdded ? `${language === "pt" ? "Adicionado em" : "Added"} ${item.kevDetails.dateAdded}` : "CISA KEV"}>
+                                <span className="text-[10px] uppercase tracking-wider text-muted-foreground/70">KEV </span>
+                                <span className="text-foreground/90">CISA</span>
+                              </span>
+                            )}
                           </div>
-                          
-                          <h3 className={`font-semibold text-foreground hover:text-primary transition-colors flex items-center gap-2 flex-wrap ${featured ? "text-lg md:text-xl leading-snug" : "text-[15px]"}`}>
-                            <a href={item.link} target="_blank" rel="noopener noreferrer">
-                              {item.title}
-                            </a>
-                          </h3>
+                        )}
 
-                          {card.sources.length > 1 && (
-                            <details className="mt-2">
-                              <summary className="cursor-pointer text-xs text-muted-foreground hover:text-foreground">
-                                {card.sources.length} {language === "pt" ? "fontes" : "sources"}
-                                {card.cves.length > 0 && ` · ${language === "pt" ? "unida por" : "linked by"} ${card.cves.join(", ")}`}
-                                {card.actors.length > 0 && ` · ${card.actors.map((a) => a.name).join(", ")}`}
-                              </summary>
-                              <ol className="mt-2 space-y-1 border-l pl-3">
-                                {[...card.sources].sort((a, b) => a.pubDate.localeCompare(b.pubDate)).map((source) => (
-                                  <li key={source.link} className="text-xs">
-                                    <span className="text-muted-foreground tabular-nums">{new Date(source.pubDate).toLocaleDateString(language === "pt" ? "pt-BR" : "en-US")}</span>
-                                    {" · "}
-                                    <a href={source.link} target="_blank" rel="noopener noreferrer" className="hover:underline">
-                                      {source.source}: {source.title}
-                                    </a>
-                                  </li>
-                                ))}
-                              </ol>
-                            </details>
-                          )}
-                          {card.actors.length > 0 && (
-                            <div className="mt-2 flex flex-wrap gap-1">
-                              {card.actors.map((actor) => (
-                                <button
-                                  key={actor.id}
-                                  type="button"
-                                  onClick={() => setActorFilter(actorFilter === actor.id ? "" : actor.id)}
-                                  title={actor.matched && actor.matched !== actor.name ? `${language === "pt" ? "citado como" : "cited as"} ${actor.matched}` : undefined}
-                                  aria-pressed={actorFilter === actor.id}
-                                  className={`rounded border px-2 py-0.5 text-[11px] transition ${actorFilter === actor.id ? "border-primary bg-primary/10 text-primary" : "text-muted-foreground hover:border-primary/40"}`}
-                                >
-                                  {actor.name}
-                                </button>
-                              ))}
-                            </div>
-                          )}
-
-                          {/* Featured story gets a short teaser under the headline */}
-                          {featured && (
-                            <p className="text-sm text-muted-foreground leading-relaxed line-clamp-2">
-                              {item.description}
-                            </p>
-                          )}
-
-                          {/* Action row (collapsed view = title + source + these) */}
-                          <div className="pt-1 flex items-center gap-1.5 flex-wrap">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => toggleExpand(item)}
-                              className="h-7 text-xs gap-1.5 px-2.5 rounded-lg text-foreground hover:bg-muted/50"
-                            >
-                              <ChevronDown className={`h-3.5 w-3.5 transition-transform ${expanded[item.link] ? "rotate-180" : ""}`} />
-                              {language === "pt" ? "Análise acionável" : "Actionable analysis"}
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => shareAdvisory(item)}
-                              className="h-7 text-xs gap-1.5 px-2.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/50"
-                            >
-                              <Share2 className="h-3.5 w-3.5" />
-                              {language === "pt" ? "Compartilhar" : "Share"}
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => keepAdvisory(item)}
-                              disabled={savedLinks.has(item.link)}
-                              className="h-7 text-xs gap-1.5 px-2.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/50"
-                            >
-                              <Bookmark className={`h-3.5 w-3.5 ${savedLinks.has(item.link) ? "fill-current" : ""}`} />
-                              {savedLinks.has(item.link)
-                                ? (language === "pt" ? "Guardado" : "Saved")
-                                : (language === "pt" ? "Guardar" : "Keep")}
-                            </Button>
-                            <a
-                              href={item.link}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-xs text-primary hover:underline font-semibold flex items-center gap-1 ml-auto"
-                            >
-                              {t("viewFullArticle") || "View full article"}
-                              <ChevronRight className="h-3 w-3" />
-                            </a>
-                          </div>
-
-                          {/* Collapsible actionable analysis */}
-                          {expanded[item.link] && (
-                            <div className="mt-2 rounded-xl border border-border/50 bg-muted/20 p-4 space-y-3 text-sm font-sans">
-                              {/* Analysis (LLM, or scraped + translated) */}
-                              {enrichment[item.link]?.loading ? (
-                                <div className="flex items-center gap-2 text-xs text-muted-foreground py-1">
-                                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                  {language === "pt" ? "Coletando artigo e gerando análise..." : "Fetching article and generating analysis..."}
-                                </div>
-                              ) : (
-                                <>
-                                  <div>
-                                    <div className="text-[11px] font-bold text-muted-foreground/80 tracking-wide mb-1">[ {language === "pt" ? "Resumo Executivo" : "Executive Summary"} ]</div>
-                                    <p className="text-sm leading-relaxed text-foreground/90 whitespace-pre-line">
-                                      {enrichment[item.link]?.data?.executiveSummary
-                                        || renderHighlightedDescription(item.description)}
-                                    </p>
-                                  </div>
-                                  {/* Copyable source line: "Source - Link" */}
-                                  <div className="pt-1 text-xs text-foreground/80 select-all break-all">
-                                    {item.source} - {item.link}
-                                  </div>
-                                  {enrichment[item.link]?.data?.source === "translate" ? (
-                                    <p className="text-[10px] text-muted-foreground/60 italic">
-                                      {language === "pt" ? "Conteúdo do artigo traduzido (Google Translate) — análise por IA desativada" : "Article content translated (Google Translate) — AI analysis off"}
-                                    </p>
-                                  ) : enrichment[item.link]?.data?.source === "rss" ? (
-                                    <p className="text-[10px] text-muted-foreground/60 italic">
-                                      {language === "pt" ? "Resumo do artigo (análise por IA indisponível)" : "Article summary (AI analysis unavailable)"}
-                                    </p>
-                                  ) : null}
-                                </>
-                              )}
-
-                              {/* Indicators of Compromise (deterministic) */}
-                              {mIocs && hasIocs(mIocs) ? (
-                                <div>
-                                  <div className="flex items-center justify-between mb-1">
-                                    <div className="text-[11px] font-bold text-muted-foreground/80 tracking-wide">[ {language === "pt" ? "INDICADORES (IOCs)" : "INDICATORS (IOCs)"} ]</div>
-                                    <div className="flex items-center gap-1.5">
-                                      <button
-                                        onClick={() => {
-                                          const txt = iocRows(mIocs).map(([t, v]) => `${t}\t${v}`).join("\n");
-                                          navigator.clipboard.writeText(txt);
-                                          toast.success(language === "pt" ? "IOCs copiados (defanged)" : "IOCs copied (defanged)");
-                                        }}
-                                        className="text-[10px] px-1.5 py-0.5 rounded border border-border/60 text-muted-foreground hover:text-foreground hover:bg-muted/50"
-                                      >
-                                        {language === "pt" ? "Copiar" : "Copy"}
-                                      </button>
-                                      <button
-                                        onClick={() => {
-                                          const rows = [["type", "indicator"], ...iocRows(mIocs)];
-                                          const csv = rows.map((r) => r.map((c) => `"${c.replace(/"/g, '""')}"`).join(",")).join("\n");
-                                          const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
-                                          const a = document.createElement("a");
-                                          a.href = URL.createObjectURL(blob);
-                                          a.download = `iocs_${new Date(item.pubDate).toISOString().slice(0, 10)}.csv`;
-                                          a.click();
-                                          URL.revokeObjectURL(a.href);
-                                        }}
-                                        className="text-[10px] px-1.5 py-0.5 rounded border border-border/60 text-muted-foreground hover:text-foreground hover:bg-muted/50"
-                                      >
-                                        {language === "pt" ? "Exportar CSV" : "Export CSV"}
-                                      </button>
-                                    </div>
-                                  </div>
-                                  <div className="flex flex-wrap gap-1.5">
-                                    {iocRows(mIocs).map(([type, value]) => (
-                                      <span
-                                        key={`${type}:${value}`}
-                                        title={type}
-                                        className="font-mono text-[11px] px-1.5 py-0.5 rounded border border-amber-500/25 bg-amber-500/5 text-amber-600 dark:text-amber-400 break-all"
-                                      >
-                                        {value}
-                                      </span>
-                                    ))}
-                                  </div>
-                                  <p className="text-[10px] text-muted-foreground/60 italic mt-1">
-                                    {language === "pt" ? "Indicadores defanged — valide antes de bloquear." : "Defanged indicators — validate before blocking."}
-                                  </p>
-                                </div>
-                              ) : null}
-
-                              {/* Source + References footer */}
-                              <div className="pt-2 border-t border-border/40 space-y-1 text-[12px]">
-                                <div>
-                                  🔗 <a href={item.link} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline font-semibold">Source</a>
-                                </div>
-                                {mCves.length ? (
-                                  <div className="flex flex-wrap items-center gap-1.5">
-                                    <span>📎 {language === "pt" ? "Referências:" : "References:"}</span>
-                                    {mCves.map((cve) => (
-                                      <a key={cve} href={`https://nvd.nist.gov/vuln/detail/${cve}`} target="_blank" rel="noopener noreferrer" className="font-mono font-semibold px-1.5 py-0.5 rounded border border-border/50 text-primary hover:bg-primary/10">{cve}</a>
-                                    ))}
-                                  </div>
-                                ) : null}
+                        {isExpanded(card, featured) && (
+                          <>
+                            {enrichment[enrichKey]?.loading ? (
+                              <div className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                {language === "pt" ? "Coletando artigos e gerando análise..." : "Fetching articles and generating analysis..."}
                               </div>
+                            ) : (
+                              <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
+                                {enr?.executiveSummary || renderHighlightedDescription(item.description)}
+                              </p>
+                            )}
+
+                            {card.sources.length > 1 && (
+                              <div className="mt-4 border-t pt-3">
+                                <div className="flex items-center gap-2 text-xs">
+                                  <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
+                                    {language === "pt" ? "Fontes" : "Sources"}
+                                  </span>
+                                  <span className="font-semibold text-foreground">{card.sources.length}</span>
+                                </div>
+
+                                {/* Linha do tempo da cobertura: a data é a espinha à
+                                    esquerda, e o filete liga um veículo ao seguinte. As
+                                    fontes já vinham em ordem cronológica — isto só faz a
+                                    ordem ser visível, que é o que mostra a notícia se
+                                    espalhando de um veículo para os outros. */}
+                                <div className="mt-2">
+                                  {[...card.sources]
+                                    .sort((a, b) => a.pubDate.localeCompare(b.pubDate))
+                                    .map((source, sourceIdx, ordered) => (
+                                      <div
+                                        key={source.link}
+                                        className="flex items-center gap-3 rounded py-1.5 text-xs transition-colors hover:bg-muted/40"
+                                      >
+                                        <span className="w-10 shrink-0 font-mono tabular-nums text-muted-foreground/70">
+                                          {new Date(source.pubDate).toLocaleDateString(language === "pt" ? "pt-BR" : "en-US", { day: "2-digit", month: "2-digit" })}
+                                        </span>
+                                        {/* Sem checkbox, a bolinha é o marcador da linha: fica
+                                            maior e na cor da marca, com o fio em cinza de texto
+                                            em vez da cor de borda — que no tema escuro quase
+                                            não separava do fundo do card. */}
+                                        <span className="relative flex w-2.5 shrink-0 items-center justify-center self-stretch">
+                                          {sourceIdx > 0 && <span className="absolute bottom-1/2 top-0 w-px bg-muted-foreground/30" />}
+                                          {sourceIdx < ordered.length - 1 && <span className="absolute bottom-0 top-1/2 w-px bg-muted-foreground/30" />}
+                                          <span className="relative h-2 w-2 rounded-full bg-primary ring-2 ring-card" />
+                                        </span>
+                                        <span className="w-28 shrink-0 truncate font-semibold text-foreground">{source.source}</span>
+                                        <a
+                                          href={source.link}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="truncate text-muted-foreground hover:text-primary hover:underline"
+                                          title={source.title}
+                                        >
+                                          {source.title}
+                                        </a>
+                                      </div>
+                                    ))}
+                                </div>
+                              </div>
+                            )}
+
+                            <div className="mt-4 flex items-center gap-2 border-t pt-3">
+                              <Button
+                                size="sm"
+                                onClick={() => makeBoletim(card)}
+                                disabled={boletimBusy === card.storyId}
+                                className="h-8 px-3 text-xs font-semibold"
+                              >
+                                {boletimBusy === card.storyId && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
+                                {language === "pt" ? "Gerar Boletim" : "Generate Bulletin"}
+                              </Button>
+                              <Button asChild variant="outline" size="sm" className="h-8 px-3 text-xs font-semibold">
+                                <a href={item.link} target="_blank" rel="noopener noreferrer">
+                                  {language === "pt" ? "Ver artigo" : "Read article"}
+                                </a>
+                              </Button>
+                              <Button
+                                variant="ghost" size="icon"
+                                onClick={() => shareAdvisory(card)}
+                                title={language === "pt" ? "Compartilhar" : "Share"}
+                                className="ml-auto h-8 w-8 text-muted-foreground hover:text-foreground"
+                              >
+                                <Share2 className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="ghost" size="icon"
+                                onClick={() => keepAdvisory(card)}
+                                disabled={savedLinks.has(item.link)}
+                                title={savedLinks.has(item.link)
+                                  ? (language === "pt" ? "Seguindo" : "Following")
+                                  : (language === "pt" ? "Seguir" : "Follow")}
+                                className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                              >
+                                <Bookmark className={cn("h-4 w-4", savedLinks.has(item.link) && "fill-current text-primary")} />
+                              </Button>
                             </div>
-                          )}
-                        </div>
+                          </>
+                        )}
                       </div>
                     );
                   })}

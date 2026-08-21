@@ -75,3 +75,32 @@ test('respeita o teto por usuário descartando o mais antigo', () => {
     assert.equal(list.length, KNOWLEDGE_CAP);
     assert.equal(list[0].url, `https://example.com/${KNOWLEDGE_CAP + 4}`);
 });
+
+test('seguir guarda a cobertura e quantos veículos havia no clique', () => {
+    const item = normalizeKnowledgeInput({
+        title: 'Falha em gateway VPN',
+        url: 'https://vendor.example/post',
+        storyId: 'A1B2C3D4E5F6',
+        sourceCount: 3,
+    });
+
+    assert.equal(item.storyId, 'a1b2c3d4e5f6');
+    assert.equal(item.followedSourceCount, 3);
+});
+
+test('storyId inválido não vira follow — o item ainda salva', () => {
+    // Sem id de cobertura o item continua sendo uma fonte guardada; só não
+    // acompanha crescimento. Um id inventado não pode virar chave de lookup.
+    for (const storyId of ['../../etc/passwd', 'zzz', '', 'a1b2c3d4e5f6a']) {
+        const item = normalizeKnowledgeInput({ title: 'T', url: 'https://a.example/1', storyId });
+        assert.equal(item.storyId, '', `storyId rejeitado: ${storyId}`);
+    }
+});
+
+test('sourceCount inválido ou absurdo não entra', () => {
+    for (const sourceCount of [0, -3, 2.5, '4', null, 5000]) {
+        const item = normalizeKnowledgeInput({ title: 'T', url: 'https://a.example/1', sourceCount });
+        assert.ok(item.followedSourceCount === 0 || item.followedSourceCount === 100,
+            `sourceCount tratado: ${sourceCount} -> ${item.followedSourceCount}`);
+    }
+});

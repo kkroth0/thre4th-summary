@@ -161,10 +161,6 @@ export const countByCategory = (cards: StoryCard[]): Record<string, number> => {
 
 export const filterStoryCards = <T extends StorySource>(
   cards: StoryCard<T>[],
-  options: { category: string; actor: string },
+  options: { category: string },
 ): StoryCard<T>[] =>
-  cards.filter((card) => {
-    if (options.category && !card.categories.includes(options.category)) return false;
-    if (options.actor && !card.actors.some((actor) => actor.id === options.actor)) return false;
-    return true;
-  });
+  cards.filter((card) => !options.category || card.categories.includes(options.category));

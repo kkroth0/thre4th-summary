@@ -1073,11 +1073,12 @@ export const deleteJob = async (id: string): Promise<void> => {
     if (!r.ok) throw new Error(`Feed API error: ${r.status}`);
 };
 
-export const generateBoletim = async (url: string, type: DeckType, title = ''): Promise<{ id: string; status: string }> => {
+/** `urls` é uma story consolidada; uma URL só continua valendo. */
+export const generateBoletim = async (urls: string | string[], type: DeckType, title = ''): Promise<{ id: string; status: string }> => {
     const r = await fetch('/api/feed/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url, type, title }),
+        body: JSON.stringify({ urls: Array.isArray(urls) ? urls : [urls], type, title }),
     });
     if (!r.ok) {
         const e = await r.json().catch(() => ({}));
@@ -1652,6 +1653,15 @@ export interface KnowledgeItem {
     savedAt: string;
     techniques: string[];
     cves: string[];
+    /** Cobertura seguida. Ausente nos itens salvos antes de Seguir existir. */
+    storyId?: string;
+    /** Veículos no momento em que o usuário seguiu. */
+    followedSourceCount?: number;
+    /** Veículos agora — derivado na leitura, contra a cobertura ao vivo. */
+    sourceCount?: number;
+    /** Quantos entraram depois do follow. */
+    newSources?: number;
+    lastSeen?: string;
 }
 
 // O que a tela de origem manda: o servidor normaliza, extrai as técnicas do
@@ -1662,6 +1672,8 @@ export interface KnowledgeInput {
     source?: string;
     publishedAt?: string;
     cves?: string[];
+    storyId?: string;
+    sourceCount?: number;
 }
 
 export const fetchKnowledge = async (): Promise<KnowledgeItem[]> => {

@@ -541,3 +541,63 @@ export function githubArtifact(url) {
     }
     return null;
 }
+
+// ─── Proteção de terminologia na tradução ──────────────────────────────────
+//
+// O caminho sem LLM traduz o artigo pelo Google Translate, que não sabe que
+// "Buffer Overflow" é nome de classe de vulnerabilidade e devolve "estouro de
+// buffer" — termo que não casa com nada que o analista vá pesquisar depois. A
+// saída é mascarar os termos antes de traduzir e repô-los na volta.
+//
+// Nomes próprios (malware, atores, produtos) ficam de fora da lista de
+// propósito: são milhares e mudam toda semana, e o tradutor já costuma
+// preservá-los por não reconhecê-los. Aqui entram só os termos que ELE conhece
+// e por isso traduz.
+const PROTECTED_TERMS = [
+    'buffer overflow', 'stack overflow', 'heap overflow', 'integer overflow',
+    'sql injection', 'command injection', 'code injection', 'prompt injection',
+    'cross-site scripting', 'cross-site request forgery', 'server-side request forgery',
+    'use-after-free', 'double free', 'out-of-bounds read', 'out-of-bounds write',
+    'path traversal', 'directory traversal', 'race condition', 'type confusion',
+    'remote code execution', 'arbitrary code execution', 'privilege escalation',
+    'denial of service', 'man-in-the-middle', 'supply chain attack',
+    'deserialization', 'memory corruption', 'zero-day', 'proof of concept',
+    'threat actor', 'threat hunting', 'kill chain', 'lateral movement',
+    'brute force', 'credential stuffing', 'living off the land',
+];
+
+// Mais longo primeiro: senão "code injection" seria comido por "injection" se
+// algum dia um termo curto entrar na lista e virar prefixo de outro.
+const PROTECTED_RE = new RegExp(
+    `\\b(?:${[...PROTECTED_TERMS].sort((a, b) => b.length - a.length).map(escapeRe).join('|')})\\b`,
+    'gi',
+);
+
+// Marcador alfanumérico sem espaço: o tradutor não reconhece como palavra e
+// costuma repassar intacto.
+// ponytail: se ele mexer no marcador além do que restoreTerms tolera, o termo
+// não volta — por isso o chamador confere e cai no texto original.
+const MARKER = 'TSQ';
+
+/** Troca cada termo técnico por um marcador. Devolve o texto e os termos na ordem. */
+export function protectTerms(text) {
+    const terms = [];
+    const masked = String(text ?? '').replace(PROTECTED_RE, (match) => {
+        terms.push(match);
+        return `${MARKER}${terms.length - 1}`;
+    });
+    return { masked, terms };
+}
+
+/**
+ * Repõe os termos, aceitando que o tradutor tenha mudado a caixa do marcador ou
+ * metido um espaço no meio. O `\b` no fim impede que o marcador 1 case dentro
+ * do 10.
+ */
+export function restoreTerms(text, terms) {
+    let out = String(text ?? '');
+    (terms || []).forEach((term, index) => {
+        out = out.replace(new RegExp(`${MARKER}\\s*${index}\\b`, 'gi'), term);
+    });
+    return out;
+}

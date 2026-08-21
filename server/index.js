@@ -15,6 +15,7 @@ import * as cheerio from 'cheerio';
 import {
     scoreArticle, localizeEnrichment, severityFromScore, extractIOCs, CTI_FEEDS,
     extractReadableText, collectArtifactLinks, githubArtifact, ARTIFACT_TEXT_FILE,
+    protectTerms, restoreTerms,
 } from './ctiIntel.js';
 import { actorTargeting } from './actorProfile.js';
 import { getShodanCreditStatus, runAttackSurfaceScan } from './attackSurface.js';
@@ -54,6 +55,7 @@ import {
 import { buildActorIndex, matchActors } from './actorMatch.js';
 import { categorize } from './newsCategories.js';
 import { mergeIntoStories } from './newsStories.js';
+import { parseFeed } from './feedParse.js';
 import { createStoryStore } from './newsStoryStore.js';
 
 // Load the root .env regardless of the process cwd (systemd runs from server/,
@@ -256,16 +258,6 @@ const sanitizeError = (error) => {
     return { status, message };
 };
 
-// HTML entity and XSS escaping helper
-const escapeHtml = (unsafe) => {
-    if (!unsafe) return '';
-    return unsafe
-         .replace(/&/g, "&amp;")
-         .replace(/</g, "&lt;")
-         .replace(/>/g, "&gt;")
-         .replace(/"/g, "&quot;")
-         .replace(/'/g, "&#039;");
-};
 
 // Helper to extract quota info
 const sendResponseWithQuota = (res, axiosResponse) => {
@@ -1361,90 +1353,6 @@ app.post('/api/censys', scanLimiter, async (req, res) => {
 
 
 // Helper to decode HTML/XML entities
-const decodeEntities = (str) => {
-    if (!str) return '';
-    return str
-        .replace(/&amp;/g, '&')
-        .replace(/&lt;/g, '<')
-        .replace(/&gt;/g, '>')
-        .replace(/&quot;/g, '"')
-        .replace(/&#039;/g, "'")
-        .replace(/&apos;/g, "'")
-        .replace(/&rsquo;/g, "'")
-        .replace(/&ldquo;/g, '"')
-        .replace(/&rdquo;/g, '"')
-        .replace(/&ndash;/g, '-')
-        .replace(/&mdash;/g, '--');
-};
-
-// Generic feed parser
-function parseFeed(xmlText, sourceName, layer) {
-    const items = [];
-    const isAtom = xmlText.includes('<entry>') || xmlText.includes('<feed');
-    
-    const cleanTag = (str) => {
-        if (!str) return '';
-        const stripped = str
-             .replace(/<!\[CDATA\[/gi, '')
-             .replace(/\]\]>/g, '')
-             .replace(/<[^>]*>/g, '')
-             .trim();
-        return escapeHtml(stripped);
-    };
-
-    if (isAtom) {
-        const entries = xmlText.split(/<entry>/i);
-        for (let i = 1; i < entries.length; i++) {
-            const entryHtml = entries[i].split(/<\/entry>/i)[0];
-            const titleMatch = entryHtml.match(/<title(?:[^>]*)>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/title>/i);
-            const linkMatch = entryHtml.match(/<link[^>]*href=["']([^"']+)["']/i) || entryHtml.match(/<link>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/link>/i);
-            const dateMatch = entryHtml.match(/<(?:updated|published)>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/(?:updated|published)>/i);
-            const summaryMatch = entryHtml.match(/<(?:summary|content)(?:[^>]*)>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/(?:summary|content)>/i);
-            
-            const title = decodeEntities(cleanTag(titleMatch ? titleMatch[1] : 'Untitled Alert'));
-            const link = linkMatch ? linkMatch[1].trim() : '';
-            const pubDate = dateMatch ? dateMatch[1].trim() : '';
-            const description = decodeEntities(cleanTag(summaryMatch ? summaryMatch[1] : ''));
-
-            if (title || link) {
-                items.push({
-                    title,
-                    link,
-                    pubDate: pubDate ? new Date(pubDate).toISOString() : new Date().toISOString(),
-                    description: description.substring(0, 300) + (description.length > 300 ? '...' : ''),
-                    source: sourceName,
-                    layer: layer
-                });
-            }
-        }
-    } else {
-        const itemParts = xmlText.split(/<item>/i);
-        for (let i = 1; i < itemParts.length; i++) {
-            const itemHtml = itemParts[i].split(/<\/item>/i)[0];
-            const titleMatch = itemHtml.match(/<title(?:[^>]*)>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/title>/i);
-            const linkMatch = itemHtml.match(/<link(?:[^>]*)>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/link>/i);
-            const dateMatch = itemHtml.match(/<pubDate>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/pubDate>/i);
-            const descMatch = itemHtml.match(/<description>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/description>/i);
-            
-            const title = decodeEntities(cleanTag(titleMatch ? titleMatch[1] : 'Untitled Alert'));
-            const link = (linkMatch ? linkMatch[1] : '').trim();
-            const pubDate = (dateMatch ? dateMatch[1] : '').trim();
-            const description = decodeEntities(cleanTag(descMatch ? descMatch[1] : ''));
-
-            if (title || link) {
-                items.push({
-                    title,
-                    link,
-                    pubDate: pubDate ? new Date(pubDate).toISOString() : new Date().toISOString(),
-                    description: description.substring(0, 300) + (description.length > 300 ? '...' : ''),
-                    source: sourceName,
-                    layer: layer
-                });
-            }
-        }
-    }
-    return items;
-}
 
 // Insert into a Map-backed cache with a hard size cap, evicting the oldest
 // entries (insertion order) so these in-memory stores can't grow unbounded.
@@ -1675,7 +1583,7 @@ async function refreshNewsletterFeed() {
                 // Enrich each item with the CTI relevance score + categorization.
                 // `reasons` is kept so the UI can explain WHY an item scored.
                 const enriched = parseFeed(response.data, f.source, f.layer).map((item) => {
-                    const intel = scoreArticle(`${item.title} ${item.description}`, f.weight_boost);
+                    const intel = scoreArticle(`${item.title} ${item.text || item.description}`, f.weight_boost);
                     return { ...item, weight_boost: f.weight_boost, ...intel };
                 });
                 feedHealth.set(f.url, { ok: true, count: enriched.length, error: null, at: new Date().toISOString() });
@@ -1722,7 +1630,7 @@ async function refreshNewsletterFeed() {
             }
             const epssVals = cves.map((c) => epssMap.get(c)).filter((n) => typeof n === 'number');
             if (epssVals.length) item.epss = Math.max(...epssVals);
-            const ic = extractIOCs(`${item.title} ${item.description || ''}`);
+            const ic = extractIOCs(`${item.title} ${item.text || item.description || ''}`);
             if (ic.ips.length || ic.domains.length || ic.hashes.length || ic.urls.length) item.iocs = ic;
         }
 
@@ -1737,7 +1645,7 @@ async function refreshNewsletterFeed() {
         // don't clobber it.
         try {
             for (const item of unifiedFeed) {
-                item.actors = matchActors(`${item.title} ${item.description || ''}`, actorIndex);
+                item.actors = matchActors(`${item.title} ${item.text || item.description || ''}`, actorIndex);
                 const { categories, primary } = categorize(item);
                 item.newsCategories = categories;
                 item.primaryCategory = primary;
@@ -1750,6 +1658,10 @@ async function refreshNewsletterFeed() {
         } catch (error) {
             console.error('news story grouping failed:', error.message);
         }
+
+        // O corpo inteiro já rendeu CVEs, atores e IOCs acima; mandá-lo pro browser
+        // multiplicaria o /api/newsletter por ~50x sem nenhum leitor.
+        for (const item of unifiedFeed) delete item.text;
 
         memoryCache.newsletter.data = unifiedFeed;
         memoryCache.newsletter.expiresAt = Date.now() + memoryCache.newsletter.ttl;
@@ -2147,8 +2059,23 @@ function loadKnowledgeStore() { try { const o = JSON.parse(fs.readFileSync(KNOWL
 function saveKnowledgeStore() { try { writeJsonAtomic(KNOWLEDGE_STORE_PATH, knowledgeStore); } catch (e) { console.error('knowledge store write failed:', e.message); } }
 let knowledgeStore = loadKnowledgeStore();   // { userId: [ {id,title,url,host,source,publishedAt,savedAt,techniques,cves} ] }
 
+// Cada item seguido é conferido contra a cobertura ao vivo: `sourceCount` é
+// quantos veículos existem agora, `newSources` é o que entrou depois do follow.
+// Derivado na leitura, não guardado — o store de stories já é a fonte da verdade
+// e duplicar o número criaria duas versões dele para divergirem.
 app.get('/api/knowledge', requirePremium, (req, res) => {
-    res.json({ items: knowledgeStore[req.user.sub] || [] });
+    const items = (knowledgeStore[req.user.sub] || []).map((item) => {
+        const story = item.storyId ? newsStoryStore.get(item.storyId) : null;
+        if (!story) return item;
+        const sourceCount = new Set(story.sources.map((s) => s.source)).size;
+        return {
+            ...item,
+            sourceCount,
+            newSources: Math.max(0, sourceCount - (item.followedSourceCount || 0)),
+            lastSeen: story.lastSeen,
+        };
+    });
+    res.json({ items });
 });
 
 app.post('/api/knowledge', requirePremium, async (req, res) => {
@@ -2571,6 +2498,11 @@ const JOB_TTL_MS = parseInt(process.env.FEED_JOB_TTL_MS, 10) || 25 * 60 * 1000;
 // Teto de jobs 'pending' aceitos ao mesmo tempo. Ao encher, o próximo /generate
 // recebe 429 com a posição na fila em vez de um wait silencioso de dezenas de min.
 const FEED_MAX_QUEUE = parseInt(process.env.FEED_MAX_QUEUE, 10) || 12;
+
+// Quantas fontes de uma story consolidada entram numa análise ou num boletim.
+// Cada uma custa um scrape e ocupa contexto do prompt; da quinta em diante o
+// writeup seguinte quase não acrescenta ao que os anteriores já disseram.
+const MAX_STORY_SOURCES = 5;
 function pendingCount() {
     return Object.values(jobsStore).filter((j) => j.status === 'pending').length;
 }
@@ -2592,16 +2524,28 @@ function expireStaleJobs() {
 //   POST /api/feed/generate  { url, type, title? }
 app.post('/api/feed/generate', requirePremium, scanLimiter, async (req, res) => {
     try {
-        const url = (req.body?.url || '').toString();
+        // Mesma forma do /api/newsletter/enrich: `urls` é a story consolidada,
+        // `url` segue aceito para uma fonte só.
+        const urls = (Array.isArray(req.body?.urls) ? req.body.urls : [req.body?.url])
+            .map((value) => (value || '').toString())
+            .filter(Boolean)
+            .slice(0, MAX_STORY_SOURCES);
+        const url = urls[0] || '';
         const type = req.body?.type === 'campaign' ? 'campaign' : 'vuln';
         const title = (req.body?.title || '').toString().slice(0, 300);
-        if (!/^https?:\/\//i.test(url)) return res.status(400).json({ error: 'url http(s) obrigatória' });
+        if (!urls.length || !urls.every((u) => /^https?:\/\//i.test(u))) {
+            return res.status(400).json({ error: 'url http(s) obrigatória' });
+        }
         // Sem BYOK: a geração usa a chave OpenRouter compartilhada do servidor
         // (OPENROUTER_API_KEY no .env do worker/engine). O acesso já é gated por
         // login + allow-list premium (requirePremium) acima.
         // Sempre valida (sem atalho de "confiar em URL do feed") — o guard SSRF
         // bloqueia IP privado/loopback/metadata. O worker na VPS revalida também.
-        try { await assertSafePublicUrl(url); } catch (e) { return res.status(400).json({ error: e.message || 'URL rejeitada' }); }
+        // TODAS passam pelo guard, não só a primeira: uma URL segura no array não
+        // vouches pelas outras, e o worker vai buscar cada uma.
+        for (const target of urls) {
+            try { await assertSafePublicUrl(target); } catch (e) { return res.status(400).json({ error: e.message || 'URL rejeitada' }); }
+        }
         // Fila cheia: recusa cedo com posição, em vez de aceitar e deixar o job
         // esperar tanto que expira. 503 (não 429) pra não colidir com o rate-limit.
         expireStaleJobs();
@@ -2615,7 +2559,7 @@ app.post('/api/feed/generate', requirePremium, scanLimiter, async (req, res) => 
         }
         const id = crypto.randomUUID();
         const now = new Date().toISOString();
-        jobsStore[id] = { id, ownerSub: req.user.sub, url, type, title, status: 'pending', json: null, error: null, createdAt: now, updatedAt: now };
+        jobsStore[id] = { id, ownerSub: req.user.sub, url, urls, type, title, status: 'pending', json: null, error: null, createdAt: now, updatedAt: now };
         pruneJobs();
         saveJobs();
         res.json({ id, status: 'pending' });
@@ -2761,15 +2705,54 @@ app.post('/api/feed/job/result', (req, res) => {
 const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1';
 const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL || 'deepseek/deepseek-v4-flash';
 
-const newsIntelPrompt = (lang) => (
+// Com mais de uma fonte o resumo vira uma linha por veículo. Um parágrafo único
+// funde os relatos numa voz só e apaga de quem é cada afirmação — que é
+// justamente o que o leitor abriu o painel para ver.
+const newsIntelPrompt = (lang, outlets = []) => (
     'You are a senior Cyber Threat Intelligence analyst. ' +
     'Respond ONLY with a JSON object with these keys:\n' +
     '1. "title": the advisory title, professionally normalized.\n' +
-    '2. "summary": ONE concise technical paragraph — an executive summary describing WHAT happened ' +
-    '(the threat, incident or fact) and why it matters for a SOC/CTI operation. ' +
+    (outlets.length > 1
+        ? '2. "summary": ONE line PER SOURCE, separated by newline characters (\\n), covering these ' +
+          `sources in this order: ${outlets.join(', ')}. Each line starts with the source name, then ": ", ` +
+          'then what THAT source specifically reports. Keep each line to one or two sentences. Never merge ' +
+          'the sources into a single voice, and where they disagree let the difference show. ' +
+          'Do NOT prefix the lines with bullets, dashes or numbers.\n'
+        : '2. "summary": ONE concise technical paragraph — an executive summary describing WHAT happened ' +
+          '(the threat, incident or fact) and why it matters for a SOC/CTI operation.\n') +
     'Do NOT include mitigations, recommendations, remediation steps or IOC lists.\n' +
+    // Traduzir jargão quebra a busca do analista e destrói o termo: "estouro de
+    // buffer" não casa com nada que ele vai procurar depois, e classe de
+    // vulnerabilidade é nome próprio, não descrição.
+    'NEVER translate technical terminology — keep it verbatim in English even when the output ' +
+    'language is Portuguese. This covers: vulnerability class names (Buffer Overflow, SQL Injection, ' +
+    'Cross-Site Scripting, Use-After-Free, Path Traversal, Remote Code Execution, Privilege Escalation, ' +
+    'Deserialization, Race Condition, Type Confusion), CVE/CWE identifiers, MITRE ATT&CK tactic and ' +
+    'technique names, and every proper noun: malware families, threat actors, tools, vendors, products, ' +
+    'protocols and APIs. Only the surrounding prose is translated.\n' +
     `OUTPUT LANGUAGE: ${lang === 'en' ? 'English' : 'Português (Brasil)'}. Respond ONLY the JSON, no extra text.`
 );
+
+/**
+ * Traduz preservando a terminologia técnica.
+ *
+ * O Google Translate acha que "Buffer Overflow" é descrição e devolve "estouro
+ * de buffer" — termo que não casa com nada que o analista vá pesquisar depois.
+ * Os termos saem mascarados e voltam na íntegra.
+ *
+ * Se algum marcador não sobreviver à ida e volta, o termo teria sumido do
+ * texto: nesse caso devolvemos o original em inglês, que é pior de ler e melhor
+ * que uma frase com buraco.
+ */
+async function translateProtected(text, targetLang) {
+    const input = String(text || '');
+    if (!input.trim()) return '';
+    const { masked, terms } = protectTerms(input);
+    const translated = await googleTranslate(masked, targetLang);
+    if (!terms.length) return translated;
+    const restored = restoreTerms(translated, terms);
+    return terms.every((term) => restored.includes(term)) ? restored : input;
+}
 
 // Free Google Translate endpoint (no key). Returns translated text, or the
 // original on any failure. Used as the no-LLM fallback so advisories are at
@@ -2894,7 +2877,7 @@ function extractMitigation(text, exclude = '') {
 }
 
 // Call OpenRouter chat completions; returns parsed JSON or null.
-async function openRouterAnalyze(title, content, lang) {
+async function openRouterAnalyze(title, content, lang, outlets = []) {
     if (!process.env.OPENROUTER_API_KEY) return null;
     const userPrompt = `Title: ${title}\nOriginal content: ${(content || '').slice(0, 12000)}`;
     try {
@@ -2903,7 +2886,7 @@ async function openRouterAnalyze(title, content, lang) {
             temperature: 0.1,
             response_format: { type: 'json_object' },
             messages: [
-                { role: 'system', content: newsIntelPrompt(lang) },
+                { role: 'system', content: newsIntelPrompt(lang, outlets) },
                 { role: 'user', content: userPrompt },
             ],
         }, {
@@ -2928,33 +2911,52 @@ async function openRouterAnalyze(title, content, lang) {
 // Mitigation. Degrades gracefully to the RSS description when OpenRouter is unavailable.
 app.post('/api/newsletter/enrich', requirePremium, scanLimiter, async (req, res) => {
     try {
-        const url = (req.body?.url || '').toString();
+        // `urls` é uma story consolidada (as fontes que o usuário marcou); `url`
+        // continua aceito para uma fonte só. O teto existe porque cada URL custa
+        // um scrape e entra no prompt: cinco writeups já estouram o orçamento de
+        // contexto sem acrescentar muito ao sexto.
+        const urls = (Array.isArray(req.body?.urls) ? req.body.urls : [req.body?.url])
+            .map((value) => (value || '').toString())
+            .filter(Boolean)
+            .slice(0, MAX_STORY_SOURCES);
         const lang = req.body?.lang === 'en' ? 'en' : 'pt';
-        if (!url) return res.status(400).json({ error: 'Missing advisory url' });
+        if (!urls.length) return res.status(400).json({ error: 'Missing advisory url' });
 
         const feed = memoryCache.newsletter.data || [];
-        const item = feed.find((i) => i.link === url);
-        if (!item) return res.status(404).json({ error: 'Advisory not found in current feed' });
+        const items = urls.map((link) => feed.find((i) => i.link === link)).filter(Boolean);
+        if (!items.length) return res.status(404).json({ error: 'Advisory not found in current feed' });
+        const item = items[0];
 
-        const cacheKey = `${lang}|${url}`;
+        // Ordenado: marcar as mesmas fontes em outra ordem é a mesma análise e
+        // tem que acertar o mesmo cache.
+        const cacheKey = `${lang}|${[...urls].sort().join('|')}`;
         const now = Date.now();
         const cached = memoryCache.newsletterEnrich.store.get(cacheKey);
         if (cached && cached.expiresAt > now) return res.json(cached.data);
 
         // Advanced collection: pull the full article body; fall back to RSS summary.
-        const { text: fullText, artifactLinks } = await fetchArticleText(item.link);
-        const content = fullText || item.description || '';
+        // Uma fonte que falhe o scrape entra com o resumo do feed em vez de
+        // derrubar a análise das outras.
+        const fetched = await Promise.all(items.map((i) => fetchArticleText(i.link).catch(() => ({ text: '', artifactLinks: [] }))));
+        const fullText = fetched.map((f) => f.text).filter(Boolean).join('\n\n');
+        const artifactLinks = [...new Set(fetched.flatMap((f) => f.artifactLinks || []))];
+        // Rotular cada corpo pela fonte é o que faz a LLM escrever "a Sophos
+        // observou X, enquanto a CISA confirmou Y" em vez de fundir os relatos
+        // numa voz só e apagar de quem é cada afirmação.
+        const content = items.length > 1
+            ? fetched.map((f, n) => `## ${items[n].source}\n${f.text || items[n].description || ''}`).join('\n\n')
+            : (fullText || item.description || '');
 
         // Re-run deterministic enrichment over the FULL article so MITRE ATT&CK,
         // threats, sectors, assets and CVEs reflect the whole story, not just the
         // (often short) RSS summary.
-        const intel = scoreArticle(`${item.title} ${item.description || ''} ${content}`, item.weight_boost || 0);
+        const intel = scoreArticle(`${items.map((i) => `${i.title} ${i.description || ''}`).join(' ')} ${content}`, item.weight_boost || 0);
         const enriched = localizeEnrichment({
             threats: intel.threats, sectors: intel.sectors, ttps: intel.ttps,
             assets: intel.assets, cves: intel.cves,
         }, lang);
 
-        const ai = await openRouterAnalyze(item.title, content, lang);
+        const ai = await openRouterAnalyze(item.title, content, lang, items.map((i) => i.source));
 
         // Deterministic IOC sweep over the FULL article (richer than the
         // title+summary set computed at collection) PLUS any linked indicator
@@ -2980,7 +2982,7 @@ app.post('/api/newsletter/enrich', requirePremium, scanLimiter, async (req, res)
             // Single executive-summary paragraph only (prompt no longer asks for
             // impact/mitigation, to save output tokens).
             payload = {
-                available: true, source: 'openrouter', scraped: !!fullText,
+                available: true, source: 'openrouter', scraped: !!fullText, sourceCount: items.length,
                 title: ai.title || item.title,
                 executiveSummary: String(ai.summary).trim(),
                 impactMitigation: '',
@@ -2993,9 +2995,9 @@ app.post('/api/newsletter/enrich', requirePremium, scanLimiter, async (req, res)
             const mitRaw = extractMitigation(fullText, execRaw);
             if (lang === 'pt') {
                 const [t, ex, mit] = await Promise.all([
-                    googleTranslate(item.title, 'pt'),
-                    googleTranslate(execRaw, 'pt'),
-                    mitRaw ? googleTranslate(mitRaw, 'pt') : Promise.resolve(''),
+                    translateProtected(item.title, 'pt'),
+                    translateProtected(execRaw, 'pt'),
+                    mitRaw ? translateProtected(mitRaw, 'pt') : Promise.resolve(''),
                 ]);
                 payload = {
                     available: false, source: 'translate', scraped: !!fullText,
