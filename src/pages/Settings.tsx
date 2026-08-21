@@ -1,7 +1,8 @@
-import { KeyRound, Loader2, Settings as SettingsIcon, ShieldCheck, SlidersHorizontal } from "lucide-react";
+import { KeyRound, Loader2, Radar, Settings as SettingsIcon, ShieldCheck, SlidersHorizontal } from "lucide-react";
 import { Navigate, useSearchParams } from "react-router-dom";
 import { AdminSettings } from "@/components/settings/AdminSettings";
 import { ApiKeysSettings } from "@/components/settings/ApiKeysSettings";
+import { MonitoringSettings } from "@/components/settings/MonitoringSettings";
 import { PreferencesSettings } from "@/components/settings/PreferencesSettings";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -9,7 +10,7 @@ import { PageLayout } from "@/components/PageLayout";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 
-type SettingsSection = "general" | "api-keys" | "admin";
+type SettingsSection = "general" | "monitoring" | "api-keys" | "admin";
 
 export default function Settings() {
   const { language, tr } = useLanguage();
@@ -30,9 +31,11 @@ export default function Settings() {
   const requested = searchParams.get("section");
   const section: SettingsSection = requested === "api-keys"
     ? "api-keys"
-    : requested === "admin" && auth.isAdmin
-      ? "admin"
-      : "general";
+    : requested === "monitoring"
+      ? "monitoring"
+      : requested === "admin" && auth.isAdmin
+        ? "admin"
+        : "general";
 
   const selectSection = (value: string) => {
     const next = value as SettingsSection;
@@ -50,12 +53,14 @@ export default function Settings() {
         <div className="mb-6 overflow-x-auto pb-1">
           <TabsList className="w-max justify-start">
             <TabsTrigger value="general"><SlidersHorizontal /> {tr({ pt: "Geral", en: "General", es: "General", fr: "Général" })}</TabsTrigger>
+            <TabsTrigger value="monitoring"><Radar /> {tr({ pt: "Monitoramento", en: "Monitoring", es: "Monitoreo", fr: "Surveillance" })}</TabsTrigger>
             <TabsTrigger value="api-keys"><KeyRound /> {tr({ pt: "Chaves de API", en: "API Keys", es: "Claves de API", fr: "Clés API" })}</TabsTrigger>
             {auth.isAdmin ? <TabsTrigger value="admin"><ShieldCheck /> Admin</TabsTrigger> : null}
           </TabsList>
         </div>
 
         <TabsContent value="general" className="mt-0"><PreferencesSettings /></TabsContent>
+        <TabsContent value="monitoring" className="mt-0"><MonitoringSettings /></TabsContent>
         <TabsContent value="api-keys" className="mt-0"><ApiKeysSettings /></TabsContent>
         {auth.isAdmin ? <TabsContent value="admin" className="mt-0"><AdminSettings /></TabsContent> : null}
       </Tabs>

@@ -57,6 +57,9 @@ import { categorize } from './newsCategories.js';
 import { mergeIntoStories } from './newsStories.js';
 import { parseFeed } from './feedParse.js';
 import { createStoryStore } from './newsStoryStore.js';
+import { ORG_REGIONS, ORG_SECTORS, createProfileStore } from './orgProfiles.js';
+import { buildThreatModel } from './orgThreatModel.js';
+import { SCRAPE_SOURCES, collectScraped } from './scrapeFeeds.js';
 
 // Load the root .env regardless of the process cwd (systemd runs from server/,
 // local dev may not).
@@ -124,6 +127,15 @@ const dailyEditionStore = createEditionStore({ filePath: DAILY_SUMMARIES_PATH, w
 
 const NEWS_STORIES_PATH = path.join(__dirname, '.news-stories.json');
 const newsStoryStore = createStoryStore({ filePath: NEWS_STORIES_PATH, readFileSync: fs.readFileSync, writeJsonAtomic });
+
+const ORG_PROFILES_PATH = path.join(__dirname, '.org-profiles.json');
+const orgProfileStore = createProfileStore({ filePath: ORG_PROFILES_PATH, readFileSync: fs.readFileSync, writeJsonAtomic });
+
+// Data de primeira aparição das fontes raspadas. Sem isto, cada refresh de 10
+// minutos recarimbaria todo post com a hora atual.
+const SCRAPE_SEEN_PATH = path.join(__dirname, '.scrape-seen.json');
+let scrapeSeen = {};
+try { scrapeSeen = JSON.parse(fs.readFileSync(SCRAPE_SEEN_PATH, 'utf8')) || {}; } catch { scrapeSeen = {}; }
 
 // 2232 names and aliases, indexed once at boot rather than per article.
 const actorIndex = (() => {
@@ -1601,10 +1613,47 @@ async function refreshNewsletterFeed() {
             .map(r => r.value)
             .flat();
 
+        // Fontes sem RSS. Falha aqui não pode levar o feed junto: no pior caso
+        // as notícias do dia saem sem a pesquisa OT.
+        let scraped = [];
+        try {
+            const result = await collectScraped({
+                // Respeita o mesmo interruptor dos feeds RSS: se a fonte aparece
+                // desligável na tela, desligar precisa desligar de verdade.
+                sources: SCRAPE_SOURCES.filter((source) => !feedOverrides.disabled.includes(source.url)),
+                fetchText: async (url) => (await axios.get(url, {
+                    headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36' },
+                    timeout: 8000,
+                })).data,
+                seen: scrapeSeen,
+                now: new Date(),
+                maxNew: 10,
+            });
+            scraped = result.items.map((item) => ({
+                ...item,
+                ...scoreArticle(`${item.title} ${item.description}`, item.weight_boost),
+            }));
+            // Poda pelo fim mais antigo: o mapa não pode crescer sem limite.
+            const entries = Object.entries(result.seen).sort((a, b) => String(b[1]).localeCompare(String(a[1]))).slice(0, 2000);
+            scrapeSeen = Object.fromEntries(entries);
+            writeJsonAtomic(SCRAPE_SEEN_PATH, scrapeSeen);
+            for (const source of SCRAPE_SOURCES) {
+                const failure = result.errors.find((error) => error.source === source.source);
+                feedHealth.set(source.url, {
+                    ok: !failure,
+                    count: result.items.filter((item) => item.source === source.source).length,
+                    error: failure ? failure.message : null,
+                    at: new Date().toISOString(),
+                });
+            }
+        } catch (error) {
+            console.error('scraped sources failed:', error.message);
+        }
+
         // De-duplicate by normalized URL (strip tracking params) — the same story
         // is often syndicated across multiple feeds; keep the highest-scoring copy.
         const byUrl = new Map();
-        for (const item of successfulFeeds) {
+        for (const item of [...successfulFeeds, ...scraped]) {
             const key = (item.link || '').replace(/[?&](utm_[^&]+|fbclid=[^&]+|feature=[^&]+)/gi, '').replace(/[?&]$/, '').toLowerCase();
             const existing = byUrl.get(key);
             if (!existing || (item.score || 0) > (existing.score || 0)) byUrl.set(key, item);
@@ -1856,14 +1905,20 @@ app.get('/api/intel/daily-brief', async (req, res) => {
 // que já é gated). As escritas exigem admin. Toda mutação dispara um refresh em
 // background pra valer sem esperar o próximo ciclo.
 function feedListForClient() {
-    return catalogFeeds().map((f) => {
-        const h = feedHealth.get(f.url);
+    const withHealth = (feed) => {
+        const h = feedHealth.get(feed.url);
         return {
-            url: f.url, source: f.source, layer: f.layer, weight_boost: f.weight_boost,
-            builtin: f.builtin, enabled: f.enabled,
+            url: feed.url, source: feed.source, layer: feed.layer, weight_boost: feed.weight_boost,
+            builtin: feed.builtin, enabled: feed.enabled,
             health: h ? { ok: h.ok, count: h.count, error: h.error, at: h.at } : null,
         };
-    });
+    };
+    // As raspadas entram só na costura de exibição: catalogFeeds()/effectiveFeeds()
+    // ficam intocados, senão o coletor de RSS tentaria buscar uma página HTML.
+    const scraped = SCRAPE_SOURCES.map((source) => withHealth({
+        ...source, builtin: true, enabled: !feedOverrides.disabled.includes(source.url),
+    }));
+    return [...catalogFeeds().map(withHealth), ...scraped];
 }
 
 app.get('/api/feeds', requireAuth, (req, res) => {
@@ -4024,6 +4079,83 @@ const loadActors = () => {
     };
     return ACTORS_CACHE;
 };
+
+// ─── Contexto da organização ───────────────────────────────────────────────
+// Configurar não é consumir, então as rotas de perfil pedem só sessão. A de
+// sugestões lê o watchlist e herda o requirePremium dele.
+const orgError = (res, error) => {
+    if (error && error.status && error.publicMessage) {
+        return res.status(error.status).json({ error: error.publicMessage });
+    }
+    const { status, message } = sanitizeError(error);
+    res.status(status).json({ error: message });
+};
+
+const knownActorIds = () => new Set(loadActors().actors.map((actor) => actor.id));
+
+// Varrer 1362 atores a cada abertura da tela de Notícias é desperdício: o
+// perfil só muda quando alguém edita, e updatedAt já marca isso.
+const threatModelCache = new Map();
+const cachedThreatModel = (profile) => {
+    const key = `${profile.id}:${profile.updatedAt}`;
+    if (!threatModelCache.has(key)) {
+        if (threatModelCache.size > 50) threatModelCache.clear();
+        threatModelCache.set(key, buildThreatModel(profile, loadActors().actors));
+    }
+    return threatModelCache.get(key);
+};
+
+app.get('/api/org/vocab', requireAuth, (_req, res) => {
+    res.set('Cache-Control', 'private, max-age=3600');
+    res.json({ sectors: ORG_SECTORS, regions: ORG_REGIONS });
+});
+
+app.get('/api/org/profiles', requireAuth, (req, res) => {
+    res.json({ profiles: orgProfileStore.list(req.user.sub) });
+});
+
+app.post('/api/org/profiles', requireAuth, (req, res) => {
+    try {
+        res.status(201).json(orgProfileStore.create(req.user, req.body || {}, new Date().toISOString(), knownActorIds()));
+    } catch (error) { orgError(res, error); }
+});
+
+app.patch('/api/org/profiles/:id', requireAuth, (req, res) => {
+    try {
+        res.json(orgProfileStore.update(req.user.sub, String(req.params.id), req.body || {}, new Date().toISOString(), knownActorIds()));
+    } catch (error) { orgError(res, error); }
+});
+
+app.delete('/api/org/profiles/:id', requireAuth, (req, res) => {
+    if (!orgProfileStore.remove(req.user.sub, String(req.params.id))) {
+        return res.status(404).json({ error: 'perfil não encontrado' });
+    }
+    res.json({ ok: true });
+});
+
+app.get('/api/org/profiles/:id/threat-model', requireAuth, (req, res) => {
+    try {
+        res.json(cachedThreatModel(orgProfileStore.get(req.user.sub, String(req.params.id))));
+    } catch (error) { orgError(res, error); }
+});
+
+// Os produtos detectados ficam em finding.product, dentro dos snapshots — um
+// por ativo. Varrer aqui evita um N+1 de requisições no navegador.
+app.get('/api/org/asset-suggestions', requirePremium, (req, res) => {
+    const byProduct = new Map();
+    for (const asset of exposureStore.listAssets(req.user.sub)) {
+        const snapshot = exposureStore.previousSuccessfulSnapshot(req.user.sub, asset.id);
+        for (const finding of snapshot?.findings || []) {
+            const product = String(finding.product || '').trim();
+            if (!product) continue;
+            const entry = byProduct.get(product.toLowerCase()) || { vendor: '', product, versions: [], seenOn: [] };
+            if (finding.version && !entry.versions.includes(finding.version)) entry.versions.push(finding.version);
+            if (!entry.seenOn.includes(asset.label)) entry.seenOn.push(asset.label);
+            byProduct.set(product.toLowerCase(), entry);
+        }
+    }
+    res.json({ suggestions: [...byProduct.values()].sort((a, b) => a.product.localeCompare(b.product)) });
+});
 
 // List (slim) + facets. The client fetches once and searches/filters in-memory.
 app.get('/api/actors', (req, res) => {
