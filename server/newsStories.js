@@ -17,6 +17,17 @@ const DAY = 86400000;
 const MIN_RARE_FOR_JACCARD = 2;
 const JACCARD_THRESHOLD = 0.5;
 
+// Acima disto o artigo é um apanhado, não uma matéria sobre uma falha: "CISA
+// Adds Four Known Exploited Vulnerabilities to Catalog" cita quatro CVEs sem
+// tratar de nenhum. Os CVEs dele continuam indexados e visíveis; o que ele
+// perde é o poder de dizer que duas matérias são a mesma.
+//
+// Sem isso o apanhado vira um eixo: toda matéria sobre qualquer um dos CVEs
+// dele casa pela regra 1 e, como o absorve recomputa os sinais a cada rodada, o
+// merge é transitivo — MLflow entra pelo apanhado de 20/08, que já tinha
+// entrado pelo de 19/08, que puxou o Windows IKE. A semana inteira num card.
+const MAX_TOPIC_CVES = 3;
+
 // Static, not derived from the day's feed: a frequency-based stoplist would make
 // the same pair of headlines group differently tomorrow.
 const STOPWORDS = new Set([
@@ -24,6 +35,11 @@ const STOPWORDS = new Set([
     'with', 'without', 'have', 'been', 'were', 'will', 'more', 'most', 'than', 'then', 'they', 'what', 'when', 'which',
     'para', 'pelo', 'pela', 'como', 'mais', 'menos', 'sobre', 'entre', 'apos', 'contra', 'seus', 'suas', 'este', 'esta',
     'isso', 'pode', 'podem', 'sera', 'estao', 'foram',
+    // Contagem não é assunto. Sem isto "CISA Adds Four ..." lê como série
+    // diferente de "CISA Adds Two ...", que é a mesma publicação recorrente.
+    'zero', 'three', 'four', 'five', 'seven', 'eight', 'nine', 'dez', 'ten',
+    'eleven', 'twelve', 'dois', 'duas', 'tres', 'quatro', 'cinco', 'seis',
+    'sete', 'oito', 'nove', 'onze', 'doze',
 ]);
 
 const COMMON_CTI = new Set([
@@ -37,6 +53,13 @@ const COMMON_CTI = new Set([
     'bug', 'bugs', 'issue', 'issues', 'code', 'codigo', 'data', 'dados', 'users', 'usuarios',
     // Sit in a large share of CTI headlines, so they carry no grouping signal.
     'ransomware', 'zero-day', '0-day', 'abuse', 'abused', 'abusing', 'targeting', 'targeted',
+    // Órgão que ASSINA o aviso, não o assunto dele. "CISA" encabeça uma fatia
+    // enorme das manchetes; deixá-lo contar fazia MLflow e Windows IKE
+    // dividirem dois dos três termos e baterem o limiar do jaccard.
+    'cisa', 'nist', 'enisa', 'cert',
+    // Metade de "exploração ativa" / "active exploitation" — o resto do par já
+    // está aqui, e sozinho ele só soma ruído.
+    'ativa', 'ativo', 'active', 'actively', 'ativamente',
 ]);
 
 const normalize = (value) =>
@@ -63,21 +86,54 @@ const overlaps = (a, b) => [...a].some((value) => b.has(value));
 
 const storyId = (link) => crypto.createHash('sha1').update(String(link || '')).digest('hex').slice(0, 12);
 
+/**
+ * Identidade de série: veículo + o esqueleto da manchete.
+ *
+ * "CISA Adds One Known Exploited Vulnerability to Catalog" sai quase todo dia,
+ * variando só a contagem. Duas edições são assuntos diferentes com a mesma
+ * manchete — para o jaccard a similaridade é 1.0, e sem isto a série inteira
+ * desaba num card só.
+ *
+ * A chave usa os termos raros, não o título literal: é o que faz "Adds One" e
+ * "Adds Two" caírem na mesma série. E é estreita o bastante para não colar
+ * matérias de verdade do mesmo veículo — "…no MLflow" e "…no Windows IKE"
+ * guardam `mlflow` e `windows`, então são séries diferentes.
+ */
+const seriesKey = (source) => `${source.source}\u0000${rareTerms(source.title).join(' ')}`;
+
+const dayOf = (value) => String(value || '').slice(0, 10);
+
 const signals = (story) => {
     const rare = new Set(story.sources.flatMap((source) => rareTerms(source.title)));
     // The actor's own name is in both headlines by definition — two unrelated
     // Cl0p stories both say "Cl0p", and that is not evidence they are one story.
     // Rule 2 needs corroboration from somewhere else in the title.
     const actorTokens = new Set(story.actors.flatMap((actor) => rareTerms(`${actor.name} ${actor.matched || ''}`)));
+    // Só os CVEs de fontes que tratam de um assunto entram na regra 1. Story
+    // gravada antes de as fontes carregarem `cves` cai no conjunto da story —
+    // volta ao comportamento antigo em vez de perder o sinal.
+    const scoped = story.sources.filter((source) => Array.isArray(source.cves));
+    const mergeCves = scoped.length
+        ? new Set(scoped.flatMap((source) => (source.cves.length <= MAX_TOPIC_CVES ? source.cves : [])))
+        : new Set(story.cves);
+
     return {
-        cves: new Set(story.cves),
+        cves: mergeCves,
         actors: new Set(story.actors.map((actor) => actor.id)),
         rare,
         rareBeyondActors: new Set([...rare].filter((term) => !actorTokens.has(term))),
+        series: new Set(story.sources.map(seriesKey)),
+        days: new Set(story.sources.map((source) => dayOf(source.pubDate))),
     };
 };
 
 const isSameStory = (a, b) => {
+    // Mesma manchete do mesmo veículo em outro dia: é a próxima edição de uma
+    // série, não a mesma notícia. Veta antes das três regras — um merge errado
+    // custa mais que um agrupamento perdido, e o boletim do dia seguinte
+    // apareceria enterrado dentro do card do dia anterior.
+    if (overlaps(a.series, b.series) && !overlaps(a.days, b.days)) return false;
+
     if (overlaps(a.cves, b.cves)) return true;
     if (overlaps(a.actors, b.actors) && overlaps(a.rareBeyondActors, b.rareBeyondActors)) return true;
     return jaccard(a.rare, b.rare) >= JACCARD_THRESHOLD;
@@ -99,6 +155,9 @@ const newStory = (item) => ({
     sources: [{
         source: item.source, link: item.link, title: item.title,
         pubDate: item.pubDate, score: item.score || 0, severity: item.severity || null,
+        // Por fonte, não só somados na story: é o que permite separar a matéria
+        // sobre uma falha do apanhado que lista dez.
+        cves: [...(item.cves || [])],
     }],
 });
 

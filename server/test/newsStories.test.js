@@ -185,3 +185,99 @@ test('recompute de signals a cada iteração: candidate herda raridade de A e ca
     assert.equal(bridged.length, 1, 'recompute enables candidate to match B after inheriting A rareness');
     assert.equal(bridged[0].sources.length, 3, 'merged story has all three sources');
 });
+
+// ─── Séries recorrentes e apanhados ────────────────────────────────────────
+// Cenário real: uma semana de feed virou UM card com oito matérias, misturando
+// o Windows IKE com o MLflow com os boletins diários da CISA.
+
+const KEV_DAY = (day, n, cves) => item({
+    source: 'CISA Advisories',
+    title: `CISA Adds ${n} Known Exploited Vulnerabilities to Catalog`,
+    link: `https://cisa.example/kev-${day}`,
+    pubDate: `2026-08-${day}T12:00:00Z`,
+    cves,
+});
+
+test('a mesma manchete do mesmo veículo em outro dia é outra edição, não a mesma notícia', () => {
+    // "CISA Adds One Known Exploited Vulnerability to Catalog" sai quase todo
+    // dia: os termos raros são idênticos e o jaccard dá 1.0.
+    const stories = mergeIntoStories([], [
+        KEV_DAY('17', 'One', ['CVE-2026-1']),
+        KEV_DAY('19', 'One', ['CVE-2026-2']),
+    ], new Date('2026-08-21T12:00:00Z'));
+
+    assert.equal(stories.length, 2, 'duas edições da série viraram um card só');
+});
+
+test('mesma manchete no mesmo dia continua sendo republicação', () => {
+    const stories = mergeIntoStories([], [
+        KEV_DAY('17', 'One', ['CVE-2026-1']),
+        { ...KEV_DAY('17', 'One', ['CVE-2026-1']), link: 'https://cisa.example/kev-17-mirror' },
+    ], new Date('2026-08-21T12:00:00Z'));
+
+    assert.equal(stories.length, 1);
+    assert.equal(stories[0].sources.length, 2);
+});
+
+test('apanhado de CVEs não cola matérias sobre falhas diferentes', () => {
+    // O boletim de 20/08 lista quatro CVEs. Sem o corte, a matéria do MLflow e a
+    // do Windows IKE entram nele — e, como o absorve recomputa os sinais a cada
+    // rodada, passam a ser a mesma notícia uma da outra.
+    const stories = mergeIntoStories([], [
+        KEV_DAY('20', 'Four', ['CVE-2026-10', 'CVE-2026-11', 'CVE-2026-12', 'CVE-2026-13']),
+        item({
+            source: 'CISO Advisor BR', title: 'CISA alerta para exploração ativa de falha crítica no MLflow',
+            link: 'https://ciso.example/mlflow', pubDate: '2026-08-20T15:00:00Z', cves: ['CVE-2026-10'],
+        }),
+        item({
+            source: 'CISO Advisor BR', title: 'CISA alerta para exploração ativa de falha crítica no Windows IKE',
+            link: 'https://ciso.example/ike', pubDate: '2026-08-20T16:00:00Z', cves: ['CVE-2026-11'],
+        }),
+    ], new Date('2026-08-21T12:00:00Z'));
+
+    const titles = stories.flatMap((s) => s.sources.map((src) => src.title));
+    const mlflow = stories.find((s) => s.sources.some((src) => src.title.includes('MLflow')));
+    const ike = stories.find((s) => s.sources.some((src) => src.title.includes('Windows IKE')));
+
+    assert.equal(titles.length, 3, 'nenhuma matéria pode sumir');
+    assert.notEqual(mlflow.id, ike.id, 'MLflow e Windows IKE viraram a mesma notícia pelo apanhado');
+});
+
+test('matérias sobre a MESMA falha continuam agrupando pelo CVE', () => {
+    // O corte é sobre apanhado, não sobre a regra do CVE: dois veículos falando
+    // do mesmo CVE seguem sendo a mesma cobertura.
+    const stories = mergeIntoStories([], [
+        item({
+            source: 'CISO Advisor BR', title: 'Falha do MLflow já está sendo atacada',
+            link: 'https://ciso.example/mlflow-2', pubDate: '2026-08-20T18:00:00Z', cves: ['CVE-2026-10'],
+        }),
+        item({
+            source: 'BleepingComputer', title: 'MLflow deserialization flaw under active exploitation',
+            link: 'https://bleeping.example/mlflow', pubDate: '2026-08-20T19:00:00Z', cves: ['CVE-2026-10'],
+        }),
+    ], new Date('2026-08-21T12:00:00Z'));
+
+    assert.equal(stories.length, 1);
+    assert.equal(stories[0].sources.length, 2);
+});
+
+test('a semana inteira de boletins não desaba num card', () => {
+    const stories = mergeIntoStories([], [
+        KEV_DAY('17', 'One', ['CVE-2026-1']),
+        KEV_DAY('18', 'Four', ['CVE-2026-2', 'CVE-2026-3', 'CVE-2026-4', 'CVE-2026-5']),
+        KEV_DAY('19', 'One', ['CVE-2026-6']),
+        KEV_DAY('20', 'Two', ['CVE-2026-7', 'CVE-2026-8']),
+        item({
+            source: 'CISO Advisor BR', title: 'CISA confirma exploração de falha do Windows por ransomware',
+            link: 'https://ciso.example/win', pubDate: '2026-08-18T14:00:00Z', cves: ['CVE-2026-2'],
+        }),
+        item({
+            source: 'CISO Advisor BR', title: 'CISA alerta para exploração ativa de falha crítica no Windows IKE',
+            link: 'https://ciso.example/ike2', pubDate: '2026-08-19T14:00:00Z', cves: ['CVE-2026-6'],
+        }),
+    ], new Date('2026-08-21T12:00:00Z'));
+
+    const biggest = Math.max(...stories.map((s) => s.sources.length));
+    assert.ok(stories.length >= 4, `esperava vários cards, veio ${stories.length}`);
+    assert.ok(biggest <= 2, `um card engoliu ${biggest} matérias`);
+});
