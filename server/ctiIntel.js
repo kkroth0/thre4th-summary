@@ -262,11 +262,33 @@ const SHARED_PLATFORM_DOMAINS = new Set([
 // A bare filename (malware.exe) matches the domain shape but is not a domain.
 const RE_FILE_EXT = /\.(exe|dll|sys|bin|dat|dmp|zip|rar|tar|gz|7z|png|jpe?g|gif|svg|css|js|html?|txt|log|json|xml|pdf|docx?|xlsx?|pptx?|csv|ya?ml|md|ps1|sh|py)$/i;
 
+// Code hosting is never the indicator. An appendix that LIVES in a repo cites its
+// own repo, the raw file host and neighbouring projects on every other line, and
+// each one came back as a "malicious domain/URL". Unlike SHARED_PLATFORM_DOMAINS
+// (bare apex only, attacker subdomain kept), here the whole host tree goes: there
+// is no evil.github.com. The repo link still shows up in `iocSources`, which is
+// where it belongs. github.io stays out of this — it serves attacker pages.
+const CODE_HOST_SUFFIXES = [
+    'github.com', 'githubusercontent.com', 'gitlab.com', 'bitbucket.org',
+];
+const isCodeHost = (host) => CODE_HOST_SUFFIXES.some(
+    (s) => host === s || host.endsWith(`.${s}`),
+);
+
 const addDomain = (set, raw) => {
     const d = String(raw).toLowerCase();
     if (!/^[a-z0-9.-]+\.[a-z]{2,}$/.test(d)) return;
-    if (SHARED_PLATFORM_DOMAINS.has(d) || RE_FILE_EXT.test(d)) return;
+    if (SHARED_PLATFORM_DOMAINS.has(d) || RE_FILE_EXT.test(d) || isCodeHost(d)) return;
     set.add(d);
+};
+
+const addUrl = (set, raw) => {
+    const url = String(raw).replace(/[.,;:]+$/, '');
+    let host = '';
+    // Inparseável fica: antes entrava sem checagem, e só o code host sai daqui.
+    try { host = new URL(url).hostname.toLowerCase(); } catch { /* keep */ }
+    if (isCodeHost(host)) return;
+    set.add(url);
 };
 
 // plaintext=false (default): article prose. Only DEFANGED network indicators are
@@ -285,7 +307,7 @@ export function extractIOCs(text, { plaintext = false } = {}) {
     // A comma ends the URL: it delimits the next column in a CSV appendix, and the
     // next clause in prose.
     for (const m of t.matchAll(/\b(?:hxxps?|https?)(?::|\[:\])\/\/[^\s<>"'),]+/gi)) {
-        if (plaintext || /\[\.\]|\(\.\)|\{\.\}|\[:\]|hxx/i.test(m[0])) urls.add(refang(m[0]).replace(/[.,;:]+$/, ''));
+        if (plaintext || /\[\.\]|\(\.\)|\{\.\}|\[:\]|hxx/i.test(m[0])) addUrl(urls, refang(m[0]));
     }
 
     const domains = new Set();

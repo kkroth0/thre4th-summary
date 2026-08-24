@@ -1094,9 +1094,12 @@ export const generateBoletim = async (urls: string | string[], type: DeckType, t
 export const downloadBoletimDeck = async (job: BoletimJob, kind: 'pptx' | 'pdf'): Promise<void> => {
     const r = await fetch(`/api/feed/job/deck?id=${encodeURIComponent(job.id)}&kind=${kind}`);
     if (!r.ok) {
-        throw new Error(r.status === 404
-            ? `Este boletim não tem ${kind.toUpperCase()}: ele foi gerado antes de os arquivos passarem a vir prontos da VPS. Gere de novo para obtê-lo.`
-            : `Falha ao baixar o ${kind.toUpperCase()}: ${r.status}`);
+        if (r.status === 404) {
+            throw new Error(`Este boletim não tem ${kind.toUpperCase()}: ele foi gerado antes de os arquivos passarem a vir prontos da VPS. Gere de novo para obtê-lo.`);
+        }
+        // 403 do gate de admin (PPTX) traz o motivo no corpo; sem corpo, o status.
+        const reason = await r.json().catch(() => null);
+        throw new Error(reason?.error || `Falha ao baixar o ${kind.toUpperCase()}: ${r.status}`);
     }
     const url = URL.createObjectURL(await r.blob());
     const a = document.createElement('a');

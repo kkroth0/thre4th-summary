@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { BrandMark } from "@/components/BrandMark";
 import { BoletimView } from "@/components/BoletimView";
+import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { downloadBoletimDeck, fetchJobRelated, type BoletimJob, type BoletimReport, type PrivateHunt } from "@/services/threatApi";
 import { buildHuntLink } from "@/pages/dailyBulletinView";
@@ -101,6 +102,7 @@ function ReportRelations({ job, pt }: { job: BoletimJob; pt: boolean }) {
 // PPTX e PDF já vêm prontos da VPS (o PDF é o próprio deck convertido) e aqui é
 // só o download; o JSON é local. A espera do download é o que o "gerando" cobre.
 function ExportMenu({ job, pt }: { job: BoletimJob; pt: boolean }) {
+  const { auth } = useAuth();
   const [busy, setBusy] = useState(false);
   const run = async (format: "json" | "pdf" | "pptx") => {
     setBusy(true);
@@ -131,9 +133,13 @@ function ExportMenu({ job, pt }: { job: BoletimJob; pt: boolean }) {
         <DropdownMenuItem disabled={!job.deck?.pdf} onSelect={() => void run("pdf")}>
           PDF{job.deck?.pdf ? "" : pt ? " — indisponível" : " — unavailable"}
         </DropdownMenuItem>
-        <DropdownMenuItem disabled={!job.deck?.pptx} onSelect={() => void run("pptx")}>
-          PowerPoint (PPTX){job.deck?.pptx ? "" : pt ? " — indisponível" : " — unavailable"}
-        </DropdownMenuItem>
+        {/* O PPTX é a fonte editável no template SRR: só admin. O servidor
+            também recusa — esconder aqui é só não oferecer o que dá 403. */}
+        {auth.isAdmin && (
+          <DropdownMenuItem disabled={!job.deck?.pptx} onSelect={() => void run("pptx")}>
+            PowerPoint (PPTX){job.deck?.pptx ? "" : pt ? " — indisponível" : " — unavailable"}
+          </DropdownMenuItem>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   );

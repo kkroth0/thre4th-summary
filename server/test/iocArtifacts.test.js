@@ -136,3 +136,17 @@ test('extractIOCs keeps attacker subdomains but drops the bare shared-platform a
   assert.ok(iocs.domains.includes('bentleyvazquezpvey.github.io'));  // real indicator
   assert.ok(!iocs.domains.includes('github.io'));                    // bare apex is noise
 });
+
+test('extractIOCs drops code hosting: um repositório GitHub não é indicador', () => {
+  const appendix = [
+    'Full list: https://github.com/vendor/threat-iocs',
+    'raw: https://raw.githubusercontent.com/vendor/threat-iocs/main/c2.txt',
+    'mirror on gist.github.com and gitlab.com/vendor/iocs',
+    'c2: https://evil-c2.com/gate.php',
+    'domain: evil-c2.com',
+  ].join('\n');
+  const iocs = extractIOCs(appendix, { plaintext: true });
+
+  assert.deepEqual(iocs.urls, ['https://evil-c2.com/gate.php']);
+  assert.deepEqual(iocs.domains, ['evil-c2.com']);
+});

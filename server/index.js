@@ -2654,13 +2654,17 @@ app.get('/api/feed/jobs', requirePremium, (req, res) => {
 
 // Apaga um boletim do usuário.   DELETE /api/feed/job/:id
 // Anexo pronto do boletim: o deck no template SRR preenchido na VPS, ou o PDF
-// dele convertido. Premium + dono.   GET /api/feed/job/deck?id=...&kind=pptx|pdf
+// dele convertido. Premium + dono; o PPTX (fonte editável, template SRR) é só
+// admin.   GET /api/feed/job/deck?id=...&kind=pptx|pdf
 app.get('/api/feed/job/deck', requirePremium, (req, res) => {
     const id = (req.query.id || '').toString();
     const kind = (req.query.kind || 'pptx').toString();
     const job = jobsStore[id];
     if (!job) return res.status(404).json({ error: 'job não encontrado' });
     if (job.ownerSub !== req.user.sub) return res.status(403).json({ error: 'job pertence a outro usuário' });
+    if (kind === 'pptx' && !isAdmin(req.user.login)) {
+        return res.status(403).json({ error: 'PPTX é somente para administrador' });
+    }
     const name = DECK_KINDS[kind] && job.deck?.[kind];
     if (!name || !isJobId(id) || !fs.existsSync(deckPath(id, kind))) {
         return res.status(404).json({ error: `${kind} não disponível para este boletim` });
