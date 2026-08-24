@@ -79,6 +79,18 @@ export function buildActorIndex(actors) {
             } else if (!COMMON_TIER_STOPLIST.has(key) && !common.has(key)) {
                 common.set(key, { ...entry, via: 'context' });
             }
+
+            // Notícia em português e espanhol inverte a ordem: o catálogo tem
+            // "Lazarus Group", a manchete escreve "Grupo Lazarus". Sem a forma
+            // invertida, matéria em PT sobre ator conhecido ficava sem
+            // atribuição nenhuma — e é a atribuição que junta duas coberturas
+            // da mesma campanha. A chave segue exigindo as duas palavras, então
+            // não afrouxa nada: "grupo" sozinho não casa com ninguém.
+            const flipped = /^(.+?)\s+(?:group|gang|team|crew|collective)$/i.exec(alias);
+            for (const prefix of flipped ? ['grupo', 'quadrilha'] : []) {
+                const flippedKey = normalize(`${prefix} ${flipped[1]}`);
+                if (!distinctive.has(flippedKey)) distinctive.set(flippedKey, { ...entry, via: 'multiword' });
+            }
         }
     }
     // Calculate max gram from the longest key in the index.

@@ -151,3 +151,27 @@ test('palavra comum de prosa CTI não vira ator', () => {
         }
     }
 });
+
+// Notícia em PT/ES inverte a ordem do nome: o catálogo tem "Lazarus Group", a
+// manchete escreve "Grupo Lazarus". Sem isto, matéria em português sobre ator
+// conhecido saía sem atribuição — e sem ator a história não correlaciona com a
+// cobertura em inglês da mesma campanha.
+test('nome de ator invertido em português e espanhol atribui igual', () => {
+    const index = buildActorIndex([{ id: 'G0032', name: 'Lazarus Group', aliases: ['Hidden Cobra'] }]);
+
+    for (const title of [
+        'Grupo Lazarus explora zero-day do Windows contra empresas de defesa',
+        'El grupo Lazarus ataca a empresas de defensa',
+        'Quadrilha Lazarus é ligada a roubo de criptomoedas',
+        'Lazarus Group targets defense firms',
+    ]) {
+        assert.deepEqual(matchActors(title, index).map((a) => a.id), ['G0032'], title);
+    }
+});
+
+test('a forma invertida exige as duas palavras, não só "grupo"', () => {
+    const index = buildActorIndex([{ id: 'G0032', name: 'Lazarus Group', aliases: [] }]);
+
+    assert.deepEqual(matchActors('Grupo de hackers ataca banco brasileiro', index), []);
+    assert.deepEqual(matchActors('O grupo de ransomware atacou a empresa', index), []);
+});
