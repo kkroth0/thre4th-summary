@@ -15,7 +15,13 @@ export const STORY_ACTIVE_DAYS = 14;
 
 const DAY = 86400000;
 const MIN_RARE_FOR_JACCARD = 2;
-const JACCARD_THRESHOLD = 0.5;
+// 0.34 = um terço dos termos raros da união. Medido contra o feed real: em 0.5
+// duas coberturas da mesma notícia em veículos diferentes quase nunca batem
+// ("SilkParasite Espionage Campaign Targets Central Asian Governments" x
+// "SilkParasite Threatens Central Asian Orgs With Flurry of RATs"), porque cada
+// redação escolhe as próprias palavras. Baixar só foi seguro depois de tirar o
+// vocabulário de classe de falha do COMMON_CTI abaixo.
+const JACCARD_THRESHOLD = 0.34;
 
 // Acima disto o artigo é um apanhado, não uma matéria sobre uma falha: "CISA
 // Adds Four Known Exploited Vulnerabilities to Catalog" cita quatro CVEs sem
@@ -27,6 +33,13 @@ const JACCARD_THRESHOLD = 0.5;
 // merge é transitivo — MLflow entra pelo apanhado de 20/08, que já tinha
 // entrado pelo de 19/08, que puxou o Windows IKE. A semana inteira num card.
 const MAX_TOPIC_CVES = 3;
+
+// O apanhado se anuncia na manchete. O cap acima só pega quem lista muitos
+// CVEs; isto pega quem lista poucos e mesmo assim é catálogo — "CISA Adds Three
+// Known Exploited Vulnerabilities to Catalog" tem exatamente três e virava eixo
+// de um card com seis matérias sem relação: Cisco ASA, Patch Tuesday da
+// Microsoft, Lazarus e KEV, todas de assunto diferente.
+const ROUNDUP = /\b(?:adds?\b[^.]{0,40}\bto\b[^.]{0,12}\bcatalog|known exploited vulnerabilit|patch tuesday|security update guide|weekly (?:recap|roundup)|roundup|resumo da semana|vulnerability summary|advance notification|security holes|(?:fixes|fixed|patches|patched|plugs|corrige|corrigem)\s+(?:nearly\s+|almost\s+|more than\s+|over\s+|mais de\s+|quase\s+)?\d+\s+(?:security\s+)?(?:flaws|bugs|vulnerabilit|holes|issues|falhas|vulnerabilidades|brechas))/i;
 
 // Static, not derived from the day's feed: a frequency-based stoplist would make
 // the same pair of headlines group differently tomorrow.
@@ -60,6 +73,24 @@ const COMMON_CTI = new Set([
     // Metade de "exploração ativa" / "active exploitation" — o resto do par já
     // está aqui, e sozinho ele só soma ruído.
     'ativa', 'ativo', 'active', 'actively', 'ativamente',
+    // Classe da falha, não assunto. Sem isto "OriginLab Origin Viewer OPJ File
+    // Parsing Out-Of-Bounds Write" e "BlackBerry QNX File Parsing Out-Of-Bounds
+    // Write" dividem quatro termos e viram a mesma história.
+    'parsing', 'file', 'files', 'arquivo', 'arquivos', 'memory', 'memoria', 'corruption', 'corrupcao',
+    'overflow', 'underflow', 'buffer', 'heap', 'stack', 'bounds', 'write', 'read', 'free', 'use-after-free',
+    'injection', 'injecao', 'command', 'comando', 'comandos', 'execution', 'execucao', 'remote', 'remoto', 'remota',
+    'disclosure', 'divulgacao', 'information', 'informacao', 'denial', 'service', 'servico',
+    'authentication', 'autenticacao', 'bypass', 'privilege', 'privileges', 'privilegio', 'privilegios',
+    'escalation', 'escalonamento', 'traversal', 'deserialization', 'desserializacao', 'arbitrary', 'arbitrario',
+    'improper', 'unauthenticated', 'authenticated', 'handling', 'multiple', 'multiplas', 'multiplos',
+    // Vocabulário de release: separa canal e plataforma, não assunto.
+    'beta', 'stable', 'desktop', 'channel', 'release', 'releases', 'version', 'versao', 'build', 'builds',
+    // Manchete de PSIRT que é só o nome da classe ("Server-Side Request
+    // Forgery (SSRF)") fica sem termo raro nenhum, e o mínimo de dois termos
+    // já a impede de casar com qualquer coisa.
+    'server-side', 'client-side', 'cross-site', 'scripting', 'request', 'forgery', 'ssrf', 'csrf', 'xss',
+    'race', 'condition', 'dereference', 'pointer', 'uninitialized', 'integer', 'path', 'null',
+    'out-of-bounds', 'use-after', 'after-free', 'hardcoded', 'insecure', 'weak', 'missing', 'exposure',
 ]);
 
 const normalize = (value) =>
@@ -114,7 +145,9 @@ const signals = (story) => {
     // volta ao comportamento antigo em vez de perder o sinal.
     const scoped = story.sources.filter((source) => Array.isArray(source.cves));
     const mergeCves = scoped.length
-        ? new Set(scoped.flatMap((source) => (source.cves.length <= MAX_TOPIC_CVES ? source.cves : [])))
+        ? new Set(scoped.flatMap((source) => (
+            source.cves.length <= MAX_TOPIC_CVES && !ROUNDUP.test(source.title) ? source.cves : []
+        )))
         : new Set(story.cves);
 
     return {
@@ -123,9 +156,16 @@ const signals = (story) => {
         rare,
         rareBeyondActors: new Set([...rare].filter((term) => !actorTokens.has(term))),
         series: new Set(story.sources.map(seriesKey)),
+        outlets: new Set(story.sources.map((source) => source.source)),
         days: new Set(story.sources.map((source) => dayOf(source.pubDate))),
     };
 };
+
+// Dentro de um veículo, manchete parecida em outro dia é a próxima edição, não
+// a mesma notícia: "Chrome Beta for Android Update" de terça não é a de quinta.
+// O veto de série acima exige o mesmo esqueleto de manchete; este cobre a
+// variação — sem ele, onze releases do Chrome viravam um card só.
+const sameOutletOtherDay = (a, b) => overlaps(a.outlets, b.outlets) && !overlaps(a.days, b.days);
 
 const isSameStory = (a, b) => {
     // Mesma manchete do mesmo veículo em outro dia: é a próxima edição de uma
@@ -136,6 +176,7 @@ const isSameStory = (a, b) => {
 
     if (overlaps(a.cves, b.cves)) return true;
     if (overlaps(a.actors, b.actors) && overlaps(a.rareBeyondActors, b.rareBeyondActors)) return true;
+    if (sameOutletOtherDay(a, b)) return false;
     return jaccard(a.rare, b.rare) >= JACCARD_THRESHOLD;
 };
 

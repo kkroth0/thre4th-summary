@@ -281,3 +281,79 @@ test('a semana inteira de boletins não desaba num card', () => {
     assert.ok(stories.length >= 4, `esperava vários cards, veio ${stories.length}`);
     assert.ok(biggest <= 2, `um card engoliu ${biggest} matérias`);
 });
+
+// ─── Medido contra o feed real (1209 itens, 35 fontes) ──────────────────────
+// Os quatro casos abaixo saíram de rodar o merge no feed de verdade: cada um é
+// um card errado que apareceu na tela, ou uma cobertura óbvia que não agrupou.
+
+test('apanhado com poucos CVEs também não empresta CVE', () => {
+    // "CISA Adds Three ..." tem exatamente três CVEs, passa no cap, e virava o
+    // eixo de um card com Cisco ASA + Lazarus + KEV, assuntos sem relação.
+    const stories = mergeIntoStories([], [
+        KEV_DAY('11', 'Three', ['CVE-2026-20349', 'CVE-2026-68820', 'CVE-2026-72898']),
+        item({
+            source: 'Cisco PSIRT', title: 'Cisco Secure Firewall Adaptive Security Appliance VPN Vulnerability',
+            link: 'https://cisco.example/asa', pubDate: '2026-08-11T15:00:00Z', cves: ['CVE-2026-20349'],
+        }),
+        item({
+            source: 'CISO Advisor BR', title: 'Grupo Lazarus explora zero-day do Windows contra empresas de defesa',
+            link: 'https://ciso.example/lazarus', pubDate: '2026-08-11T16:00:00Z', cves: ['CVE-2026-68820'],
+        }),
+    ], new Date('2026-08-12T12:00:00Z'));
+
+    assert.equal(stories.length, 3, 'o apanhado colou Cisco e Lazarus na mesma história');
+});
+
+test('manchete parecida do mesmo veículo em outro dia é a próxima edição', () => {
+    // Onze releases do Chrome viraram um card só: "Chrome Beta for Android
+    // Update" e "Chrome for Android Update" não têm o mesmo esqueleto, então o
+    // veto de série não pegava, e o jaccard casava.
+    const chrome = (day, title) => item({
+        source: 'Chrome Releases', title, link: `https://chrome.example/${day}-${title}`,
+        pubDate: `2026-08-${day}T12:00:00Z`,
+    });
+    const outrosDias = mergeIntoStories([], [
+        chrome('06', 'Chrome Beta for Android Update'),
+        chrome('11', 'Chrome for Android Update'),
+    ], new Date('2026-08-12T12:00:00Z'));
+    assert.equal(outrosDias.length, 2);
+
+    const mesmoDia = mergeIntoStories([], [
+        chrome('11', 'Chrome Beta for Android Update'),
+        chrome('11', 'Chrome for Android Update'),
+    ], new Date('2026-08-12T12:00:00Z'));
+    assert.equal(mesmoDia.length, 1, 'no mesmo dia é o mesmo lote de release');
+});
+
+test('classe da falha não é assunto: produtos diferentes não viram uma história', () => {
+    const stories = mergeIntoStories([], [
+        item({
+            source: 'Zero Day Initiative', title: 'ZDI-26-552: OriginLab Origin Viewer OPJ File Parsing Out-Of-Bounds Write',
+            link: 'https://zdi.example/552', cves: ['CVE-2026-18293'],
+        }),
+        item({
+            source: 'Zero Day Initiative', title: 'ZDI-26-566: BlackBerry QNX File Parsing Out-Of-Bounds Write Remote Code Execution',
+            link: 'https://zdi.example/566', cves: ['CVE-2026-40272'],
+        }),
+    ], NOW);
+
+    assert.equal(stories.length, 2);
+});
+
+test('dois veículos cobrindo a mesma campanha agrupam mesmo sem CVE', () => {
+    // É a correlação que o limiar de 0.5 perdia: cada redação escolhe as
+    // próprias palavras, e só o nome da campanha e a região sobrevivem.
+    const stories = mergeIntoStories([], [
+        item({
+            source: 'The Hacker News', title: 'SilkParasite Espionage Campaign Targets Central Asian Governments with RATs',
+            link: 'https://thn.example/silkparasite',
+        }),
+        item({
+            source: 'Dark Reading', title: 'SilkParasite Threatens Central Asian Orgs With Flurry of RATs',
+            link: 'https://dr.example/silkparasite',
+        }),
+    ], NOW);
+
+    assert.equal(stories.length, 1, 'a mesma campanha em dois veículos continuou em cards separados');
+    assert.equal(stories[0].sources.length, 2);
+});
