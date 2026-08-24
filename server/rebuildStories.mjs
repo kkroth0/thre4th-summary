@@ -8,6 +8,10 @@
 //   node server/rebuildStories.mjs --write    # grava, com .bak ao lado
 //   node server/rebuildStories.mjs --write /outro/.news-stories.json
 //
+// No servidor, reinicie o serviço DEPOIS de gravar: o processo em execução
+// guarda as histórias em memória e as escreve de volta no próximo refresh do
+// feed, desfazendo o reagrupamento sem avisar.
+//
 // Ator e categoria são re-derivados do título, não copiados da história antiga:
 // um card mal agrupado espalharia os atores dele por todas as fontes, que é
 // justamente o que estamos desfazendo. O preço é que a fonte gravada não guarda
@@ -71,3 +75,4 @@ if (!write) {
 fs.copyFileSync(file, `${file}.bak`);
 fs.writeFileSync(file, JSON.stringify(rebuilt, null, 0));
 console.log(`\ngravado. Cópia do anterior em ${file}.bak`);
+console.log('reinicie o serviço agora — o processo em execução ainda tem as histórias antigas em memória.');
