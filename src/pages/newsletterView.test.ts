@@ -154,15 +154,6 @@ test("match repetido entre fontes aparece uma vez na história", () => {
   assert.deepEqual(cards[0].orgMatches, [{ kind: "asset", label: "FortiGate" }]);
 });
 
-test("sortByOrg ordena pelo contexto, desempatando pelo score do feed", () => {
-  const cards = groupAdvisoriesIntoStories([
-    orgItem({ link: "a", storyId: "a", orgScore: 10, score: 90 }),
-    orgItem({ link: "b", storyId: "b", orgScore: 70, score: 10 }),
-    orgItem({ link: "c", storyId: "c", orgScore: 70, score: 50 }),
-  ], { sortByOrg: true });
-  assert.deepEqual(cards.map((card) => card.storyId), ["c", "b", "a"]);
-});
-
 test("orgOnly esconde o que está fora do contexto", () => {
   const cards = groupAdvisoriesIntoStories([
     orgItem({ link: "a", storyId: "a", orgScore: 40 }),
@@ -172,7 +163,7 @@ test("orgOnly esconde o que está fora do contexto", () => {
   assert.deepEqual(filtered.map((card) => card.storyId), ["a"]);
 });
 
-test("sem orgOnly, nada é escondido — o contexto reordena, não filtra", () => {
+test("sem orgOnly, nada é escondido — o contexto ou filtra tudo ou nada", () => {
   const cards = groupAdvisoriesIntoStories([
     orgItem({ link: "a", storyId: "a", orgScore: 40 }),
     orgItem({ link: "b", storyId: "b", orgScore: 0 }),

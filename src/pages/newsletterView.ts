@@ -115,7 +115,7 @@ export interface StoryCard<T extends StorySource = StorySource> {
 // server could not group, the reader still sees every headline.
 export const groupAdvisoriesIntoStories = <T extends StorySource>(
   advisories: T[],
-  options: { sortByRelevance?: boolean; sortByOrg?: boolean } = {},
+  options: { sortByRelevance?: boolean } = {},
 ): StoryCard<T>[] => {
   const byStory = new Map<string, StoryCard<T>>();
 
@@ -155,11 +155,7 @@ export const groupAdvisoriesIntoStories = <T extends StorySource>(
     card.categories.sort((a, b) => (NEWS_CATEGORY_ORDER as readonly string[]).indexOf(a) - (NEWS_CATEGORY_ORDER as readonly string[]).indexOf(b));
     card.primaryCategory = card.categories[0] ?? null;
   }
-  // O contexto manda quando pedido; o score do feed é o desempate, e lastSeen
-  // fecha a ordem para ela nunca depender da ordem de chegada.
-  if (options.sortByOrg) {
-    return cards.sort((a, b) => b.orgScore - a.orgScore || b.score - a.score || b.lastSeen.localeCompare(a.lastSeen));
-  }
+  // O contexto filtra (orgOnly), nunca reordena: ou é tudo, ou é só o contexto.
   return options.sortByRelevance
     ? cards.sort((a, b) => b.score - a.score || b.lastSeen.localeCompare(a.lastSeen))
     : cards.sort((a, b) => b.lastSeen.localeCompare(a.lastSeen));

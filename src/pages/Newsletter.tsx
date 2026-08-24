@@ -180,7 +180,6 @@ const Newsletter = () => {
   const [sortByRelevance, setSortByRelevance] = useState<boolean>(false);
   const [kevOnly, setKevOnly] = useState<boolean>(false);
   const { profiles: orgProfiles, activeId: orgProfileId, setActiveId: setOrgProfileId, model: orgModel } = useOrgProfile();
-  const [sortByOrg, setSortByOrg] = useState(false);
   const [orgOnly, setOrgOnly] = useState(false);
   // Links já guardados no Knowledge — só pra desabilitar o botão. A verdade
   // continua no servidor, que de-dup por URL de qualquer jeito.
@@ -489,10 +488,10 @@ const Newsletter = () => {
 
   const storyCards = useMemo(
     () => filterStoryCards(
-      groupAdvisoriesIntoStories(filteredAdvisories, { sortByRelevance, sortByOrg: sortByOrg && Boolean(orgModel) }),
+      groupAdvisoriesIntoStories(filteredAdvisories, { sortByRelevance }),
       { category: categoryFilter, orgOnly: orgOnly && Boolean(orgModel) },
     ),
-    [filteredAdvisories, sortByRelevance, sortByOrg, orgModel, categoryFilter, orgOnly],
+    [filteredAdvisories, sortByRelevance, orgModel, categoryFilter, orgOnly],
   );
   const categoryCounts = useMemo(() => countByCategory(groupAdvisoriesIntoStories(filteredAdvisories)), [filteredAdvisories]);
 
@@ -501,14 +500,12 @@ const Newsletter = () => {
     selectedSeverity !== "all",
     sortByRelevance,
     kevOnly,
-    sortByOrg,
     orgOnly,
   ].filter(Boolean).length;
   const clearFilters = () => {
     setSelectedSeverity("all");
     setSortByRelevance(false);
     setKevOnly(false);
-    setSortByOrg(false);
     setOrgOnly(false);
   };
 
@@ -643,10 +640,6 @@ const Newsletter = () => {
                           <option key={profile.id} value={profile.id}>{profile.name}</option>
                         ))}
                       </select>
-                      <label className="flex items-center gap-2 text-xs">
-                        <input type="checkbox" checked={sortByOrg} disabled={!orgModel} onChange={(event) => setSortByOrg(event.target.checked)} />
-                        {language === "pt" ? "Relevante para mim primeiro" : "Most relevant to me first"}
-                      </label>
                       <label className="flex items-center gap-2 text-xs">
                         <input type="checkbox" checked={orgOnly} disabled={!orgModel} onChange={(event) => setOrgOnly(event.target.checked)} />
                         {language === "pt" ? "Só o meu contexto" : "My context only"}
