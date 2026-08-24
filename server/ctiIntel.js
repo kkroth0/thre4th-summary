@@ -269,7 +269,8 @@ const RE_FILE_EXT = /\.(exe|dll|sys|bin|dat|dmp|zip|rar|tar|gz|7z|png|jpe?g|gif|
 // is no evil.github.com. The repo link still shows up in `iocSources`, which is
 // where it belongs. github.io stays out of this — it serves attacker pages.
 const CODE_HOST_SUFFIXES = [
-    'github.com', 'githubusercontent.com', 'gitlab.com', 'bitbucket.org',
+    'github.com', 'githubusercontent.com', 'githubassets.com',
+    'gitlab.com', 'gitlab-static.net', 'bitbucket.org',
 ];
 const isCodeHost = (host) => CODE_HOST_SUFFIXES.some(
     (s) => host === s || host.endsWith(`.${s}`),

@@ -150,3 +150,30 @@ test('extractIOCs drops code hosting: um repositório GitHub não é indicador',
   assert.deepEqual(iocs.urls, ['https://evil-c2.com/gate.php']);
   assert.deepEqual(iocs.domains, ['evil-c2.com']);
 });
+
+// Um apêndice que é PÁGINA (gist, release, pastebin) chega como HTML. É o
+// caminho que publicava github.githubassets.com como domínio malicioso: ele só
+// existe no <script src> da moldura do GitHub, nunca no conteúdo.
+test('apêndice em HTML: a moldura da página não vira IOC, o conteúdo vira', () => {
+  const gistHtml = `
+<html><head>
+  <link rel="stylesheet" href="https://github.githubassets.com/assets/light-0eace2f.css">
+  <script src="https://github.githubassets.com/assets/wp-runtime-4f3b2c.js"></script>
+</head><body>
+  <header><a href="https://github.com/vendor">vendor</a></header>
+  <table class="highlight"><tbody>
+    <tr><td class="blob-code">command-and-control: evil-c2.com</td></tr>
+    <tr><td class="blob-code">drop: https://payload-host.net/stage2.bin</td></tr>
+    <tr><td class="blob-code">9f2c4a1b8e7d6c5f4a3b2c1d0e9f8a7b6c5d4e3f2a1b0c9d8e7f6a5b4c3d2e1f</td></tr>
+  </tbody></table>
+</body></html>`;
+
+  const iocs = extractIOCs(extractReadableText(gistHtml), { plaintext: true });
+
+  assert.ok(!iocs.domains.includes('github.githubassets.com'));
+  // O host da URL não se repete em domains — a varredura de domínio simples
+  // roda depois de tirar as URLs, e é assim já antes desta mudança.
+  assert.deepEqual(iocs.domains, ['evil-c2.com']);
+  assert.deepEqual(iocs.urls, ['https://payload-host.net/stage2.bin']);
+  assert.equal(iocs.hashes.length, 1);
+});

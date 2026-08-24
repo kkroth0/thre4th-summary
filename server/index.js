@@ -2875,7 +2875,15 @@ async function fetchArtifactFile(url) {
         responseType: 'text',
         transformResponse: (d) => d,
     });
-    return String(resp.data || '').slice(0, ARTIFACT_MAX_BYTES);
+    const body = String(resp.data || '').slice(0, ARTIFACT_MAX_BYTES);
+    // Nem todo apêndice é arquivo texto: gist.github.com, uma página de release
+    // e o pastebin vêm como PÁGINA. Mandar o HTML cru pro extractIOCs publicava
+    // a moldura como indicador — github.githubassets.com e todo CDN que estiver
+    // num <script src>. O texto legível mantém as linhas do apêndice (td/li/pre)
+    // e descarta atributo e <script> de uma vez.
+    const isHtml = /^text\/html/i.test(resp.headers?.['content-type'] || '')
+        || /^\s*<(?:!doctype|html)\b/i.test(body);
+    return isHtml ? extractReadableText(body) : body;
 }
 
 // A GitHub folder link resolves to its text files; anything else is fetched as-is.
