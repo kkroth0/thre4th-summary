@@ -12,17 +12,17 @@
 // guarda as histórias em memória e as escreve de volta no próximo refresh do
 // feed, desfazendo o reagrupamento sem avisar.
 //
-// Ator e categoria são re-derivados do título, não copiados da história antiga:
-// um card mal agrupado espalharia os atores dele por todas as fontes, que é
-// justamente o que estamos desfazendo. O preço é que a fonte gravada não guarda
-// a descrição, então a atribuição sai do título só — o refresh seguinte do feed
-// reenriquece com o texto inteiro.
+// Ator e categoria são re-derivados do título antes da remescla: copiá-los da
+// história antiga espalharia os atores de um card mal agrupado por todas as
+// fontes dele, que é justamente o que estamos desfazendo. Depois da remescla o
+// que a história antiga sabia volta, mas só se ela couber inteira numa história
+// nova — vide o comentário no meio do arquivo.
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { mergeIntoStories } from './newsStories.js';
 import { buildActorIndex, matchActors } from './actorMatch.js';
-import { categorize } from './newsCategories.js';
+import { categorize, NEWS_CATEGORIES } from './newsCategories.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const args = process.argv.slice(2);
@@ -58,12 +58,43 @@ for (const story of stories) {
 }
 
 const rebuilt = mergeIntoStories([], [...byLink.values()], new Date());
+
+// A fonte gravada não guarda a descrição, então re-derivar pelo título perde
+// categoria e ator que vieram do texto do artigo. Devolver o que a história
+// antiga sabia só é seguro quando ela coube INTEIRA numa história nova: se foi
+// dividida — que é o defeito sendo consertado — o rótulo pode pertencer à outra
+// metade, e aí ele fica de fora e espera o próximo refresh do feed.
+const storyOfLink = new Map();
+for (const story of rebuilt) for (const source of story.sources) storyOfLink.set(source.link, story);
+
+for (const old of stories) {
+    const targets = new Set((old.sources || [])
+        .map((source) => source && storyOfLink.get(source.link))
+        .filter(Boolean));
+    if (targets.size !== 1) continue;
+
+    const [target] = targets;
+    for (const category of old.categories || []) {
+        if (!target.categories.includes(category)) target.categories.push(category);
+    }
+    for (const actor of old.actors || []) {
+        if (actor && actor.id && !target.actors.some((a) => a.id === actor.id)) target.actors.push(actor);
+    }
+}
+
+// A precedência é a mesma do merge: a principal é a primeira que casou.
+for (const story of rebuilt) {
+    story.categories = NEWS_CATEGORIES.filter((category) => story.categories.includes(category));
+    story.primaryCategory = story.categories[0] || null;
+}
+
 const multi = (list) => list.filter((story) => (story.sources || []).length > 1).length;
 const cross = (list) => list.filter((story) => new Set((story.sources || []).map((s) => s.source)).size > 1).length;
+const withCategory = (list) => list.filter((story) => (story.categories || []).length).length;
 
 console.log(`${file}`);
-console.log(`  antes:  ${stories.length} histórias | ${multi(stories)} multi-fonte | ${cross(stories)} entre veículos`);
-console.log(`  depois: ${rebuilt.length} histórias | ${multi(rebuilt)} multi-fonte | ${cross(rebuilt)} entre veículos`);
+console.log(`  antes:  ${stories.length} histórias | ${multi(stories)} multi-fonte | ${cross(stories)} entre veículos | ${withCategory(stories)} com categoria`);
+console.log(`  depois: ${rebuilt.length} histórias | ${multi(rebuilt)} multi-fonte | ${cross(rebuilt)} entre veículos | ${withCategory(rebuilt)} com categoria`);
 console.log(`  fontes: ${byLink.size}`);
 
 if (!write) {
