@@ -6,7 +6,6 @@ export interface NewsletterFilterItem {
   description: string;
   source: string;
   pubDate: string;
-  layer?: number;
   severity?: string;
   kev?: boolean;
   score?: number;
@@ -14,7 +13,6 @@ export interface NewsletterFilterItem {
 
 export interface NewsletterFilterOptions {
   search: string;
-  layer: string;
   severity: string;
   kevOnly: boolean;
   sortByRelevance: boolean;
@@ -57,9 +55,6 @@ export const filterNewsletterAdvisories = <T extends NewsletterFilterItem>(
     if (!matchesSearch) return false;
     if (options.severity !== "all" && item.severity !== options.severity) return false;
     if (options.kevOnly && !item.kev) return false;
-    if (options.layer === "l1" && item.layer !== 1) return false;
-    if (options.layer === "l2" && item.layer !== 2) return false;
-    if (options.layer === "l3" && (item.layer ?? 0) < 3) return false;
 
     return true;
   });
@@ -73,6 +68,7 @@ export const filterNewsletterAdvisories = <T extends NewsletterFilterItem>(
 // Same order as NEWS_CATEGORIES on the server: precedence, not importance.
 export const NEWS_CATEGORY_ORDER = [
   "Ransomware", "APTs", "Data Leaks", "OT/ICS", "Vulnerabilities", "Malware", "Microsoft",
+  "Finance/Banking", "Health/Pharma",
 ] as const;
 
 export interface StoryActor {

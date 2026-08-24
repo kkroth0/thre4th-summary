@@ -7,6 +7,7 @@ const item = (over = {}) => ({ title: '', description: '', threats: [], cves: []
 test('a ordem de precedência é a acordada', () => {
     assert.deepEqual(NEWS_CATEGORIES, [
         'Ransomware', 'APTs', 'Data Leaks', 'OT/ICS', 'Vulnerabilities', 'Malware', 'Microsoft',
+        'Finance/Banking', 'Health/Pharma',
     ]);
 });
 
@@ -133,4 +134,57 @@ test('item sem nenhum sinal fica sem categoria em vez de cair num balde errado',
 test('entrada malformada não quebra', () => {
     assert.deepEqual(categorize(null), { categories: [], primary: null });
     assert.deepEqual(categorize({}), { categories: [], primary: null });
+});
+
+// Notícia chega em PT, ES ou EN — os baldes de setor casam sinônimo em cada uma.
+test('Finance/Banking reconhece o vocabulário financeiro em PT, ES e EN', () => {
+    const titles = [
+        'Banking trojan targets customers of major banks',
+        'Troiano bancário ataca clientes de bancos brasileiros',
+        'Ataque atinge instituição financeira e o sistema Pix',
+        'Ransomware golpea al sector bancario mexicano',
+        'Nueva campaña contra instituciones financieras en Chile',
+        'Fintech breach exposes payment gateway credentials',
+        'Malware drena caixas eletrônicos de cooperativa de crédito',
+    ];
+    for (const title of titles) {
+        assert.ok(categorize(item({ title })).categories.includes('Finance/Banking'), title);
+    }
+});
+
+test('Health/Pharma reconhece o vocabulário de saúde em PT, ES e EN', () => {
+    const titles = [
+        'Ransomware hits hospital network, patient records exposed',
+        'Healthcare provider discloses HIPAA breach',
+        'Vazamento expõe prontuários de pacientes em rede de saúde',
+        'Ataque derruba sistema de saúde e farmácias no interior',
+        'Hackers atacan el sistema de salud y una clínica privada',
+        'Farmacéutica confirma robo de datos de pacientes',
+        'Flaw in medical devices lets attackers alter EHR data',
+    ];
+    for (const title of titles) {
+        assert.ok(categorize(item({ title })).categories.includes('Health/Pharma'), title);
+    }
+});
+
+// Setor é balde adicional: a categoria principal continua sendo a da ameaça.
+test('os baldes de setor não roubam a categoria principal', () => {
+    const result = categorize(item({ title: 'Ransomware hits a hospital', threats: ['Ransomware'] }));
+    assert.deepEqual(result.categories, ['Ransomware', 'Health/Pharma']);
+    assert.equal(result.primary, 'Ransomware');
+});
+
+// Termo genérico de manchete não carimba setor — mesmo critério de MICROSOFT/OT_ICS.
+test('vocabulário genérico não carimba os baldes de setor', () => {
+    const falsePositives = [
+        'The financial impact of a breach keeps growing',
+        'Credit card data found on a dark web forum',
+        'Taylor Swift ticket scam spreads via SMS',
+        'Report on the financial health of the security market',
+    ];
+    for (const title of falsePositives) {
+        const { categories } = categorize(item({ title }));
+        assert.ok(!categories.includes('Finance/Banking'), title);
+        assert.ok(!categories.includes('Health/Pharma'), title);
+    }
 });

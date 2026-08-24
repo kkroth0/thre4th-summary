@@ -11,13 +11,12 @@ test("formats today's full date in the selected language", () => {
 
 test("keeps matching advisories from different months", () => {
   const advisories = [
-    { title: "July item", description: "alpha", source: "CISA", pubDate: "2026-07-01", layer: 1, severity: "High" },
-    { title: "June item", description: "alpha", source: "Vendor", pubDate: "2026-06-01", layer: 2, severity: "Medium" },
+    { title: "July item", description: "alpha", source: "CISA", pubDate: "2026-07-01", severity: "High" },
+    { title: "June item", description: "alpha", source: "Vendor", pubDate: "2026-06-01", severity: "Medium" },
   ];
 
   const result = filterNewsletterAdvisories(advisories, {
     search: "alpha",
-    layer: "all",
     severity: "all",
     kevOnly: false,
     sortByRelevance: false,
@@ -96,6 +95,7 @@ test("categorias são ordenadas pela precedência, não pela ordem de inserção
 test("a ordem das categorias é a mesma do servidor", () => {
   assert.deepEqual(NEWS_CATEGORY_ORDER, [
     "Ransomware", "APTs", "Data Leaks", "OT/ICS", "Vulnerabilities", "Malware", "Microsoft",
+    "Finance/Banking", "Health/Pharma",
   ]);
 });
 

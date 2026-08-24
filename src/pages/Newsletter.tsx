@@ -44,7 +44,6 @@ interface Advisory {
   pubDate: string;
   description: string;
   source: string;
-  layer?: number;
   // CTI relevance enrichment (from the specialized collector)
   score?: number;
   severity?: string; // Critical | High | Medium | Low
@@ -177,7 +176,6 @@ const Newsletter = () => {
   const [searchNews, setSearchNews] = useState("");
   const [loadingNews, setLoadingNews] = useState(true);
   const [newsError, setNewsError] = useState<string | null>(null);
-  const [selectedLayer, setSelectedLayer] = useState<string>("all");
   const [selectedSeverity, setSelectedSeverity] = useState<string>("all");
   const [sortByRelevance, setSortByRelevance] = useState<boolean>(false);
   const [kevOnly, setKevOnly] = useState<boolean>(false);
@@ -218,7 +216,6 @@ const Newsletter = () => {
             pubDate: item.pubDate as string,
             description: item.description as string,
             source: item.source as string,
-            layer: typeof item.layer === "number" ? item.layer : undefined,
             score: typeof item.score === "number" ? item.score : undefined,
             severity: typeof item.severity === "string" ? (item.severity as string) : undefined,
             categories: Array.isArray(item.categories) ? (item.categories as string[]) : undefined,
@@ -483,11 +480,10 @@ const Newsletter = () => {
   // Filter Advisories / News
   const filteredAdvisories = useMemo(() => annotateOrg(filterNewsletterAdvisories(advisories, {
     search: searchNews,
-    layer: selectedLayer,
     severity: selectedSeverity,
     kevOnly,
     sortByRelevance,
-  }), orgModel), [advisories, searchNews, selectedLayer, selectedSeverity, sortByRelevance, kevOnly, orgModel]);
+  }), orgModel), [advisories, searchNews, selectedSeverity, sortByRelevance, kevOnly, orgModel]);
 
   const [categoryFilter, setCategoryFilter] = useState("");
 
@@ -502,7 +498,6 @@ const Newsletter = () => {
 
   // How many filters are narrowing the feed — drives the badge on the Filters button.
   const activeFilterCount = [
-    selectedLayer !== "all",
     selectedSeverity !== "all",
     sortByRelevance,
     kevOnly,
@@ -510,7 +505,6 @@ const Newsletter = () => {
     orgOnly,
   ].filter(Boolean).length;
   const clearFilters = () => {
-    setSelectedLayer("all");
     setSelectedSeverity("all");
     setSortByRelevance(false);
     setKevOnly(false);
@@ -571,7 +565,7 @@ const Newsletter = () => {
               />
             </div>
             
-            {/* Feed Layers pill filter group & Actions */}
+            {/* Filters & Actions */}
             <div className="flex items-center gap-1.5 shrink-0">
               {/* All filters collapsed into one popover — keeps the bar clean */}
               <Popover>
@@ -591,32 +585,6 @@ const Newsletter = () => {
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent align="end" className="w-72 space-y-3">
-                  {/* Layer */}
-                  <div className="space-y-1.5">
-                    <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                      {language === "pt" ? "Camada" : "Layer"}
-                    </div>
-                    <div className="grid grid-cols-2 gap-1.5">
-                      {[
-                        { k: "all", label: language === "pt" ? "Todos" : "All", dot: "" },
-                        { k: "l1", label: "L1 · PSIRT", dot: "bg-red-500" },
-                        { k: "l2", label: "L2 · CTI", dot: "bg-amber-500" },
-                        { k: "l3", label: "L3 · Research/BR", dot: "bg-blue-500" },
-                      ].map((o) => (
-                        <Button
-                          key={o.k}
-                          variant={selectedLayer === o.k ? "default" : "outline"}
-                          size="sm"
-                          className="h-8 justify-start text-xs font-semibold gap-1.5"
-                          onClick={() => setSelectedLayer(o.k)}
-                        >
-                          {o.dot && <span className={`h-2 w-2 rounded-full ${o.dot}`} />}
-                          {o.label}
-                        </Button>
-                      ))}
-                    </div>
-                  </div>
-
                   {/* Severity */}
                   <div className="space-y-1.5">
                     <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
