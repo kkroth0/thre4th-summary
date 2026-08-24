@@ -188,3 +188,14 @@ test('vocabulário genérico não carimba os baldes de setor', () => {
         assert.ok(!categories.includes('Health/Pharma'), title);
     }
 });
+
+// Post de marketing que lista setores de passagem carimbava saúde e finanças.
+// Setor vem do título — quem foi atacado está na manchete, não no meio do texto.
+test('menção de setor no corpo não carimba o balde de setor', () => {
+    const { categories } = categorize(item({
+        title: 'Wazuh and AI for enhanced SOC workflows',
+        description: 'From healthcare and finance to manufacturing and education, organizations rely on AI.',
+    }));
+    assert.ok(!categories.includes('Health/Pharma'));
+    assert.ok(!categories.includes('Finance/Banking'));
+});

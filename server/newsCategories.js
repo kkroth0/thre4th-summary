@@ -41,7 +41,8 @@ const MALWARE_THREATS = new Set(['Trojan', 'Infostealer', 'Wiper', 'Backdoor', '
 export function categorize(item) {
     if (!item || typeof item !== 'object') return { categories: [], primary: null };
 
-    const text = `${item.title || ''} ${item.description || ''}`;
+    const title = `${item.title || ''}`;
+    const text = `${title} ${item.description || ''}`;
     const threats = Array.isArray(item.threats) ? item.threats : [];
     const cves = Array.isArray(item.cves) ? item.cves : [];
     const actors = Array.isArray(item.actors) ? item.actors : [];
@@ -55,8 +56,15 @@ export function categorize(item) {
         Vulnerabilities: cves.length > 0 || VULN_CLASS.test(text),
         Malware: threats.some((t) => MALWARE_THREATS.has(t)),
         Microsoft: MICROSOFT.test(text),
-        'Finance/Banking': FINANCE.test(text),
-        'Health/Pharma': HEALTH.test(text),
+        // Setor sai só do título: é quem *foi atacado*, e a manchete sempre diz.
+        // O corpo cita setor de passagem ("from healthcare and finance to
+        // manufacturing…") em qualquer post de marketing, e isso carimbava o
+        // balde errado. Menos recall, muito menos ruído.
+        // ponytail: título só. Se faltar notícia cujo alvo aparece só no corpo,
+        // o passo é um segundo regex, com os termos inequívocos (hospital,
+        // banco, prontuário, ATM), rodando também na descrição.
+        'Finance/Banking': FINANCE.test(title),
+        'Health/Pharma': HEALTH.test(title),
     };
 
     const categories = NEWS_CATEGORIES.filter((name) => hits[name]);
