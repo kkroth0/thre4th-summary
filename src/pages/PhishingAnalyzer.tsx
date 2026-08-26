@@ -21,6 +21,7 @@ import { defang, defangList } from "@/utils/defang";
 import { detectTyposquat } from "@/utils/typosquat";
 import { exportIOCsJSON, exportIOCsSTIX } from "@/utils/threatExport";
 import { BrandHunt } from "@/components/phishing/BrandHunt";
+import { PhishTickets } from "@/components/phishing/PhishTickets";
 
 interface ScoreSignal {
   label: string;
@@ -166,7 +167,7 @@ const PhishingAnalyzer = () => {
   // A página tem dois trabalhos: analisar um e-mail que chegou, e caçar domínio
   // de phishing antes de ele chegar. As abas de dentro pertencem ao e-mail
   // analisado, então a troca de trabalho mora aqui em cima.
-  const [mode, setMode] = useState<"eml" | "hunt">("eml");
+  const [mode, setMode] = useState<"eml" | "hunt" | "tickets">("eml");
   const [fileName, setFileName] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   // Live threat-intel enrichment (reuses the main scan engine).
@@ -578,9 +579,13 @@ const PhishingAnalyzer = () => {
                   ? (language === "pt"
                     ? "Remetente, autenticação, links e anexos de um .eml. O arquivo é lido no navegador e não sai da sua máquina."
                     : "Sender, authentication, links and attachments from a .eml file. It is read in the browser and never leaves your machine.")
-                  : (language === "pt"
-                    ? "Domínios recém-registrados que carregam as marcas do seu perfil, achados no que o urlscan já varreu. Nada é submetido a scan."
-                    : "Freshly registered domains carrying your profile's brands, found in what urlscan already scanned. Nothing is submitted for scanning.")}
+                  : mode === "hunt"
+                    ? (language === "pt"
+                      ? "Domínios recém-registrados que carregam as marcas do seu perfil, achados no que o urlscan já varreu. Nada é submetido a scan."
+                      : "Freshly registered domains carrying your profile's brands, found in what urlscan already scanned. Nothing is submitted for scanning.")
+                    : (language === "pt"
+                      ? "O que virou tarefa: evidência congelada, contatos de abuse e o pedido de derrubada pronto para enviar."
+                      : "What became work: frozen evidence, abuse contacts and the takedown request ready to send.")}
               </p>
             </div>
             {mode === "eml" && parsedData && (
@@ -600,6 +605,7 @@ const PhishingAnalyzer = () => {
             {([
               { key: "eml" as const, label: language === "pt" ? "Analisar e-mail" : "Analyze email" },
               { key: "hunt" as const, label: language === "pt" ? "Caça a domínios" : "Domain hunt" },
+              { key: "tickets" as const, label: language === "pt" ? "Fila" : "Queue" },
             ]).map((tab) => (
               <button
                 key={tab.key}
@@ -613,7 +619,9 @@ const PhishingAnalyzer = () => {
             ))}
           </div>
 
-          {mode === "hunt" ? (
+          {mode === "tickets" ? (
+            <PhishTickets />
+          ) : mode === "hunt" ? (
             <BrandHunt />
           ) : !parsedData ? (
             /* Dropzone and Sample Loader Card */

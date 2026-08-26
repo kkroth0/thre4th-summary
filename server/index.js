@@ -60,6 +60,11 @@ import { createStoryStore } from './newsStoryStore.js';
 import {
     PHISH_LIMITS, createPhishWatchStore, createUrlscanSearch, runDuePhishWatch, runProfileWatch,
 } from './phishingWatch.js';
+import {
+    OPEN_STATUS, applyStatus, attachEvidence, buildDailyDigest, createTicketStore, markDns,
+    noteRecurrence, selectAutoOpen, takedownRequest, ticketFromHit,
+} from './phishTickets.js';
+import { createRdap, takedownTargets } from './rdap.js';
 import { ORG_REGIONS, ORG_SECTORS, createProfileStore } from './orgProfiles.js';
 import { buildThreatModel } from './orgThreatModel.js';
 import { SCRAPE_SOURCES, collectScraped } from './scrapeFeeds.js';
@@ -137,6 +142,79 @@ const phishWatchStore = createPhishWatchStore({ filePath: PHISH_WATCH_PATH, read
 const urlscanSearch = () => (process.env.URLSCAN_API_KEY
     ? createUrlscanSearch({ apiKey: process.env.URLSCAN_API_KEY })
     : null);
+
+const PHISH_TICKETS_PATH = path.join(__dirname, '.phish-tickets.json');
+const phishTicketStore = createTicketStore({ filePath: PHISH_TICKETS_PATH, readFileSync: fs.readFileSync, writeJsonAtomic });
+const rdap = createRdap({});
+
+// A evidência é congelada na abertura porque domínio de phishing morre rápido e
+// o pedido de derrubada precisa da prova de quando estava no ar. RDAP é registro
+// de terceiro: se falhar, o ticket existe do mesmo jeito, sem os contatos.
+async function withEvidence(ticket, hit, at) {
+    try {
+        const [registration, hosting] = await Promise.all([
+            rdap.domain(ticket.apexDomain).catch(() => null),
+            hit.ip ? rdap.ip(hit.ip).catch(() => null) : Promise.resolve(null),
+        ]);
+        return attachEvidence(ticket, {
+            at, registration, hosting, ip: hit.ip, asn: hit.asn, country: hit.country,
+            targets: takedownTargets({ domain: ticket.apexDomain, hosting, registration }),
+        });
+    } catch (error) {
+        console.error('phish ticket evidence failed:', error.message || error);
+        return ticket;
+    }
+}
+
+/**
+ * Achado → fila. Score alto abre sozinho; confirmado na mão abre também.
+ *
+ * O mesmo domínio voltando não abre tarefa nova: se o ticket já foi encerrado,
+ * reabre com a data da volta, que é o que mostra golpista insistente.
+ */
+async function syncTicketsFromHits(ownerId, profileId, { manualHitId = null } = {}) {
+    const at = new Date().toISOString();
+    const opened = [];
+    const hits = phishWatchStore.list(ownerId, { profileId });
+    const semTicket = hits.filter((hit) => !phishTicketStore.byId(hit.id));
+    const autoOpen = new Set(selectAutoOpen(semTicket).map((hit) => hit.id));
+
+    for (const hit of hits) {
+        const manual = manualHitId && hit.id === manualHitId;
+        const existing = phishTicketStore.byId(hit.id);
+
+        if (existing) {
+            if (!OPEN_STATUS.includes(existing.status) && String(hit.lastSeen) > String(existing.updatedAt)) {
+                phishTicketStore.upsert(noteRecurrence(existing, { at }));
+            }
+            continue;
+        }
+        if (!manual && !autoOpen.has(hit.id)) continue;
+
+        const ticket = ticketFromHit(hit, { at, openedBy: manual ? 'manual' : 'auto', by: manual ? 'analista' : 'sistema' });
+        phishTicketStore.upsert(await withEvidence(ticket, hit, at));
+        opened.push(ticket.id);
+    }
+    return opened;
+}
+
+// Domínio que parou de resolver é candidato a derrubado — o sistema anota o
+// fato e nunca fecha o ticket sozinho: pode ter sido o takedown, pode ter sido
+// o golpista trocando de casa.
+async function recheckTicketDns(now = new Date()) {
+    const cutoff = now.getTime() - PHISH_LIMITS.runIntervalMs;
+    for (const ticket of phishTicketStore.all()) {
+        if (!OPEN_STATUS.includes(ticket.status)) continue;
+        const checkedAt = ticket.dns?.checkedAt ? new Date(ticket.dns.checkedAt).getTime() : 0;
+        if (checkedAt > cutoff) continue;
+        let alive = false;
+        try {
+            const addresses = await dns.promises.resolve4(ticket.apexDomain);
+            alive = addresses.length > 0;
+        } catch { alive = false; }
+        phishTicketStore.upsert(markDns(ticket, alive, { at: new Date().toISOString() }));
+    }
+}
 
 const ORG_PROFILES_PATH = path.join(__dirname, '.org-profiles.json');
 const orgProfileStore = createProfileStore({ filePath: ORG_PROFILES_PATH, readFileSync: fs.readFileSync, writeJsonAtomic });
@@ -2516,8 +2594,13 @@ async function runPhishWatchTick() {
         store: phishWatchStore,
         profiles: orgProfileStore.allProfiles(),
         now: new Date(),
-        runOne: (profile) => runProfileWatch({ store: phishWatchStore, profile, search }),
+        runOne: async (profile) => {
+            await runProfileWatch({ store: phishWatchStore, profile, search });
+            await syncTicketsFromHits(profile.ownerId, profile.id);
+        },
     });
+    // Depois da rodada: o que já está na fila ainda está no ar?
+    await recheckTicketDns();
 }
 
 async function runExposureSchedulerTick() {
@@ -4167,6 +4250,7 @@ app.delete('/api/org/profiles/:id', requireAuth, (req, res) => {
     // Os achados de phishing são do perfil: sem isto viram lixo órfão que
     // ninguém vê e que a retenção nunca alcança.
     phishWatchStore.dropProfile(String(req.params.id));
+    phishTicketStore.dropProfile(String(req.params.id));
     res.json({ ok: true });
 });
 
@@ -4385,10 +4469,48 @@ app.get('/api/phishing-watch/hits', requirePremium, (req, res) => {
     });
 });
 
-app.post('/api/phishing-watch/hits/:id/status', requirePremium, (req, res) => {
+app.post('/api/phishing-watch/hits/:id/status', requirePremium, async (req, res) => {
     try {
-        const hit = phishWatchStore.setStatus(req.user.sub, String(req.params.id), String((req.body || {}).status || ''));
-        res.json({ hit });
+        const status = String((req.body || {}).status || '');
+        const hit = phishWatchStore.setStatus(req.user.sub, String(req.params.id), status);
+        // Confirmar é dizer "isso é phishing mesmo": vira tarefa na hora, sem
+        // depender do score que o robô deu.
+        if (status === 'confirmed') await syncTicketsFromHits(req.user.sub, hit.profileId, { manualHitId: hit.id });
+        res.json({ hit, ticket: phishTicketStore.byId(hit.id) });
+    } catch (error) { phishError(res, error); }
+});
+
+app.get('/api/phishing-watch/tickets', requirePremium, (req, res) => {
+    const profileId = req.query.profileId ? String(req.query.profileId) : undefined;
+    const status = req.query.status ? String(req.query.status) : undefined;
+    const tickets = phishTicketStore.list(req.user.sub, { profileId, status });
+    res.json({ tickets, digest: buildDailyDigest(phishTicketStore.list(req.user.sub, { profileId })) });
+});
+
+app.get('/api/phishing-watch/tickets/:id', requirePremium, (req, res) => {
+    try {
+        const ticket = phishTicketStore.get(req.user.sub, String(req.params.id));
+        const profile = orgProfileStore.get(req.user.sub, ticket.profileId);
+        const brand = ticket.term || (profile.brands || [])[0] || '';
+        res.json({
+            ticket,
+            takedown: {
+                pt: takedownRequest(ticket, { language: 'pt', brand }),
+                en: takedownRequest(ticket, { language: 'en', brand }),
+            },
+        });
+    } catch (error) { phishError(res, error); }
+});
+
+app.post('/api/phishing-watch/tickets/:id/status', requirePremium, (req, res) => {
+    try {
+        const body = req.body || {};
+        const ticket = phishTicketStore.setStatus(req.user.sub, String(req.params.id), String(body.status || ''), {
+            at: new Date().toISOString(),
+            by: req.user.login || 'analista',
+            note: String(body.note || '').slice(0, 500),
+        });
+        res.json({ ticket });
     } catch (error) { phishError(res, error); }
 });
 
@@ -4399,8 +4521,10 @@ app.post('/api/phishing-watch/run', requirePremium, scanLimiter, async (req, res
         // getProfile confere o dono: perfil de outro usuário responde 404.
         const profile = orgProfileStore.get(req.user.sub, String((req.body || {}).profileId || ''));
         const outcome = await runProfileWatch({ store: phishWatchStore, profile, search });
+        const opened = await syncTicketsFromHits(req.user.sub, profile.id);
         res.json({
             ...outcome,
+            openedTickets: opened.length,
             hits: phishWatchStore.list(req.user.sub, { profileId: profile.id, status: 'new' }),
             run: phishWatchStore.runOf(profile.id),
         });

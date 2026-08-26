@@ -1,0 +1,105 @@
+{
+ "objectClassName": "domain",
+ "ldhName": "VOTORANTIMCIMENTOS.COM",
+ "status": [
+  "client delete prohibited",
+  "client transfer prohibited",
+  "client update prohibited"
+ ],
+ "events": [
+  {
+   "eventAction": "registration",
+   "eventDate": "2014-09-11T21:02:02Z"
+  },
+  {
+   "eventAction": "expiration",
+   "eventDate": "2026-09-11T21:02:02Z"
+  },
+  {
+   "eventAction": "last changed",
+   "eventDate": "2025-11-30T11:13:31Z"
+  },
+  {
+   "eventAction": "last update of RDAP database",
+   "eventDate": "2026-08-26T02:32:02Z"
+  }
+ ],
+ "nameservers": [
+  {
+   "ldhName": "NS1-01.AZURE-DNS.COM"
+  },
+  {
+   "ldhName": "NS2-01.AZURE-DNS.NET"
+  },
+  {
+   "ldhName": "NS3-01.AZURE-DNS.ORG"
+  },
+  {
+   "ldhName": "NS4-01.AZURE-DNS.INFO"
+  }
+ ],
+ "entities": [
+  {
+   "roles": [
+    "registrar"
+   ],
+   "handle": "269",
+   "vcardArray": [
+    "vcard",
+    [
+     [
+      "version",
+      {},
+      "text",
+      "4.0"
+     ],
+     [
+      "fn",
+      {},
+      "text",
+      "Key-Systems GmbH"
+     ]
+    ]
+   ],
+   "entities": [
+    {
+     "roles": [
+      "abuse"
+     ],
+     "vcardArray": [
+      "vcard",
+      [
+       [
+        "version",
+        {},
+        "text",
+        "4.0"
+       ],
+       [
+        "fn",
+        {},
+        "text",
+        ""
+       ],
+       [
+        "tel",
+        {
+         "type": "voice"
+        },
+        "uri",
+        "tel:+49.68949396850"
+       ],
+       [
+        "email",
+        {},
+        "text",
+        "abuse@key-systems.net"
+       ]
+      ]
+     ],
+     "entities": []
+    }
+   ]
+  }
+ ]
+}

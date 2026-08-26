@@ -1,0 +1,188 @@
+{
+ "objectClassName": "domain",
+ "ldhName": "temapstore.com.br",
+ "status": [
+  "active"
+ ],
+ "events": [
+  {
+   "eventAction": "registration",
+   "eventDate": "2025-11-17T18:51:07Z"
+  },
+  {
+   "eventAction": "last changed",
+   "eventDate": "2025-11-19T22:51:20Z"
+  },
+  {
+   "eventAction": "expiration",
+   "eventDate": "2026-11-17T18:51:07Z"
+  }
+ ],
+ "nameservers": [
+  {
+   "ldhName": "nspro86.hostgator.com.br"
+  },
+  {
+   "ldhName": "nspro87.hostgator.com.br"
+  }
+ ],
+ "entities": [
+  {
+   "roles": [
+    "registrant"
+   ],
+   "handle": "24126673000150",
+   "vcardArray": [
+    "vcard",
+    [
+     [
+      "version",
+      {},
+      "text",
+      "4.0"
+     ],
+     [
+      "kind",
+      {},
+      "text",
+      "org"
+     ],
+     [
+      "fn",
+      {},
+      "text",
+      "LUCIANO JUNIOR DA SILVA COMERCIO EM GERAL"
+     ],
+     [
+      "adr",
+      {},
+      "text",
+      [
+       "",
+       "",
+       "",
+       "",
+       "",
+       "",
+       "BR"
+      ]
+     ]
+    ]
+   ],
+   "entities": [
+    {
+     "roles": [
+      "administrative"
+     ],
+     "handle": "LUJSI358",
+     "vcardArray": [
+      "vcard",
+      [
+       [
+        "version",
+        {},
+        "text",
+        "4.0"
+       ],
+       [
+        "kind",
+        {},
+        "text",
+        "individual"
+       ],
+       [
+        "fn",
+        {},
+        "text",
+        "LUCIANO JUNIOR DA SILVA"
+       ],
+       [
+        "email",
+        {},
+        "text",
+        "luciano@grupotemtudo.com"
+       ],
+       [
+        "lang",
+        {},
+        "language-tag",
+        ""
+       ],
+       [
+        "adr",
+        {},
+        "text",
+        [
+         "",
+         "",
+         "",
+         "",
+         "",
+         "",
+         "BR"
+        ]
+       ]
+      ]
+     ],
+     "entities": []
+    }
+   ]
+  },
+  {
+   "roles": [
+    "technical"
+   ],
+   "handle": "MAGON417",
+   "vcardArray": [
+    "vcard",
+    [
+     [
+      "version",
+      {},
+      "text",
+      "4.0"
+     ],
+     [
+      "kind",
+      {},
+      "text",
+      "individual"
+     ],
+     [
+      "fn",
+      {},
+      "text",
+      "Marco Gonçalves"
+     ],
+     [
+      "email",
+      {},
+      "text",
+      "otaviocacau@gmail.com"
+     ],
+     [
+      "lang",
+      {},
+      "language-tag",
+      "pt"
+     ],
+     [
+      "adr",
+      {},
+      "text",
+      [
+       "",
+       "",
+       "",
+       "",
+       "",
+       "",
+       "BR"
+      ]
+     ]
+    ]
+   ],
+   "entities": []
+  }
+ ]
+}

@@ -2024,6 +2024,64 @@ export const setPhishHitStatus = (id: string, status: PhishHitStatus): Promise<{
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status }),
     });
 
+export type TicketStatus = 'open' | 'analysis' | 'takedown' | 'down' | 'closed';
+
+export interface TicketEvent { at: string; kind: string; by: string; note: string; }
+
+export interface TakedownTarget { kind: 'hosting' | 'registrar' | 'channel'; email?: string; url?: string; label?: string; name?: string; }
+
+export interface PhishTicket {
+    id: string;
+    profileId: string;
+    apexDomain: string;
+    domain: string;
+    url: string;
+    term: string | null;
+    title: string;
+    score: number;
+    reasons: string[];
+    scanUrl: string;
+    screenshot: string;
+    firstSeen: string;
+    status: TicketStatus;
+    openedAt: string;
+    openedBy: 'auto' | 'manual';
+    updatedAt: string;
+    reopenedAt?: string;
+    evidence: {
+        ip: string | null; asn: string | null; country: string | null; capturedAt: string;
+        registration: { registrar?: string | null; registeredAt?: string | null; nameservers?: string[]; abuse?: string[] } | null;
+        hosting: { network?: string | null; holder?: string | null; abuse?: string[] } | null;
+    } | null;
+    targets: TakedownTarget[];
+    dns: { checkedAt: string | null; aliveAt: string | null; deadAt: string | null };
+    events: TicketEvent[];
+}
+
+export interface TicketDigest {
+    date: string;
+    opened: PhishTicket[];
+    reopened: PhishTicket[];
+    dropped: PhishTicket[];
+    aging: PhishTicket[];
+    byStatus: Record<string, number>;
+    openCount: number;
+}
+
+export const fetchPhishTickets = (profileId: string, status?: string): Promise<{ tickets: PhishTicket[]; digest: TicketDigest }> => {
+    const params = new URLSearchParams({ profileId });
+    if (status) params.set('status', status);
+    return orgJson(`/api/phishing-watch/tickets?${params}`);
+};
+
+export const fetchPhishTicket = (id: string): Promise<{ ticket: PhishTicket; takedown: { pt: string; en: string } }> =>
+    orgJson(`/api/phishing-watch/tickets/${encodeURIComponent(id)}`);
+
+export const setPhishTicketStatus = (id: string, status: TicketStatus, note = ''): Promise<{ ticket: PhishTicket }> =>
+    orgJson(`/api/phishing-watch/tickets/${encodeURIComponent(id)}/status`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status, note }),
+    });
+
 export const runPhishWatch = (profileId: string): Promise<{ found: number; scanned: number; hits: PhishHit[]; run: PhishRun }> =>
     orgJson('/api/phishing-watch/run', {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ profileId }),
