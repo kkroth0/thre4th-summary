@@ -577,15 +577,15 @@ const PhishingAnalyzer = () => {
               <p className="mt-2 leading-relaxed text-muted-foreground">
                 {mode === "eml"
                   ? (language === "pt"
-                    ? "Remetente, autenticação, links e anexos de um .eml. O arquivo é lido no navegador e não sai da sua máquina."
-                    : "Sender, authentication, links and attachments from a .eml file. It is read in the browser and never leaves your machine.")
+                    ? "O e-mail suspeito, aberto por dentro: remetente, autenticação, links e anexos. O .eml é lido aqui no navegador e nunca sai da sua máquina."
+                    : "The suspicious email, opened up: sender, authentication, links and attachments. The .eml is read here in the browser and never leaves your machine.")
                   : mode === "hunt"
                     ? (language === "pt"
-                      ? "Domínios recém-registrados que carregam as marcas do seu perfil, achados no que o urlscan já varreu. Nada é submetido a scan."
-                      : "Freshly registered domains carrying your profile's brands, found in what urlscan already scanned. Nothing is submitted for scanning.")
+                      ? "Todo phishing começa com um domínio novo. A caça acha no dia em que ele nasce, cruzando as marcas do seu perfil com tudo que o urlscan já varreu — e nenhuma URL sua vira scan público."
+                      : "Every phishing campaign starts with a new domain. The hunt finds it the day it is born, crossing your profile's brands with everything urlscan has already scanned — and no URL of yours ever becomes a public scan.")
                     : (language === "pt"
-                      ? "O que virou tarefa: evidência congelada, contatos de abuse e o pedido de derrubada pronto para enviar."
-                      : "What became work: frozen evidence, abuse contacts and the takedown request ready to send.")}
+                      ? "Do achado até a derrubada: evidência congelada antes de o domínio sumir, contato de abuse descoberto sozinho, e o pedido pronto para enviar."
+                      : "From find to takedown: evidence frozen before the domain disappears, abuse contacts discovered on their own, and the request ready to send.")}
               </p>
             </div>
             {mode === "eml" && parsedData && (
@@ -605,7 +605,7 @@ const PhishingAnalyzer = () => {
             {([
               { key: "eml" as const, label: language === "pt" ? "Analisar e-mail" : "Analyze email" },
               { key: "hunt" as const, label: language === "pt" ? "Caça a domínios" : "Domain hunt" },
-              { key: "tickets" as const, label: language === "pt" ? "Fila" : "Queue" },
+              { key: "tickets" as const, label: language === "pt" ? "Tickets" : "Tickets" },
             ]).map((tab) => (
               <button
                 key={tab.key}
