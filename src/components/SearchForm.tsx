@@ -3,7 +3,10 @@ import { ArrowRight, Search, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useToast } from "@/hooks/use-toast";
-import { extractIocsFromText, MAX_ANALYZER_TARGETS } from "@/utils/iocExtract";
+import { extractIocsFromText } from "@/utils/iocExtract";
+
+// Teto só de exibição: 200 chips estouram o layout, mas todos são analisados.
+const CHIP_PREVIEW = 12;
 
 interface SearchFormProps {
   query: string;
@@ -57,8 +60,8 @@ export const SearchForm = ({
             toast({
               title: language === "pt" ? "IOCs Extraídos" : "IOCs Extracted",
               description: language === "pt"
-                ? `Extraídos ${allIocs.length} alvos únicos de ${file.name}. A análise roda ${MAX_ANALYZER_TARGETS} por vez.`
-                : `Extracted ${allIocs.length} unique targets from ${file.name}. Analysis runs ${MAX_ANALYZER_TARGETS} at a time.`,
+                ? `Extraídos ${allIocs.length} alvos únicos de ${file.name}.`
+                : `Extracted ${allIocs.length} unique targets from ${file.name}.`,
             });
           } else {
             toast({
@@ -114,7 +117,7 @@ export const SearchForm = ({
               {extractedIocs.length > 1 && (
                 <div className="flex items-center gap-1.5 rounded-full border border-primary/25 bg-primary/10 px-2.5 py-1 font-mono text-[10px] font-bold tracking-wide text-primary">
                   <div className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
-                  {Math.min(extractedIocs.length, MAX_ANALYZER_TARGETS)}/{extractedIocs.length > MAX_ANALYZER_TARGETS ? extractedIocs.length : MAX_ANALYZER_TARGETS} IOCs
+                  {extractedIocs.length} IOCs
                 </div>
               )}
 
@@ -155,14 +158,14 @@ export const SearchForm = ({
           {/* Parsed IOCs preview — only when many targets */}
           {extractedIocs.length > 1 && (
             <div className="flex flex-wrap items-center justify-center gap-1.5 max-w-2xl mx-auto animate-fade-in">
-              {extractedIocs.slice(0, MAX_ANALYZER_TARGETS).map(ioc => (
+              {extractedIocs.slice(0, CHIP_PREVIEW).map(ioc => (
                 <span key={ioc} className="inline-flex items-center rounded-md border border-primary/15 bg-primary/5 px-2 py-0.5 font-mono text-[10px] tracking-wide text-muted-foreground">
                   {ioc}
                 </span>
               ))}
-              {extractedIocs.length > MAX_ANALYZER_TARGETS && (
+              {extractedIocs.length > CHIP_PREVIEW && (
                 <span className="text-[10px] text-slate-500 font-medium">
-                  +{extractedIocs.length - MAX_ANALYZER_TARGETS} {language === "pt" ? "fora deste lote" : "outside this batch"}
+                  +{extractedIocs.length - CHIP_PREVIEW} {language === "pt" ? "também no lote" : "also in this batch"}
                 </span>
               )}
             </div>

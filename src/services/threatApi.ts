@@ -2086,3 +2086,18 @@ export const runPhishWatch = (profileId: string): Promise<{ found: number; scann
     orgJson('/api/phishing-watch/run', {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ profileId }),
     });
+
+/** Cota restante por base (faixa abaixo da barra de busca). Exige sessão. */
+export interface VendorQuota {
+    name: string;
+    /** ok = tem número · pending = só depois da primeira busca · none = base sem cota */
+    state: 'ok' | 'unconfigured' | 'none' | 'pending' | 'error';
+    used?: number | null;
+    limit?: number | null;
+    remaining?: number | null;
+    period?: 'day' | 'month';
+    resetAt?: string | null;
+    error?: string;
+}
+
+export const fetchVendorQuotas = (): Promise<{ quotas: VendorQuota[] }> => orgJson('/api/vendors/quotas');

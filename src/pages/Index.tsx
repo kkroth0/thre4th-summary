@@ -17,6 +17,7 @@ import { VendorContent } from "@/components/VendorContent";
 import { VendorFilter } from "@/components/VendorFilter";
 import { Footer } from "@/components/Footer";
 import { useAuth } from "@/contexts/AuthContext";
+import { VendorQuotas } from "@/components/VendorQuotas";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { Header, useNavCatalog } from "@/components/Header";
 import { BrandMark } from "@/components/BrandMark";
@@ -35,7 +36,7 @@ import { fetchThreatDataProgressive, saveScan } from "@/services/threatApi";
 import { ScanHistory } from "@/components/ScanHistory";
 import { useToast } from "@/hooks/use-toast";
 import { SearchForm } from "@/components/SearchForm";
-import { extractIocsFromText, isSupportedAnalyzerQuery, MAX_ANALYZER_TARGETS } from "@/utils/iocExtract";
+import { extractIocsFromText, isSupportedAnalyzerQuery } from "@/utils/iocExtract";
 import { normalizeVendorSelection, SUPPORTED_VENDORS } from "@/config/vendorCatalog";
 import { ThreatIntelligenceResult } from "@/types/threat-intelligence";
 import { cn } from "@/lib/utils";
@@ -187,6 +188,7 @@ const HeroOpsPanel = ({ language }: { language: string }) => {
 
 const Index = () => {
   const { auth, loading: authLoading } = useAuth();
+  const [searchRun, setSearchRun] = useState(0);
   const [savingScans, setSavingScans] = useState(false);
   const [query, setQuery] = useState("");
   const [selectedVendors, setSelectedVendors] = useState<string[]>(ALL_VENDORS);
@@ -361,17 +363,6 @@ const Index = () => {
       queries = uniqueTokens;
     }
 
-    if (queries.length > MAX_ANALYZER_TARGETS) {
-      const totalTargets = queries.length;
-      queries = queries.slice(0, MAX_ANALYZER_TARGETS);
-      toast({
-        title: language === "pt" ? "Lote limitado" : "Batch limited",
-        description: language === "pt"
-          ? `Detectei ${totalTargets} IOCs. Vou analisar os ${MAX_ANALYZER_TARGETS} primeiros neste lote.`
-          : `Detected ${totalTargets} IOCs. Analyzing the first ${MAX_ANALYZER_TARGETS} in this batch.`,
-      });
-    }
-
     // Validation
     const invalidQueries = queries.filter(q => !isSupportedAnalyzerQuery(q));
 
@@ -450,6 +441,7 @@ const Index = () => {
       });
     } finally {
       setIsAnalyzing(false);
+      setSearchRun((n) => n + 1);   // revalida a faixa de créditos com o que o lote consumiu
     }
   };
 
@@ -1382,8 +1374,8 @@ const Index = () => {
                 </h2>
                 <p className="text-xs text-muted-foreground">
                   {language === "pt"
-                    ? `IP, domínio, URL ou hash · 21 fontes · até ${MAX_ANALYZER_TARGETS} por vez`
-                    : `IP, domain, URL or hash · 21 sources · up to ${MAX_ANALYZER_TARGETS} at once`}
+                    ? "IP, domínio, URL ou hash · 21 fontes"
+                    : "IP, domain, URL or hash · 21 sources"}
                 </p>
               </div>
               <SearchForm
@@ -1394,6 +1386,7 @@ const Index = () => {
                 selectedVendors={selectedVendors}
                 onVendorsChange={setSelectedVendors}
               />
+              <VendorQuotas refreshKey={searchRun} />
               <div className="mt-3 flex flex-wrap items-center gap-2 px-1">
                 <span className="text-xs text-muted-foreground">{language === "pt" ? "exemplos:" : "examples:"}</span>
                 {["14.103.115.208", "51.210.208.8", "1.1.1.1"].map((ip) => (

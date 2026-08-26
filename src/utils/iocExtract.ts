@@ -1,7 +1,8 @@
-// IOC extraction from free text (search input, uploaded logs). Batch cap and
-// helpers shared by the analyzer page and the search form.
-
-export const MAX_ANALYZER_TARGETS = 6;
+// IOC extraction from free text (search input, uploaded logs). Helpers shared
+// by the analyzer page and the search form.
+//
+// Não há cap de lote: o teto do que dá pra rodar de uma vez é a cota das bases,
+// mostrada na faixa de créditos abaixo da barra de busca.
 
 const IOC_FILE_EXTENSIONS = ["exe", "dll", "sys", "zip", "rar", "tar", "gz", "png", "jpg", "jpeg", "gif", "css", "js", "html", "htm", "txt", "log", "json", "xml", "pdf", "doc", "docx", "xls", "xlsx"];
 const IPV4_GLOBAL_REGEX = /\b(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\b/g;

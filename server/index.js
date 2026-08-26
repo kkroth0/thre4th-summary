@@ -65,6 +65,7 @@ import {
     noteRecurrence, selectAutoOpen, takedownRequest, ticketFromHit,
 } from './phishTickets.js';
 import { createRdap, takedownTargets } from './rdap.js';
+import { createQuotaReader } from './vendorQuotas.js';
 import { ORG_REGIONS, ORG_SECTORS, createProfileStore } from './orgProfiles.js';
 import { buildThreatModel } from './orgThreatModel.js';
 import { SCRAPE_SOURCES, collectScraped } from './scrapeFeeds.js';
@@ -274,6 +275,12 @@ const skipRateLimit = (req) => {
     const disableRateLimit = process.env.DISABLE_RATE_LIMIT === 'true';
     if (disableRateLimit) return true;
 
+    // Usuário logado não é limitado: um lote de busca dispara ~20 consultas por
+    // IOC e o teto real dele passa a ser a cota das bases, mostrada na faixa de
+    // créditos. Anônimo continua limitado — as rotas de busca são públicas e
+    // queimam a chave do servidor.
+    if (verifySession(getCookie(req, 'ts_session'))) return true;
+
     // Always skip DNSBL checks (a single page issues many concurrent lookups).
     // Match on req.path ONLY — it never contains the query string, so appending
     // "?x=/dnsbl" to another endpoint can no longer bypass the limiter. The path
@@ -360,9 +367,13 @@ const sanitizeError = (error) => {
 
 
 // Helper to extract quota info
-const sendResponseWithQuota = (res, axiosResponse) => {
+const sendResponseWithQuota = (res, axiosResponse, vendor) => {
     const headers = axiosResponse.headers;
     const quota = {};
+
+    // A cota do AbuseIPDB só existe no header de uma consulta real: aproveitar a
+    // que já está passando evita gastar um crédito pra perguntar quantos sobraram.
+    if (vendor) quotaReader.record(vendor, headers);
 
     if (headers['x-ratelimit-remaining']) quota.remaining = headers['x-ratelimit-remaining'];
     if (headers['x-ratelimit-limit']) quota.limit = headers['x-ratelimit-limit'];
@@ -437,6 +448,8 @@ const withKeyRotation = async (envName, makeRequest) => {
     throw lastError; // all keys exhausted
 };
 
+const quotaReader = createQuotaReader({ getKeys });
+
 // --- API Endpoints ---
 
 // VirusTotal
@@ -483,7 +496,7 @@ app.post('/api/abuseipdb', scanLimiter, async (req, res) => {
                 headers: { "Key": key, "Accept": "application/json" }
             })
         );
-        sendResponseWithQuota(res, response);
+        sendResponseWithQuota(res, response, 'AbuseIPDB');
     } catch (error) {
         if (error.noKey) return res.status(500).json({ error: "API Key missing" });
         const { status, message } = sanitizeError(error);
@@ -507,7 +520,7 @@ app.post('/api/abuseipdb/check-block', scanLimiter, async (req, res) => {
                 headers: { "Key": key, "Accept": "application/json" }
             })
         );
-        sendResponseWithQuota(res, response);
+        sendResponseWithQuota(res, response, 'AbuseIPDB');
     } catch (error) {
         if (error.noKey) return res.status(500).json({ error: "API Key missing" });
         const { status, message } = sanitizeError(error);
@@ -2145,6 +2158,7 @@ app.get('/api/admin/integrations', requireAdmin, (req, res) => {
         { name: 'Censys', env: 'CENSYS_API_KEY', configured: set('CENSYS_API_KEY'), required: true },
         { name: 'Pulsedive', env: 'PULSEDIVE_API_KEY', configured: set('PULSEDIVE_API_KEY'), required: false, note: 'usa o tier free sem chave' },
         { name: 'PhishTank', env: 'PHISHTANK_API_KEY', configured: set('PHISHTANK_API_KEY'), required: false },
+        { name: 'urlscan.io', env: 'URLSCAN_API_KEY', configured: set('URLSCAN_API_KEY'), required: false, note: 'sem chave a vigilância de marca de phishing não roda' },
     ];
     // Provedores que não precisam de chave nenhuma.
     const keyless = ['PhishStats', 'OpenPhish', 'Team Cymru', 'CIRCL hashlookup', 'IP Geolocation', 'Ransomware.live', 'DNSBL'];
@@ -4532,6 +4546,18 @@ app.post('/api/phishing-watch/run', requirePremium, scanLimiter, async (req, res
 });
 
 // Vendors API Status
+// Cota restante por base, pra faixa abaixo da barra de busca. Exige login: o
+// número expõe o consumo das chaves do servidor, e é o mesmo público que ganha
+// isenção do rate limiter — quem não tem limite é quem enxerga o teto real.
+app.get('/api/vendors/quotas', requireAuth, async (req, res) => {
+    try {
+        res.json({ quotas: await quotaReader.read() });
+    } catch (error) {
+        console.error('vendor quotas failed:', error.message);
+        res.status(502).json({ error: 'falha ao ler cotas' });
+    }
+});
+
 app.get('/api/vendors/status', (req, res) => {
     // Use getKeys() so providers configured only via numbered fallback vars
     // (e.g. VIRUSTOTAL2_API_KEY) still report as available.
