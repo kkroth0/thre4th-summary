@@ -30,7 +30,7 @@ import {
 } from "@/services/threatApi";
 
 const EMPTY: Partial<OrgProfile> = {
-  name: "", sectors: [], regions: [], assets: [], ot: { present: false, vendors: [], protocols: [] }, actors: [],
+  name: "", sectors: [], regions: [], assets: [], brands: [], ot: { present: false, vendors: [], protocols: [] }, actors: [],
 };
 
 // Alternar um rótulo dentro de uma lista fechada — setores e regiões só aceitam
@@ -49,6 +49,7 @@ export function OrgProfileEditor() {
   const [draftSnapshot, setDraftSnapshot] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [assetInput, setAssetInput] = useState("");
+  const [brandInput, setBrandInput] = useState("");
   // Ação represada esperando confirmação de descarte (trocar de perfil ou
   // cancelar com edição suja). Nulo = nenhum diálogo aberto.
   const [pendingDiscard, setPendingDiscard] = useState<(() => void) | null>(null);
@@ -123,6 +124,15 @@ export function OrgProfileEditor() {
     if (!draft || !product) return;
     setDraft({ ...draft, assets: [...(draft.assets ?? []), { vendor: "", product }] });
     setAssetInput("");
+  };
+
+  // Quem normaliza de verdade é o servidor (tira esquema, www e TLD, recusa
+  // termo curto). Aqui só evita o duplicado óbvio antes de mandar.
+  const addBrand = () => {
+    const brand = brandInput.trim().toLowerCase();
+    if (!draft || !brand || (draft.brands ?? []).includes(brand)) return;
+    setDraft({ ...draft, brands: [...(draft.brands ?? []), brand] });
+    setBrandInput("");
   };
 
   return (
@@ -221,6 +231,39 @@ export function OrgProfileEditor() {
                       type="button"
                       onClick={() => setDraft({ ...draft, assets: (draft.assets ?? []).filter((_, i) => i !== index) })}
                       aria-label={pt ? "Remover ativo" : "Remove asset"}
+                    >
+                      ×
+                    </button>
+                  </Badge>
+                ))}
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="org-brand">{pt ? "Marcas e domínios" : "Brands and domains"}</Label>
+              <p className="text-xs text-muted-foreground">
+                {pt
+                  ? "O que a vigilância de phishing procura em domínios recém-criados. Pode digitar o domínio inteiro — vale o nome, não o final."
+                  : "What the phishing watch looks for in freshly registered domains. Paste the whole domain if you like — only the name counts."}
+              </p>
+              <div className="flex gap-2">
+                <Input
+                  id="org-brand"
+                  value={brandInput}
+                  placeholder="bancoxpto, bancoxpto.com.br…"
+                  onChange={(event) => setBrandInput(event.target.value)}
+                  onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); addBrand(); } }}
+                />
+                <Button variant="outline" size="sm" onClick={addBrand} aria-label={pt ? "Adicionar marca" : "Add brand"}><Plus /></Button>
+              </div>
+              <div className="flex flex-wrap gap-1.5 pt-1">
+                {(draft.brands ?? []).map((brand) => (
+                  <Badge key={brand} variant="secondary" className="gap-1 text-[11px]">
+                    {brand}
+                    <button
+                      type="button"
+                      onClick={() => setDraft({ ...draft, brands: (draft.brands ?? []).filter((item) => item !== brand) })}
+                      aria-label={pt ? "Remover marca" : "Remove brand"}
                     >
                       ×
                     </button>

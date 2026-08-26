@@ -8,6 +8,10 @@
 import crypto from 'crypto';
 import { SECTOR_RULES } from './ctiIntel.js';
 import { TARGET_REGION_LABELS } from './actorProfile.js';
+// As marcas do perfil são os termos que a vigilância de phishing procura no
+// urlscan, então quem valida é o módulo que faz a busca — validar em dois
+// lugares é ter duas regras discordando daqui a três meses.
+import { normalizeBrands } from './phishingWatch.js';
 
 export const ORG_LIMITS = {
     profilesPerUser: 10,
@@ -111,6 +115,7 @@ export function normalizeProfileInput(input = {}, existing = null, now = new Dat
         sectors: fromVocabulary(pick('sectors'), ORG_SECTORS, 'setor'),
         regions: fromVocabulary(pick('regions'), ORG_REGIONS, 'região'),
         assets: normalizeAssets(pick('assets')),
+        brands: normalizeBrands(pick('brands')),
         ot: normalizeOt(pick('ot')),
         actors,
         createdAt: existing?.createdAt || now,
@@ -137,6 +142,9 @@ export function createProfileStore({ filePath, readFileSync, writeJsonAtomic }) 
         list(ownerId) {
             return mine(ownerId).sort((a, b) => String(a.name).localeCompare(String(b.name)));
         },
+        // Sem dono: é o agendador da vigilância de phishing varrendo todo mundo.
+        // Nenhuma rota devolve isto — quem responde ao navegador usa list/get.
+        allProfiles() { return [...profiles]; },
         // 404 e não 403: confirmar que o id existe já entregaria informação do
         // perfil de outro dono.
         get(ownerId, id) {

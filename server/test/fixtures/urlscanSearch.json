@@ -1,0 +1,75 @@
+{
+  "results": [
+    {
+      "task": {
+        "time": "2026-08-25T23:42:59.555Z",
+        "source": "certstream-suspicious",
+        "uuid": "01a03b4e-29e1-73ce-bd5e-9199c71fb95d",
+        "url": "https://www.adobe-bancochile-bing.com.ph/",
+        "domain": "www.adobe-bancochile-bing.com.ph",
+        "apexDomain": "adobe-bancochile-bing.com.ph",
+        "visibility": "public"
+      },
+      "page": {
+        "domain": "www.adobe-bancochile-bing.com.ph",
+        "apexDomain": "adobe-bancochile-bing.com.ph",
+        "apexDomainAgeDays": 0,
+        "title": "Redirecting...",
+        "status": "200",
+        "country": "US",
+        "asnname": "AKAMAI-LINODE-AP - Akamai Connected Cloud, SG",
+        "ip": "45.79.222.138"
+      },
+      "result": "https://urlscan.io/api/v1/result/01a03b4e-29e1-73ce-bd5e-9199c71fb95d/",
+      "screenshot": "https://urlscan.io/screenshots/01a03b4e-29e1-73ce-bd5e-9199c71fb95d.png"
+    },
+    {
+      "task": {
+        "time": "2026-08-25T23:42:35.607Z",
+        "source": "certstream-suspicious",
+        "uuid": "01a03b4d-ca58-72ac-9ef4-030502ae8787",
+        "url": "https://www.desacelerenacaixa.com.br/",
+        "domain": "www.desacelerenacaixa.com.br",
+        "apexDomain": "desacelerenacaixa.com.br",
+        "visibility": "public"
+      },
+      "page": {
+        "domain": "www.desacelerenacaixa.com.br",
+        "apexDomain": "desacelerenacaixa.com.br",
+        "apexDomainAgeDays": 0,
+        "title": "Loja online de DNC",
+        "status": "200",
+        "country": "BR",
+        "asnname": "AS273584 - LINKED STORE BRASIL CRIACAO E DESENVOL DE SOFTWARE, BR",
+        "ip": "185.133.35.22"
+      },
+      "result": "https://urlscan.io/api/v1/result/01a03b4d-ca58-72ac-9ef4-030502ae8787/",
+      "screenshot": "https://urlscan.io/screenshots/01a03b4d-ca58-72ac-9ef4-030502ae8787.png"
+    },
+    {
+      "task": {
+        "time": "2026-08-25T23:41:17.995Z",
+        "source": "certstream-suspicious",
+        "uuid": "01a03b4c-95e4-76ba-9472-e6a84678582a",
+        "url": "https://desacelerenacaixa.com.br/",
+        "domain": "desacelerenacaixa.com.br",
+        "apexDomain": "desacelerenacaixa.com.br",
+        "visibility": "public"
+      },
+      "page": {
+        "domain": "desacelerenacaixa.com.br",
+        "apexDomain": "desacelerenacaixa.com.br",
+        "apexDomainAgeDays": 0,
+        "title": "Loja online de DNC",
+        "status": "200",
+        "country": "BR",
+        "asnname": "AS273584 - LINKED STORE BRASIL CRIACAO E DESENVOL DE SOFTWARE, BR",
+        "ip": "185.133.35.21"
+      },
+      "result": "https://urlscan.io/api/v1/result/01a03b4c-95e4-76ba-9472-e6a84678582a/",
+      "screenshot": "https://urlscan.io/screenshots/01a03b4c-95e4-76ba-9472-e6a84678582a.png"
+    }
+  ],
+  "total": 10000,
+  "has_more": true
+}

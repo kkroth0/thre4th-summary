@@ -97,7 +97,7 @@ jobs:
           ssh -p "${VPS_PORT}" "${target}" "VPS_APP_DIR='${VPS_APP_DIR}' bash -s" <<'REMOTE'
           set -euo pipefail
           APP="${VPS_APP_DIR}"
-          EX=(--exclude=node_modules/ --exclude=node_modules.bak/ --exclude=.env --exclude='.env.*' --exclude=.users.json --exclude=.posts.json --exclude=.daily-summaries.json --exclude=.scans.json --exclude=.allowlist.json --exclude=.feed-jobs.json --exclude=.feed-sources.json --exclude='*.bak.*')
+          EX=(--exclude=node_modules/ --exclude=node_modules.bak/ --exclude=.env --exclude='.env.*' --exclude=.users.json --exclude=.posts.json --exclude=.daily-summaries.json --exclude=.scans.json --exclude=.allowlist.json --exclude=.feed-jobs.json --exclude=.feed-sources.json --exclude=.news-stories.json --exclude=.phish-watch.json --exclude='*.bak.*')
           rm -rf "$APP/server.prev" "$APP/dist.prev"
           if [ -d "$APP/server" ]; then rsync -a --delete "${EX[@]}" "$APP/server/" "$APP/server.prev/"; fi
           if [ -d "$APP/dist" ]; then rsync -a --delete "$APP/dist/" "$APP/dist.prev/"; fi
@@ -130,6 +130,7 @@ jobs:
             --exclude='.feed-jobs.json' \
             --exclude='.feed-sources.json' \
             --exclude='.news-stories.json' \
+            --exclude='.phish-watch.json' \
             --exclude='*.bak.*' \
             ./server/ "${target}:${VPS_APP_DIR}/server/"
 
@@ -149,7 +150,7 @@ jobs:
             "VPS_APP_DIR='${VPS_APP_DIR}' VPS_SERVICE='${VPS_SERVICE}' bash -s" <<'REMOTE'
           set -uo pipefail
           APP="${VPS_APP_DIR}"; SVC="${VPS_SERVICE}"
-          EX=(--exclude=node_modules/ --exclude=node_modules.bak/ --exclude=.env --exclude='.env.*' --exclude=.users.json --exclude=.posts.json --exclude=.daily-summaries.json --exclude=.scans.json --exclude=.allowlist.json --exclude=.feed-jobs.json --exclude=.feed-sources.json --exclude='*.bak.*')
+          EX=(--exclude=node_modules/ --exclude=node_modules.bak/ --exclude=.env --exclude='.env.*' --exclude=.users.json --exclude=.posts.json --exclude=.daily-summaries.json --exclude=.scans.json --exclude=.allowlist.json --exclude=.feed-jobs.json --exclude=.feed-sources.json --exclude=.news-stories.json --exclude=.phish-watch.json --exclude='*.bak.*')
 
           rollback() {
             echo "::error::deploy failed — rolling back to previous release"

@@ -1925,6 +1925,9 @@ export interface OrgProfile {
     sectors: string[];
     regions: string[];
     assets: OrgAsset[];
+    // Marcas e domínios da organização. São os termos que a vigilância de
+    // phishing procura no urlscan; perfil sem marca não é vigiado.
+    brands: string[];
     ot: { present: boolean; vendors: string[]; protocols: string[] };
     actors: string[];
     createdAt: string;
@@ -1970,3 +1973,58 @@ export const fetchOrgThreatModel = (id: string): Promise<OrgThreatModel> =>
 
 export const fetchOrgAssetSuggestions = async (): Promise<OrgAssetSuggestion[]> =>
     (await orgJson<{ suggestions: OrgAssetSuggestion[] }>('/api/org/asset-suggestions')).suggestions;
+
+// ─── Vigilância de marca (urlscan) ─────────────────────────────────────────
+export type PhishHitStatus = 'new' | 'confirmed' | 'dismissed';
+
+export interface PhishHit {
+    id: string;
+    profileId: string;
+    apexDomain: string;
+    domain: string;
+    url: string;
+    term: string | null;
+    apexAgeDays: number | null;
+    title: string;
+    country: string;
+    asn: string;
+    ip: string;
+    source: string;
+    scanUrl: string;
+    screenshot: string;
+    firstSeen: string;
+    lastSeen: string;
+    score: number;
+    reasons: string[];
+    status: PhishHitStatus;
+}
+
+export interface PhishRun {
+    lastRunAt?: string;
+    lastStatus?: 'success' | 'error';
+    lastError?: string | null;
+    lastFound?: number;
+}
+
+export interface PhishHitsResponse {
+    configured: boolean;
+    hits: PhishHit[];
+    run: PhishRun | null;
+    intervalMs: number;
+}
+
+export const fetchPhishHits = (profileId: string, status?: PhishHitStatus): Promise<PhishHitsResponse> => {
+    const params = new URLSearchParams({ profileId });
+    if (status) params.set('status', status);
+    return orgJson(`/api/phishing-watch/hits?${params}`);
+};
+
+export const setPhishHitStatus = (id: string, status: PhishHitStatus): Promise<{ hit: PhishHit }> =>
+    orgJson(`/api/phishing-watch/hits/${encodeURIComponent(id)}/status`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status }),
+    });
+
+export const runPhishWatch = (profileId: string): Promise<{ found: number; scanned: number; hits: PhishHit[]; run: PhishRun }> =>
+    orgJson('/api/phishing-watch/run', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ profileId }),
+    });

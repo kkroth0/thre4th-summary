@@ -20,6 +20,7 @@ import type { ThreatIntelligenceResult } from "@/types/threat-intelligence";
 import { defang, defangList } from "@/utils/defang";
 import { detectTyposquat } from "@/utils/typosquat";
 import { exportIOCsJSON, exportIOCsSTIX } from "@/utils/threatExport";
+import { BrandHunt } from "@/components/phishing/BrandHunt";
 
 interface ScoreSignal {
   label: string;
@@ -162,6 +163,10 @@ const PhishingAnalyzer = () => {
   const { t, language } = useLanguage();
   const [dragActive, setDragActive] = useState(false);
   const [parsedData, setParsedData] = useState<ParsedEml | null>(null);
+  // A página tem dois trabalhos: analisar um e-mail que chegou, e caçar domínio
+  // de phishing antes de ele chegar. As abas de dentro pertencem ao e-mail
+  // analisado, então a troca de trabalho mora aqui em cima.
+  const [mode, setMode] = useState<"eml" | "hunt">("eml");
   const [fileName, setFileName] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   // Live threat-intel enrichment (reuses the main scan engine).
@@ -569,12 +574,16 @@ const PhishingAnalyzer = () => {
                 {language === "pt" ? "Análise de Phishing" : "Phishing Analysis"}
               </h1>
               <p className="mt-2 leading-relaxed text-muted-foreground">
-                {language === "pt"
-                  ? "Remetente, autenticação, links e anexos de um .eml. O arquivo é lido no navegador e não sai da sua máquina."
-                  : "Sender, authentication, links and attachments from a .eml file. It is read in the browser and never leaves your machine."}
+                {mode === "eml"
+                  ? (language === "pt"
+                    ? "Remetente, autenticação, links e anexos de um .eml. O arquivo é lido no navegador e não sai da sua máquina."
+                    : "Sender, authentication, links and attachments from a .eml file. It is read in the browser and never leaves your machine.")
+                  : (language === "pt"
+                    ? "Domínios recém-registrados que carregam as marcas do seu perfil, achados no que o urlscan já varreu. Nada é submetido a scan."
+                    : "Freshly registered domains carrying your profile's brands, found in what urlscan already scanned. Nothing is submitted for scanning.")}
               </p>
             </div>
-            {parsedData && (
+            {mode === "eml" && parsedData && (
               <Button
                 variant="outline"
                 size="sm"
@@ -587,7 +596,26 @@ const PhishingAnalyzer = () => {
             )}
           </div>
 
-          {!parsedData ? (
+          <div className="flex gap-2">
+            {([
+              { key: "eml" as const, label: language === "pt" ? "Analisar e-mail" : "Analyze email" },
+              { key: "hunt" as const, label: language === "pt" ? "Caça a domínios" : "Domain hunt" },
+            ]).map((tab) => (
+              <button
+                key={tab.key}
+                type="button"
+                onClick={() => setMode(tab.key)}
+                aria-pressed={mode === tab.key}
+                className={`rounded-full border px-4 py-1.5 text-xs font-semibold transition ${mode === tab.key ? "border-primary bg-primary/10 text-primary" : "text-muted-foreground hover:border-primary/40"}`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+
+          {mode === "hunt" ? (
+            <BrandHunt />
+          ) : !parsedData ? (
             /* Dropzone and Sample Loader Card */
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               <Card className="lg:col-span-2 border shadow-sm bg-muted/40  flex flex-col justify-center min-h-[380px]">

@@ -57,6 +57,9 @@ import { categorize } from './newsCategories.js';
 import { mergeIntoStories } from './newsStories.js';
 import { parseFeed } from './feedParse.js';
 import { createStoryStore } from './newsStoryStore.js';
+import {
+    PHISH_LIMITS, createPhishWatchStore, createUrlscanSearch, runDuePhishWatch, runProfileWatch,
+} from './phishingWatch.js';
 import { ORG_REGIONS, ORG_SECTORS, createProfileStore } from './orgProfiles.js';
 import { buildThreatModel } from './orgThreatModel.js';
 import { SCRAPE_SOURCES, collectScraped } from './scrapeFeeds.js';
@@ -127,6 +130,13 @@ const dailyEditionStore = createEditionStore({ filePath: DAILY_SUMMARIES_PATH, w
 
 const NEWS_STORIES_PATH = path.join(__dirname, '.news-stories.json');
 const newsStoryStore = createStoryStore({ filePath: NEWS_STORIES_PATH, readFileSync: fs.readFileSync, writeJsonAtomic });
+
+const PHISH_WATCH_PATH = path.join(__dirname, '.phish-watch.json');
+const phishWatchStore = createPhishWatchStore({ filePath: PHISH_WATCH_PATH, readFileSync: fs.readFileSync, writeJsonAtomic });
+// Só busca, nunca submete: submeter publicaria a URL do cliente no urlscan.
+const urlscanSearch = () => (process.env.URLSCAN_API_KEY
+    ? createUrlscanSearch({ apiKey: process.env.URLSCAN_API_KEY })
+    : null);
 
 const ORG_PROFILES_PATH = path.join(__dirname, '.org-profiles.json');
 const orgProfileStore = createProfileStore({ filePath: ORG_PROFILES_PATH, readFileSync: fs.readFileSync, writeJsonAtomic });
@@ -2498,6 +2508,18 @@ async function runExposureForAsset(asset) {
     });
 }
 
+async function runPhishWatchTick() {
+    if (process.env.NODE_ENV === 'test') return;
+    const search = urlscanSearch();
+    if (!search) return;
+    await runDuePhishWatch({
+        store: phishWatchStore,
+        profiles: orgProfileStore.allProfiles(),
+        now: new Date(),
+        runOne: (profile) => runProfileWatch({ store: phishWatchStore, profile, search }),
+    });
+}
+
 async function runExposureSchedulerTick() {
     if (process.env.EXPOSURE_WATCHLIST_DISABLE_DAILY === 'true' || process.env.NODE_ENV === 'test') return;
     await runDueExposureSnapshots({ store: exposureStore, now: new Date(), runOne: runExposureForAsset });
@@ -4142,6 +4164,9 @@ app.delete('/api/org/profiles/:id', requireAuth, (req, res) => {
     if (!orgProfileStore.remove(req.user.sub, String(req.params.id))) {
         return res.status(404).json({ error: 'perfil não encontrado' });
     }
+    // Os achados de phishing são do perfil: sem isto viram lixo órfão que
+    // ninguém vê e que a retenção nunca alcança.
+    phishWatchStore.dropProfile(String(req.params.id));
     res.json({ ok: true });
 });
 
@@ -4340,6 +4365,48 @@ app.get('/api/exposure-watchlist/changes', requirePremium, (req, res) => {
     res.json({ changes: exposureStore.listChanges(req.user.sub, req.query.limit) });
 });
 
+// ─── Vigilância de marca · domínio recém-criado com a marca no nome ────────
+// Os termos vigiados são as marcas do perfil da organização: um lugar só
+// para o contexto do cliente, em vez de mais um cadastro paralelo.
+const phishError = (res, error) => {
+    if (error.status && error.publicMessage) return res.status(error.status).json({ error: error.publicMessage });
+    const { status, message } = sanitizeError(error);
+    res.status(status).json({ error: message });
+};
+
+app.get('/api/phishing-watch/hits', requirePremium, (req, res) => {
+    const profileId = req.query.profileId ? String(req.query.profileId) : undefined;
+    const status = req.query.status ? String(req.query.status) : undefined;
+    res.json({
+        configured: Boolean(process.env.URLSCAN_API_KEY),
+        hits: phishWatchStore.list(req.user.sub, { profileId, status }),
+        run: profileId ? phishWatchStore.runOf(profileId) : null,
+        intervalMs: PHISH_LIMITS.runIntervalMs,
+    });
+});
+
+app.post('/api/phishing-watch/hits/:id/status', requirePremium, (req, res) => {
+    try {
+        const hit = phishWatchStore.setStatus(req.user.sub, String(req.params.id), String((req.body || {}).status || ''));
+        res.json({ hit });
+    } catch (error) { phishError(res, error); }
+});
+
+app.post('/api/phishing-watch/run', requirePremium, scanLimiter, async (req, res) => {
+    const search = urlscanSearch();
+    if (!search) return res.status(500).json({ error: 'API Key missing' });
+    try {
+        // getProfile confere o dono: perfil de outro usuário responde 404.
+        const profile = orgProfileStore.get(req.user.sub, String((req.body || {}).profileId || ''));
+        const outcome = await runProfileWatch({ store: phishWatchStore, profile, search });
+        res.json({
+            ...outcome,
+            hits: phishWatchStore.list(req.user.sub, { profileId: profile.id, status: 'new' }),
+            run: phishWatchStore.runOf(profile.id),
+        });
+    } catch (error) { phishError(res, error); }
+});
+
 // Vendors API Status
 app.get('/api/vendors/status', (req, res) => {
     // Use getKeys() so providers configured only via numbered fallback vars
@@ -4353,6 +4420,7 @@ app.get('/api/vendors/status', (req, res) => {
         "URLhaus": true,
         "Censys": hasKey('CENSYS_API_KEY'),
         "WHOIS": hasKey('WHOIS_API_KEY'),
+        "urlscan.io": hasKey('URLSCAN_API_KEY'),
         "IP Geolocation": true
     };
     res.json(status);
@@ -4395,6 +4463,10 @@ app.listen(PORT, () => {
     if (process.env.NODE_ENV !== 'test' && process.env.EXPOSURE_WATCHLIST_DISABLE_DAILY !== 'true') {
         setTimeout(runExposureSchedulerTick, 30_000);
         setInterval(runExposureSchedulerTick, 15 * 60 * 1000);
+        // Mesmo tick de 15 min do exposure; quem decide a hora é o
+        // selectDueProfiles, que só deixa passar perfil vencido há uma hora.
+        setTimeout(runPhishWatchTick, 60_000);
+        setInterval(runPhishWatchTick, 15 * 60 * 1000);
     }
     scheduleDailyEdition();
 });
