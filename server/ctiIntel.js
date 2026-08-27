@@ -299,6 +299,10 @@ const addUrl = (set, raw) => {
 // public IPv4 are always taken (unambiguous in either source).
 // ponytail: plaintext mode over a prose-y .md appendix can pull a few benign
 // domains; bounded by the 40KB fetch cap. Restrict by file type only if it bites.
+// O que anuncia versão logo antes do número: a palavra, a notação da CISA
+// (`vers:intdot/`) e os comparadores que aparecem em "prior to <4.3.4.1".
+const RE_VERSION_BEFORE = /(?:vers(?:ion|ao|ão)?|vers:intdot\/|firmware|release|build|update|patch|prior to|earlier than|before|through)\s*[<>=]*\s*$|(?:<|>|&lt;|&gt;|≤|≥)\s*$/i;
+
 export function extractIOCs(text, { plaintext = false } = {}) {
     const t = String(text || '');
     const hashes = new Set();
@@ -325,10 +329,17 @@ export function extractIOCs(text, { plaintext = false } = {}) {
     }
 
     const ips = new Set();
-    for (const m of refang(t).matchAll(/\b(?:\d{1,3}\.){3}\d{1,3}\b/g)) {
+    const refanged = refang(t);
+    for (const m of refanged.matchAll(/\b(?:\d{1,3}\.){3}\d{1,3}\b/g)) {
         const ip = m[0];
         if (ip.split('.').some((o) => Number(o) > 255)) continue;
         if (RE_PRIVATE_IP.test(ip)) continue;
+        // Versão de produto tem a mesma cara de um IPv4 — "version 3.3.1.0",
+        // "vers:intdot/&lt;4.3.4.1" — e advisory de OT é feito disso. Sem os dois
+        // guardas abaixo, um boletim da CISA sobre a Siemens saía com quatro
+        // "IOCs" que são número de firmware.
+        if (ip.split('.').some((o) => o.length > 1 && o.startsWith('0'))) continue;
+        if (RE_VERSION_BEFORE.test(refanged.slice(Math.max(0, m.index - 28), m.index))) continue;
         ips.add(ip);
     }
 

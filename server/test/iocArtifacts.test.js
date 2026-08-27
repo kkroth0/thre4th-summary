@@ -67,6 +67,31 @@ test('sidebar de verdade continua removida', () => {
   assert.match(text, /fake GitHub repositories/);
 });
 
+// Versão de produto tem a mesma cara de um IPv4, e advisory de OT é feito
+// disso. Sem os guardas, um item da CISA sobre a Siemens saía com número de
+// firmware na lista de IOC — e ia parar no índice como se fosse infraestrutura.
+test('número de versão não vira IP', () => {
+  const advisory = [
+    'the bundled log4net library is upgraded to version 3.3.1.0, and the',
+    'SIMATIC IoT2050 Advanced (6ES7647-0BA00-1YA2) vers:intdot/<4.3.4.1',
+    'Desigo DXR2 vers:intdot/<01.21.233.16-7862 (CVE-2026-1693)',
+    'upgrade to firmware 8.20.1.4 or later',
+  ].join(' ');
+
+  assert.deepEqual(extractIOCs(advisory).ips, []);
+});
+
+// O guarda não pode custar o IOC de verdade: o Unit 42 defanga, o Krebs não, e
+// os dois têm que passar.
+test('IP de verdade passa, defangado ou não', () => {
+  const artigo = 'The C2 server at 193.143.1[.]131 was contacted. '
+    + 'Investigators traced the intrusion to 211.27.196.111 in Australia.';
+  const ips = extractIOCs(artigo).ips;
+
+  assert.ok(ips.includes('193.143.1.131'), `defangado sumiu: ${ips}`);
+  assert.ok(ips.includes('211.27.196.111'), `texto puro sumiu: ${ips}`);
+});
+
 test('collectArtifactLinks finds the appendix repo despite the anchor text never saying IOC', () => {
   const links = collectArtifactLinks(ARTICLE_HTML, ARTICLE_URL);
 
