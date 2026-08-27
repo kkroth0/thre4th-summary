@@ -197,7 +197,19 @@ export const attribute = (
     // Fox Tempest, Qilin Ransomware, MedusaHVNC" veio assim de um pulse real —,
     // então separar por vírgula vem antes de procurar: sem isso o Fox Tempest,
     // que ESTÁ no catálogo, era descartado junto com os vizinhos.
-    const rotulos = unique(signals.adversaries.flatMap((a) => a.split(/[,;]/)));
+    // Pulse em lote não atribui. Um publicador da OTX despeja o mês inteiro num
+    // pulse só ("EbeeAug2026 Pt1") e enfia no `adversary` a lista de tudo que
+    // ele cobre — "XCSSET, M365 AiTM PhaaS, DOUBLECUP, Phantom Mantis, Fake
+    // Movie Download campaign, Phorpiex". São seis coisas sem relação entre si,
+    // e o indicador estar no pulse não o liga a nenhuma delas. Esses pulses vêm
+    // com malware_families e attack_ids VAZIOS, ao contrário do pulse de
+    // analista, que preenche os campos certos.
+    //
+    // Então a lista inteira vira contexto, e só o `adversary` de rótulo único
+    // chega a atribuir.
+    const emLote = signals.adversaries.filter((a) => /[,;]/.test(a));
+    const rotulos = signals.adversaries.filter((a) => !/[,;]/.test(a));
+    const rotulosEmLote = unique(emLote.flatMap((a) => a.split(/[,;]/)).map((x) => x.trim()));
     // "Qilin Ransomware" é a Qilin do catálogo, e "Lazarus Group" é o nome
     // canônico dela mesma — por isso o nome inteiro é tentado primeiro e o
     // corte do qualificador só entra como segunda chance.
@@ -210,7 +222,10 @@ export const attribute = (
     // O que sobra não é lixo: é nome de campanha ("M365 AiTM PhaaS") e de
     // malware ("WordlistLoader"), que o MISP e o MITRE não catalogam como ator
     // mas que valem por si. Ganha coluna própria em vez de virar descarte.
-    const otxLabels = rotulos.filter((label) => !canon(label)).map((label) => label.trim()).filter(Boolean);
+    const otxLabels = unique([
+        ...rotulos.filter((label) => !canon(label)),
+        ...rotulosEmLote,
+    ].map((label) => label.trim()));
     const viaFamily = new Map<string, string[]>();
     const sharedTools: string[] = [];
     // O catálogo cobre o ferramental que o MITRE amarra a grupo nomeado. Crimeware
@@ -261,7 +276,8 @@ export const attribute = (
     if (otxLabels.length) {
         // A base cita a contagem; os nomes inteiros ficam na coluna própria,
         // porque dezesseis rótulos aqui dentro ninguém lê.
-        basis.push(`${otxLabels.length} rótulo(s) da OTX sem ator no catálogo, na coluna Campanha/Malware`);
+        const doLote = emLote.length ? `, ${emLote.length} de pulse em lote` : "";
+        basis.push(`${otxLabels.length} rótulo(s) da OTX sem atribuição${doLote}, na coluna Campanha/Malware`);
     }
     if (!actors.length && unmapped.length) {
         basis.push(`família ${unmapped.join(", ")} não consta no catálogo de atores`);

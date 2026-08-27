@@ -99,8 +99,11 @@ const otxPulseDetails = (pulses: any[]): OtxPulseDetail[] =>
         malwareFamilies: (p.malware_families || [])
             .map((m: any) => (typeof m === "string" ? m : m?.display_name || m?.id || ""))
             .filter(Boolean),
+        // A OTX manda id, name e display_name ("T1566.001 - Spearphishing
+        // Attachment"). Guardar só o id põe "T1056.001" numa planilha de
+        // cliente, onde "T1056.001 - Keylogging" diz o que aconteceu.
         attackIds: (p.attack_ids || [])
-            .map((a: any) => (typeof a === "string" ? a : a?.id || ""))
+            .map((a: any) => (typeof a === "string" ? a : a?.display_name || a?.id || ""))
             .filter(Boolean),
         tags: Array.isArray(p.tags) ? p.tags.filter(Boolean) : [],
         tlp: p.TLP || p.tlp || "",

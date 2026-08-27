@@ -219,7 +219,7 @@ test("rótulo da OTX que não é ator não vira grupo", () => {
                 "Pulse Details": [
                     pulse({ adversary: "APT29" }),
                     pulse({ id: "b", adversary: "M365 AiTM PhaaS" }),
-                    pulse({ id: "c", adversary: "FTP Banners: Dead Drop Res" }),
+                    pulse({ id: "c", adversary: "FTP Banners" }),
                 ],
             })],
         })],
@@ -228,15 +228,15 @@ test("rótulo da OTX que não é ator não vira grupo", () => {
     const row = report.indicators[0];
 
     assert.equal(row.actors, "APT29");
-    assert.equal(row.otxLabels, "M365 AiTM PhaaS, FTP Banners: Dead Drop Res",
+    assert.equal(row.otxLabels, "M365 AiTM PhaaS, FTP Banners",
         "campanha e malware da OTX ficam à vista, em coluna própria");
-    assert.match(row.basis, /2 rótulo\(s\) da OTX sem ator no catálogo/);
+    assert.match(row.basis, /2 rótulo\(s\) da OTX sem atribuição/);
 });
 
-// Um pulse real trouxe "Mirage Kitten, Fox Tempest, Qilin Ransomware,
-// MedusaHVNC" num campo só. Sem separar, o ator de verdade morre junto com os
-// vizinhos que o catálogo não conhece.
-test("adversary com vários rótulos numa string é separado antes de procurar", () => {
+// Pulse em lote ("EbeeAug2026 Pt1") despeja o mês num pulse só e enfia no
+// adversary a lista de tudo que ele cobre. Seis coisas sem relação: o indicador
+// estar lá dentro não o liga a nenhuma. Nem o ator de verdade da lista atribui.
+test("pulse em lote não atribui, nem o ator que está na lista", () => {
     const report = buildEnrichment(
         [result({
             vendorData: [vendor("AlienVault OTX", {
@@ -247,8 +247,9 @@ test("adversary com vários rótulos numa string é separado antes de procurar",
     );
     const row = report.indicators[0];
 
-    assert.equal(row.actors, "APT29");
-    assert.equal(row.otxLabels, "Mirage Kitten, MedusaHVNC");
+    assert.equal(row.actors, "", "APT29 veio de pulse em lote, não atribui");
+    assert.equal(row.otxLabels, "Mirage Kitten, APT29, MedusaHVNC", "a lista inteira vira contexto");
+    assert.match(row.basis, /1 de pulse em lote/);
 });
 
 // Dezesseis rótulos na base da atribuição ninguém lê — mas nenhum se perde:
@@ -260,7 +261,7 @@ test("lista longa de rótulo da OTX fica inteira na coluna, e a base só conta",
         index, new Date("2026-08-27T00:00:00Z"), {}, names,
     );
     assert.equal(report.indicators[0].otxLabels, "L1, L2, L3, L4, L5, L6");
-    assert.match(report.indicators[0].basis, /6 rótulo\(s\) da OTX sem ator no catálogo/);
+    assert.match(report.indicators[0].basis, /6 rótulo\(s\) da OTX sem atribuição, 1 de pulse em lote/);
 });
 
 // A OTX escreve "Qilin Ransomware"; o catálogo, que puxa do ransomware.live,
@@ -271,7 +272,10 @@ test("qualificador colado no nome não impede achar o ator", () => {
     const report = buildEnrichment(
         [result({
             vendorData: [vendor("AlienVault OTX", {
-                "Pulse Details": [pulse({ adversary: "Qilin Ransomware, Lazarus Group" })],
+                "Pulse Details": [
+                    pulse({ adversary: "Qilin Ransomware" }),
+                    pulse({ id: "b", adversary: "Lazarus Group" }),
+                ],
             })],
         })],
         index, new Date("2026-08-27T00:00:00Z"), {}, comSufixo,
