@@ -43,6 +43,13 @@ jobs:
       CENSYS_API_KEY: ${{ secrets.CENSYS_API_KEY }}
       # Geração de hunt/KQL e resumo de notícias (OpenRouter).
       OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      # Sem chave, a OTX limita por IP e para de responder acima de ~5 chamadas
+      # simultâneas — medido em 2026-08-27: um lote de 12 perdia 3. Com chave,
+      # 12/12. O otxGate também sobe o teto de 4 para 8 quando ela existe.
+      ALIENVAULT_API_KEY: ${{ secrets.ALIENVAULT_API_KEY }}
+      # abuse.ch exige Auth-Key em ThreatFox, URLhaus e MalwareBazaar: sem ela
+      # as três devolvem 401 e o enriquecimento perde a família do malware.
+      ABUSE_CH_API_KEY: ${{ secrets.ABUSE_CH_API_KEY }}
     steps:
       - name: Prepare SSH
         shell: bash
@@ -71,7 +78,7 @@ jobs:
 
           # Build the KEY=VALUE payload from only the secrets that are set.
           payload="$(mktemp)"
-          for k in SHODAN_API_KEY RANSOMWARE_LIVE_API_KEY SECRETS_ENCRYPTION_KEY CENSYS_API_KEY OPENROUTER_API_KEY; do
+          for k in SHODAN_API_KEY RANSOMWARE_LIVE_API_KEY SECRETS_ENCRYPTION_KEY CENSYS_API_KEY OPENROUTER_API_KEY ALIENVAULT_API_KEY ABUSE_CH_API_KEY; do
             v="${!k-}"
             [ -n "$v" ] && printf '%s=%s\n' "$k" "$v" >> "$payload"
           done
