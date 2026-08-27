@@ -29,6 +29,7 @@ const INDICATOR_COLUMNS = [
     { header: "Detecções VirusTotal", key: "vtDetections", width: 20 },
     { header: "Score AbuseIPDB", key: "abuseScore", width: 17 },
     { header: "Pulses OTX", key: "otxPulses", width: 12 },
+    { header: "Técnicas Observadas (tags)", key: "techniques", width: 52 },
     { header: "Tags", key: "tags", width: 40 },
     { header: "País", key: "country", width: 10 },
     { header: "ASN", key: "asn", width: 14 },

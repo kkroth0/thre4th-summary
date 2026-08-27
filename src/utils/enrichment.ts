@@ -48,6 +48,7 @@ export interface EnrichedIndicator {
     abuseScore: string;
     otxPulses: number;
     tags: string;
+    techniques: string;
     country: string;
     asn: string;
     firstSeen: string;
@@ -100,6 +101,28 @@ const VERDICT_LABEL: Record<string, string> = {
 
 // Qualificador que a OTX cola no nome e o catálogo não tem: "Qilin Ransomware"
 // contra a "Qilin" do ransomware.live.
+// Tag de pulse mistura quatro coisas. Medido nos pulses reais de 2026-08-27:
+// técnica ("device code phishing", "captive portal compromise", "authentication
+// abuse"), nome de ator ("unc6293", "cozy bear"), nome de malware ("vidar",
+// "chocoshell") e lixo estrutural do publicador ("filehashsha256",
+// "pajaxsuccessfml", "methodindex") — esse último não ajuda ninguém e sai fora.
+
+// Campo do formato do IOC, cabeçalho de planilha do publicador e afins.
+const NOISE_TAG = /^(?:filehash\w*|md5|sha1|sha256|hostname|computername|username|methodindex|datetime|pajax\w*|ip|ipv4|ipv6|domains?|urls?|all-domains|monthly|weekly|daily|blocklist|yara|list|feed|osint)$/i;
+
+// O que descreve COMO o ataque acontece. Lista curta e extensível: saiu do que
+// as tags reais trouxeram, mais os vizinhos óbvios do mesmo eixo.
+const TECHNIQUE_TAG = new RegExp([
+    'phishing', 'smishing', 'vishing', 'phaas', 'aitm', 'mitm', 'man-in-the-middle',
+    'captive portal', 'watering hole', 'drive-by', 'supply chain', 'typosquat',
+    'credential', 'password', 'token', 'session', 'cookie', 'oauth', 'device code',
+    'device linking', 'authentication abuse', 'mfa', '2fa', 'brute', 'spray',
+    'injection', 'exfiltrat', 'persistence', 'privilege', 'escalation', 'lateral',
+    'sideload', 'dll hijack', 'hijack', 'spoof', 'obfuscat', 'evasion', 'bypass',
+    'keylog', 'screen capture', 'tunnel', 'living off the land', 'lolbin',
+    'ransom', 'wiper', 'drainer', 'scam', 'fraud', 'abuse',
+].join('|'), 'i');
+
 const QUALIFIER_SUFFIX = /\s+(ransomware|group|gang|team|crew|botnet|malware)$/i;
 
 const unique = (values: string[]): string[] =>
@@ -136,6 +159,7 @@ interface Signals {
     campaigns: string[];
     attackIds: string[];
     tags: string[];
+    techniqueTags: string[];
 }
 
 const collectSignals = (result: ThreatIntelligenceResult): Signals => {
@@ -148,6 +172,13 @@ const collectSignals = (result: ThreatIntelligenceResult): Signals => {
     const urlhaus = vendorOf(result, "URLhaus");
     const pulses = pulseDetails(otx);
     const withAdversary = pulses.filter((p) => clean(p.adversary));
+    const todasAsTags = unique([
+        ...asList(threatfox?.["All Tags"]),
+        ...asList(virustotal?.["All Tags"]),
+        ...pulses.flatMap((p) => p.tags || []),
+        ...String(bazaar?.["Tags"] || "").split(",").map((t) => t.trim()),
+        ...asList(urlhaus?.["Tags"]),
+    ]).filter((t) => !NOISE_TAG.test(t));
 
     return {
         adversaries: unique(withAdversary.map((p) => p.adversary)),
@@ -162,13 +193,10 @@ const collectSignals = (result: ThreatIntelligenceResult): Signals => {
         ]),
         campaigns: unique(pulses.filter(isCampaignPulse).map((p) => p.name)),
         attackIds: unique(pulses.flatMap((p) => p.attackIds || [])),
-        tags: unique([
-            ...asList(threatfox?.["All Tags"]),
-            ...asList(virustotal?.["All Tags"]),
-            ...pulses.flatMap((p) => p.tags || []),
-            ...String(bazaar?.["Tags"] || "").split(",").map((t) => t.trim()),
-            ...asList(urlhaus?.["Tags"]),
-        ]),
+        tags: todasAsTags.filter((t) => !TECHNIQUE_TAG.test(t)),
+        // As que dizem COMO — é a granularidade que o ATT&CK não tem: ele
+        // registra "Phishing", a tag registra "device code phishing".
+        techniqueTags: todasAsTags.filter((t) => TECHNIQUE_TAG.test(t)),
     };
 };
 
@@ -420,6 +448,7 @@ const enrichOne = (
         abuseScore: clean(abuse?.["Abuse Confidence Score"]),
         otxPulses: pulses.length,
         tags: signals.tags.join(", "),
+        techniques: signals.techniqueTags.join(", "),
         country: clean(virustotal?.["Country"]) || clean(abuse?.["Country"]) || clean(otx?.["Country"]),
         asn: clean(virustotal?.["ASN"]) || clean(abuse?.["ASN"]) || clean(otx?.["ASN"]),
         firstSeen: clean(threatfox?.["First Seen"])

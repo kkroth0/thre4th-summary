@@ -15,7 +15,7 @@ const report: EnrichmentReport = {
             actors: "Wizard Spider", campaign: "Emotet epoch4 infra", families: "Emotet",
             attackIds: "T1566", confidence: "Alta", otxLabels: "M365 AiTM PhaaS, WordlistLoader",
             basis: "OTX nomeia Wizard Spider em 2 pulses · catálogo: Emotet é usada por Wizard Spider",
-            vtDetections: "42/94", abuseScore: "100%", otxPulses: 2, tags: "banker",
+            vtDetections: "42/94", abuseScore: "100%", otxPulses: 2, tags: "banker", techniques: "device code phishing, oauth phishing",
             country: "RU", asn: "AS49505", firstSeen: "2026-08-01", lastSeen: "2026-08-25",
             sources: "VirusTotal, AbuseIPDB, AlienVault OTX, ThreatFox", unanswered: "",
             mentions: "Mandiant: Going with the Flow(s) (UNC6293, APT29)",
@@ -24,7 +24,7 @@ const report: EnrichmentReport = {
             indicator: "1.1.1.1", type: "IP", verdict: "Limpo", actors: "", campaign: "",
             families: "", attackIds: "", confidence: "Sem atribuição", otxLabels: "",
             basis: "nenhuma base nomeou grupo ou família", vtDetections: "0/94",
-            abuseScore: "0%", otxPulses: 0, tags: "", country: "AU", asn: "AS13335",
+            abuseScore: "0%", otxPulses: 0, tags: "", techniques: "", country: "AU", asn: "AS13335",
             firstSeen: "", lastSeen: "", sources: "VirusTotal", unanswered: "ThreatFox", mentions: "",
         },
     ],
@@ -76,12 +76,14 @@ test("a planilha sai nas três abas do padrão EY", () => {
     // Zero pulse é ausência de dado, não a contagem zero.
     assert.equal(indicadores.getRow(3).getCell(13).value, "");
 
-    assert.equal(indicadores.getRow(1).getCell(20).value, "Bases sem Resposta");
-    assert.equal(indicadores.getRow(3).getCell(20).value, "ThreatFox", "base caída fica à vista na planilha");
+    assert.equal(indicadores.getRow(1).getCell(14).value, "Técnicas Observadas (tags)");
+    assert.match(String(indicadores.getRow(2).getCell(14).value), /device code phishing/);
+    assert.equal(indicadores.getRow(1).getCell(21).value, "Bases sem Resposta");
+    assert.equal(indicadores.getRow(3).getCell(21).value, "ThreatFox", "base caída fica à vista na planilha");
     assert.equal(indicadores.getRow(2).getCell(7).value, "M365 AiTM PhaaS, WordlistLoader",
         "nome de campanha e de malware da OTX ficam à vista, não viram descarte");
-    assert.equal(indicadores.getRow(1).getCell(21).value, "Mencionado Em");
-    assert.match(String(indicadores.getRow(2).getCell(21).value), /Mandiant.*UNC6293/);
+    assert.equal(indicadores.getRow(1).getCell(22).value, "Mencionado Em");
+    assert.match(String(indicadores.getRow(2).getCell(22).value), /Mandiant.*UNC6293/);
 
     assert.equal(enrichmentExcelFilename(report), "Enriquecimento-de-Indicadores-2026-08-27.xlsx");
 });

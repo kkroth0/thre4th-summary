@@ -305,6 +305,30 @@ test("sem catálogo de nomes, o rótulo passa cru", () => {
     assert.equal(row.actors, "M365 AiTM PhaaS");
 });
 
+// Tag de pulse mistura técnica, nome de ator, nome de malware e lixo estrutural
+// do publicador. O que diz COMO o ataque acontece é a granularidade que o ATT&CK
+// não tem: ele registra "Phishing", a tag registra "device code phishing".
+test("tag que descreve técnica sai separada, e o lixo estrutural sai fora", () => {
+    const row = only({
+        vendorData: [vendor("AlienVault OTX", {
+            "Pulse Details": [pulse({
+                adversary: "APT29",
+                tags: [
+                    "device code phishing", "captive portal compromise", "authentication abuse",
+                    "cozy bear", "chocoshell", "microsoft 365",
+                    "filehashsha256", "pajaxsuccessfml", "methodindex", "monthly",
+                ],
+            })],
+        })],
+    });
+
+    assert.equal(row.techniques, "device code phishing, captive portal compromise, authentication abuse");
+    assert.equal(row.tags, "cozy bear, chocoshell, microsoft 365", "ator e malware ficam em Tags");
+    for (const lixo of ["filehashsha256", "pajaxsuccessfml", "methodindex", "monthly"]) {
+        assert.doesNotMatch(`${row.tags} ${row.techniques}`, new RegExp(lixo), lixo);
+    }
+});
+
 test("as evidências ficam rastreáveis até o provedor", () => {
     const report = buildEnrichment([result({
         vendorData: [
