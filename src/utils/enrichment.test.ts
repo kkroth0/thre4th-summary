@@ -121,6 +121,21 @@ test("preenchimento das APIs não vai para a planilha", () => {
     assert.equal(row.asn, "");
 });
 
+// A abuse.ch devolve 401 sem Auth-Key: sem essa distinção, o ThreatFox caído
+// sai da planilha igual ao ThreatFox que respondeu "não conheço esse IOC", e
+// "Sem atribuição" passa a ler como veredito.
+test("base que não respondeu aparece, em vez de virar silêncio", () => {
+    const row = only({
+        vendorData: [
+            { name: "ThreatFox", data: {}, error: "ThreatFox API error: 401 Unauthorized" },
+            vendor("VirusTotal", { "Detection Rate": "0/94" }),
+        ],
+    });
+    assert.equal(row.unanswered, "ThreatFox");
+    assert.equal(row.sources, "VirusTotal", "base caída não conta como consultada");
+    assert.match(row.basis, /sem resposta: ThreatFox$/);
+});
+
 test("as evidências ficam rastreáveis até o provedor", () => {
     const report = buildEnrichment([result({
         vendorData: [

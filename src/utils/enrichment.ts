@@ -51,6 +51,7 @@ export interface EnrichedIndicator {
     firstSeen: string;
     lastSeen: string;
     sources: string;
+    unanswered: string;
 }
 
 export interface EnrichmentEvidence {
@@ -301,6 +302,10 @@ const evidenceFor = (result: ThreatIntelligenceResult): EnrichmentEvidence[] => 
 const enrichOne = (result: ThreatIntelligenceResult, index: SoftwareIndex): EnrichedIndicator => {
     const signals = collectSignals(result);
     const { actors, confidence, basis } = attribute(signals, index);
+    // Base que respondeu erro (401 da abuse.ch, cota estourada, timeout) não é
+    // base que respondeu "nada". Sem essa coluna, "Sem atribuição" numa planilha
+    // de cliente lê como veredito quando na verdade a fonte não foi consultada.
+    const unanswered = (result.vendorData || []).filter((v) => v.error).map((v) => v.name);
     const virustotal = vendorOf(result, "VirusTotal");
     const abuse = vendorOf(result, "AbuseIPDB");
     const otx = vendorOf(result, "AlienVault OTX");
@@ -316,7 +321,7 @@ const enrichOne = (result: ThreatIntelligenceResult, index: SoftwareIndex): Enri
         families: signals.families.join(", "),
         attackIds: signals.attackIds.join(", "),
         confidence,
-        basis,
+        basis: unanswered.length ? `${basis} · sem resposta: ${unanswered.join(", ")}` : basis,
         vtDetections: clean(virustotal?.["Detection Rate"]),
         abuseScore: clean(abuse?.["Abuse Confidence Score"]),
         otxPulses: pulses.length,
@@ -330,6 +335,7 @@ const enrichOne = (result: ThreatIntelligenceResult, index: SoftwareIndex): Enri
             .filter((v) => !v.error && v.data && Object.keys(v.data).length)
             .map((v) => v.name)
             .join(", "),
+        unanswered: unanswered.join(", "),
     };
 };
 

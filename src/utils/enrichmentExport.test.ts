@@ -17,14 +17,14 @@ const report: EnrichmentReport = {
             basis: "OTX nomeia Wizard Spider em 2 pulses · catálogo: Emotet é usada por Wizard Spider",
             vtDetections: "42/94", abuseScore: "100%", otxPulses: 2, tags: "banker",
             country: "RU", asn: "AS49505", firstSeen: "2026-08-01", lastSeen: "2026-08-25",
-            sources: "VirusTotal, AbuseIPDB, AlienVault OTX, ThreatFox",
+            sources: "VirusTotal, AbuseIPDB, AlienVault OTX, ThreatFox", unanswered: "",
         },
         {
             indicator: "1.1.1.1", type: "IP", verdict: "Limpo", actors: "", campaign: "",
             families: "", attackIds: "", confidence: "Sem atribuição",
             basis: "nenhuma base nomeou grupo ou família", vtDetections: "0/94",
             abuseScore: "0%", otxPulses: 0, tags: "", country: "AU", asn: "AS13335",
-            firstSeen: "", lastSeen: "", sources: "VirusTotal",
+            firstSeen: "", lastSeen: "", sources: "VirusTotal", unanswered: "ThreatFox",
         },
     ],
     evidence: [
@@ -73,6 +73,9 @@ test("a planilha sai nas três abas do padrão EY", () => {
     assert.equal(indicadores.getRow(3).getCell(7).value, "Sem atribuição");
     // Zero pulse é ausência de dado, não a contagem zero.
     assert.equal(indicadores.getRow(3).getCell(12).value, "");
+
+    assert.equal(indicadores.getRow(1).getCell(19).value, "Bases sem Resposta");
+    assert.equal(indicadores.getRow(3).getCell(19).value, "ThreatFox", "base caída fica à vista na planilha");
 
     assert.equal(enrichmentExcelFilename(report), "Enriquecimento-de-Indicadores-2026-08-27.xlsx");
 });
