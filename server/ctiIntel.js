@@ -485,8 +485,15 @@ const contentRoot = ($) => {
 export function extractReadableText(html) {
     try {
         const $ = cheerio.load(html);
-        $(ARTICLE_CHROME).remove();
+        // A raiz sai ANTES da limpeza, e a limpeza roda DENTRO dela. Quando o
+        // remove() era global ele podia apagar o documento inteiro: o WordPress
+        // marca com `no-sidebar` a página que NÃO tem sidebar, o seletor
+        // [class*="sidebar"] casava com essa classe no <body>, e o artigo sumia.
+        // Medido em 2026-08-27: 67% dos artigos de uma amostra de 18 (todos os
+        // do Unit 42) voltavam vazios daqui — e isso também deixava o boletim
+        // gerado a partir dessas URLs sem texto nenhum.
         const root = contentRoot($);
+        root.find(ARTICLE_CHROME).remove();
         const blocks = new Set();
         // Document order, so the narrative reaches the model in one piece. A <p>
         // still needs to look like prose (45+ chars); a table cell holding

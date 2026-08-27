@@ -40,6 +40,33 @@ test('extractReadableText keeps the IOC table and code block, not just paragraph
   assert.doesNotMatch(text, /Follow us/);                    // nav still stripped
 });
 
+// O WordPress marca com `no-sidebar` a página que NÃO tem sidebar, e a classe
+// mora no <body>. Com a limpeza rodando global, o [class*="sidebar"] do
+// ARTICLE_CHROME casava com ela e apagava o documento inteiro — o Unit 42, que
+// é justamente quem publica tabela de IOC, voltava vazio, e o boletim gerado a
+// partir dessas URLs chegava na LLM sem texto.
+test('classe no <body> não apaga o artigo — nem uma que diz NÃO ter sidebar', () => {
+  const html = ARTICLE_HTML.replace('<body>', '<body class="single-post wp-theme-unit42-v6 no-sidebar">');
+  const text = extractReadableText(html);
+
+  assert.match(text, /fake GitHub repositories/);
+  assert.match(text, /193\.143\.1\[\.\]131/, 'a tabela de IOC sobrevive');
+  assert.ok(text.length > 200, `extração voltou com ${text.length} chars`);
+});
+
+// A sidebar de verdade continua fora: o conserto foi na ordem da limpeza, não
+// na lista do que se limpa.
+test('sidebar de verdade continua removida', () => {
+  const html = ARTICLE_HTML.replace(
+    '<article>',
+    '<article><div class="sidebar"><p>Subscribe to our newsletter for weekly threat intel updates</p></div>',
+  );
+  const text = extractReadableText(html);
+
+  assert.doesNotMatch(text, /Subscribe to our newsletter/);
+  assert.match(text, /fake GitHub repositories/);
+});
+
 test('collectArtifactLinks finds the appendix repo despite the anchor text never saying IOC', () => {
   const links = collectArtifactLinks(ARTICLE_HTML, ARTICLE_URL);
 
