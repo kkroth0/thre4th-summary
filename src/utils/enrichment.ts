@@ -166,10 +166,17 @@ export const attribute = (signals: Signals, index: SoftwareIndex): Attribution =
     const direct = signals.adversaries;
     const viaFamily = new Map<string, string[]>();
     const sharedTools: string[] = [];
+    // O catálogo cobre o ferramental que o MITRE amarra a grupo nomeado. Crimeware
+    // de mercado — ClearFake, Mozi, RedLine, Lumma — não está lá, e a linha tem
+    // que dizer isso: "não achei o grupo" é diferente de "ninguém nomeou nada".
+    const unmapped: string[] = [];
 
     for (const family of signals.families) {
         const actors = index[softwareKey(family)] || [];
-        if (!actors.length) continue;
+        if (!actors.length) {
+            unmapped.push(family);
+            continue;
+        }
         if (actors.length >= SHARED_TOOL_ACTORS) {
             sharedTools.push(`${family} (${actors.length} grupos)`);
             continue;
@@ -194,6 +201,9 @@ export const attribute = (signals: Signals, index: SoftwareIndex): Attribution =
     }
     if (sharedTools.length) {
         basis.push(`ferramenta compartilhada, não atribui sozinha: ${sharedTools.join("; ")}`);
+    }
+    if (!actors.length && unmapped.length) {
+        basis.push(`família ${unmapped.join(", ")} não consta no catálogo de atores`);
     }
     if (!actors.length && !basis.length) {
         basis.push("nenhuma base nomeou grupo ou família");

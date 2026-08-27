@@ -136,6 +136,16 @@ test("base que não respondeu aparece, em vez de virar silêncio", () => {
     assert.match(row.basis, /sem resposta: ThreatFox$/);
 });
 
+// O catálogo só cobre ferramental que o MITRE amarra a grupo nomeado. Crimeware
+// de mercado cai fora, e a linha precisa separar "não achei o grupo dessa
+// família" de "ninguém nomeou nada" — senão o leitor culpa a base errada.
+test("família fora do catálogo diz isso, em vez de fingir que ninguém nomeou nada", () => {
+    const row = only({ vendorData: [vendor("ThreatFox", { Status: "Malicious", "All Malware": ["ClearFake"] })] });
+    assert.equal(row.actors, "");
+    assert.equal(row.families, "ClearFake");
+    assert.equal(row.basis, "família ClearFake não consta no catálogo de atores");
+});
+
 test("as evidências ficam rastreáveis até o provedor", () => {
     const report = buildEnrichment([result({
         vendorData: [
