@@ -35,6 +35,7 @@ const INDICATOR_COLUMNS = [
     { header: "Última Ocorrência", key: "lastSeen", width: 22 },
     { header: "Fontes Consultadas", key: "sources", width: 52 },
     { header: "Bases sem Resposta", key: "unanswered", width: 30 },
+    { header: "Mencionado Em", key: "mentions", width: 76 },
 ];
 
 const EVIDENCE_COLUMNS = [

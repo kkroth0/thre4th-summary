@@ -146,6 +146,37 @@ test("família fora do catálogo diz isso, em vez de fingir que ninguém nomeou 
     assert.equal(row.basis, "família ClearFake não consta no catálogo de atores");
 });
 
+// O ponto da feature: dizer que o indicador já apareceu, e onde. Mas menção
+// NÃO atribui — o Unit 42 defanga serviço legítimo ao descrever o abuso dele,
+// então "slack.com citado em artigo sobre APT29" não faz slack.com ser da APT29.
+test("menção em notícia vira evidência, e não preenche o ator", () => {
+    const mention = {
+        storyId: "st1", title: "Going with the Flow(s)", source: "Mandiant",
+        link: "https://cloud.google.com/blog/flow", pubDate: "2026-08-20T00:00:00Z",
+        actors: ["UNC6293", "APT29"], categories: ["Espionagem"],
+    };
+    const report = buildEnrichment(
+        [result({ query: "107.189.18.7", vendorData: [] })],
+        index, new Date("2026-08-27T00:00:00Z"),
+        { "107.189.18.7": [mention] },
+    );
+    const row = report.indicators[0];
+
+    assert.match(row.mentions, /Mandiant: Going with the Flow\(s\) \(UNC6293, APT29\)/);
+    assert.equal(row.actors, "", "a matéria não atribui o indicador ao grupo");
+    assert.equal(row.confidence, "Sem atribuição");
+
+    const ev = report.evidence.find((e) => e.kind === "Menção em notícia")!;
+    assert.equal(ev.source, "Mandiant");
+    assert.equal(ev.link, "https://cloud.google.com/blog/flow");
+    assert.match(ev.detail, /Ator citado na matéria: UNC6293, APT29/);
+});
+
+test("indicador sem menção não inventa coluna", () => {
+    const row = buildEnrichment([result({ vendorData: [] })], index).indicators[0];
+    assert.equal(row.mentions, "");
+});
+
 test("as evidências ficam rastreáveis até o provedor", () => {
     const report = buildEnrichment([result({
         vendorData: [

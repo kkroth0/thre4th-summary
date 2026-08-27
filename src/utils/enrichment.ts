@@ -11,7 +11,7 @@
 //
 // Módulo puro: recebe resultados e o índice, devolve linhas. Sem fetch, sem DOM.
 import type { ThreatIntelligenceResult, VendorData } from "@/types/threat-intelligence";
-import type { OtxPulseDetail } from "@/services/threatApi";
+import type { NewsMention, OtxPulseDetail } from "@/services/threatApi";
 import { detectAnalyzerQueryType } from "@/utils/iocExtract";
 
 // Mesma normalização do server/actorSoftware.js, que constrói as chaves do
@@ -52,6 +52,7 @@ export interface EnrichedIndicator {
     lastSeen: string;
     sources: string;
     unanswered: string;
+    mentions: string;
 }
 
 export interface EnrichmentEvidence {
@@ -309,7 +310,11 @@ const evidenceFor = (result: ThreatIntelligenceResult): EnrichmentEvidence[] => 
     return rows;
 };
 
-const enrichOne = (result: ThreatIntelligenceResult, index: SoftwareIndex): EnrichedIndicator => {
+const enrichOne = (
+    result: ThreatIntelligenceResult,
+    index: SoftwareIndex,
+    mentions: NewsMention[],
+): EnrichedIndicator => {
     const signals = collectSignals(result);
     const { actors, confidence, basis } = attribute(signals, index);
     // Base que respondeu erro (401 da abuse.ch, cota estourada, timeout) não é
@@ -346,6 +351,13 @@ const enrichOne = (result: ThreatIntelligenceResult, index: SoftwareIndex): Enri
             .map((v) => v.name)
             .join(", "),
         unanswered: unanswered.join(", "),
+        // Só o que a matéria diz, nunca a atribuição: o Unit 42 defanga até
+        // serviço legítimo quando descreve o abuso dele, então `slack.com`
+        // aparece citado num artigo sobre APT29. A menção é a evidência; quem
+        // conclui é o analista.
+        mentions: mentions
+            .map((m) => `${m.source}: ${m.title}${m.actors.length ? ` (${m.actors.join(", ")})` : ""}`)
+            .join(" · "),
     };
 };
 
@@ -361,12 +373,28 @@ export const buildEnrichment = (
     results: ThreatIntelligenceResult[],
     index: SoftwareIndex,
     now: Date = new Date(),
+    mentionsByIoc: Record<string, NewsMention[]> = {},
 ): EnrichmentReport => {
-    const indicators = results.map((result) => enrichOne(result, index));
+    const mentionsOf = (query: string) => mentionsByIoc[query] || [];
+    const indicators = results.map((result) => enrichOne(result, index, mentionsOf(result.query)));
     return {
         generatedAt: now.toISOString(),
         indicators,
-        evidence: results.flatMap(evidenceFor),
+        evidence: results.flatMap((result) => [
+            ...evidenceFor(result),
+            ...mentionsOf(result.query).map((m) => ({
+                indicator: result.query,
+                source: m.source,
+                kind: "Menção em notícia",
+                title: m.title,
+                detail: [
+                    m.actors.length && `Ator citado na matéria: ${m.actors.join(", ")}`,
+                    m.categories.length && m.categories.join(", "),
+                ].filter(Boolean).join(" · "),
+                date: clean(m.pubDate),
+                link: m.link,
+            })),
+        ]),
         byActor: tally(indicators.flatMap((i) => i.actors.split(", ").filter(Boolean))),
         byFamily: tally(indicators.flatMap((i) => i.families.split(", ").filter(Boolean))),
         byVerdict: tally(indicators.map((i) => i.verdict)),

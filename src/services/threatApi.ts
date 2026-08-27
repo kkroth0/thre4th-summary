@@ -2172,6 +2172,25 @@ export const fetchVendorQuotas = (): Promise<{ quotas: VendorQuota[] }> => orgJs
 // Bases que o enriquecimento consulta: são as quatro que rotulam família,
 // campanha ou grupo. As outras dezessete respondem reputação, e reputação não
 // atribui indicador a ninguém.
+export interface NewsMention {
+    storyId: string;
+    title: string;
+    source: string;
+    link: string;
+    pubDate: string;
+    actors: string[];
+    categories: string[];
+}
+
+// Quem já mencionou este indicador no acervo de notícias. Só a layer 3 (os
+// laboratórios de pesquisa) tem IOC colhido do corpo, então é de lá que vem.
+// Falha aqui não pode derrubar o enriquecimento: menção é acréscimo.
+export const fetchNewsMentions = async (ioc: string): Promise<NewsMention[]> => {
+    const response = await fetch(`/api/news/mentions?ioc=${encodeURIComponent(ioc)}`);
+    if (!response.ok) return [];
+    return (await response.json()).mentions || [];
+};
+
 export const ENRICHMENT_VENDORS = ["VirusTotal", "AlienVault OTX", "ThreatFox", "AbuseIPDB"];
 
 // Índice família de malware → grupos, do catálogo de atores. É estático e o

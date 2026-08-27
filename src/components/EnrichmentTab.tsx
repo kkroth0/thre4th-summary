@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useLanguage } from "@/contexts/LanguageContext";
 import type { ThreatIntelligenceResult } from "@/types/threat-intelligence";
-import { ENRICHMENT_VENDORS, fetchSoftwareIndex, fetchThreatData } from "@/services/threatApi";
+import { ENRICHMENT_VENDORS, fetchNewsMentions, fetchSoftwareIndex, fetchThreatData, type NewsMention } from "@/services/threatApi";
 import { extractIocsFromText, isSupportedAnalyzerQuery } from "@/utils/iocExtract";
 import { buildEnrichment, type SoftwareIndex } from "@/utils/enrichment";
 import { exportEnrichmentExcel } from "@/utils/enrichmentExport";
@@ -28,6 +28,7 @@ export const EnrichmentTab = ({ results }: { results: ThreatIntelligenceResult[]
     const [pasted, setPasted] = useState("");
     const [extra, setExtra] = useState<ThreatIntelligenceResult[]>([]);
     const [running, setRunning] = useState(false);
+    const [mentions, setMentions] = useState<Record<string, NewsMention[]>>({});
 
     useEffect(() => {
         // Catálogo indisponível não derruba a aba: a atribuição por adversary do
@@ -40,7 +41,21 @@ export const EnrichmentTab = ({ results }: { results: ThreatIntelligenceResult[]
         return [...extra, ...results].filter((r) => !seen.has(r.query) && seen.add(r.query));
     }, [extra, results]);
 
-    const report = useMemo(() => buildEnrichment(all, index || {}), [all, index]);
+    // Menção é acréscimo: se o acervo não responder (usuário sem premium, feed
+    // frio), o enriquecimento sai igual, só sem a coluna.
+    useEffect(() => {
+        const faltando = all.map((r) => r.query).filter((q) => !(q in mentions));
+        if (!faltando.length) return;
+        let vivo = true;
+        Promise.all(faltando.map(async (q) => [q, await fetchNewsMentions(q).catch(() => [])] as const))
+            .then((pares) => { if (vivo) setMentions((atual) => ({ ...atual, ...Object.fromEntries(pares) })); });
+        return () => { vivo = false; };
+    }, [all, mentions]);
+
+    const report = useMemo(
+        () => buildEnrichment(all, index || {}, new Date(), mentions),
+        [all, index, mentions],
+    );
 
     const runPasted = async () => {
         const targets = extractIocsFromText(pasted).filter(isSupportedAnalyzerQuery);
@@ -61,6 +76,7 @@ export const EnrichmentTab = ({ results }: { results: ThreatIntelligenceResult[]
     };
 
     const attributed = report.indicators.filter((i) => i.actors).length;
+    const mencionados = report.indicators.filter((i) => i.mentions).length;
 
     return (
         <div className="space-y-6">
@@ -73,8 +89,8 @@ export const EnrichmentTab = ({ results }: { results: ThreatIntelligenceResult[]
                         </h3>
                         <p className="mt-1 text-xs text-muted-foreground">
                             {pt
-                                ? `${report.indicators.length} indicadores · ${attributed} com grupo atribuído · ${report.evidence.length} evidências`
-                                : `${report.indicators.length} indicators · ${attributed} attributed · ${report.evidence.length} pieces of evidence`}
+                                ? `${report.indicators.length} indicadores · ${attributed} com grupo atribuído · ${mencionados} citados em notícia · ${report.evidence.length} evidências`
+                                : `${report.indicators.length} indicators · ${attributed} attributed · ${mencionados} in the news · ${report.evidence.length} pieces of evidence`}
                         </p>
                     </div>
                     <Button
@@ -123,6 +139,7 @@ export const EnrichmentTab = ({ results }: { results: ThreatIntelligenceResult[]
                             <th className="px-3 py-2 font-black">{pt ? "Família" : "Family"}</th>
                             <th className="px-3 py-2 font-black">{pt ? "Confiança" : "Confidence"}</th>
                             <th className="px-3 py-2 font-black">{pt ? "Base da atribuição" : "Basis"}</th>
+                            <th className="px-3 py-2 font-black">{pt ? "Mencionado em" : "Mentioned in"}</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -139,6 +156,7 @@ export const EnrichmentTab = ({ results }: { results: ThreatIntelligenceResult[]
                                     </span>
                                 </td>
                                 <td className="px-3 py-2 text-muted-foreground">{row.basis}</td>
+                                <td className="px-3 py-2 text-muted-foreground">{row.mentions || "—"}</td>
                             </tr>
                         ))}
                     </tbody>
