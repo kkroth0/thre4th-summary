@@ -37,3 +37,27 @@ export const buildSoftwareIndex = (actors) => {
     }
     return index;
 };
+
+// Índice nome/alias → nome canônico do ator.
+//
+// O campo `adversary` do pulse da OTX é texto livre, e analista escreve nele o
+// que quiser: medido em 2026-08-27, de 26 rótulos vindos de dois indicadores
+// reais, só 5 eram ator — o resto era nome de malware ("WordlistLoader"),
+// rótulo de campanha ("M365 AiTM PhaaS") e até título de artigo ("FTP Banners:
+// Dead Drop Res"). Sem passar por aqui, a coluna Grupo da planilha saía com 21
+// nomes, e nenhum cliente lê isso.
+//
+// O alias também colapsa duplicata: UNC2452 e APT29 viram uma linha só.
+export const buildActorNameIndex = (actors) => {
+    const index = {};
+    for (const actor of actors || []) {
+        if (!actor?.name || actor.name.toLowerCase() === PLACEHOLDER) continue;
+        for (const label of [actor.name, ...(actor.aliases || [])]) {
+            const key = softwareKey(label);
+            // O primeiro a reivindicar a chave fica: alias colidindo entre dois
+            // atores é raro e ambíguo, e trocar de dono a cada rebuild seria pior.
+            if (key && !index[key]) index[key] = actor.name;
+        }
+    }
+    return index;
+};

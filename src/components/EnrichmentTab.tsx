@@ -4,9 +4,9 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useLanguage } from "@/contexts/LanguageContext";
 import type { ThreatIntelligenceResult } from "@/types/threat-intelligence";
-import { ENRICHMENT_VENDORS, fetchNewsMentions, fetchSoftwareIndex, fetchThreatData, type NewsMention } from "@/services/threatApi";
+import { ENRICHMENT_VENDORS, fetchNewsMentions, fetchSoftwareIndex, fetchThreatData, type ActorIndexes, type NewsMention } from "@/services/threatApi";
 import { extractIocsFromText, isSupportedAnalyzerQuery } from "@/utils/iocExtract";
-import { buildEnrichment, type SoftwareIndex } from "@/utils/enrichment";
+import { buildEnrichment } from "@/utils/enrichment";
 import { exportEnrichmentExcel } from "@/utils/enrichmentExport";
 import { toast } from "sonner";
 
@@ -24,7 +24,7 @@ const CONFIDENCE_TONE: Record<string, string> = {
 export const EnrichmentTab = ({ results }: { results: ThreatIntelligenceResult[] }) => {
     const { language } = useLanguage();
     const pt = language === "pt";
-    const [index, setIndex] = useState<SoftwareIndex | null>(null);
+    const [index, setIndex] = useState<ActorIndexes | null>(null);
     const [pasted, setPasted] = useState("");
     const [extra, setExtra] = useState<ThreatIntelligenceResult[]>([]);
     const [running, setRunning] = useState(false);
@@ -33,7 +33,7 @@ export const EnrichmentTab = ({ results }: { results: ThreatIntelligenceResult[]
     useEffect(() => {
         // Catálogo indisponível não derruba a aba: a atribuição por adversary do
         // OTX continua, só a que vem da família desliga — e o aviso diz isso.
-        fetchSoftwareIndex().then(setIndex).catch(() => setIndex({}));
+        fetchSoftwareIndex().then(setIndex).catch(() => setIndex({ software: {}, names: {} }));
     }, []);
 
     const all = useMemo(() => {
@@ -53,7 +53,7 @@ export const EnrichmentTab = ({ results }: { results: ThreatIntelligenceResult[]
     }, [all, mentions]);
 
     const report = useMemo(
-        () => buildEnrichment(all, index || {}, new Date(), mentions),
+        () => buildEnrichment(all, index?.software || {}, new Date(), mentions, index?.names || {}),
         [all, index, mentions],
     );
 
@@ -104,7 +104,7 @@ export const EnrichmentTab = ({ results }: { results: ThreatIntelligenceResult[]
                     </Button>
                 </div>
 
-                {index && !Object.keys(index).length && (
+                {index && !Object.keys(index.software).length && (
                     <p className="mt-3 rounded border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-400">
                         {pt
                             ? "Catálogo de atores indisponível — a atribuição por família de malware está desligada nesta sessão."

@@ -18,7 +18,7 @@ import {
     protectTerms, restoreTerms,
 } from './ctiIntel.js';
 import { actorTargeting } from './actorProfile.js';
-import { buildSoftwareIndex } from './actorSoftware.js';
+import { buildSoftwareIndex, buildActorNameIndex } from './actorSoftware.js';
 import { filterExactIocs } from './threatfoxMatch.js';
 import { getShodanCreditStatus, runAttackSurfaceScan } from './attackSurface.js';
 import { shodanAxios } from './shodanGate.js';
@@ -4366,10 +4366,16 @@ app.get('/api/actors', (req, res) => {
 // indicadores: ThreatFox e VirusTotal devolvem a família, o cliente quer o
 // grupo. Registrado ANTES de /api/actors/:id, senão o :id engole a rota.
 let softwareIndexCache = null;
+let actorNameIndexCache = null;
 app.get('/api/actors/software-index', (req, res) => {
-    softwareIndexCache ||= buildSoftwareIndex(loadActors().actors);
+    const { actors } = loadActors();
+    softwareIndexCache ||= buildSoftwareIndex(actors);
+    // `names` viaja junto porque quem usa um usa o outro: o enriquecimento
+    // precisa da ponte família→grupo E de saber se o `adversary` que a OTX
+    // mandou é um grupo de verdade ou texto que o analista digitou.
+    actorNameIndexCache ||= buildActorNameIndex(actors);
     res.set('Cache-Control', 'public, max-age=21600');
-    res.json({ index: softwareIndexCache });
+    res.json({ index: softwareIndexCache, names: actorNameIndexCache });
 });
 
 // Full detail for one actor.

@@ -24,6 +24,8 @@ export const softwareKey = (name: string): string =>
         .replace(/[^a-z0-9]/g, "");
 
 export type SoftwareIndex = Record<string, { id: string; name: string }[]>;
+/** nome ou alias normalizado → nome canônico. Vem do mesmo endpoint. */
+export type ActorNameIndex = Record<string, string>;
 
 // A partir de quantos grupos uma família deixa de atribuir e passa a ser
 // ferramenta compartilhada. Três ainda cabe numa linha de planilha como
@@ -135,6 +137,10 @@ const collectSignals = (result: ThreatIntelligenceResult): Signals => {
     const otx = vendorOf(result, "AlienVault OTX");
     const threatfox = vendorOf(result, "ThreatFox");
     const virustotal = vendorOf(result, "VirusTotal");
+    // Num hash é a MalwareBazaar que nomeia a família; numa URL, a URLhaus.
+    // Sem elas o indicador que não é IP chegava ao catálogo sem nada para casar.
+    const bazaar = vendorOf(result, "MalwareBazaar");
+    const urlhaus = vendorOf(result, "URLhaus");
     const pulses = pulseDetails(otx);
     const withAdversary = pulses.filter((p) => clean(p.adversary));
 
@@ -146,6 +152,8 @@ const collectSignals = (result: ThreatIntelligenceResult): Signals => {
             ...pulses.flatMap((p) => p.malwareFamilies || []),
             clean(virustotal?.["Threat Classification"]),
             ...asList(virustotal?.["Threat Names"]),
+            clean(bazaar?.["Signature"]),
+            clean(urlhaus?.["Signature"]),
         ]),
         campaigns: unique(pulses.filter(isCampaignPulse).map((p) => p.name)),
         attackIds: unique(pulses.flatMap((p) => p.attackIds || [])),
@@ -153,6 +161,8 @@ const collectSignals = (result: ThreatIntelligenceResult): Signals => {
             ...asList(threatfox?.["All Tags"]),
             ...asList(virustotal?.["All Tags"]),
             ...pulses.flatMap((p) => p.tags || []),
+            ...String(bazaar?.["Tags"] || "").split(",").map((t) => t.trim()),
+            ...asList(urlhaus?.["Tags"]),
         ]),
     };
 };
@@ -163,8 +173,26 @@ export interface Attribution {
     basis: string;
 }
 
-export const attribute = (signals: Signals, index: SoftwareIndex): Attribution => {
-    const direct = signals.adversaries;
+export const attribute = (
+    signals: Signals,
+    index: SoftwareIndex,
+    mentions: NewsMention[] = [],
+    names: ActorNameIndex = {},
+): Attribution => {
+    // O `adversary` do pulse é texto livre, e analista escreve o que quiser:
+    // medido, de 26 rótulos vindos de dois indicadores reais só 5 eram ator — o
+    // resto era nome de malware, rótulo de campanha e até título de artigo. Sem
+    // este filtro a coluna Grupo saía com 21 nomes. Quando o catálogo está vazio
+    // (endpoint fora), passa tudo: é melhor um rótulo cru do que coluna vazia.
+    //
+    // O campo também chega com vários rótulos numa string só — "Mirage Kitten,
+    // Fox Tempest, Qilin Ransomware, MedusaHVNC" veio assim de um pulse real —,
+    // então separar por vírgula vem antes de procurar: sem isso o Fox Tempest,
+    // que ESTÁ no catálogo, era descartado junto com os vizinhos.
+    const rotulos = unique(signals.adversaries.flatMap((a) => a.split(/[,;]/)));
+    const canon = (label: string) => (Object.keys(names).length ? names[softwareKey(label)] : label.trim());
+    const direct = unique(rotulos.map(canon).filter(Boolean));
+    const descartados = rotulos.filter((label) => !canon(label)).map((label) => label.trim());
     const viaFamily = new Map<string, string[]>();
     const sharedTools: string[] = [];
     // O catálogo cobre o ferramental que o MITRE amarra a grupo nomeado. Crimeware
@@ -188,9 +216,14 @@ export const attribute = (signals: Signals, index: SoftwareIndex): Attribution =
     }
 
     const catalogActors = [...viaFamily.keys()];
-    const agreeing = catalogActors.filter((name) =>
+    // O que a matéria atribuiu. É sinal fraco de propósito: a story casa ator no
+    // texto inteiro do artigo, então um grupo citado de passagem entra junto —
+    // por isso entra como Baixa e sempre com o título do artigo ao lado, para o
+    // analista poder discordar sem abrir a fonte.
+    const fromNews = unique(mentions.flatMap((m) => m.actors || []).map(canon).filter(Boolean));
+    const agreeing = [...catalogActors, ...fromNews].filter((name) =>
         direct.some((adversary) => softwareKey(adversary) === softwareKey(name)));
-    const actors = unique([...direct, ...catalogActors]);
+    const actors = unique([...direct, ...catalogActors, ...fromNews]);
 
     const basis: string[] = [];
     if (direct.length) {
@@ -203,6 +236,19 @@ export const attribute = (signals: Signals, index: SoftwareIndex): Attribution =
     if (sharedTools.length) {
         basis.push(`ferramenta compartilhada, não atribui sozinha: ${sharedTools.join("; ")}`);
     }
+    for (const mention of mentions) {
+        if (!mention.actors?.length) continue;
+        basis.push(`${mention.source} cita ${mention.actors.join(", ")} em "${mention.title}"`);
+    }
+    if (descartados.length) {
+        // Dito, não escondido: o analista precisa saber que a OTX falou algo que
+        // o catálogo não reconhece como grupo. Mas dezesseis rótulos numa célula
+        // ninguém lê, e o texto integral continua na aba Evidências dentro do
+        // pulse — aqui vai só a amostra e a contagem.
+        const amostra = descartados.slice(0, 4).join(", ");
+        const resto = descartados.length - 4;
+        basis.push(`rótulo da OTX fora do catálogo, não atribuído: ${amostra}${resto > 0 ? ` (+${resto})` : ""}`);
+    }
     if (!actors.length && unmapped.length) {
         basis.push(`família ${unmapped.join(", ")} não consta no catálogo de atores`);
     }
@@ -214,6 +260,8 @@ export const attribute = (signals: Signals, index: SoftwareIndex): Attribution =
     if (actors.length) {
         if (agreeing.length || (direct.length && signals.adversaryPulses >= 2)) confidence = "Alta";
         else if (direct.length) confidence = "Média";
+        // Catálogo e notícia ficam os dois em Baixa: um deduziu pela família, o
+        // outro leu num artigo. Nenhum dos dois viu o indicador ser usado.
         else confidence = "Baixa";
     }
 
@@ -314,9 +362,10 @@ const enrichOne = (
     result: ThreatIntelligenceResult,
     index: SoftwareIndex,
     mentions: NewsMention[],
+    names: ActorNameIndex,
 ): EnrichedIndicator => {
     const signals = collectSignals(result);
-    const { actors, confidence, basis } = attribute(signals, index);
+    const { actors, confidence, basis } = attribute(signals, index, mentions, names);
     // Base que respondeu erro (401 da abuse.ch, cota estourada, timeout) não é
     // base que respondeu "nada". Sem essa coluna, "Sem atribuição" numa planilha
     // de cliente lê como veredito quando na verdade a fonte não foi consultada.
@@ -374,9 +423,10 @@ export const buildEnrichment = (
     index: SoftwareIndex,
     now: Date = new Date(),
     mentionsByIoc: Record<string, NewsMention[]> = {},
+    names: ActorNameIndex = {},
 ): EnrichmentReport => {
     const mentionsOf = (query: string) => mentionsByIoc[query] || [];
-    const indicators = results.map((result) => enrichOne(result, index, mentionsOf(result.query)));
+    const indicators = results.map((result) => enrichOne(result, index, mentionsOf(result.query), names));
     return {
         generatedAt: now.toISOString(),
         indicators,

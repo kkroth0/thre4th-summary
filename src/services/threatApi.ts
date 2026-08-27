@@ -2191,12 +2191,26 @@ export const fetchNewsMentions = async (ioc: string): Promise<NewsMention[]> => 
     return (await response.json()).mentions || [];
 };
 
-export const ENRICHMENT_VENDORS = ["VirusTotal", "AlienVault OTX", "ThreatFox", "AbuseIPDB"];
+export const ENRICHMENT_VENDORS = [
+    "VirusTotal", "AlienVault OTX", "ThreatFox", "AbuseIPDB",
+    // Para hash e URL, estas duas são quem nomeia a família — e família é a
+    // ponte até o grupo no catálogo. Num IP elas são descartadas sozinhas pelo
+    // resolveVendorsForQuery, então entrar aqui não custa chamada nenhuma.
+    "MalwareBazaar", "URLhaus",
+];
 
 // Índice família de malware → grupos, do catálogo de atores. É estático e o
 // server manda cache de 6h, então uma carga por sessão basta.
-export const fetchSoftwareIndex = async (): Promise<Record<string, { id: string; name: string }[]>> => {
+export interface ActorIndexes {
+    /** família de malware normalizada → grupos que a usam */
+    software: Record<string, { id: string; name: string }[]>;
+    /** nome ou alias normalizado → nome canônico do ator */
+    names: Record<string, string>;
+}
+
+export const fetchSoftwareIndex = async (): Promise<ActorIndexes> => {
     const response = await fetch('/api/actors/software-index');
     if (!response.ok) throw new Error('software index unavailable');
-    return (await response.json()).index || {};
+    const body = await response.json();
+    return { software: body.index || {}, names: body.names || {} };
 };

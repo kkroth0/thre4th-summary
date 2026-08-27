@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { buildSoftwareIndex, softwareKey } from '../actorSoftware.js';
+import { buildActorNameIndex, buildSoftwareIndex, softwareKey } from '../actorSoftware.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
@@ -44,4 +44,29 @@ test('o catálogo real produz um índice utilizável', () => {
     // Ferramenta compartilhada: o enriquecimento conta com esse número alto
     // para NÃO atribuir grupo a partir dela.
     assert.ok(index[softwareKey('Cobalt Strike')].length > 10);
+});
+
+test('o índice de nomes reconhece alias e devolve o nome canônico', () => {
+    const index = buildActorNameIndex([
+        { id: 'G0016', name: 'APT29', aliases: ['UNC2452', 'Midnight Blizzard'] },
+        { id: 'G0032', name: 'Lazarus Group', aliases: [] },
+        { id: 'x', name: '[Unnamed group]', aliases: ['Ghost'] },
+    ]);
+    assert.equal(index[softwareKey('UNC2452')], 'APT29', 'alias vira o nome canônico');
+    assert.equal(index[softwareKey('midnight blizzard')], 'APT29');
+    assert.equal(index[softwareKey('Lazarus Group')], 'Lazarus Group');
+    assert.equal(index[softwareKey('Ghost')], undefined, 'grupo sem nome não entra');
+});
+
+// É o filtro que impede a coluna Grupo de sair com nome de malware e título de
+// artigo, então o catálogo real precisa mesmo reconhecer os dois casos.
+test('o catálogo real reconhece ator e recusa rótulo solto', () => {
+    const raw = JSON.parse(fs.readFileSync(path.join(here, '..', 'data', 'actors.json'), 'utf8'));
+    const index = buildActorNameIndex(raw.actors);
+
+    assert.equal(index[softwareKey('APT29')], 'APT29');
+    assert.equal(index[softwareKey('UNC2452')], 'APT29', 'alias real colapsa');
+    for (const solto of ['M365 AiTM PhaaS', 'FTP Banners: Dead Drop Res', 'Fake Movie Download campaign']) {
+        assert.equal(index[softwareKey(solto)], undefined, solto);
+    }
 });

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { ThreatIntelligenceResult, VendorData } from "@/types/threat-intelligence";
-import { buildEnrichment, softwareKey, type SoftwareIndex } from "./enrichment";
+import { buildEnrichment, softwareKey, type ActorNameIndex, type SoftwareIndex } from "./enrichment";
 
 const actor = (id: string, name: string) => ({ id, name });
 
@@ -12,6 +12,15 @@ const index: SoftwareIndex = {
     [softwareKey("QakBot")]: [actor("G1046", "Storm-1811"), actor("G0127", "TA551"), actor("G0143", "TA577")],
     [softwareKey("Cobalt Strike")]: Array.from({ length: 30 }, (_, i) => actor(`G${i}`, `Grupo ${i}`)),
     [softwareKey("SUNBURST")]: [actor("G0016", "APT29")],
+};
+
+// Nome e alias do catálogo. UNC2452 é alias da APT29 — é o que colapsa a
+// duplicata que a OTX manda como se fossem dois grupos.
+const names: ActorNameIndex = {
+    [softwareKey("APT29")]: "APT29",
+    [softwareKey("UNC2452")]: "APT29",
+    [softwareKey("Wizard Spider")]: "Wizard Spider",
+    [softwareKey("UNC6293")]: "UNC6293",
 };
 
 const vendor = (name: string, data: Record<string, unknown>): VendorData => ({ name, data });
@@ -146,10 +155,12 @@ test("família fora do catálogo diz isso, em vez de fingir que ninguém nomeou 
     assert.equal(row.basis, "família ClearFake não consta no catálogo de atores");
 });
 
-// O ponto da feature: dizer que o indicador já apareceu, e onde. Mas menção
-// NÃO atribui — o Unit 42 defanga serviço legítimo ao descrever o abuso dele,
-// então "slack.com citado em artigo sobre APT29" não faz slack.com ser da APT29.
-test("menção em notícia vira evidência, e não preenche o ator", () => {
+// O ponto da feature: correlacionar o indicador com um APT, inclusive pelo que
+// a notícia disse. A menção atribui, mas só em Baixa e sempre citando o artigo:
+// a story casa ator no texto inteiro, então grupo mencionado de passagem entra
+// junto. O que tornou isso seguro foi o filtro de benignos — antes dele,
+// `slack.com` citado num artigo sobre APT29 viraria "slack.com é da APT29".
+test("menção em notícia atribui em Baixa, citando o artigo", () => {
     const mention = {
         storyId: "st1", title: "Going with the Flow(s)", source: "Mandiant",
         link: "https://cloud.google.com/blog/flow", pubDate: "2026-08-20T00:00:00Z",
@@ -163,8 +174,9 @@ test("menção em notícia vira evidência, e não preenche o ator", () => {
     const row = report.indicators[0];
 
     assert.match(row.mentions, /Mandiant: Going with the Flow\(s\) \(UNC6293, APT29\)/);
-    assert.equal(row.actors, "", "a matéria não atribui o indicador ao grupo");
-    assert.equal(row.confidence, "Sem atribuição");
+    assert.equal(row.actors, "UNC6293, APT29");
+    assert.equal(row.confidence, "Baixa", "ler num artigo não é ver o indicador ser usado");
+    assert.match(row.basis, /Mandiant cita UNC6293, APT29 em "Going with the Flow\(s\)"/);
 
     const ev = report.evidence.find((e) => e.kind === "Menção em notícia")!;
     assert.equal(ev.source, "Mandiant");
@@ -172,9 +184,101 @@ test("menção em notícia vira evidência, e não preenche o ator", () => {
     assert.match(ev.detail, /Ator citado na matéria: UNC6293, APT29/);
 });
 
+// A notícia não pode rebaixar o que a base já sabia: adversary do OTX em dois
+// pulses continua Alta mesmo que uma matéria fraca cite outro grupo junto.
+test("menção não rebaixa a atribuição que veio da base", () => {
+    const report = buildEnrichment(
+        [result({
+            query: "185.220.101.5",
+            vendorData: [vendor("AlienVault OTX", {
+                "Pulse Details": [pulse({ adversary: "APT29" }), pulse({ id: "b2", adversary: "APT29" })],
+            })],
+        })],
+        index, new Date("2026-08-27T00:00:00Z"),
+        { "185.220.101.5": [{ storyId: "s", title: "Roundup", source: "Blog", link: "https://x.example",
+                              pubDate: "2026-08-01T00:00:00Z", actors: ["Lazarus Group"], categories: [] }] },
+    );
+    const row = report.indicators[0];
+
+    assert.equal(row.confidence, "Alta");
+    assert.match(row.actors, /^APT29, Lazarus Group$/, "os dois aparecem, a ordem põe a base na frente");
+});
+
 test("indicador sem menção não inventa coluna", () => {
     const row = buildEnrichment([result({ vendorData: [] })], index).indicators[0];
     assert.equal(row.mentions, "");
+});
+
+// O `adversary` do pulse é texto livre. Medido em dois indicadores reais: de 26
+// rótulos, 21 eram nome de malware, rótulo de campanha ou título de artigo. Sem
+// o filtro, a coluna Grupo da planilha saía com 21 nomes.
+test("rótulo da OTX que não é ator não vira grupo", () => {
+    const report = buildEnrichment(
+        [result({
+            vendorData: [vendor("AlienVault OTX", {
+                "Pulse Details": [
+                    pulse({ adversary: "APT29" }),
+                    pulse({ id: "b", adversary: "M365 AiTM PhaaS" }),
+                    pulse({ id: "c", adversary: "FTP Banners: Dead Drop Res" }),
+                ],
+            })],
+        })],
+        index, new Date("2026-08-27T00:00:00Z"), {}, names,
+    );
+    const row = report.indicators[0];
+
+    assert.equal(row.actors, "APT29");
+    assert.match(row.basis, /rótulo da OTX fora do catálogo, não atribuído: M365 AiTM PhaaS, FTP Banners: Dead Drop Res/);
+    assert.doesNotMatch(row.basis, /\+\d/, "dois rótulos cabem, não precisa de contagem");
+});
+
+// Um pulse real trouxe "Mirage Kitten, Fox Tempest, Qilin Ransomware,
+// MedusaHVNC" num campo só. Sem separar, o ator de verdade morre junto com os
+// vizinhos que o catálogo não conhece.
+test("adversary com vários rótulos numa string é separado antes de procurar", () => {
+    const report = buildEnrichment(
+        [result({
+            vendorData: [vendor("AlienVault OTX", {
+                "Pulse Details": [pulse({ adversary: "Mirage Kitten, APT29, MedusaHVNC" })],
+            })],
+        })],
+        index, new Date("2026-08-27T00:00:00Z"), {}, names,
+    );
+    const row = report.indicators[0];
+
+    assert.equal(row.actors, "APT29");
+    assert.match(row.basis, /não atribuído: Mirage Kitten, MedusaHVNC/);
+});
+
+// Dezesseis rótulos numa célula ninguém lê — e um pulse real trouxe isso.
+test("lista longa de rótulo descartado vira amostra e contagem", () => {
+    const soltos = ["L1", "L2", "L3", "L4", "L5", "L6"].join(", ");
+    const report = buildEnrichment(
+        [result({ vendorData: [vendor("AlienVault OTX", { "Pulse Details": [pulse({ adversary: soltos })] })] })],
+        index, new Date("2026-08-27T00:00:00Z"), {}, names,
+    );
+    assert.match(report.indicators[0].basis, /não atribuído: L1, L2, L3, L4 \(\+2\)$/);
+});
+
+test("alias colapsa: UNC2452 e APT29 não saem como dois grupos", () => {
+    const report = buildEnrichment(
+        [result({
+            vendorData: [vendor("AlienVault OTX", {
+                "Pulse Details": [pulse({ adversary: "APT29" }), pulse({ id: "b", adversary: "UNC2452" })],
+            })],
+        })],
+        index, new Date("2026-08-27T00:00:00Z"), {}, names,
+    );
+    assert.equal(report.indicators[0].actors, "APT29");
+});
+
+// Catálogo fora do ar não pode zerar a coluna: rótulo cru é pior que nome
+// canônico, e muito melhor que célula vazia.
+test("sem catálogo de nomes, o rótulo passa cru", () => {
+    const row = only({
+        vendorData: [vendor("AlienVault OTX", { "Pulse Details": [pulse({ adversary: "M365 AiTM PhaaS" })] })],
+    });
+    assert.equal(row.actors, "M365 AiTM PhaaS");
 });
 
 test("as evidências ficam rastreáveis até o provedor", () => {
