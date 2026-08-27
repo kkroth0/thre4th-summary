@@ -47,7 +47,12 @@ const ANALYSIS_TEXT_CAP = 20000;
 
 export function parseFeed(xmlText, sourceName, layer) {
     const items = [];
-    const isAtom = xmlText.includes('<entry>') || xmlText.includes('<feed');
+    // `includes('<feed')` casava com <feedburner:origLink> e <feedblitz:...>,
+    // que são elementos comuns DENTRO de um RSS. O feed do FortiGuard (servido
+    // pelo FeedBlitz) era lido como Atom, procurava <entry> e devolvia zero item
+    // com 10 <item> na mão. Exigir o delimitador depois do nome separa a raiz
+    // <feed ...> do prefixo de namespace.
+    const isAtom = /<entry[\s>]/i.test(xmlText) || /<feed[\s>]/i.test(xmlText);
     
     const cleanTag = (str) => {
         if (!str) return '';

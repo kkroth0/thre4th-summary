@@ -56,3 +56,46 @@ test('o texto de análise é limitado, para o corpo não virar consumo de memór
 
     assert.equal(item.text.length, 20000);
 });
+
+// `includes('<feed')` casava com <feedburner:origLink>, que é elemento comum
+// DENTRO de um RSS. O feed do FortiGuard, servido pelo FeedBlitz, era lido como
+// Atom, procurava <entry> e devolvia zero item tendo dez <item> na mão.
+test('RSS com elemento de namespace feedburner não é confundido com Atom', () => {
+    const rss = `<?xml version="1.0" encoding="UTF-8"?>
+<rss xmlns:feedburner="http://rssnamespace.org/feedburner/ext/1.0" version="2.0"><channel>
+  <title>FortiGuard Labs Threat Research</title>
+  <item>
+    <title>Multi-Functional Linux Botnet</title>
+    <link>https://www.fortinet.com/blog/threat-research/botnet</link>
+    <pubDate>Wed, 27 Aug 2026 10:00:00 GMT</pubDate>
+    <description>A new botnet targeting Linux hosts.</description>
+    <feedburner:origLink>https://www.fortinet.com/blog/threat-research/botnet</feedburner:origLink>
+  </item>
+</channel></rss>`;
+
+    const items = parseFeed(rss, 'FortiGuard Labs', 3);
+
+    assert.equal(items.length, 1);
+    assert.equal(items[0].title, 'Multi-Functional Linux Botnet');
+    assert.equal(items[0].layer, 3);
+});
+
+// A raiz <feed ...> continua sendo Atom — o conserto foi no delimitador, não em
+// desligar a detecção.
+test('Atom de verdade continua sendo lido como Atom', () => {
+    const atom = `<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <entry>
+    <title>Stable Channel Update</title>
+    <link href="https://chromereleases.googleblog.com/update"/>
+    <updated>2026-08-27T10:00:00Z</updated>
+    <summary>Security fixes.</summary>
+  </entry>
+</feed>`;
+
+    const items = parseFeed(atom, 'Chrome Releases', 1);
+
+    assert.equal(items.length, 1);
+    assert.equal(items[0].title, 'Stable Channel Update');
+    assert.equal(items[0].link, 'https://chromereleases.googleblog.com/update');
+});

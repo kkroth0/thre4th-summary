@@ -484,6 +484,7 @@ export const CTI_FEEDS = [
     { url: 'https://api.msrc.microsoft.com/update-guide/rss', source: 'Microsoft MSRC', layer: 1, weight_boost: 20 },
     { url: 'https://filestore.fortinet.com/fortiguard/rss/ir.xml', source: 'FortiGuard PSIRT', layer: 1, weight_boost: 20 },
     { url: 'https://filestore.fortinet.com/fortiguard/rss/outbreakalert.xml', source: 'FortiGuard Outbreak', layer: 1, weight_boost: 20 },
+    { url: 'https://feeds.feedblitz.com/fortinet/blog/psirt', source: 'Fortinet PSIRT Blog', layer: 1, weight_boost: 15 },
     { url: 'https://security.paloaltonetworks.com/rss.xml', source: 'Palo Alto PSIRT', layer: 1, weight_boost: 20 },
     { url: 'https://security.nozominetworks.com/rss.xml', source: 'Nozomi Networks PSIRT', layer: 1, weight_boost: 20 },
     { url: 'https://about.gitlab.com/security-releases.xml', source: 'GitLab Security', layer: 1, weight_boost: 20 },
@@ -514,6 +515,12 @@ export const CTI_FEEDS = [
     { url: 'https://research.checkpoint.com/feed/', source: 'Check Point Research', layer: 3, weight_boost: 10 },
     { url: 'https://securelist.com/feed/', source: 'Kaspersky Securelist', layer: 3, weight_boost: 12 },
     { url: 'https://www.volexity.com/feed/', source: 'Volexity', layer: 3, weight_boost: 12 },
+    { url: 'https://www.group-ib.com/blog/rss.xml', source: 'Group-IB', layer: 3, weight_boost: 12 },
+    // O host feeds.fortinet.com serve com certificado de *.feedblitz.com — o
+    // hostname não bate e o TLS é recusado por qualquer cliente que valide.
+    // O host canônico do FeedBlitz entrega o mesmo feed, com cert válido.
+    { url: 'https://feeds.feedblitz.com/fortinet/blog/threat-research', source: 'FortiGuard Labs', layer: 3, weight_boost: 15 },
+    { url: 'https://unit42.paloaltonetworks.com/category/top-cyberthreats/feed/', source: 'Unit 42 Top Cyberthreats', layer: 3, weight_boost: 15 },
     { url: 'https://feeds.feedburner.com/threatintelligence/pvexyqv7v0v/', source: 'Mandiant', layer: 3, weight_boost: 15 },
     { url: 'https://www.elastic.co/security-labs/rss/feed.xml', source: 'Elastic Security', layer: 3, weight_boost: 5 },
 
