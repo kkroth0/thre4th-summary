@@ -259,6 +259,51 @@ const SHARED_PLATFORM_DOMAINS = new Set([
     'r2.dev', 'b-cdn.net', 'glitch.me',
 ]);
 
+// Serviço legítimo e famoso nunca é o indicador. O artigo de laboratório
+// defanga o que ESTÁ SENDO ABUSADO, não só o que é do atacante: um post sobre
+// abuso de canal confiável escreve `slack[.]com`, e sem este guarda a planilha
+// sairia com "slack.com atribuído à APT29".
+//
+// Mesma semântica do SHARED_PLATFORM_DOMAINS: só o apex sai. `evil.sharepoint.com`
+// e `payload.pastebin.com` continuam passando, porque aí o atacante é dono do
+// nome. O custo assumido é que a menção "o grupo usou o Slack" some do índice —
+// o que é certo, porque hunting por slack.com não acha adversário nenhum.
+//
+// Lista curada, não exaustiva: é para os famosos. Domínio novo entra aqui
+// quando aparecer como ruído em colheita real, não por precaução.
+const BENIGN_APEX_DOMAINS = new Set([
+    // Comunicação e colaboração — o balde que mais aparece defangado
+    'slack.com', 'discord.com', 'discordapp.com', 'telegram.org', 't.me',
+    'zoom.us', 'whatsapp.com', 'teams.microsoft.com', 'skype.com',
+    // Armazenamento e documentos
+    'dropbox.com', 'box.com', 'mega.nz', 'mediafire.com', 'wetransfer.com',
+    'drive.google.com', 'docs.google.com', 'onedrive.live.com', 'sharepoint.com',
+    // Plataformas grandes
+    'google.com', 'gmail.com', 'microsoft.com', 'office.com', 'live.com',
+    'outlook.com', 'apple.com', 'icloud.com', 'amazon.com', 'cloudflare.com',
+    'akamai.com', 'fastly.com', 'adobe.com', 'oracle.com', 'ibm.com',
+    // Redes sociais
+    'facebook.com', 'instagram.com', 'linkedin.com', 'twitter.com', 'x.com',
+    'youtube.com', 'reddit.com', 'tiktok.com', 'telegram.me',
+    // Desenvolvimento e pacotes
+    'npmjs.com', 'pypi.org', 'docker.com', 'stackoverflow.com', 'pastebin.com',
+    // Fornecedores de segurança: o artigo cita o próprio domínio o tempo todo
+    'virustotal.com', 'paloaltonetworks.com', 'mandiant.com', 'kaspersky.com',
+    'securelist.com', 'talosintelligence.com', 'sans.edu', 'sans.org',
+    'crowdstrike.com', 'trendmicro.com', 'sophos.com', 'fortinet.com',
+    'checkpoint.com', 'welivesecurity.com', 'eset.com', 'abuse.ch',
+    'alienvault.com', 'recordedfuture.com', 'proofpoint.com', 'volexity.com',
+    'mitre.org', 'cisa.gov', 'nist.gov', 'first.org',
+]);
+
+// Resolvedor público famoso. Malware usa 1.1.1.1 para DoH e o relatório cita —
+// mas caçar por 1.1.1.1 não acha adversário nenhum, acha a internet.
+const BENIGN_IPS = new Set([
+    '1.1.1.1', '1.0.0.1', '8.8.8.8', '8.8.4.4', '9.9.9.9', '149.112.112.112',
+    '208.67.222.222', '208.67.220.220', '4.2.2.2', '4.2.2.1', '64.6.64.6',
+    '76.76.2.0', '94.140.14.14', '185.228.168.9', '76.76.19.19',
+]);
+
 // A bare filename (malware.exe) matches the domain shape but is not a domain.
 const RE_FILE_EXT = /\.(exe|dll|sys|bin|dat|dmp|zip|rar|tar|gz|7z|png|jpe?g|gif|svg|css|js|html?|txt|log|json|xml|pdf|docx?|xlsx?|pptx?|csv|ya?ml|md|ps1|sh|py)$/i;
 
@@ -279,7 +324,8 @@ const isCodeHost = (host) => CODE_HOST_SUFFIXES.some(
 const addDomain = (set, raw) => {
     const d = String(raw).toLowerCase();
     if (!/^[a-z0-9.-]+\.[a-z]{2,}$/.test(d)) return;
-    if (SHARED_PLATFORM_DOMAINS.has(d) || RE_FILE_EXT.test(d) || isCodeHost(d)) return;
+    if (SHARED_PLATFORM_DOMAINS.has(d) || BENIGN_APEX_DOMAINS.has(d)) return;
+    if (RE_FILE_EXT.test(d) || isCodeHost(d)) return;
     set.add(d);
 };
 
@@ -334,6 +380,7 @@ export function extractIOCs(text, { plaintext = false } = {}) {
         const ip = m[0];
         if (ip.split('.').some((o) => Number(o) > 255)) continue;
         if (RE_PRIVATE_IP.test(ip)) continue;
+        if (BENIGN_IPS.has(ip)) continue;
         // Versão de produto tem a mesma cara de um IPv4 — "version 3.3.1.0",
         // "vers:intdot/&lt;4.3.4.1" — e advisory de OT é feito disso. Sem os dois
         // guardas abaixo, um boletim da CISA sobre a Siemens saía com quatro

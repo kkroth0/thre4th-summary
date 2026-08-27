@@ -92,6 +92,40 @@ test('IP de verdade passa, defangado ou não', () => {
   assert.ok(ips.includes('211.27.196.111'), `texto puro sumiu: ${ips}`);
 });
 
+// O artigo de laboratório defanga o que está sendo ABUSADO, não só o que é do
+// atacante: um post sobre abuso de canal confiável escreve `slack[.]com`. Sem o
+// guarda, a planilha do cliente sairia com "slack.com atribuído à APT29".
+test('serviço legítimo famoso não vira indicador', () => {
+  const artigo = 'The actor abused slack[.]com and dropbox[.]com for exfiltration, '
+    + 'resolving through 1.1.1.1 and 8.8.8.8, as reported by unit42[.]paloaltonetworks[.]com.';
+  const { domains, ips } = extractIOCs(artigo);
+
+  assert.deepEqual(ips, [], `resolvedor público entrou: ${ips}`);
+  for (const benigno of ['slack.com', 'dropbox.com']) {
+    assert.ok(!domains.includes(benigno), `${benigno} entrou como IOC`);
+  }
+});
+
+// Só o apex sai. Quando o atacante é dono do nome à esquerda, o indicador é
+// dele — é assim que tenant malicioso e paste de payload continuam passando.
+test('subdomínio de plataforma legítima continua sendo indicador', () => {
+  const { domains } = extractIOCs('staging files at evil-tenant[.]sharepoint[.]com and payload[.]pastebin[.]com');
+
+  assert.ok(domains.includes('evil-tenant.sharepoint.com'), `perdeu o tenant: ${domains}`);
+  assert.ok(domains.includes('payload.pastebin.com'), `perdeu o paste: ${domains}`);
+});
+
+// O guarda não pode comer infraestrutura de verdade: estes quatro vieram da
+// colheita real de 2026-08-27 (Mandiant e Securelist).
+test('infra de campanha real continua passando', () => {
+  const { domains } = extractIOCs('C2 at owa-ms365[.]com, m365-owa[.]com, verify-drive[.]com and kookjar[.]com');
+
+  assert.deepEqual(
+    domains.sort(),
+    ['kookjar.com', 'm365-owa.com', 'owa-ms365.com', 'verify-drive.com'],
+  );
+});
+
 test('collectArtifactLinks finds the appendix repo despite the anchor text never saying IOC', () => {
   const links = collectArtifactLinks(ARTICLE_HTML, ARTICLE_URL);
 
