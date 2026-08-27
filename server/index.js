@@ -22,6 +22,7 @@ import { buildSoftwareIndex } from './actorSoftware.js';
 import { filterExactIocs } from './threatfoxMatch.js';
 import { getShodanCreditStatus, runAttackSurfaceScan } from './attackSurface.js';
 import { shodanAxios } from './shodanGate.js';
+import { otxThrottled, OTX_TIMEOUT_MS } from './otxGate.js';
 import { groupByField, refsOfReport, relatedTo, techniqueCoverage } from './attackIndex.js';
 import { isJobId, jobSummary, orphanDeckFiles, pruneJobsMap } from './feedJobs.js';
 import { parseHearthData } from './hearth.js';
@@ -546,7 +547,9 @@ app.post('/api/alienvault', scanLimiter, async (req, res) => {
         else if (queryType === "hash") endpoint = `https://otx.alienvault.com/api/v1/indicators/file/${sanitized}/general`;
         else endpoint = `https://otx.alienvault.com/api/v1/indicators/url/${encodeURIComponent(sanitized)}/general`;
 
-        const response = await axios.get(endpoint, { headers });
+        // A OTX morre por concorrência sem devolver 429: o gate segura o lote
+        // em 4 chamadas em voo e o timeout impede que uma travada ocupe a vaga.
+        const response = await otxThrottled(() => axios.get(endpoint, { headers, timeout: OTX_TIMEOUT_MS }));
         sendResponseWithQuota(res, response);
     } catch (error) {
         const { status, message } = sanitizeError(error);
