@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { getFieldCategory } from "@/components/VendorDataTable";
-import { Shield, AlertTriangle, Bug, FileSearch, Globe, Github, Link as LinkIcon, Radar, Database, Eye, Search, LayoutGrid, Mail, ArrowRight, Upload, Copy, Check, Clock, Download, FileJson, FileCode, ChevronDown, Bookmark, MapPinned } from "lucide-react";
+import { Shield, AlertTriangle, Bug, FileSearch, Globe, Github, Link as LinkIcon, Radar, Database, Eye, Search, LayoutGrid, Mail, ArrowRight, Upload, Copy, Check, Clock, Download, FileJson, FileCode, ChevronDown, Bookmark, MapPinned, Sparkles } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -18,6 +18,7 @@ import { VendorFilter } from "@/components/VendorFilter";
 import { Footer } from "@/components/Footer";
 import { useAuth } from "@/contexts/AuthContext";
 import { VendorQuotas } from "@/components/VendorQuotas";
+import { EnrichmentTab } from "@/components/EnrichmentTab";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { Header, useNavCatalog } from "@/components/Header";
 import { BrandMark } from "@/components/BrandMark";
@@ -1624,6 +1625,9 @@ const Index = () => {
                   <TabsTrigger value="overview" className="gap-2">
                     <LayoutGrid className="h-4 w-4" /> Overview
                   </TabsTrigger>
+                  <TabsTrigger value="enrichment" className="gap-2">
+                    <Sparkles className="h-4 w-4" /> {language === "pt" ? "Enriquecimento" : "Enrichment"}
+                  </TabsTrigger>
                   {results.map((result, idx) => (
                     <TabsTrigger key={idx} value={result.query} className="gap-2">
                       {result.threatLevel === "malicious" && <AlertTriangle className="h-3 w-3 text-destructive" />}
@@ -1699,6 +1703,10 @@ const Index = () => {
                     onViewDetails={(q) => setActiveTab(q)}
                   />
                 </div>
+              </TabsContent>
+
+              <TabsContent value="enrichment" className="mt-6 animate-fade-in">
+                <EnrichmentTab results={results} />
               </TabsContent>
 
               {results.map((data) => (

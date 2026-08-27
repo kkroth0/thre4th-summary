@@ -18,6 +18,7 @@ import {
     protectTerms, restoreTerms,
 } from './ctiIntel.js';
 import { actorTargeting } from './actorProfile.js';
+import { buildSoftwareIndex } from './actorSoftware.js';
 import { getShodanCreditStatus, runAttackSurfaceScan } from './attackSurface.js';
 import { shodanAxios } from './shodanGate.js';
 import { groupByField, refsOfReport, relatedTo, techniqueCoverage } from './attackIndex.js';
@@ -4309,6 +4310,16 @@ app.get('/api/actors', (req, res) => {
             techniques: (a.techniques || []).map((technique) => technique.id).filter(Boolean),
         })),
     });
+});
+
+// Índice família de malware → grupos, consumido pelo enriquecimento de
+// indicadores: ThreatFox e VirusTotal devolvem a família, o cliente quer o
+// grupo. Registrado ANTES de /api/actors/:id, senão o :id engole a rota.
+let softwareIndexCache = null;
+app.get('/api/actors/software-index', (req, res) => {
+    softwareIndexCache ||= buildSoftwareIndex(loadActors().actors);
+    res.set('Cache-Control', 'public, max-age=21600');
+    res.json({ index: softwareIndexCache });
 });
 
 // Full detail for one actor.

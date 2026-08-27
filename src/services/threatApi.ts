@@ -61,6 +61,53 @@ export const resolveVendorsForQuery = (query: string, selectedVendors: string[])
 };
 
 // Formatting logic moved from individual fetch functions
+// A AbuseIPDB devolve categoria como número ([18, 22]); ninguém lê isso numa
+// planilha entregue ao cliente. Tabela oficial da API v2.
+const ABUSEIPDB_CATEGORIES: Record<number, string> = {
+    1: "DNS comprometido", 2: "Envenenamento de DNS", 3: "Pedidos fraudulentos",
+    4: "Ataque DDoS", 5: "Força bruta FTP", 6: "Ping of Death", 7: "Phishing",
+    8: "Fraude VoIP", 9: "Proxy aberto", 10: "Spam em web", 11: "Spam por e-mail",
+    12: "Spam em blog", 13: "IP de VPN", 14: "Varredura de portas", 15: "Hacking",
+    16: "SQL Injection", 17: "Spoofing", 18: "Força bruta", 19: "Bot malicioso",
+    20: "Host explorado", 21: "Ataque a aplicação web", 22: "SSH", 23: "IoT",
+};
+
+export const abuseCategoryNames = (categories: unknown): string[] =>
+    (Array.isArray(categories) ? categories : [])
+        .map((id: any) => ABUSEIPDB_CATEGORIES[Number(id)] || `Categoria ${id}`);
+
+// Um pulse do OTX cru, reduzido ao que atribui um indicador a grupo/campanha.
+// O `formatVendorData` guardava só o nome de três pulses e jogava o resto fora,
+// que é justamente onde mora a atribuição.
+export interface OtxPulseDetail {
+    id: string;
+    name: string;
+    adversary: string;
+    malwareFamilies: string[];
+    attackIds: string[];
+    tags: string[];
+    tlp: string;
+    created: string;
+    modified: string;
+}
+
+const otxPulseDetails = (pulses: any[]): OtxPulseDetail[] =>
+    (Array.isArray(pulses) ? pulses : []).map((p: any) => ({
+        id: p.id || "",
+        name: p.name || "",
+        adversary: p.adversary || "",
+        malwareFamilies: (p.malware_families || [])
+            .map((m: any) => (typeof m === "string" ? m : m?.display_name || m?.id || ""))
+            .filter(Boolean),
+        attackIds: (p.attack_ids || [])
+            .map((a: any) => (typeof a === "string" ? a : a?.id || ""))
+            .filter(Boolean),
+        tags: Array.isArray(p.tags) ? p.tags.filter(Boolean) : [],
+        tlp: p.TLP || p.tlp || "",
+        created: p.created || "",
+        modified: p.modified || "",
+    }));
+
 export const formatVendorData = (vendorName: string, data: any, query: string): any => {
     if (data.error) throw new Error(data.error);
     if (data.data?.Status && (data.data.Status.includes("only") || data.data.Status === "No data")) return data.data;
@@ -100,6 +147,20 @@ export const formatVendorData = (vendorName: string, data: any, query: string): 
                 "Country": vtAttrs.country || "Unknown",
                 "Last Analysis": vtAttrs.last_analysis_date ? new Date(vtAttrs.last_analysis_date * 1000).toLocaleString() : "Unknown",
                 "Tags": vtAttrs.tags?.slice(0, 5).join(", ") || "None",
+                // Campos de atribuição — a família sugerida pelo consenso dos
+                // engines e o contexto colaborativo, que é onde a VT nomeia
+                // campanha quando alguém nomeou.
+                "Threat Classification": vtAttrs.popular_threat_classification?.suggested_threat_label || "",
+                "Threat Names": (vtAttrs.popular_threat_classification?.popular_threat_name || [])
+                    .map((n: any) => n?.value).filter(Boolean),
+                "Crowdsourced Context": (vtAttrs.crowdsourced_context || []).map((c: any) => ({
+                    title: c.title || "",
+                    source: c.source || "",
+                    detail: c.details || "",
+                    severity: c.severity || "",
+                    link: c.link || "",
+                })),
+                "All Tags": Array.isArray(vtAttrs.tags) ? vtAttrs.tags : [],
             };
         case "AbuseIPDB":
             // AbuseIPDB response is wrapped in data property, and backend wraps it in data property
@@ -111,6 +172,7 @@ export const formatVendorData = (vendorName: string, data: any, query: string): 
                 date: r.reportedAt,
                 comment: r.comment || "No comment",
                 categories: r.categories || [],
+                categoryNames: abuseCategoryNames(r.categories),
                 reporterId: r.reporterId || "Unknown",
                 reporterCountry: r.reporterCountryCode || "Unknown"
             })) || [];
@@ -139,6 +201,7 @@ export const formatVendorData = (vendorName: string, data: any, query: string): 
                 "Pulse Count": `${otxData.pulse_info.count || 0} pulses`,
                 "Status": (otxData.pulse_info.count || 0) > 0 ? "Suspicious Activity" : "Clean",
                 "Pulses": otxData.pulse_info.pulses?.slice(0, 3).map((p: any) => p.name).join(", ") || "No recent activity",
+                "Pulse Details": otxPulseDetails(otxData.pulse_info.pulses),
                 "Reputation": otxData.reputation || 0,
                 "Country": otxData.country_name || "Unknown",
                 "City": otxData.city || "Unknown",
@@ -203,6 +266,10 @@ export const formatVendorData = (vendorName: string, data: any, query: string): 
                     "Malpedia": tf.malware_malpedia || "N/A",
                     "Tags": allTags.slice(0, 8).join(", ") || "None",
                     "Reference": tf.reference || "N/A",
+                    // Listas inteiras — as chaves acima cortam em 5/8 para caber
+                    // na tela, e a atribuição precisa de todas.
+                    "All Malware": malwares,
+                    "All Tags": allTags,
                     "First Seen": tf.first_seen || "Unknown",
                     "Last Seen": tf.last_seen || "Unknown",
                 };
@@ -2101,3 +2168,16 @@ export interface VendorQuota {
 }
 
 export const fetchVendorQuotas = (): Promise<{ quotas: VendorQuota[] }> => orgJson('/api/vendors/quotas');
+
+// Bases que o enriquecimento consulta: são as quatro que rotulam família,
+// campanha ou grupo. As outras dezessete respondem reputação, e reputação não
+// atribui indicador a ninguém.
+export const ENRICHMENT_VENDORS = ["VirusTotal", "AlienVault OTX", "ThreatFox", "AbuseIPDB"];
+
+// Índice família de malware → grupos, do catálogo de atores. É estático e o
+// server manda cache de 6h, então uma carga por sessão basta.
+export const fetchSoftwareIndex = async (): Promise<Record<string, { id: string; name: string }[]>> => {
+    const response = await fetch('/api/actors/software-index');
+    if (!response.ok) throw new Error('software index unavailable');
+    return (await response.json()).index || {};
+};

@@ -1,0 +1,359 @@
+// Enriquecimento de indicadores: pega o que as bases já responderam e tenta
+// dizer a que grupo ou campanha aquele IP/domínio/URL/hash pertence.
+//
+// Regra que sustenta o resto: **família de malware não é grupo**. O ThreatFox e
+// o VirusTotal quase sempre respondem com a família, e famílias populares —
+// Cobalt Strike, PlugX, njRAT — são usadas por dezenas de grupos. Atribuir por
+// elas transformaria qualquer IP com Cobalt Strike em trinta atores. Por isso a
+// família só atribui quando poucos grupos a usam; acima disso ela vira
+// "ferramenta compartilhada" e entra no relatório como contexto, não como
+// atribuição.
+//
+// Módulo puro: recebe resultados e o índice, devolve linhas. Sem fetch, sem DOM.
+import type { ThreatIntelligenceResult, VendorData } from "@/types/threat-intelligence";
+import type { OtxPulseDetail } from "@/services/threatApi";
+import { detectAnalyzerQueryType } from "@/utils/iocExtract";
+
+// Mesma normalização do server/actorSoftware.js, que constrói as chaves do
+// índice — as duas pontas têm que concordar ou nada casa.
+export const softwareKey = (name: string): string =>
+    String(name || "")
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/\p{Mn}/gu, "")
+        .replace(/[^a-z0-9]/g, "");
+
+export type SoftwareIndex = Record<string, { id: string; name: string }[]>;
+
+// A partir de quantos grupos uma família deixa de atribuir e passa a ser
+// ferramenta compartilhada. Três ainda cabe numa linha de planilha como
+// "candidatos"; quatro já é ruído.
+export const SHARED_TOOL_ACTORS = 4;
+
+export type AttributionConfidence = "Alta" | "Média" | "Baixa" | "Sem atribuição";
+
+export interface EnrichedIndicator {
+    indicator: string;
+    type: string;
+    verdict: string;
+    actors: string;
+    campaign: string;
+    families: string;
+    attackIds: string;
+    confidence: AttributionConfidence;
+    basis: string;
+    vtDetections: string;
+    abuseScore: string;
+    otxPulses: number;
+    tags: string;
+    country: string;
+    asn: string;
+    firstSeen: string;
+    lastSeen: string;
+    sources: string;
+}
+
+export interface EnrichmentEvidence {
+    indicator: string;
+    source: string;
+    kind: string;
+    title: string;
+    detail: string;
+    date: string;
+    link: string;
+}
+
+export interface NamedCount {
+    name: string;
+    count: number;
+}
+
+export interface EnrichmentReport {
+    generatedAt: string;
+    indicators: EnrichedIndicator[];
+    evidence: EnrichmentEvidence[];
+    byActor: NamedCount[];
+    byFamily: NamedCount[];
+    byVerdict: NamedCount[];
+    byCountry: NamedCount[];
+}
+
+const TYPE_LABEL: Record<string, string> = {
+    ip: "IP",
+    domain: "Domínio",
+    url: "URL",
+    hash: "Hash",
+    unknown: "Indefinido",
+};
+
+const VERDICT_LABEL: Record<string, string> = {
+    malicious: "Malicioso",
+    suspicious: "Suspeito",
+    safe: "Limpo",
+    unknown: "Inconclusivo",
+};
+
+const unique = (values: string[]): string[] =>
+    Array.from(new Set(values.map((v) => String(v || "").trim()).filter(Boolean)));
+
+const vendorOf = (result: ThreatIntelligenceResult, name: string): Record<string, any> | null => {
+    const found = result.vendorData?.find((v: VendorData) => v.name === name && !v.error);
+    return found?.data && Object.keys(found.data).length ? found.data : null;
+};
+
+const asList = (value: unknown): string[] =>
+    Array.isArray(value) ? value.map((v) => String(v || "").trim()).filter(Boolean) : [];
+
+// "Unknown"/"None"/"N/A" são preenchimento das bases, não valor — numa planilha
+// entregue ao cliente a célula vazia diz a verdade melhor.
+const EMPTY_MARKERS = new Set(["unknown", "none", "n/a", "never", "no data", "no data available", ""]);
+const clean = (value: unknown): string => {
+    const text = String(value ?? "").trim();
+    return EMPTY_MARKERS.has(text.toLowerCase()) ? "" : text;
+};
+
+const pulseDetails = (otx: Record<string, any> | null): OtxPulseDetail[] =>
+    Array.isArray(otx?.["Pulse Details"]) ? (otx!["Pulse Details"] as OtxPulseDetail[]) : [];
+
+// Pulse de feed automático não tem adversary nem técnica — vira ruído se entrar
+// como campanha. Só o pulse escrito por analista carrega um dos dois.
+const isCampaignPulse = (pulse: OtxPulseDetail): boolean =>
+    Boolean(pulse.adversary) || (pulse.attackIds || []).length > 0;
+
+interface Signals {
+    adversaries: string[];
+    adversaryPulses: number;
+    families: string[];
+    campaigns: string[];
+    attackIds: string[];
+    tags: string[];
+}
+
+const collectSignals = (result: ThreatIntelligenceResult): Signals => {
+    const otx = vendorOf(result, "AlienVault OTX");
+    const threatfox = vendorOf(result, "ThreatFox");
+    const virustotal = vendorOf(result, "VirusTotal");
+    const pulses = pulseDetails(otx);
+    const withAdversary = pulses.filter((p) => clean(p.adversary));
+
+    return {
+        adversaries: unique(withAdversary.map((p) => p.adversary)),
+        adversaryPulses: withAdversary.length,
+        families: unique([
+            ...asList(threatfox?.["All Malware"]),
+            ...pulses.flatMap((p) => p.malwareFamilies || []),
+            clean(virustotal?.["Threat Classification"]),
+            ...asList(virustotal?.["Threat Names"]),
+        ]),
+        campaigns: unique(pulses.filter(isCampaignPulse).map((p) => p.name)),
+        attackIds: unique(pulses.flatMap((p) => p.attackIds || [])),
+        tags: unique([
+            ...asList(threatfox?.["All Tags"]),
+            ...asList(virustotal?.["All Tags"]),
+            ...pulses.flatMap((p) => p.tags || []),
+        ]),
+    };
+};
+
+export interface Attribution {
+    actors: string[];
+    confidence: AttributionConfidence;
+    basis: string;
+}
+
+export const attribute = (signals: Signals, index: SoftwareIndex): Attribution => {
+    const direct = signals.adversaries;
+    const viaFamily = new Map<string, string[]>();
+    const sharedTools: string[] = [];
+
+    for (const family of signals.families) {
+        const actors = index[softwareKey(family)] || [];
+        if (!actors.length) continue;
+        if (actors.length >= SHARED_TOOL_ACTORS) {
+            sharedTools.push(`${family} (${actors.length} grupos)`);
+            continue;
+        }
+        for (const actor of actors) {
+            viaFamily.set(actor.name, unique([...(viaFamily.get(actor.name) || []), family]));
+        }
+    }
+
+    const catalogActors = [...viaFamily.keys()];
+    const agreeing = catalogActors.filter((name) =>
+        direct.some((adversary) => softwareKey(adversary) === softwareKey(name)));
+    const actors = unique([...direct, ...catalogActors]);
+
+    const basis: string[] = [];
+    if (direct.length) {
+        const plural = signals.adversaryPulses === 1 ? "pulse" : "pulses";
+        basis.push(`OTX nomeia ${direct.join(", ")} em ${signals.adversaryPulses} ${plural}`);
+    }
+    for (const [actor, families] of viaFamily) {
+        basis.push(`catálogo: ${families.join(", ")} é usada por ${actor}`);
+    }
+    if (sharedTools.length) {
+        basis.push(`ferramenta compartilhada, não atribui sozinha: ${sharedTools.join("; ")}`);
+    }
+    if (!actors.length && !basis.length) {
+        basis.push("nenhuma base nomeou grupo ou família");
+    }
+
+    let confidence: AttributionConfidence = "Sem atribuição";
+    if (actors.length) {
+        if (agreeing.length || (direct.length && signals.adversaryPulses >= 2)) confidence = "Alta";
+        else if (direct.length) confidence = "Média";
+        else confidence = "Baixa";
+    }
+
+    return { actors, confidence, basis: basis.join(" · ") };
+};
+
+const evidenceFor = (result: ThreatIntelligenceResult): EnrichmentEvidence[] => {
+    const rows: EnrichmentEvidence[] = [];
+    const indicator = result.query;
+
+    for (const pulse of pulseDetails(vendorOf(result, "AlienVault OTX"))) {
+        const detail = [
+            pulse.adversary && `Grupo: ${pulse.adversary}`,
+            pulse.malwareFamilies?.length && `Famílias: ${pulse.malwareFamilies.join(", ")}`,
+            pulse.attackIds?.length && `ATT&CK: ${pulse.attackIds.join(", ")}`,
+            pulse.tags?.length && `Tags: ${pulse.tags.join(", ")}`,
+            pulse.tlp && `TLP: ${pulse.tlp.toUpperCase()}`,
+        ].filter(Boolean).join(" · ");
+        rows.push({
+            indicator,
+            source: "AlienVault OTX",
+            kind: "Pulse",
+            title: pulse.name,
+            detail,
+            date: clean(pulse.modified) || clean(pulse.created),
+            link: pulse.id ? `https://otx.alienvault.com/pulse/${pulse.id}` : "",
+        });
+    }
+
+    const threatfox = vendorOf(result, "ThreatFox");
+    if (threatfox && clean(threatfox["Status"]) === "Malicious") {
+        rows.push({
+            indicator,
+            source: "ThreatFox",
+            kind: "IOC catalogado",
+            title: asList(threatfox["All Malware"]).join(", ") || clean(threatfox["Malware"]),
+            detail: [
+                clean(threatfox["Threat Type"]) && `Tipo: ${clean(threatfox["Threat Type"])}`,
+                clean(threatfox["Confidence"]) && `Confiança: ${clean(threatfox["Confidence"])}`,
+                asList(threatfox["All Tags"]).length && `Tags: ${asList(threatfox["All Tags"]).join(", ")}`,
+            ].filter(Boolean).join(" · "),
+            date: clean(threatfox["First Seen"]),
+            link: clean(threatfox["Reference"])
+                || `https://threatfox.abuse.ch/browse.php?search=ioc%3A${encodeURIComponent(indicator)}`,
+        });
+    }
+
+    const virustotal = vendorOf(result, "VirusTotal");
+    if (virustotal) {
+        const classification = clean(virustotal["Threat Classification"]);
+        if (classification || clean(virustotal["Top Detections"])) {
+            rows.push({
+                indicator,
+                source: "VirusTotal",
+                kind: "Classificação",
+                title: classification || clean(virustotal["Detection Rate"]),
+                detail: [
+                    clean(virustotal["Detection Rate"]) && `Detecções: ${clean(virustotal["Detection Rate"])}`,
+                    clean(virustotal["Top Detections"]) && `Engines: ${clean(virustotal["Top Detections"])}`,
+                ].filter(Boolean).join(" · "),
+                date: clean(virustotal["Last Analysis"]),
+                link: `https://www.virustotal.com/gui/search/${encodeURIComponent(indicator)}`,
+            });
+        }
+        for (const context of ((virustotal["Crowdsourced Context"] as any[]) || [])) {
+            rows.push({
+                indicator,
+                source: "VirusTotal",
+                kind: "Contexto colaborativo",
+                title: clean(context?.title),
+                detail: [clean(context?.source), clean(context?.detail)].filter(Boolean).join(" · "),
+                date: "",
+                link: clean(context?.link),
+            });
+        }
+    }
+
+    const abuse = vendorOf(result, "AbuseIPDB");
+    for (const report of ((abuse?.["Reports"] as any[]) || [])) {
+        rows.push({
+            indicator,
+            source: "AbuseIPDB",
+            kind: "Denúncia",
+            title: (report?.categoryNames || []).join(", ") || "Sem categoria",
+            detail: [
+                clean(report?.comment),
+                clean(report?.reporterCountry) && `Denunciante em ${clean(report.reporterCountry)}`,
+            ].filter(Boolean).join(" · "),
+            date: clean(report?.date),
+            link: `https://www.abuseipdb.com/check/${encodeURIComponent(indicator)}`,
+        });
+    }
+
+    return rows;
+};
+
+const enrichOne = (result: ThreatIntelligenceResult, index: SoftwareIndex): EnrichedIndicator => {
+    const signals = collectSignals(result);
+    const { actors, confidence, basis } = attribute(signals, index);
+    const virustotal = vendorOf(result, "VirusTotal");
+    const abuse = vendorOf(result, "AbuseIPDB");
+    const otx = vendorOf(result, "AlienVault OTX");
+    const threatfox = vendorOf(result, "ThreatFox");
+    const pulses = pulseDetails(otx);
+
+    return {
+        indicator: result.query,
+        type: TYPE_LABEL[detectAnalyzerQueryType(result.query)] || TYPE_LABEL.unknown,
+        verdict: VERDICT_LABEL[result.threatLevel] || VERDICT_LABEL.unknown,
+        actors: actors.join(", "),
+        campaign: signals.campaigns.join(" · "),
+        families: signals.families.join(", "),
+        attackIds: signals.attackIds.join(", "),
+        confidence,
+        basis,
+        vtDetections: clean(virustotal?.["Detection Rate"]),
+        abuseScore: clean(abuse?.["Abuse Confidence Score"]),
+        otxPulses: pulses.length,
+        tags: signals.tags.join(", "),
+        country: clean(virustotal?.["Country"]) || clean(abuse?.["Country"]) || clean(otx?.["Country"]),
+        asn: clean(virustotal?.["ASN"]) || clean(abuse?.["ASN"]) || clean(otx?.["ASN"]),
+        firstSeen: clean(threatfox?.["First Seen"])
+            || clean(pulses.map((p) => p.created).filter(Boolean).sort()[0]),
+        lastSeen: clean(threatfox?.["Last Seen"]) || clean(abuse?.["Last Report"]),
+        sources: (result.vendorData || [])
+            .filter((v) => !v.error && v.data && Object.keys(v.data).length)
+            .map((v) => v.name)
+            .join(", "),
+    };
+};
+
+const tally = (values: string[]): NamedCount[] => {
+    const counts = new Map<string, number>();
+    for (const value of values.filter(Boolean)) counts.set(value, (counts.get(value) || 0) + 1);
+    return [...counts.entries()]
+        .map(([name, count]) => ({ name, count }))
+        .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+};
+
+export const buildEnrichment = (
+    results: ThreatIntelligenceResult[],
+    index: SoftwareIndex,
+    now: Date = new Date(),
+): EnrichmentReport => {
+    const indicators = results.map((result) => enrichOne(result, index));
+    return {
+        generatedAt: now.toISOString(),
+        indicators,
+        evidence: results.flatMap(evidenceFor),
+        byActor: tally(indicators.flatMap((i) => i.actors.split(", ").filter(Boolean))),
+        byFamily: tally(indicators.flatMap((i) => i.families.split(", ").filter(Boolean))),
+        byVerdict: tally(indicators.map((i) => i.verdict)),
+        byCountry: tally(indicators.map((i) => i.country)),
+    };
+};
