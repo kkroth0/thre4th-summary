@@ -16,6 +16,12 @@
 export const RESEARCH_LAYER = 3;
 export const DEFAULT_MAX_FETCHES = 40;
 
+// Quantos corpos buscar ao mesmo tempo. Observado no primeiro deploy: com os 40
+// disparados de uma vez, o refresh que roda no boot degradava o resto da API —
+// chamadas à OTX que levam 0,5s passavam de 15s e morriam no timeout. O refresh
+// não tem pressa; a busca do usuário tem.
+export const FETCH_CONCURRENCY = Number(process.env.NEWS_IOC_CONCURRENCY) || 5;
+
 export const isResearchItem = (item) => Number(item?.layer) === RESEARCH_LAYER;
 
 const hasAny = (iocs) =>
@@ -30,7 +36,7 @@ const hasAny = (iocs) =>
  * Falha de um artigo nunca derruba os outros nem o refresh: notícia sem IOC é
  * notícia, notícia que não chega é feed quebrado.
  */
-export async function harvestResearchIocs(items, { fetchText, extract, maxFetches = DEFAULT_MAX_FETCHES, onError } = {}) {
+export async function harvestResearchIocs(items, { fetchText, extract, maxFetches = DEFAULT_MAX_FETCHES, concurrency = FETCH_CONCURRENCY, onError } = {}) {
     const alvos = (items || []).filter((item) => isResearchItem(item) && item.link && !hasAny(item.iocs));
     // Os mais recentes primeiro: se o teto cortar, corta o artigo velho, que já
     // teve chance em refresh anterior.
@@ -43,7 +49,8 @@ export async function harvestResearchIocs(items, { fetchText, extract, maxFetche
     // nada. Quem precisa do texto (a atribuição de ator) lê daqui.
     const textos = new Map();
 
-    await Promise.all(alvos.slice(0, maxFetches).map(async (item) => {
+    const fila = alvos.slice(0, maxFetches);
+    const buscarUm = async (item) => {
         try {
             const texto = await fetchText(item.link);
             if (!texto) return;
@@ -56,7 +63,11 @@ export async function harvestResearchIocs(items, { fetchText, extract, maxFetche
             falhas += 1;
             onError?.(item, error);
         }
-    }));
+    };
+    // Em lotes, não tudo de uma vez: ver FETCH_CONCURRENCY.
+    for (let i = 0; i < fila.length; i += concurrency) {
+        await Promise.all(fila.slice(i, i + concurrency).map(buscarUm));
+    }
 
     return { candidatos: alvos.length, buscados: Math.min(alvos.length, maxFetches), colhidos, falhas, textos };
 }

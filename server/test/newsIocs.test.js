@@ -90,3 +90,24 @@ test('indicador que ninguém citou devolve vazio, não um match frouxo', () => {
     assert.deepEqual(findMentions(stories, '8.8.8.8'), []);
     assert.deepEqual(findMentions(stories, ''), []);
 });
+
+// Observado no primeiro deploy: 40 buscas simultâneas no boot degradavam o
+// resto da API — chamadas à OTX de 0,5s passavam de 15s e morriam no timeout.
+test('a colheita busca em lotes, não tudo de uma vez', async () => {
+    let emVoo = 0, pico = 0;
+    const items = Array.from({ length: 12 }, (_, i) => item({ link: `https://x.example/${i}` }));
+
+    await harvestResearchIocs(items, {
+        fetchText: async () => {
+            emVoo += 1; pico = Math.max(pico, emVoo);
+            await new Promise((r) => setImmediate(r));
+            emVoo -= 1;
+            return 'C2 at 193.143.1[.]131';
+        },
+        extract,
+        concurrency: 4,
+    });
+
+    assert.equal(pico, 4, `pico de ${pico} buscas simultâneas`);
+    assert.equal(items.filter((i) => i.iocs).length, 12, 'todos foram colhidos mesmo em lotes');
+});
