@@ -23,6 +23,7 @@ import { filterExactIocs } from './threatfoxMatch.js';
 import { getShodanCreditStatus, runAttackSurfaceScan } from './attackSurface.js';
 import { shodanAxios } from './shodanGate.js';
 import { otxThrottled, OTX_TIMEOUT_MS } from './otxGate.js';
+import { harvestResearchIocs, findMentions } from './newsIocs.js';
 import { groupByField, refsOfReport, relatedTo, techniqueCoverage } from './attackIndex.js';
 import { isJobId, jobSummary, orphanDeckFiles, pruneJobsMap } from './feedJobs.js';
 import { parseHearthData } from './hearth.js';
@@ -1791,6 +1792,27 @@ async function refreshNewsletterFeed() {
             if (ic.ips.length || ic.domains.length || ic.hashes.length || ic.urls.length) item.iocs = ic;
         }
 
+        // O RSS não traz IOC — medido, 895 itens renderam zero indicador real.
+        // Quem traz é o corpo do artigo de laboratório de pesquisa, então só a
+        // layer 3 paga o fetch. Nunca derruba o refresh: no pior caso o feed
+        // sai sem a colheita, como saía antes.
+        let corpos = new Map();
+        try {
+            const colheita = await harvestResearchIocs(items, {
+                fetchText: async (url) => (await fetchArticleText(url)).text,
+                // Modo artigo, NÃO plaintext: o modo permissivo é dos apêndices
+                // (CSV/gist), onde todo domínio é indicador. Em prosa ele indexa
+                // microsoft.com como IOC — medido, inflava de 15 para 24 artigos
+                // "com indicador", e o índice de menções vira ruído.
+                extract: (text) => extractIOCs(text),
+                onError: (item, error) => console.warn(`IOC harvest failed for ${item.link}: ${error.message}`),
+            });
+            corpos = colheita.textos;
+            if (colheita.colhidos) console.log(`[feed] IOCs colhidos de ${colheita.colhidos}/${colheita.buscados} artigos de pesquisa`);
+        } catch (error) {
+            console.warn(`IOC harvest skipped: ${error.message}`);
+        }
+
         // Default order: most recent first (the route can re-sort by relevance).
         const unifiedFeed = items.sort((a, b) => new Date(b.pubDate) - new Date(a.pubDate));
 
@@ -1802,7 +1824,12 @@ async function refreshNewsletterFeed() {
         // don't clobber it.
         try {
             for (const item of unifiedFeed) {
-                item.actors = matchActors(`${item.title} ${item.text || item.description || ''}`, actorIndex);
+                // O corpo, quando foi colhido, é o que nomeia o grupo: o resumo
+                // do RSS raramente cita ator, e o artigo do laboratório cita no
+                // meio da análise. Medido: os posts do Unit 42 só devolvem
+                // FunkSec, APT29 e Contagious Interview quando se lê o corpo.
+                const paraAtor = corpos.get(item.link) || item.text || item.description || '';
+                item.actors = matchActors(`${item.title} ${paraAtor}`, actorIndex);
                 const { categories, primary } = categorize(item);
                 item.newsCategories = categories;
                 item.primaryCategory = primary;
@@ -1873,6 +1900,23 @@ app.get('/api/news/stories', requirePremium, async (req, res) => {
             days: parseInt(req.query.days, 10) || undefined,
             limit: Math.min(parseInt(req.query.limit, 10) || 200, 500),
         }));
+    } catch (error) {
+        const { status, message } = sanitizeError(error);
+        res.status(status).json({ error: message });
+    }
+});
+
+// Quem já mencionou este indicador. Alimenta o Enriquecimento: o achado que
+// interessa não é "o IP existe", é "saiu no Unit 42, atribuído ao FunkSec".
+// requirePremium igual às outras rotas de notícia — é o mesmo acervo.
+//   GET /api/news/mentions?ioc=212.193.31.119
+app.get('/api/news/mentions', requirePremium, async (req, res) => {
+    const ioc = (req.query.ioc || '').toString().trim();
+    if (!ioc || ioc.length > 2048) return res.status(400).json({ error: 'ioc required' });
+    try {
+        if (!memoryCache.newsletter.data) await refreshNewsletterFeed();
+        res.set('Cache-Control', 'private, max-age=300');
+        res.json({ ioc, mentions: findMentions(newsStoryStore.all(), ioc) });
     } catch (error) {
         const { status, message } = sanitizeError(error);
         res.status(status).json({ error: message });

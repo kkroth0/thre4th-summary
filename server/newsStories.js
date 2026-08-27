@@ -199,6 +199,11 @@ const newStory = (item) => ({
         // Por fonte, não só somados na story: é o que permite separar a matéria
         // sobre uma falha do apanhado que lista dez.
         cves: [...(item.cves || [])],
+        // Guardado SÓ por fonte, ao contrário dos cves. A pergunta que isso
+        // responde é "qual artigo mencionou este IP" — a união na story não
+        // responde nada que a varredura das fontes não responda, e seria um
+        // segundo lugar para dessincronizar.
+        iocs: item.iocs || null,
     }],
 });
 
