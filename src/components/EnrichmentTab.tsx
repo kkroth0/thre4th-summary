@@ -137,6 +137,7 @@ export const EnrichmentTab = ({ results }: { results: ThreatIntelligenceResult[]
                             <th className="px-3 py-2 font-black">{pt ? "Grupo / Ator" : "Group / Actor"}</th>
                             <th className="px-3 py-2 font-black">{pt ? "Campanha" : "Campaign"}</th>
                             <th className="px-3 py-2 font-black">{pt ? "Família" : "Family"}</th>
+                            <th className="px-3 py-2 font-black">{pt ? "Campanha/Malware (OTX)" : "Campaign/Malware (OTX)"}</th>
                             <th className="px-3 py-2 font-black">{pt ? "Confiança" : "Confidence"}</th>
                             <th className="px-3 py-2 font-black">{pt ? "Base da atribuição" : "Basis"}</th>
                             <th className="px-3 py-2 font-black">{pt ? "Mencionado em" : "Mentioned in"}</th>
@@ -150,6 +151,7 @@ export const EnrichmentTab = ({ results }: { results: ThreatIntelligenceResult[]
                                 <td className="px-3 py-2 font-semibold">{row.actors || "—"}</td>
                                 <td className="px-3 py-2 text-muted-foreground">{row.campaign || "—"}</td>
                                 <td className="px-3 py-2 text-muted-foreground">{row.families || "—"}</td>
+                                <td className="px-3 py-2 text-muted-foreground">{row.otxLabels || "—"}</td>
                                 <td className="px-3 py-2">
                                     <span className={`rounded-full border px-2 py-0.5 text-[11px] ${CONFIDENCE_TONE[row.confidence]}`}>
                                         {row.confidence}

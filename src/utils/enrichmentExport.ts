@@ -22,6 +22,7 @@ const INDICATOR_COLUMNS = [
     { header: "Grupo / Ator", key: "actors", width: 30 },
     { header: "Campanha", key: "campaign", width: 38 },
     { header: "Família de Malware", key: "families", width: 30 },
+    { header: "Campanha/Malware (OTX)", key: "otxLabels", width: 46 },
     { header: "Confiança da Atribuição", key: "confidence", width: 22 },
     { header: "Base da Atribuição", key: "basis", width: 72 },
     { header: "Técnicas ATT&CK", key: "attackIds", width: 24 },

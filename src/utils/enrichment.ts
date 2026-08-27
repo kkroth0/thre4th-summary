@@ -55,6 +55,7 @@ export interface EnrichedIndicator {
     sources: string;
     unanswered: string;
     mentions: string;
+    otxLabels: string;
 }
 
 export interface EnrichmentEvidence {
@@ -96,6 +97,10 @@ const VERDICT_LABEL: Record<string, string> = {
     safe: "Limpo",
     unknown: "Inconclusivo",
 };
+
+// Qualificador que a OTX cola no nome e o catálogo não tem: "Qilin Ransomware"
+// contra a "Qilin" do ransomware.live.
+const QUALIFIER_SUFFIX = /\s+(ransomware|group|gang|team|crew|botnet|malware)$/i;
 
 const unique = (values: string[]): string[] =>
     Array.from(new Set(values.map((v) => String(v || "").trim()).filter(Boolean)));
@@ -171,6 +176,9 @@ export interface Attribution {
     actors: string[];
     confidence: AttributionConfidence;
     basis: string;
+    /** o que a OTX chamou de adversary e o catálogo não conhece como grupo:
+     *  nome de campanha e de malware, que valem por si. */
+    otxLabels: string[];
 }
 
 export const attribute = (
@@ -190,9 +198,19 @@ export const attribute = (
     // então separar por vírgula vem antes de procurar: sem isso o Fox Tempest,
     // que ESTÁ no catálogo, era descartado junto com os vizinhos.
     const rotulos = unique(signals.adversaries.flatMap((a) => a.split(/[,;]/)));
-    const canon = (label: string) => (Object.keys(names).length ? names[softwareKey(label)] : label.trim());
+    // "Qilin Ransomware" é a Qilin do catálogo, e "Lazarus Group" é o nome
+    // canônico dela mesma — por isso o nome inteiro é tentado primeiro e o
+    // corte do qualificador só entra como segunda chance.
+    const canon = (label: string) => {
+        if (!Object.keys(names).length) return label.trim();
+        const semQualificador = label.replace(QUALIFIER_SUFFIX, "").trim();
+        return names[softwareKey(label)] || names[softwareKey(semQualificador)] || "";
+    };
     const direct = unique(rotulos.map(canon).filter(Boolean));
-    const descartados = rotulos.filter((label) => !canon(label)).map((label) => label.trim());
+    // O que sobra não é lixo: é nome de campanha ("M365 AiTM PhaaS") e de
+    // malware ("WordlistLoader"), que o MISP e o MITRE não catalogam como ator
+    // mas que valem por si. Ganha coluna própria em vez de virar descarte.
+    const otxLabels = rotulos.filter((label) => !canon(label)).map((label) => label.trim()).filter(Boolean);
     const viaFamily = new Map<string, string[]>();
     const sharedTools: string[] = [];
     // O catálogo cobre o ferramental que o MITRE amarra a grupo nomeado. Crimeware
@@ -240,14 +258,10 @@ export const attribute = (
         if (!mention.actors?.length) continue;
         basis.push(`${mention.source} cita ${mention.actors.join(", ")} em "${mention.title}"`);
     }
-    if (descartados.length) {
-        // Dito, não escondido: o analista precisa saber que a OTX falou algo que
-        // o catálogo não reconhece como grupo. Mas dezesseis rótulos numa célula
-        // ninguém lê, e o texto integral continua na aba Evidências dentro do
-        // pulse — aqui vai só a amostra e a contagem.
-        const amostra = descartados.slice(0, 4).join(", ");
-        const resto = descartados.length - 4;
-        basis.push(`rótulo da OTX fora do catálogo, não atribuído: ${amostra}${resto > 0 ? ` (+${resto})` : ""}`);
+    if (otxLabels.length) {
+        // A base cita a contagem; os nomes inteiros ficam na coluna própria,
+        // porque dezesseis rótulos aqui dentro ninguém lê.
+        basis.push(`${otxLabels.length} rótulo(s) da OTX sem ator no catálogo, na coluna Campanha/Malware`);
     }
     if (!actors.length && unmapped.length) {
         basis.push(`família ${unmapped.join(", ")} não consta no catálogo de atores`);
@@ -265,7 +279,7 @@ export const attribute = (
         else confidence = "Baixa";
     }
 
-    return { actors, confidence, basis: basis.join(" · ") };
+    return { actors, confidence, basis: basis.join(" · "), otxLabels };
 };
 
 const evidenceFor = (result: ThreatIntelligenceResult): EnrichmentEvidence[] => {
@@ -365,7 +379,7 @@ const enrichOne = (
     names: ActorNameIndex,
 ): EnrichedIndicator => {
     const signals = collectSignals(result);
-    const { actors, confidence, basis } = attribute(signals, index, mentions, names);
+    const { actors, confidence, basis, otxLabels } = attribute(signals, index, mentions, names);
     // Base que respondeu erro (401 da abuse.ch, cota estourada, timeout) não é
     // base que respondeu "nada". Sem essa coluna, "Sem atribuição" numa planilha
     // de cliente lê como veredito quando na verdade a fonte não foi consultada.
@@ -404,6 +418,7 @@ const enrichOne = (
         // serviço legítimo quando descreve o abuso dele, então `slack.com`
         // aparece citado num artigo sobre APT29. A menção é a evidência; quem
         // conclui é o analista.
+        otxLabels: otxLabels.join(", "),
         mentions: mentions
             .map((m) => `${m.source}: ${m.title}${m.actors.length ? ` (${m.actors.join(", ")})` : ""}`)
             .join(" · "),

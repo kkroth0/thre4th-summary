@@ -228,8 +228,9 @@ test("rótulo da OTX que não é ator não vira grupo", () => {
     const row = report.indicators[0];
 
     assert.equal(row.actors, "APT29");
-    assert.match(row.basis, /rótulo da OTX fora do catálogo, não atribuído: M365 AiTM PhaaS, FTP Banners: Dead Drop Res/);
-    assert.doesNotMatch(row.basis, /\+\d/, "dois rótulos cabem, não precisa de contagem");
+    assert.equal(row.otxLabels, "M365 AiTM PhaaS, FTP Banners: Dead Drop Res",
+        "campanha e malware da OTX ficam à vista, em coluna própria");
+    assert.match(row.basis, /2 rótulo\(s\) da OTX sem ator no catálogo/);
 });
 
 // Um pulse real trouxe "Mirage Kitten, Fox Tempest, Qilin Ransomware,
@@ -247,17 +248,36 @@ test("adversary com vários rótulos numa string é separado antes de procurar",
     const row = report.indicators[0];
 
     assert.equal(row.actors, "APT29");
-    assert.match(row.basis, /não atribuído: Mirage Kitten, MedusaHVNC/);
+    assert.equal(row.otxLabels, "Mirage Kitten, MedusaHVNC");
 });
 
-// Dezesseis rótulos numa célula ninguém lê — e um pulse real trouxe isso.
-test("lista longa de rótulo descartado vira amostra e contagem", () => {
+// Dezesseis rótulos na base da atribuição ninguém lê — mas nenhum se perde:
+// eles vão inteiros para a coluna Campanha/Malware.
+test("lista longa de rótulo da OTX fica inteira na coluna, e a base só conta", () => {
     const soltos = ["L1", "L2", "L3", "L4", "L5", "L6"].join(", ");
     const report = buildEnrichment(
         [result({ vendorData: [vendor("AlienVault OTX", { "Pulse Details": [pulse({ adversary: soltos })] })] })],
         index, new Date("2026-08-27T00:00:00Z"), {}, names,
     );
-    assert.match(report.indicators[0].basis, /não atribuído: L1, L2, L3, L4 \(\+2\)$/);
+    assert.equal(report.indicators[0].otxLabels, "L1, L2, L3, L4, L5, L6");
+    assert.match(report.indicators[0].basis, /6 rótulo\(s\) da OTX sem ator no catálogo/);
+});
+
+// A OTX escreve "Qilin Ransomware"; o catálogo, que puxa do ransomware.live,
+// tem "Qilin". O nome inteiro é tentado primeiro, então "Lazarus Group" — que é
+// o nome canônico dele mesmo — não é mutilado pelo corte.
+test("qualificador colado no nome não impede achar o ator", () => {
+    const comSufixo: ActorNameIndex = { ...names, [softwareKey("Qilin")]: "Qilin", [softwareKey("Lazarus Group")]: "Lazarus Group" };
+    const report = buildEnrichment(
+        [result({
+            vendorData: [vendor("AlienVault OTX", {
+                "Pulse Details": [pulse({ adversary: "Qilin Ransomware, Lazarus Group" })],
+            })],
+        })],
+        index, new Date("2026-08-27T00:00:00Z"), {}, comSufixo,
+    );
+    assert.equal(report.indicators[0].actors, "Qilin, Lazarus Group");
+    assert.equal(report.indicators[0].otxLabels, "");
 });
 
 test("alias colapsa: UNC2452 e APT29 não saem como dois grupos", () => {

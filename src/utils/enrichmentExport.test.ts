@@ -13,7 +13,7 @@ const report: EnrichmentReport = {
         {
             indicator: "185.220.101.5", type: "IP", verdict: "Malicioso",
             actors: "Wizard Spider", campaign: "Emotet epoch4 infra", families: "Emotet",
-            attackIds: "T1566", confidence: "Alta",
+            attackIds: "T1566", confidence: "Alta", otxLabels: "M365 AiTM PhaaS, WordlistLoader",
             basis: "OTX nomeia Wizard Spider em 2 pulses · catálogo: Emotet é usada por Wizard Spider",
             vtDetections: "42/94", abuseScore: "100%", otxPulses: 2, tags: "banker",
             country: "RU", asn: "AS49505", firstSeen: "2026-08-01", lastSeen: "2026-08-25",
@@ -22,7 +22,7 @@ const report: EnrichmentReport = {
         },
         {
             indicator: "1.1.1.1", type: "IP", verdict: "Limpo", actors: "", campaign: "",
-            families: "", attackIds: "", confidence: "Sem atribuição",
+            families: "", attackIds: "", confidence: "Sem atribuição", otxLabels: "",
             basis: "nenhuma base nomeou grupo ou família", vtDetections: "0/94",
             abuseScore: "0%", otxPulses: 0, tags: "", country: "AU", asn: "AS13335",
             firstSeen: "", lastSeen: "", sources: "VirusTotal", unanswered: "ThreatFox", mentions: "",
@@ -54,8 +54,9 @@ test("a planilha sai nas três abas do padrão EY", () => {
     const header = indicadores.getRow(1);
     assert.equal(header.getCell(1).value, "Indicador");
     assert.equal(header.getCell(4).value, "Grupo / Ator");
-    assert.equal(header.getCell(7).value, "Confiança da Atribuição");
-    assert.equal(header.getCell(8).value, "Base da Atribuição", "a atribuição sempre vem com o porquê ao lado");
+    assert.equal(header.getCell(7).value, "Campanha/Malware (OTX)");
+    assert.equal(header.getCell(8).value, "Confiança da Atribuição");
+    assert.equal(header.getCell(9).value, "Base da Atribuição", "a atribuição sempre vem com o porquê ao lado");
 
     // Faixa preta, Calibri 14 amarelo em negrito, com borda, congelada e filtrável.
     const style = header.getCell(1);
@@ -71,14 +72,16 @@ test("a planilha sai nas três abas do padrão EY", () => {
     assert.equal(indicadores.getRow(2).getCell(3).font, undefined);
 
     assert.equal(indicadores.getRow(2).getCell(4).value, "Wizard Spider");
-    assert.equal(indicadores.getRow(3).getCell(7).value, "Sem atribuição");
+    assert.equal(indicadores.getRow(3).getCell(8).value, "Sem atribuição");
     // Zero pulse é ausência de dado, não a contagem zero.
-    assert.equal(indicadores.getRow(3).getCell(12).value, "");
+    assert.equal(indicadores.getRow(3).getCell(13).value, "");
 
-    assert.equal(indicadores.getRow(1).getCell(19).value, "Bases sem Resposta");
-    assert.equal(indicadores.getRow(3).getCell(19).value, "ThreatFox", "base caída fica à vista na planilha");
-    assert.equal(indicadores.getRow(1).getCell(20).value, "Mencionado Em");
-    assert.match(String(indicadores.getRow(2).getCell(20).value), /Mandiant.*UNC6293/);
+    assert.equal(indicadores.getRow(1).getCell(20).value, "Bases sem Resposta");
+    assert.equal(indicadores.getRow(3).getCell(20).value, "ThreatFox", "base caída fica à vista na planilha");
+    assert.equal(indicadores.getRow(2).getCell(7).value, "M365 AiTM PhaaS, WordlistLoader",
+        "nome de campanha e de malware da OTX ficam à vista, não viram descarte");
+    assert.equal(indicadores.getRow(1).getCell(21).value, "Mencionado Em");
+    assert.match(String(indicadores.getRow(2).getCell(21).value), /Mandiant.*UNC6293/);
 
     assert.equal(enrichmentExcelFilename(report), "Enriquecimento-de-Indicadores-2026-08-27.xlsx");
 });
