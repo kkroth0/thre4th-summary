@@ -19,6 +19,7 @@ import {
 } from './ctiIntel.js';
 import { actorTargeting } from './actorProfile.js';
 import { buildSoftwareIndex } from './actorSoftware.js';
+import { filterExactIocs } from './threatfoxMatch.js';
 import { getShodanCreditStatus, runAttackSurfaceScan } from './attackSurface.js';
 import { shodanAxios } from './shodanGate.js';
 import { groupByField, refsOfReport, relatedTo, techniqueCoverage } from './attackIndex.js';
@@ -674,7 +675,9 @@ app.post('/api/threatfox', scanLimiter, async (req, res) => {
             { query: "search_ioc", search_term: sanitized },
             { headers }
         );
-        res.json(response.data);
+        // A busca segue por curinga (é o que casa `ip:porta` e URL do host),
+        // mas o que não é o indicador consultado não sai daqui.
+        res.json(filterExactIocs(response.data, sanitized));
     } catch (error) {
         const { status, message } = sanitizeError(error);
         res.status(status).json({ error: message });
