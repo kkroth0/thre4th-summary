@@ -3,6 +3,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import {
   RefreshCw, ShieldAlert, Loader2, Sparkles, Trash2, KeyRound,
   CheckCircle2, ArrowRight, RotateCcw, ChevronDown, Download, SlidersHorizontal,
+  AlertTriangle, ExternalLink,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -31,8 +32,7 @@ import {
 } from "@/services/threatApi";
 import { exportBoletimJSON } from "@/utils/boletimExport";
 import {
-  canOpenReport, filterSuggestions, DEFAULT_SUGGESTION_PREFS, type SuggestionPrefs,
-} from "./dailyBulletinView";
+  canOpenReport, filterSuggestions, DEFAULT_SUGGESTION_PREFS, type SuggestionPrefs, canOpenJob, explainFailure, reportTitle } from "./dailyBulletinView";
 
 const PREFS_KEY = "daily-suggestion-prefs";
 const loadPrefs = (): SuggestionPrefs => {
@@ -58,11 +58,14 @@ const PHASES = [
 const phaseIndex = (elapsedMs: number) => (elapsedMs < 15000 ? 0 : elapsedMs < 40000 ? 1 : 2);
 
 // Minimal status: a small dot + a muted label. Colour only where it means
+// something. DEN-06 da auditoria: os tons -600 mediam 3,77:1 em 12px, abaixo do
+// mínimo AA de 4,5:1 — subiram para -700 no tema claro; no escuro os -400 já
+// passam sobre o fundo escuro.
 // something (amber = working, emerald = ready, red = failed).
 const JOB_STATUS: Record<string, { dot: string; text: string; pt: string; en: string }> = {
-  pending: { dot: "bg-amber-500", text: "text-amber-600 dark:text-amber-400", pt: "Gerando", en: "Generating" },
-  done: { dot: "bg-emerald-500", text: "text-emerald-600 dark:text-emerald-400", pt: "Pronto", en: "Ready" },
-  error: { dot: "bg-red-500", text: "text-red-600 dark:text-red-400", pt: "Erro", en: "Error" },
+  pending: { dot: "bg-amber-500", text: "text-amber-700 dark:text-amber-400", pt: "Gerando", en: "Generating" },
+  done: { dot: "bg-emerald-500", text: "text-emerald-700 dark:text-emerald-400", pt: "Pronto", en: "Ready" },
+  error: { dot: "bg-red-500", text: "text-red-700 dark:text-red-400", pt: "Erro", en: "Error" },
 };
 
 // Tiny severity dot for suggestion rows (kept subtle for the minimal look).
@@ -86,6 +89,53 @@ const timeAgo = (iso: string, pt: boolean) => {
 
 // Card de job na coluna de trabalho. Pronto (com JSON) é clicável e abre no
 // painel; gerando mostra fase + barra; erro expõe "tentar de novo".
+// Painel de diagnóstico da falha. Antes, clicar num item com erro abria
+// "Nenhum relatório aberto" — o analista via que falhou e não descobria por quê:
+// a mensagem só existia truncada na linha da lista.
+const FailurePane: React.FC<{ job: BoletimJob; pt: boolean; onRetry: (job: BoletimJob) => void }> = ({ job, pt, onRetry }) => {
+  const ajuda = explainFailure(job.error, pt);
+  return (
+    <div className="rounded-xl border border-red-500/25 bg-red-500/[0.04] p-5">
+      <div className="flex items-start gap-3">
+        <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-red-700 dark:text-red-400" />
+        <div className="min-w-0 flex-1">
+          <h3 className="text-base font-semibold leading-snug">{reportTitle(job)}</h3>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            {pt ? "Falhou" : "Failed"} {timeAgo(job.updatedAt || job.createdAt, pt)} · {hostOf(job.url) || job.url}
+          </p>
+        </div>
+      </div>
+
+      <p className="mt-4 text-sm font-medium">{ajuda.resumo}</p>
+      <p className="mt-1 text-sm text-muted-foreground">{ajuda.causa}</p>
+
+      <div className="mt-4 flex flex-wrap gap-2">
+        <Button size="sm" onClick={() => onRetry(job)} className="gap-1.5">
+          <RotateCcw className="h-3.5 w-3.5" /> {ajuda.acoes[0]}
+        </Button>
+        {ajuda.acoes.slice(1).map((acao) => (
+          <span key={acao} className="rounded-full border border-border px-3 py-1 text-xs text-muted-foreground">
+            {acao}
+          </span>
+        ))}
+        <a
+          href={job.url} target="_blank" rel="noopener noreferrer"
+          className="inline-flex items-center gap-1 rounded-full border border-border px-3 py-1 text-xs text-muted-foreground hover:text-foreground"
+        >
+          <ExternalLink className="h-3 w-3" /> {pt ? "Abrir a fonte" : "Open the source"}
+        </a>
+      </div>
+
+      {/* A mensagem crua fica, inteira: é o que o analista cola no chamado. */}
+      {job.error && (
+        <pre className="mt-4 overflow-x-auto whitespace-pre-wrap rounded-lg border border-border bg-muted/40 p-3 font-mono text-xs text-muted-foreground">
+          {job.error}
+        </pre>
+      )}
+    </div>
+  );
+};
+
 const JobListItem: React.FC<{
   job: BoletimJob;
   selected: boolean;
@@ -98,7 +148,7 @@ const JobListItem: React.FC<{
 }> = ({ job: j, selected, picked, nowMs, pt, onSelect, onPick, onRetry }) => {
   const st = JOB_STATUS[j.status] || JOB_STATUS.pending;
   const elapsed = Math.max(0, nowMs - new Date(j.createdAt).getTime());
-  const clickable = canOpenReport(j);
+  const clickable = canOpenJob(j);
   return (
     <div
       role={clickable ? "button" : undefined}
@@ -117,12 +167,12 @@ const JobListItem: React.FC<{
           <Checkbox
             checked={picked}
             onCheckedChange={(value) => onPick(j.id, Boolean(value))}
-            aria-label={pt ? `Selecionar ${j.title || j.url}` : `Select ${j.title || j.url}`}
+            aria-label={pt ? `Selecionar ${reportTitle(j)}` : `Select ${reportTitle(j)}`}
           />
         </span>
         <span className={`h-2 w-2 rounded-full shrink-0 ${st.dot} ${j.status === "pending" ? "animate-pulse" : ""}`} />
         <div className="min-w-0 flex-1">
-          <div className="text-sm font-medium truncate">{j.title || j.url}</div>
+          <div className="text-sm font-medium truncate" title={reportTitle(j)}>{reportTitle(j)}</div>
           <div className="text-xs text-muted-foreground truncate">
             <span className={st.text}>{pt ? st.pt : st.en}</span>
             {j.status === "done" ? ` · ${timeAgo(j.updatedAt || j.createdAt, pt)}` : ""}
@@ -138,7 +188,12 @@ const JobListItem: React.FC<{
       </div>
       {j.status === "error" && (
         <div className="mt-1.5 flex items-center gap-2 pl-12">
-          <span className="min-w-0 flex-1 truncate text-xs text-red-500/90">{j.error || (pt ? "falhou" : "failed")}</span>
+          {/* Resumo em uma linha; a mensagem inteira e o que fazer ficam no
+              painel ao lado, que agora abre ao clicar. DEN-06: vermelho cheio
+              em vez de /90, que ficava em 3,76:1. */}
+          <span className="min-w-0 flex-1 truncate text-xs text-red-700 dark:text-red-400">
+            {explainFailure(j.error, pt).resumo}
+          </span>
           <Button
             size="sm" variant="ghost" className="h-6 px-2 text-xs text-muted-foreground hover:text-foreground shrink-0"
             onClick={(e) => { e.stopPropagation(); onRetry(j); }}
@@ -348,6 +403,8 @@ const DailyBulletin: React.FC = () => {
 
   // Report currently opened on the right pane.
   const selectedJob = jobs.find((j) => j.id === selectedId && j.status === "done" && j.json) || null;
+  // O item que falhou não tem relatório para o ReportPane, mas tem diagnóstico.
+  const selectedFailure = jobs.find((j) => j.id === selectedId && j.status === "error") || null;
 
   return (
     <PageLayout width="max-w-7xl">
@@ -392,9 +449,21 @@ const DailyBulletin: React.FC = () => {
                 <Sparkles className="h-4 w-4" /> {pt ? "Gerar Boletim" : "Generate Bulletin"}
               </Button>
             </div>
-            <div data-testid="report-generator-status-row" className="flex items-center gap-1.5 px-1 text-xs text-muted-foreground">
-              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
-              <span className="truncate">{auth.login} · {pt ? "pronto para gerar" : "ready to generate"}</span>
+            {/* O botão fica desabilitado sem URL, e a linha dizia "pronto para
+                gerar" — dois sinais opostos ao mesmo tempo. Agora ela diz o que
+                falta. DEN-06: o cinza de rótulo sobe de text-muted-foreground
+                para um tom que passa 4,5:1. */}
+            <div data-testid="report-generator-status-row" className="flex items-center gap-1.5 px-1 text-xs text-slate-600 dark:text-slate-300">
+              {pasteUrl.trim() ? (
+                <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-700 dark:text-emerald-400" />
+              ) : (
+                <ArrowRight className="h-3.5 w-3.5 shrink-0 opacity-70" />
+              )}
+              <span className="truncate">
+                {pasteUrl.trim()
+                  ? `${auth.login} · ${pt ? "pronto para gerar" : "ready to generate"}`
+                  : (pt ? "Cole uma URL para liberar a geração" : "Paste a URL to enable generation")}
+              </span>
               <Link to="/settings" className="ml-auto shrink-0 hover:text-foreground">{pt ? "Configurações" : "Settings"}</Link>
             </div>
           </div>
@@ -596,7 +665,11 @@ const DailyBulletin: React.FC = () => {
           ref={paneRef}
           className="min-w-0 scroll-mt-24 lg:sticky lg:top-20 lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto"
         >
-          <ReportPane job={selectedJob} />
+          {selectedFailure ? (
+            <FailurePane job={selectedFailure} pt={pt} onRetry={retryJob} />
+          ) : (
+            <ReportPane job={selectedJob} />
+          )}
         </div>
       </div>
     </PageLayout>

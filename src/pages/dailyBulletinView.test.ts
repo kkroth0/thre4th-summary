@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildHuntLink, canOpenReport, DEFAULT_SUGGESTION_PREFS, filterSuggestions } from "./dailyBulletinView.ts";
+import { buildHuntLink, canOpenJob, canOpenReport, DEFAULT_SUGGESTION_PREFS, explainFailure, filterSuggestions, reportTitle } from "./dailyBulletinView.ts";
 
 test("relatório persistido abre mesmo quando a listagem omite o JSON", () => {
   assert.equal(canOpenReport({ status: "done", json: null, hasReport: true }), true);
@@ -41,4 +41,46 @@ test("preferências das sugestões cortam por severidade, KEV e palavra-chave", 
   // Palavra-chave bate no título ou no CVE, sem diferenciar maiúscula.
   assert.deepEqual(filterSuggestions(items, { ...prefs, keywords: "fortinet, cve-2026-9" }).map((i) => i.title), ["Fortinet RCE"]);
   assert.equal(filterSuggestions(items, { ...prefs, keywords: "  " }).length, 3);
+});
+
+// ─── DEN-01: a lista mostrava URL crua no lugar do título ───────────────────
+// O job só ganha `title` quando o worker responde, então metade da lista ficava
+// com "https://www.atf.gov/news/press-rele...". O nome da página já está na URL.
+test("o título sai do slug quando o worker ainda não respondeu", () => {
+  assert.equal(
+    reportTitle({ title: "", url: "https://socradar.io/blog/shinyhunters-extortion-campaign/" }),
+    "shinyhunters extortion campaign",
+  );
+  assert.equal(
+    reportTitle({ title: "Nimbus Manticore expande arsenal", url: "https://x.example/a" }),
+    "Nimbus Manticore expande arsenal",
+    "título de verdade sempre vence",
+  );
+});
+
+test("slug sem informação cai no domínio, em vez de virar lixo", () => {
+  assert.equal(reportTitle({ title: "", url: "https://www.bleepingcomputer.com/news/12345/" }), "bleepingcomputer.com");
+  assert.equal(reportTitle({ title: "", url: "https://thehackernews.com/" }), "thehackernews.com");
+  // URL gravada no campo de título não serve como nome.
+  assert.equal(reportTitle({ title: "https://x.example/y", url: "https://x.example/threat-brief-report" }), "threat brief report");
+});
+
+// ─── EST-01: o item que falhou abria o estado vazio ─────────────────────────
+test("o item com erro abre, o pendente não", () => {
+  assert.equal(canOpenJob({ status: "error" }), true);
+  assert.equal(canOpenJob({ status: "pending" }), false);
+  assert.equal(canOpenJob({ status: "done", json: {} }), true);
+  assert.equal(canOpenJob({ status: "done" }), false, "done sem relatório continua sem abrir");
+});
+
+test("a falha é explicada em linguagem de analista, com saída", () => {
+  const timeout = explainFailure("timeout após 240s (árvore de processos encerrada)", true);
+  assert.match(timeout.resumo, /passou do tempo limite/);
+  assert.match(timeout.causa, /paywall|JavaScript/i);
+  assert.ok(timeout.acoes.includes("Colar o texto do artigo"));
+
+  assert.match(explainFailure("job perdido (servidor reiniciou?)", true).resumo, /reiniciou/);
+  assert.match(explainFailure("Request failed with status code 403", true).resumo, /recusou o acesso/);
+  // Mensagem desconhecida não inventa diagnóstico.
+  assert.match(explainFailure("erro estranho", true).resumo, /^A geração falhou$/);
 });
