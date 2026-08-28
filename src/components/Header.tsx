@@ -1,8 +1,11 @@
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import {
   ArrowLeft,
   BookOpen,
   CalendarCheck,
+  ChevronLeft,
+  ChevronRight,
   Crosshair,
   Database,
   FileSearch,
@@ -193,10 +196,36 @@ export function useNavCatalog() {
 // Uma coluna à esquerda caberia melhor os catorze itens, como a auditoria
 // sugere, mas mudaria o gabarito de todas as telas de uma vez; a barra rolável
 // entrega a persistência sem esse risco.
+//
+// Rolar sem pista, porém, é o mesmo que esconder: em 1440px os últimos módulos
+// ficavam fora da vista e nada dizia que existiam — inclusive o módulo aberto,
+// que podia estar cortado na borda. Duas correções, as duas baratas: o item
+// ativo se traz para dentro da vista ao entrar na página, e a borda que tem
+// conteúdo além ganha um esmaecido com seta. Sem biblioteca de carrossel.
 export function NavTabs() {
   const { pathname } = useLocation();
   const { homeItem, navGroups } = useNavCatalog();
   const grupoAtivo = navGroups.find((g) => g.items.some((i) => isRouteActive(i.path, pathname)));
+  const trilho = useRef<HTMLDivElement>(null);
+  const [sobra, setSobra] = useState({ esquerda: false, direita: false });
+
+  const medir = useCallback(() => {
+    const el = trilho.current;
+    if (!el) return;
+    // 1px de folga: zoom e fração de pixel deixam scrollWidth 0,5 acima.
+    const fim = el.scrollWidth - el.clientWidth - el.scrollLeft;
+    setSobra({ esquerda: el.scrollLeft > 1, direita: fim > 1 });
+  }, []);
+
+  useEffect(() => {
+    const el = trilho.current;
+    if (!el) return;
+    el.querySelector('[aria-current="page"]')?.scrollIntoView({ block: "nearest", inline: "center" });
+    medir();
+    const observador = new ResizeObserver(medir);
+    observador.observe(el);
+    return () => observador.disconnect();
+  }, [pathname, medir]);
 
   const item = (nav: NavItem, dentroDoGrupoAtivo: boolean) => {
     const active = isRouteActive(nav.path, pathname);
@@ -222,9 +251,37 @@ export function NavTabs() {
     );
   };
 
+  // O esmaecido cobre a borda e some junto com a sobra; a seta é o que se
+  // reconhece como "tem mais para esse lado". Decorativo: quem navega por
+  // teclado ou leitor de tela alcança os itens sem depender dele.
+  const borda = (lado: "left" | "right") => (
+    <div
+      aria-hidden
+      className={cn(
+        // O trecho sólido do gradiente tem que caber a seta inteira, senão ela
+        // fica por cima do rótulo cortado e as duas viram borrão.
+        "pointer-events-none absolute inset-y-0 z-10 flex w-14 items-center transition-opacity",
+        lado === "left"
+          ? "left-0 justify-start bg-gradient-to-r from-background from-[45%] to-transparent pl-1"
+          : "right-0 justify-end bg-gradient-to-l from-background from-[45%] to-transparent pr-1",
+        (lado === "left" ? sobra.esquerda : sobra.direita) ? "opacity-100" : "opacity-0",
+      )}
+    >
+      {lado === "left"
+        ? <ChevronLeft className="h-4 w-4 text-muted-foreground" />
+        : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
+    </div>
+  );
+
   return (
-    <div className="border-b border-border bg-background/60">
-      <div className="scrollbar-none flex items-center gap-1 overflow-x-auto px-4 lg:px-6">
+    <div className="relative border-b border-border bg-background/60">
+      {borda("left")}
+      {borda("right")}
+      <div
+        ref={trilho}
+        onScroll={medir}
+        className="scrollbar-none flex items-center gap-1 overflow-x-auto px-4 lg:px-6"
+      >
         {item(homeItem, true)}
         {navGroups.map((group) => (
           <div key={group.label} className="flex items-center gap-1">
