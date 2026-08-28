@@ -795,7 +795,7 @@ const PhishingAnalyzer = () => {
 
               {/* Main Content Area: Tabs at the top, stretching full width */}
               <Tabs defaultValue="overview" className="w-full">
-                <TabsList className="justify-start overflow-x-auto h-auto p-1 bg-muted/30 border-b border-border/60 rounded-none w-full flex gap-1.5 sm:gap-4 scrollbar-none">
+                <TabsList variant="underline" className="overflow-x-auto scrollbar-none">
                   <TabsTrigger value="overview" className="bg-transparent border-b-2 rounded-none px-2.5 sm:px-4 pb-2 pt-1 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent text-[10px] sm:text-xs font-bold uppercase tracking-wider">
                     {language === "pt" ? "Visão Geral" : "Overview"}
                   </TabsTrigger>

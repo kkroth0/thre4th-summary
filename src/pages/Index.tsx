@@ -35,6 +35,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { MultiIpSummary } from "@/components/MultiIpSummary";
 import { fetchThreatDataProgressive, saveScan, IOC_SOURCE_COUNT } from "@/services/threatApi";
 import { ScanHistory } from "@/components/ScanHistory";
+import { RecentScans } from "@/components/RecentScans";
 import { useToast } from "@/hooks/use-toast";
 import { SearchForm } from "@/components/SearchForm";
 import { extractIocsFromText, isSupportedAnalyzerQuery } from "@/utils/iocExtract";
@@ -1610,6 +1611,13 @@ const Index = () => {
                 </div>
               </div>
             </section>
+          )}
+
+          {/* DEN-04: a tela de entrada ficava com dois terços em branco e o
+              histórico só existia num modal que aparece depois do primeiro
+              resultado — nunca na hora em que ajudaria. */}
+          {!results.length && !isAnalyzing && (
+            <RecentScans onPick={(q) => { setQuery(q); handleSearch(undefined, q); }} />
           )}
 
           {results.length > 0 && (

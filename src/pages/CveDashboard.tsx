@@ -681,7 +681,7 @@ const CveDashboard = () => {
 
           {/* Sub tabs: Recent vs Exploited */}
           <Tabs defaultValue="exploited" className="w-full">
-            <TabsList className="justify-start overflow-x-auto h-auto p-1 bg-muted/30 border-b border-border/60 rounded-none w-full flex gap-4">
+            <TabsList variant="underline" className="overflow-x-auto">
               <TabsTrigger value="exploited" className="bg-transparent border-b-2 rounded-none px-4 pb-2 pt-1 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent">
                 {t("exploitedCves") || "Exploited CVEs"}
               </TabsTrigger>
