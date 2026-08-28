@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageLayout } from "@/components/PageLayout";
+import { EmptyState } from "@/components/EmptyState";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { toast } from "sonner";
 import {
@@ -761,20 +762,19 @@ const Newsletter = () => {
                   <p className="text-sm text-muted-foreground mt-1">Please try again later.</p>
                 </div>
               ) : storyCards.length === 0 ? (
-                <div className="p-12 border border-dashed rounded-lg text-center bg-card space-y-4">
-                  <BookOpen className="h-12 w-12 text-muted-foreground/50 mx-auto mb-3" />
-                  <div>
-                    <p className="text-muted-foreground font-medium">{language === "pt" ? "Nenhuma notícia encontrada no histórico" : "No threat advisories found in the stored history"}</p>
-                    <p className="text-xs text-muted-foreground mt-1">{language === "pt" ? "Ajuste a busca ou os filtros, ou atualize os feeds" : "Adjust the search or filters, or refresh the feeds"}</p>
-                  </div>
-                  <Button
-                    onClick={() => loadNews()}
-                    className="gap-2 h-9 px-4 rounded-md text-xs font-semibold bg-primary hover:bg-primary/90 text-white mx-auto"
-                  >
-                    <RefreshCw className="h-3.5 w-3.5" />
-                    {language === "pt" ? "Buscar Notícias Recentes" : "Fetch Recent Advisories"}
-                  </Button>
-                </div>
+                <EmptyState
+                  icon={BookOpen}
+                  title={language === "pt" ? "Nenhuma notícia no histórico" : "No advisories in the stored history"}
+                  description={language === "pt"
+                    ? "Ajuste a busca ou os filtros, ou traga o que saiu desde a última coleta."
+                    : "Adjust the search or filters, or fetch what came out since the last collection."}
+                  action={
+                    <Button onClick={() => loadNews()} size="sm" className="gap-2">
+                      <RefreshCw className="h-3.5 w-3.5" />
+                      {language === "pt" ? "Buscar notícias recentes" : "Fetch recent advisories"}
+                    </Button>
+                  }
+                />
               ) : (
                 <div className="flex flex-col gap-2.5">
                   {storyCards.map((card, idx) => {

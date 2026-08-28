@@ -9,6 +9,7 @@ const metricTone = (tone?: string): MetricTone =>
 import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, Download, ExternalLink, RefreshCw, Search, ShieldCheck } from "lucide-react";
 import { PageLayout } from "@/components/PageLayout";
+import { EmptyState } from "@/components/EmptyState";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -243,8 +244,18 @@ export default function SapPatch() {
                                     </tr>
                                 ))}
                                 {!pageRows.length && (
-                                    <tr><td colSpan={5} className="px-4 py-10 text-center text-sm text-muted-foreground">
-                                        {loading ? (pt ? "Carregando…" : "Loading…") : (pt ? "Nenhuma nota." : "No notes.")}
+                                    <tr><td colSpan={5}>
+                                        {loading ? (
+                                            <p className="px-4 py-10 text-center text-sm text-muted-foreground">{pt ? "Carregando…" : "Loading…"}</p>
+                                        ) : (
+                                            <EmptyState
+                                                bare
+                                                title={pt ? "Nenhuma nota neste ciclo" : "No notes in this cycle"}
+                                                description={pt
+                                                    ? "Escolha outro mês no seletor acima, ou limpe o filtro de severidade."
+                                                    : "Pick another month above, or clear the severity filter."}
+                                            />
+                                        )}
                                     </td></tr>
                                 )}
                             </tbody>

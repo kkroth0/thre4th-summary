@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { History, Trash2, Loader2, Search, AlertTriangle, ShieldCheck, HelpCircle } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/EmptyState";
 import {
     Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger,
 } from "@/components/ui/dialog";
@@ -67,7 +68,16 @@ export function ScanHistory({ onPick }: { onPick: (query: string) => void }) {
                             <Loader2 className="h-4 w-4 animate-spin" /> {tr({ pt: "Carregando…", en: "Loading…", es: "Cargando…", fr: "Chargement…" })}
                         </div>
                     ) : !scans.length ? (
-                        <div className="text-sm text-muted-foreground py-8 text-center">{tr({ pt: "Nenhum scan salvo ainda.", en: "No saved scans yet.", es: "Aún no hay escaneos guardados.", fr: "Aucun scan enregistré pour l'instant." })}</div>
+                        <EmptyState
+                            bare
+                            title={tr({ pt: "Nenhum scan salvo ainda", en: "No saved scans yet", es: "Aún no hay escaneos guardados", fr: "Aucun scan enregistré" })}
+                            description={tr({
+                                pt: "Consulte um indicador e o resultado fica guardado aqui para você voltar depois.",
+                                en: "Look up an indicator and the result is kept here for you to come back to.",
+                                es: "Consulta un indicador y el resultado queda guardado aquí.",
+                                fr: "Recherchez un indicateur et le résultat est conservé ici.",
+                            })}
+                        />
                     ) : (
                         <div className="space-y-1.5">
                             {scans.map((s) => {

@@ -13,6 +13,7 @@ import { checkDNSBL, checkDNSBLBatch } from "@/services/threatApi";
 import { useToast } from "@/hooks/use-toast";
 import { PageLayout } from "@/components/PageLayout";
 import { PageHeader } from "@/components/PageHeader";
+import { EmptyState } from "@/components/EmptyState";
 import { useLanguage } from "@/contexts/LanguageContext";
 
 import DNSBL_PROVIDERS from "../config/dnsblProviders.json";
@@ -574,12 +575,13 @@ const DnsblCheck = () => {
 
                             {/* Providers Grid */}
                             {filteredResults.length === 0 ? (
-                                <div className="p-12 border border-dashed border-border/50 rounded-lg text-center bg-muted/40 ">
-                                    <Info className="h-10 w-10 text-muted-foreground/50 mx-auto mb-3" />
-                                    <p className="text-muted-foreground font-medium">
-                                        {language === 'pt' ? "Nenhum provedor encontrado para a filtragem atual." : "No providers found matching current filters."}
-                                    </p>
-                                </div>
+                                <EmptyState
+                                    icon={Info}
+                                    title={language === 'pt' ? "Nenhum provedor nestes filtros" : "No providers in these filters"}
+                                    description={language === 'pt'
+                                        ? "Limpe um filtro para ver o resto da consulta."
+                                        : "Clear a filter to see the rest of the lookup."}
+                                />
                             ) : (
                                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
                                     {filteredResults.map((result) => {

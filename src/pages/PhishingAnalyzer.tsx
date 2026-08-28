@@ -12,6 +12,7 @@ import {
   DropdownMenuItem,
 } from "@/components/ui/dropdown-menu";
 import { PageLayout } from "@/components/PageLayout";
+import { EmptyState } from "@/components/EmptyState";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { ThreatBadge } from "@/components/ThreatBadge";
 import { toast } from "sonner";
@@ -1061,9 +1062,13 @@ const PhishingAnalyzer = () => {
                     </CardHeader>
                     <CardContent className="p-0">
                       {parsedData.links.length === 0 ? (
-                        <div className="p-8 text-center text-xs text-muted-foreground">
-                          {language === "pt" ? "Nenhum link encontrado no corpo do e-mail." : "No hyperlinks found in the email body."}
-                        </div>
+                        <EmptyState
+                          bare
+                          title={language === "pt" ? "Nenhum link no corpo" : "No links in the body"}
+                          description={language === "pt"
+                            ? "A mensagem não traz hiperlink. Vale olhar os anexos e a autenticação do remetente."
+                            : "The message carries no hyperlink. Worth checking the attachments and sender authentication."}
+                        />
                       ) : (
                         <div className="divide-y max-h-[460px] overflow-y-auto">
                           {parsedData.links.map((link, idx) => {
@@ -1128,9 +1133,13 @@ const PhishingAnalyzer = () => {
                     </CardHeader>
                     <CardContent className="p-0">
                       {parsedData.attachments.length === 0 ? (
-                        <div className="p-8 text-center text-xs text-muted-foreground">
-                          {language === "pt" ? "Nenhum anexo encontrado nesta mensagem." : "No attachment files found in this message."}
-                        </div>
+                        <EmptyState
+                          bare
+                          title={language === "pt" ? "Nenhum anexo nesta mensagem" : "No attachments in this message"}
+                          description={language === "pt"
+                            ? "Nada para detonar. O risco, se houver, está nos links ou no remetente."
+                            : "Nothing to detonate. The risk, if any, is in the links or the sender."}
+                        />
                       ) : (
                         <div className="divide-y">
                           {parsedData.attachments.map((attach, idx) => {

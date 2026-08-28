@@ -26,6 +26,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { PageLayout } from "@/components/PageLayout";
+import { EmptyState } from "@/components/EmptyState";
 import { MetricCard, type MetricTone } from "@/components/MetricCard";
 
 // As telas guardavam o tom como classe do Tailwind; o cartão pede o papel.
@@ -335,9 +336,13 @@ function VictimTable({
             </div>
           </>
         ) : (
-          <div className="p-8 text-center text-sm font-medium text-muted-foreground">
-            {pt ? "Nenhuma vítima encontrada nesse filtro." : "No victims found for this filter."}
-          </div>
+          <EmptyState
+            bare
+            title={pt ? "Nenhuma vítima neste filtro" : "No victims in this filter"}
+            description={pt
+              ? "Limpe o grupo, o país ou o setor para ver as reivindicações do período inteiro."
+              : "Clear the group, country or sector to see the whole period's claims."}
+          />
         )}
       </CardContent>
     </Card>

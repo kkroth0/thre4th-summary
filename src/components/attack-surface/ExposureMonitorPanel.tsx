@@ -3,6 +3,7 @@ import { AlertTriangle, Clock, Loader2, Lock, Play, Plus, RefreshCw, Trash2, Upl
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/EmptyState";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -442,8 +443,14 @@ export function ExposureMonitorPanel() {
                 ))}
                 {assets.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={5} className="py-10 text-center text-sm text-muted-foreground">
-                      {pt ? "Nenhum ativo cadastrado." : "No assets saved."}
+                    <TableCell colSpan={5}>
+                      <EmptyState
+                        bare
+                        title={pt ? "Nenhum ativo na watchlist" : "No assets in the watchlist"}
+                        description={pt
+                          ? "Cadastre um domínio ou IP para acompanhar o que muda na exposição dele."
+                          : "Add a domain or IP to track what changes in its exposure."}
+                      />
                     </TableCell>
                   </TableRow>
                 ) : null}
@@ -473,7 +480,13 @@ export function ExposureMonitorPanel() {
               </article>
             ))}
             {changes.length === 0 ? (
-              <p className="py-8 text-center text-sm text-muted-foreground">{pt ? "Sem mudancas ainda." : "No changes yet."}</p>
+              <EmptyState
+                bare
+                title={pt ? "Sem mudanças ainda" : "No changes yet"}
+                description={pt
+                  ? "As diferenças aparecem aqui a partir do segundo scan de um mesmo ativo."
+                  : "Differences show up here from the second scan of the same asset on."}
+              />
             ) : null}
           </div>
         </div>

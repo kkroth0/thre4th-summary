@@ -3,7 +3,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import {
   RefreshCw, ShieldAlert, Loader2, Sparkles, Trash2, KeyRound,
   CheckCircle2, ArrowRight, RotateCcw, ChevronDown, Download, SlidersHorizontal,
-  AlertTriangle, ExternalLink,
+  AlertTriangle, ExternalLink, FileText,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { PageLayout } from "@/components/PageLayout";
 import { PageHeader } from "@/components/PageHeader";
+import { EmptyState } from "@/components/EmptyState";
 import { ReportPane, hostOf } from "@/components/ReportPane";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useAuth } from "@/contexts/AuthContext";
@@ -577,9 +578,14 @@ const DailyBulletin: React.FC = () => {
             )}
 
             {jobs.length === 0 ? (
-              <p className="py-10 text-center text-sm text-muted-foreground">
-                {pt ? "Nenhum relatório ainda. Cole uma URL ou gere a partir de uma sugestão." : "No reports yet. Paste a URL or generate from a suggestion."}
-              </p>
+              <EmptyState
+                icon={FileText}
+                bare
+                title={pt ? "Nenhum relatório ainda" : "No reports yet"}
+                description={pt
+                  ? "Cole uma URL no campo acima, ou gere a partir de uma das sugestões."
+                  : "Paste a URL in the field above, or generate from one of the suggestions."}
+              />
             ) : (
               <div className="space-y-1.5">
                 {jobs.map((j) => (
@@ -687,11 +693,15 @@ const DailyBulletin: React.FC = () => {
             ) : loading ? (
               <div className="py-10 text-center"><Loader2 className="h-4 w-4 animate-spin mx-auto text-muted-foreground" /></div>
             ) : (
-              <p className="py-10 text-center text-sm text-muted-foreground">
-                {suggestions.length
-                  ? (pt ? "Nenhuma sugestão passa pelos seus filtros." : "No suggestion matches your filters.")
-                  : (pt ? "Nenhuma sugestão no momento." : "No suggestions right now.")}
-              </p>
+              <EmptyState
+                bare
+                title={suggestions.length
+                  ? (pt ? "Nenhuma sugestão passa pelos filtros" : "No suggestion matches your filters")
+                  : (pt ? "Nenhuma sugestão no momento" : "No suggestions right now")}
+                description={suggestions.length
+                  ? (pt ? "Afrouxe a severidade mínima ou as fontes nas preferências de sugestão." : "Loosen the minimum severity or the sources in the suggestion preferences.")
+                  : (pt ? "As sugestões vêm da coleta de notícias. Volte depois da próxima rodada." : "Suggestions come from the news collection. Come back after the next round.")}
+              />
             )}
           </section>
         </div>

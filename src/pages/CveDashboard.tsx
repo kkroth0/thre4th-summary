@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PageLayout } from "@/components/PageLayout";
+import { EmptyState } from "@/components/EmptyState";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { toast } from "sonner";
 import {
@@ -545,9 +546,16 @@ const CveDashboard = () => {
               </CardHeader>
               <CardContent className="pt-4 flex-1 flex flex-col justify-center space-y-3.5">
                 {topTargetedVendors.length === 0 ? (
-                  <div className="text-center text-xs text-muted-foreground py-8">
-                    {tr({ pt: "Nenhum dado disponível.", en: "No data available.", es: "No hay datos disponibles.", fr: "Aucune donnée disponible." })}
-                  </div>
+                  <EmptyState
+                    bare
+                    title={tr({ pt: "Sem fornecedor no recorte", en: "No vendor in this window", es: "Sin proveedor en este recorte", fr: "Aucun fournisseur sur la période" })}
+                    description={tr({
+                      pt: "Nenhuma CVE explorada tem fornecedor identificado no período. Amplie a janela de dias.",
+                      en: "No exploited CVE has an identified vendor in this window. Widen the day range.",
+                      es: "Ninguna CVE explotada tiene proveedor identificado en el periodo. Amplía el rango de días.",
+                      fr: "Aucune CVE exploitée n'a de fournisseur identifié sur la période. Élargissez la plage de jours.",
+                    })}
+                  />
                 ) : (
                   (() => {
                     const maxCount = Math.max(...topTargetedVendors.map(v => v.count)) || 1;

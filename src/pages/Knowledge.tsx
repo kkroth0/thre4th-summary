@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { PageHeader } from "@/components/PageHeader";
+import { EmptyState } from "@/components/EmptyState";
 import { PageLayout } from "@/components/PageLayout";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { deleteKnowledge, fetchKnowledge, type KnowledgeItem } from "@/services/threatApi";
@@ -95,14 +96,12 @@ const Knowledge = () => {
                     {pt ? "Carregando…" : "Loading…"}
                 </div>
             ) : items.length === 0 ? (
-                <div className="rounded-lg border border-dashed border-border py-16 text-center">
-                    <p className="font-semibold">{pt ? "Nada guardado ainda" : "Nothing saved yet"}</p>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                        {pt
-                            ? "Use o botão de salvar em Notícias de Segurança para trazer uma fonte para cá."
-                            : "Use the save button on Security News to bring a source here."}
-                    </p>
-                </div>
+                <EmptyState
+                    title={pt ? "Nada guardado ainda" : "Nothing saved yet"}
+                    description={pt
+                        ? "Use o botão de salvar em Notícias de Segurança para trazer uma fonte para cá."
+                        : "Use the save button on Security News to bring a source here."}
+                />
             ) : (
                 <div className="overflow-x-auto rounded-lg border border-border">
                     <Table>

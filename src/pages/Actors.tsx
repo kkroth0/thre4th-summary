@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { PageLayout } from "@/components/PageLayout";
+import { EmptyState } from "@/components/EmptyState";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -705,9 +706,12 @@ function ThreatModelTab({ actors, sectors, targets, huntTechniques, pt, onOpen }
       </aside>
 
       {!active ? (
-        <div className="rounded-lg border border-dashed border-border bg-muted/25 p-8 text-center text-sm text-muted-foreground">
-          {pt ? "Nenhuma organização selecionada." : "No organization selected."}
-        </div>
+        <EmptyState
+          title={pt ? "Nenhuma organização selecionada" : "No organization selected"}
+          description={pt
+            ? "Escolha uma organização acima para modelar as ameaças que interessam a ela."
+            : "Pick an organization above to model the threats that matter to it."}
+        />
       ) : (
         <section className="space-y-5">
           <div className="soc-panel space-y-4 rounded-lg p-4">
@@ -1194,9 +1198,12 @@ const Actors = () => {
                 {pt ? "Não foi possível carregar os atores." : "Could not load actors."}
               </div>
             ) : shown.length === 0 ? (
-              <div className="rounded-lg border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
-                {pt ? "Nenhum ator encontrado com estes filtros." : "No actor matches these filters."}
-              </div>
+              <EmptyState
+                title={pt ? "Nenhum ator com estes filtros" : "No actor with these filters"}
+                description={pt
+                  ? "Limpe a origem, a indústria ou o país alvo para ver o catálogo inteiro."
+                  : "Clear the origin, industry or target country to see the whole catalog."}
+              />
             ) : (
               <div className="rounded-lg border border-border">
                 <Table className="table-fixed" stickyHeader>

@@ -3,6 +3,7 @@
 // linhas e as abas de lá pertencem ao e-mail analisado, não à página.
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import { EmptyState } from "@/components/EmptyState";
 import { AlertTriangle, Check, Clock, ExternalLink, Loader2, RefreshCw, Search, ShieldAlert, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -208,13 +209,14 @@ export function BrandHunt() {
           {[1, 2, 3].map((n) => <div key={n} className="h-24 animate-pulse rounded-lg border bg-card" />)}
         </div>
       ) : !hits.length ? (
-        <Card className="border-dashed">
-          <CardContent className="p-10 text-center text-sm text-muted-foreground">
-            {status === "new"
-              ? (pt ? "Nenhum domínio novo nas últimas rodadas — o que é boa notícia." : "No new domains in the latest runs — which is good news.")
-              : (pt ? "Nada aqui ainda." : "Nothing here yet.")}
-          </CardContent>
-        </Card>
+        <EmptyState
+          title={status === "new"
+            ? (pt ? "Nenhum domínio novo nas últimas rodadas" : "No new domains in the latest runs")
+            : (pt ? "Nada nesta aba ainda" : "Nothing in this tab yet")}
+          description={status === "new"
+            ? (pt ? "O que é boa notícia: ninguém registrou parecido com a sua marca no período." : "Which is good news: nobody registered anything close to your brand in the period.")
+            : (pt ? "Rode uma caçada para popular esta lista." : "Run a hunt to populate this list.")}
+        />
       ) : (
         <div className="space-y-3">
           {hits.map((hit) => (

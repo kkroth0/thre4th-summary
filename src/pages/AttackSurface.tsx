@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { PageLayout } from "@/components/PageLayout";
+import { EmptyState } from "@/components/EmptyState";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -587,8 +588,14 @@ export default function AttackSurface() {
                   <TableBody>
                     {filteredFindings.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={7} className="py-12 text-center text-muted-foreground">
-                          {pt ? "Nenhum serviço corresponde aos filtros." : "No services match the filters."}
+                        <TableCell colSpan={7}>
+                          <EmptyState
+                            bare
+                            title={pt ? "Nenhum serviço corresponde aos filtros" : "No services match the filters"}
+                            description={pt
+                              ? "Limpe o risco ou a porta para ver todo o perímetro devolvido pelo scan."
+                              : "Clear the risk or port filter to see the whole perimeter the scan returned."}
+                          />
                         </TableCell>
                       </TableRow>
                     ) : (
@@ -677,15 +684,13 @@ export default function AttackSurface() {
         )}
 
         {!result && !isLoading && (
-          <div className="soc-panel rounded-lg p-10 text-center">
-            <Radar className="mx-auto h-10 w-10 text-muted-foreground/50" />
-            <h2 className="mt-4 text-lg font-semibold">{pt ? "Nenhuma busca executada" : "No search yet"}</h2>
-            <p className="mx-auto mt-2 max-w-xl text-sm text-muted-foreground">
-              {pt
-                ? "Use o modo guiado para alvos comuns ou a query Shodan para pesquisas avancadas."
-                : "Use guided mode for common targets or Shodan query mode for advanced investigations."}
-            </p>
-          </div>
+          <EmptyState
+            icon={Radar}
+            title={pt ? "Nenhuma busca executada" : "No search yet"}
+            description={pt
+              ? "Use o modo guiado para alvos comuns, ou a query Shodan para pesquisas avançadas."
+              : "Use guided mode for common targets, or Shodan query mode for advanced investigations."}
+          />
         )}
           </TabsContent>
 

@@ -30,6 +30,7 @@ import {
     Chrome,
 } from "lucide-react";
 import { PageLayout } from "@/components/PageLayout";
+import { EmptyState } from "@/components/EmptyState";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -663,9 +664,15 @@ const PatchTuesday = () => {
                                             ))}
                                             {pageRows.length === 0 && (
                                                 <tr>
-                                                    <td colSpan={8} className="px-4 py-10 text-center text-muted-foreground">
-                                                        <ListFilter className="h-5 w-5 mx-auto mb-2 opacity-50" />
-                                                        {isPt ? "Nenhum CVE corresponde aos filtros." : "No CVEs match the current filters."}
+                                                    <td colSpan={8}>
+                                                        <EmptyState
+                                                            icon={ListFilter}
+                                                            bare
+                                                            title={isPt ? "Nenhum CVE corresponde aos filtros" : "No CVEs match the filters"}
+                                                            description={isPt
+                                                                ? "Limpe a severidade ou a busca para ver o resto do ciclo."
+                                                                : "Clear the severity or the search to see the rest of the cycle."}
+                                                        />
                                                     </td>
                                                 </tr>
                                             )}

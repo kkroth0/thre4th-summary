@@ -19,6 +19,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { PageHeader } from "@/components/PageHeader";
+import { EmptyState } from "@/components/EmptyState";
 import { PageLayout } from "@/components/PageLayout";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { cn } from "@/lib/utils";
@@ -343,7 +344,7 @@ function HuntDetail({ hunt, onClose, onEdit, onCopy }: {
 }
 
 function FieldCoverageList({ coverage }: { coverage: FieldCoverage | null }) {
-  if (!coverage?.values.length) return <p className="py-16 text-center text-sm text-muted-foreground">Nenhuma cobertura registrada nas suas hunts.</p>;
+  if (!coverage?.values.length) return <EmptyState bare title="Nenhuma cobertura registrada" description="A cobertura sai das suas hunts com técnica ATT&CK preenchida. Crie uma hunt ou preencha a técnica de uma existente." />;
   const max = coverage.values[0].count;
   return (
     <div className="divide-y rounded-md border">
@@ -994,8 +995,12 @@ const Hunting = () => {
                   })}
                   {!schedule.length && (
                     <tr>
-                      <td colSpan={5} className="px-4 py-10 text-center text-muted-foreground">
-                        Nenhuma hunt com ritmo definido. Defina a cadência na hunt para ela entrar no controle contínuo.
+                      <td colSpan={5}>
+                        <EmptyState
+                          bare
+                          title="Nenhuma hunt com ritmo definido"
+                          description="Defina a cadência na hunt — diária, semanal, mensal ou por intel — para ela entrar no controle contínuo."
+                        />
                       </td>
                     </tr>
                   )}
@@ -1127,7 +1132,7 @@ const Hunting = () => {
               {loading ? (
                 <div className="flex items-center gap-2 py-20 text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Carregando biblioteca…</div>
               ) : !shown.length ? (
-                <div className="rounded-md border border-dashed py-20 text-center text-sm text-muted-foreground">Nenhuma hunt corresponde aos filtros.</div>
+                <EmptyState title="Nenhuma hunt corresponde aos filtros" description="Limpe um filtro ou busque por outra técnica, CVE ou tabela." />
               ) : (
                 <div className="rounded-md border bg-card">
                   <Table className="min-w-[820px]">

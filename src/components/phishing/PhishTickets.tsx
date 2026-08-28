@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Check, ChevronDown, Clock, Copy, ExternalLink, Loader2, RotateCcw, Send, Skull } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/EmptyState";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { useLanguage } from "@/contexts/LanguageContext";
@@ -142,11 +143,12 @@ export function PhishTickets() {
       {loading ? (
         <div className="space-y-3">{[1, 2].map((n) => <div key={n} className="h-20 animate-pulse rounded-lg border bg-card" />)}</div>
       ) : !tickets.length ? (
-        <Card className="border-dashed">
-          <CardContent className="p-10 text-center text-sm text-muted-foreground">
-            {pt ? "Nada na fila." : "Nothing in the queue."}
-          </CardContent>
-        </Card>
+        <EmptyState
+          title={pt ? "Nada na fila" : "Nothing in the queue"}
+          description={pt
+            ? "Abra um ticket a partir de um domínio suspeito para acompanhar o takedown aqui."
+            : "Open a ticket from a suspicious domain to track its takedown here."}
+        />
       ) : (
         <div className="space-y-2">
           {tickets.map((ticket) => {
