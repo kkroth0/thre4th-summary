@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { PageHeader } from "@/components/PageHeader";
 import { EmptyState } from "@/components/EmptyState";
+import { LoadingRows } from "@/components/LoadingState";
 import { PageLayout } from "@/components/PageLayout";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { deleteKnowledge, fetchKnowledge, type KnowledgeItem } from "@/services/threatApi";
@@ -91,10 +92,7 @@ const Knowledge = () => {
             </div>
 
             {loading ? (
-                <div className="flex items-center gap-2 py-16 text-muted-foreground">
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    {pt ? "Carregando…" : "Loading…"}
-                </div>
+                <LoadingRows rows={6} />
             ) : items.length === 0 ? (
                 <EmptyState
                     title={pt ? "Nada guardado ainda" : "Nothing saved yet"}

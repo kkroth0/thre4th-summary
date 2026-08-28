@@ -20,6 +20,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { PageHeader } from "@/components/PageHeader";
 import { EmptyState } from "@/components/EmptyState";
+import { LoadingRows } from "@/components/LoadingState";
 import { PageLayout } from "@/components/PageLayout";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { cn } from "@/lib/utils";
@@ -372,7 +373,7 @@ function TechniqueMatrix({ coverage, hunts, catalog, onOpen }: {
   onOpen: (hunt: HuntingItem) => void;
 }) {
   const [selected, setSelected] = useState<TechniqueCoverageNode | null>(null);
-  if (!coverage) return <div className="flex items-center gap-2 py-16 text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Carregando cobertura…</div>;
+  if (!coverage) return <LoadingRows rows={6} />;
   const related: HuntingItem[] = selected
     ? [...huntsForTechnique(hunts, selected.id), ...huntsForTechnique(catalog, selected.id)]
     : [];
@@ -1130,7 +1131,7 @@ const Hunting = () => {
             <section className="min-w-0">
               <div className="mb-2 flex items-center justify-between text-sm text-muted-foreground"><span>{shown.length === allItems.length ? `${shown.length} hunts` : `${shown.length} / ${allItems.length}`}</span><span>HEARTH · MIT</span></div>
               {loading ? (
-                <div className="flex items-center gap-2 py-20 text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Carregando biblioteca…</div>
+                <LoadingRows rows={8} />
               ) : !shown.length ? (
                 <EmptyState title="Nenhuma hunt corresponde aos filtros" description="Limpe um filtro ou busque por outra técnica, CVE ou tabela." />
               ) : (

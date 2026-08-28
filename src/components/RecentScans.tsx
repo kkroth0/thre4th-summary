@@ -3,6 +3,7 @@ import { History, Loader2 } from "lucide-react";
 import { fetchScans, type SavedScan } from "@/services/threatApi";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { LoadingRows } from "@/components/LoadingState";
 
 // DEN-04: a tela de entrada da busca usava um terço da altura e deixava o resto
 // em branco, e o histórico de consultas só existia dentro de um modal que
@@ -42,9 +43,7 @@ export const RecentScans = ({ onPick, limit = 6 }: { onPick: (query: string) => 
   if (!auth.authenticated) return null;
   if (scans === null) {
     return (
-      <div className="flex items-center gap-2 px-1 py-3 text-xs text-muted-foreground">
-        <Loader2 className="h-3.5 w-3.5 animate-spin" /> {pt ? "Carregando consultas recentes…" : "Loading recent searches…"}
-      </div>
+      <LoadingRows rows={3} />
     );
   }
   if (!scans.length) return null;

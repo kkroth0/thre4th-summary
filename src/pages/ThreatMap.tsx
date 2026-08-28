@@ -27,6 +27,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { PageLayout } from "@/components/PageLayout";
 import { EmptyState } from "@/components/EmptyState";
+import { LoadingRows } from "@/components/LoadingState";
 import { MetricCard, type MetricTone } from "@/components/MetricCard";
 
 // As telas guardavam o tom como classe do Tailwind; o cartão pede o papel.
@@ -834,9 +835,7 @@ const ThreatMap = () => {
       </div>
 
       {loading && !data ? (
-        <div className="flex items-center justify-center py-20 text-muted-foreground">
-          <Loader2 className="mr-2 h-5 w-5 animate-spin" /> {pt ? "Carregando radar..." : "Loading radar..."}
-        </div>
+        <LoadingRows rows={6} />
       ) : data && signal && delta ? (
         <div className="space-y-5">
           <FocusControls

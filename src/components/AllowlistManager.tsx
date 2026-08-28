@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { LoadingRows } from "@/components/LoadingState";
 import {
     fetchAllowlist,
     addAllowlistEntry,
@@ -107,9 +108,7 @@ export default function AllowlistManager() {
 
                 <div className="space-y-1.5">
                     {loading ? (
-                        <div className="flex items-center gap-2 text-sm text-muted-foreground py-4 justify-center">
-                            <Loader2 className="h-4 w-4 animate-spin" /> {pt ? "Carregando…" : "Loading…"}
-                        </div>
+                        <LoadingRows rows={3} />
                     ) : !entries.length ? (
                         <div className="flex items-center gap-2 text-sm text-muted-foreground py-4 justify-center">
                             <Lock className="h-4 w-4" /> {pt ? "Ninguém com premium dinâmico." : "Dynamic premium list is empty."}

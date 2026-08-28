@@ -31,6 +31,7 @@ import {
 } from "lucide-react";
 import { PageLayout } from "@/components/PageLayout";
 import { EmptyState } from "@/components/EmptyState";
+import { LoadingRows } from "@/components/LoadingState";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -348,12 +349,7 @@ const PatchTuesday = () => {
 
                     {/* Loading state */}
                     {loadingSummary && (
-                        <div className="flex flex-col items-center justify-center py-24 gap-3 text-muted-foreground">
-                            <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                            <span className="text-xs font-semibold tracking-wide">
-                                {isPt ? "Carregando dados do MSRC..." : "Fetching data from MSRC..."}
-                            </span>
-                        </div>
+                        <LoadingRows rows={6} />
                     )}
 
                     {/* Content */}

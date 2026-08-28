@@ -3,6 +3,7 @@ import { History, Trash2, Loader2, Search, AlertTriangle, ShieldCheck, HelpCircl
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/EmptyState";
+import { LoadingRows } from "@/components/LoadingState";
 import {
     Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger,
 } from "@/components/ui/dialog";
@@ -64,9 +65,7 @@ export function ScanHistory({ onPick }: { onPick: (query: string) => void }) {
                 </DialogHeader>
                 <ScrollArea className="max-h-[55vh] pr-3">
                     {loading ? (
-                        <div className="flex items-center gap-2 text-sm text-muted-foreground py-8 justify-center">
-                            <Loader2 className="h-4 w-4 animate-spin" /> {tr({ pt: "Carregando…", en: "Loading…", es: "Cargando…", fr: "Chargement…" })}
-                        </div>
+                        <LoadingRows rows={4} />
                     ) : !scans.length ? (
                         <EmptyState
                             bare

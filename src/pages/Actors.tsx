@@ -21,6 +21,7 @@ import {
 import { Link } from "react-router-dom";
 import { PageLayout } from "@/components/PageLayout";
 import { EmptyState } from "@/components/EmptyState";
+import { LoadingRows } from "@/components/LoadingState";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -1187,12 +1188,7 @@ const Actors = () => {
 
           <div className="p-3">
             {loading ? (
-              <div className="flex min-h-[360px] items-center justify-center">
-                <div className="text-center">
-                  <Loader2 className="mx-auto h-6 w-6 animate-spin text-muted-foreground" />
-                  <p className="mt-3 text-sm text-muted-foreground">{pt ? "Carregando catálogo..." : "Loading catalog..."}</p>
-                </div>
-              </div>
+              <LoadingRows rows={7} />
             ) : error ? (
               <div className="rounded-lg border border-red-500/20 bg-red-500/5 p-5 text-sm text-muted-foreground">
                 {pt ? "Não foi possível carregar os atores." : "Could not load actors."}
