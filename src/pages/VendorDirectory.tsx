@@ -108,12 +108,18 @@ const VendorDirectory = () => {
     const [searchQuery, setSearchQuery] = useState("");
     const [selectedType, setSelectedType] = useState<string>("ALL");
     const [apiStatuses, setApiStatuses] = useState<Record<string, boolean>>({});
+    // EST-04: "verificando" precisa acabar. Sem prazo nem caminho de erro, uma
+    // resposta que não chega deixava os 18 cartões pulsando para sempre.
+    const [statusFailed, setStatusFailed] = useState(false);
 
     useEffect(() => {
-        fetch("/api/vendors/status")
+        fetch("/api/vendors/status", { signal: AbortSignal.timeout(8000) })
             .then(res => res.json())
             .then(data => setApiStatuses(data))
-            .catch(err => console.error("Error fetching vendor API statuses:", err));
+            .catch(err => {
+                console.error("Error fetching vendor API statuses:", err);
+                setStatusFailed(true);
+            });
     }, []);
 
     const vendorsList = useMemo(() => {
@@ -236,9 +242,11 @@ const VendorDirectory = () => {
                                                             </span>
                                                         )
                                                     ) : (
-                                                        <span className="inline-flex items-center gap-1.5 text-[9px] font-black tracking-wider px-2 py-0.5 rounded bg-muted/40 text-muted-foreground border border-muted/50 animate-pulse shrink-0">
+                                                        <span className={`inline-flex items-center gap-1.5 text-[9px] font-black tracking-wider px-2 py-0.5 rounded bg-muted/40 text-muted-foreground border border-muted/50 shrink-0 ${statusFailed ? "" : "animate-pulse"}`}>
                                                             <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground" />
-                                                            {language === 'pt' ? "VERIFICANDO" : "CHECKING"}
+                                                            {statusFailed
+                                                                ? (language === 'pt' ? "SEM RESPOSTA" : "NO ANSWER")
+                                                                : (language === 'pt' ? "VERIFICANDO" : "CHECKING")}
                                                         </span>
                                                     )}
                                                     {info?.docLink && (
