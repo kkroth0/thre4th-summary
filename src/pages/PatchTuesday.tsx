@@ -290,7 +290,7 @@ const PatchTuesday = () => {
 
                         <div className="flex items-center gap-2 w-full lg:w-auto">
                             <Select value={selectedId} onValueChange={setSelectedId} disabled={loadingMonths || !months.length}>
-                                <SelectTrigger className="w-full lg:w-[260px] h-10 rounded-xl bg-background border-border/50">
+                                <SelectTrigger className="w-full lg:w-[260px] h-10 rounded-lg bg-background border-border/50">
                                     <SelectValue placeholder={loadingMonths ? (isPt ? "Carregando meses..." : "Loading months...") : isPt ? "Selecione o mês" : "Select month"} />
                                 </SelectTrigger>
                                 <SelectContent className="max-h-[320px]">
@@ -305,7 +305,7 @@ const PatchTuesday = () => {
                     </div>
 
                     {/* Export bar */}
-                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-muted/40 border border-border/50 p-4 rounded-xl">
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-muted/40 border border-border/50 p-4 rounded-lg">
                         <div className="flex items-center gap-2 text-xs text-muted-foreground">
                             <Download className="h-4 w-4 text-primary" />
                             <span className="font-semibold text-foreground">
@@ -324,7 +324,7 @@ const PatchTuesday = () => {
                                     variant="outline"
                                     onClick={() => runExport(kind)}
                                     disabled={!summary || loadingSummary || exporting !== null}
-                                    className={cn("h-9 rounded-xl text-xs font-semibold border gap-2", cls)}
+                                    className={cn("h-9 rounded-lg text-xs font-semibold border gap-2", cls)}
                                 >
                                     {exporting === kind ? (
                                         <Loader2 className="h-4 w-4 animate-spin" />
@@ -339,7 +339,7 @@ const PatchTuesday = () => {
 
                     {/* Error state */}
                     {error && !loadingSummary && (
-                        <div className="flex items-center gap-3 p-4 rounded-xl border border-red-500/20 bg-red-500/5 text-sm text-red-500">
+                        <div className="flex items-center gap-3 p-4 rounded-lg border border-red-500/20 bg-red-500/5 text-sm text-red-500">
                             <AlertCircle className="h-5 w-5 shrink-0" />
                             <span>{error}</span>
                         </div>
@@ -387,7 +387,7 @@ const PatchTuesday = () => {
 
                             {/* Upstream noise, reported apart from the headline numbers */}
                             {t && t.upstream > 0 && (
-                                <div className="flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl border border-border/50 bg-muted/30 text-xs text-muted-foreground">
+                                <div className="flex items-center gap-2.5 px-3.5 py-2.5 rounded-lg border border-border/50 bg-muted/30 text-xs text-muted-foreground">
                                     <Chrome className="h-4 w-4 shrink-0 text-muted-foreground/70" />
                                     <span>
                                         {isPt
@@ -399,7 +399,7 @@ const PatchTuesday = () => {
 
                             {/* What actually needs attention today */}
                             {actionNow.length > 0 && (
-                                <div className="rounded-xl border border-red-500/25 bg-red-500/[0.04] overflow-hidden">
+                                <div className="rounded-lg border border-red-500/25 bg-red-500/[0.04] overflow-hidden">
                                     <div className="px-5 py-3.5 border-b border-red-500/20 flex flex-wrap items-center gap-2">
                                         <Flame className="h-4 w-4 text-red-500" />
                                         <h2 className="text-sm font-bold">{isPt ? "Ação imediata" : "Act now"}</h2>
@@ -473,7 +473,7 @@ const PatchTuesday = () => {
                             </div>
 
                             {/* CVE Explorer */}
-                            <div className="rounded-xl border border-border/50 bg-muted/40 overflow-hidden">
+                            <div className="rounded-lg border border-border/50 bg-muted/40 overflow-hidden">
                                 <div className="px-5 py-3.5 border-b border-border/50 flex flex-wrap items-center gap-2">
                                     <ShieldAlert className="h-4 w-4 text-primary" />
                                     <h2 className="text-sm font-bold">{isPt ? "Explorador de CVEs" : "CVE Explorer"}</h2>
@@ -512,12 +512,12 @@ const PatchTuesday = () => {
                                             placeholder={isPt ? "Buscar CVE ou título..." : "Search CVE or title..."}
                                             value={search}
                                             onChange={(e) => setSearch(e.target.value)}
-                                            className="pl-9 h-9 text-xs rounded-xl bg-background border-border/50"
+                                            className="pl-9 h-9 text-xs rounded-lg bg-background border-border/50"
                                         />
                                     </div>
 
                                     <Select value={fSeverity} onValueChange={setFSeverity}>
-                                        <SelectTrigger className="w-[140px] h-9 text-xs rounded-xl bg-background border-border/50">
+                                        <SelectTrigger className="w-[140px] h-9 text-xs rounded-lg bg-background border-border/50">
                                             <SelectValue placeholder={isPt ? "Severidade" : "Severity"} />
                                         </SelectTrigger>
                                         <SelectContent>
@@ -531,7 +531,7 @@ const PatchTuesday = () => {
                                     </Select>
 
                                     <Select value={fCvss} onValueChange={setFCvss}>
-                                        <SelectTrigger className="w-[130px] h-9 text-xs rounded-xl bg-background border-border/50">
+                                        <SelectTrigger className="w-[130px] h-9 text-xs rounded-lg bg-background border-border/50">
                                             <SelectValue placeholder="CVSS" />
                                         </SelectTrigger>
                                         <SelectContent>
@@ -543,7 +543,7 @@ const PatchTuesday = () => {
                                     </Select>
 
                                     <Select value={fImpact} onValueChange={setFImpact}>
-                                        <SelectTrigger className="w-[170px] h-9 text-xs rounded-xl bg-background border-border/50">
+                                        <SelectTrigger className="w-[170px] h-9 text-xs rounded-lg bg-background border-border/50">
                                             <SelectValue placeholder={isPt ? "Impacto" : "Impact"} />
                                         </SelectTrigger>
                                         <SelectContent>
@@ -557,7 +557,7 @@ const PatchTuesday = () => {
                                     </Select>
 
                                     <Select value={fStatus} onValueChange={setFStatus}>
-                                        <SelectTrigger className="w-[160px] h-9 text-xs rounded-xl bg-background border-border/50">
+                                        <SelectTrigger className="w-[160px] h-9 text-xs rounded-lg bg-background border-border/50">
                                             <SelectValue placeholder="Status" />
                                         </SelectTrigger>
                                         <SelectContent>
@@ -574,7 +574,7 @@ const PatchTuesday = () => {
                                             variant="ghost"
                                             size="sm"
                                             onClick={clearFilters}
-                                            className="h-9 rounded-xl text-xs gap-1.5 text-muted-foreground hover:text-foreground"
+                                            className="h-9 rounded-lg text-xs gap-1.5 text-muted-foreground hover:text-foreground"
                                         >
                                             <X className="h-3.5 w-3.5" />
                                             {isPt ? "Limpar" : "Clear"}
@@ -735,7 +735,7 @@ interface DistroPanelProps {
 }
 
 const DistroPanel = ({ title, rows, max, barClass }: DistroPanelProps) => (
-    <div className="rounded-xl border border-border/50 bg-muted/40 p-5">
+    <div className="rounded-lg border border-border/50 bg-muted/40 p-5">
         <h2 className="text-sm font-bold mb-4">{title}</h2>
         <div className="space-y-2.5">
             {rows.map((r) => (

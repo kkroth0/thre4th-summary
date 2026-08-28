@@ -55,7 +55,7 @@ export function AdminSettings() {
 
       <Card>
         <CardContent className="flex items-start gap-3 p-5">
-          <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 ring-1 ring-inset ring-primary/20">
+          <span className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-primary/10 ring-1 ring-inset ring-primary/20">
             <Unlock className="text-primary" />
           </span>
           <div className="min-w-0 flex-1">
@@ -81,7 +81,7 @@ export function AdminSettings() {
       <Card>
         <CardContent className="flex flex-col gap-4 p-5">
           <div className="flex items-start gap-3">
-            <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 ring-1 ring-inset ring-primary/20">
+            <span className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-primary/10 ring-1 ring-inset ring-primary/20">
               <Plug className="text-primary" />
             </span>
             <div className="min-w-0 flex-1">

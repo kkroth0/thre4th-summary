@@ -171,7 +171,7 @@ const VendorDirectory = () => {
                     </div>
 
                     {/* Filter controls row */}
-                    <div className="flex flex-col md:flex-row items-center gap-3 bg-muted/40 border border-border/50 p-3 rounded-xl">
+                    <div className="flex flex-col md:flex-row items-center gap-3 bg-muted/40 border border-border/50 p-3 rounded-lg">
                         <div className="relative w-full md:w-80">
                             <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground/60" />
                             <Input
@@ -213,7 +213,7 @@ const VendorDirectory = () => {
                                 return (
                                     <div
                                         key={name}
-                                        className="p-4 rounded-xl border border-border/50 bg-muted/40 hover:bg-muted/40 transition-all hover:scale-[1.01] hover:border-border/50 flex flex-col justify-between h-[160px] relative shadow-sm hover:shadow-md"
+                                        className="p-4 rounded-lg border border-border/50 bg-muted/40 hover:bg-muted/40 transition-all hover:scale-[1.01] hover:border-border/50 flex flex-col justify-between h-[160px] relative shadow-sm hover:shadow-md"
                                     >
                                         <div className="space-y-2">
                                             <div className="flex items-center justify-between gap-2">
@@ -282,7 +282,7 @@ const VendorDirectory = () => {
                                 );
                             })
                         ) : (
-                            <div className="col-span-full h-32 flex flex-col items-center justify-center text-muted-foreground bg-muted/40 rounded-xl border border-dashed border-border/50">
+                            <div className="col-span-full h-32 flex flex-col items-center justify-center text-muted-foreground bg-muted/40 rounded-lg border border-dashed border-border/50">
                                 <Shield className="h-6 w-6 text-muted-foreground/40 mb-2" />
                                 <p className="text-xs">No intelligence sources matching filters found.</p>
                             </div>

@@ -586,12 +586,12 @@ const CveDashboard = () => {
               placeholder={t("searchCves") || "Search CVEs..."}
               value={searchCveQuery}
               onChange={(e) => setSearchCveQuery(e.target.value)}
-              className="pl-9 bg-card h-11 rounded-xl"
+              className="pl-9 bg-card h-11 rounded-lg"
             />
           </div>
 
           {/* Filters Bar */}
-          <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 bg-muted/40  p-5 rounded-xl border border-border/50 ">
+          <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 bg-muted/40  p-5 rounded-lg border border-border/50 ">
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 flex-1">
               {/* Vendor Select */}
               <div className="flex flex-col gap-1.5">
@@ -599,10 +599,10 @@ const CveDashboard = () => {
                   {tr({ pt: "Fabricante", en: "Vendor", es: "Proveedor", fr: "Fournisseur" })}
                 </span>
                 <Select value={selectedVendor} onValueChange={setSelectedVendor}>
-                  <SelectTrigger className="h-10.5 bg-background/40 border-border/50 rounded-xl text-xs font-semibold focus:ring-primary/20 hover:bg-background/60 transition-all">
+                  <SelectTrigger className="h-10.5 bg-background/40 border-border/50 rounded-lg text-xs font-semibold focus:ring-primary/20 hover:bg-background/60 transition-all">
                     <SelectValue placeholder={tr({ pt: "Todos Fabricantes", en: "All Vendors", es: "Todos los Proveedores", fr: "Tous les Fournisseurs" })} />
                   </SelectTrigger>
-                  <SelectContent className="max-h-80 border-border/50 bg-popover/95  rounded-xl">
+                  <SelectContent className="max-h-80 border-border/50 bg-popover/95  rounded-lg">
                     <SelectItem value="all" className="text-xs font-semibold rounded-lg">
                       {tr({ pt: "Todos Fabricantes", en: "All Vendors", es: "Todos los Proveedores", fr: "Tous les Fournisseurs" })}
                     </SelectItem>
@@ -621,10 +621,10 @@ const CveDashboard = () => {
                   {tr({ pt: "Software / Produto", en: "Software / Product", es: "Software / Producto", fr: "Logiciel / Produit" })}
                 </span>
                 <Select value={selectedSoftware} onValueChange={setSelectedSoftware}>
-                  <SelectTrigger className="h-10.5 bg-background/40 border-border/50 rounded-xl text-xs font-semibold focus:ring-primary/20 hover:bg-background/60 transition-all">
+                  <SelectTrigger className="h-10.5 bg-background/40 border-border/50 rounded-lg text-xs font-semibold focus:ring-primary/20 hover:bg-background/60 transition-all">
                     <SelectValue placeholder={tr({ pt: "Todos Softwares", en: "All Softwares", es: "Todos los Software", fr: "Tous les Logiciels" })} />
                   </SelectTrigger>
-                  <SelectContent className="max-h-80 border-border/50 bg-popover/95  rounded-xl">
+                  <SelectContent className="max-h-80 border-border/50 bg-popover/95  rounded-lg">
                     <SelectItem value="all" className="text-xs font-semibold rounded-lg">
                       {tr({ pt: "Todos Softwares", en: "All Softwares", es: "Todos los Software", fr: "Tous les Logiciels" })}
                     </SelectItem>
@@ -643,10 +643,10 @@ const CveDashboard = () => {
                   {tr({ pt: "Severidade", en: "Severity", es: "Severidad", fr: "Gravité" })}
                 </span>
                 <Select value={selectedSeverity} onValueChange={setSelectedSeverity}>
-                  <SelectTrigger className="h-10.5 bg-background/40 border-border/50 rounded-xl text-xs font-semibold focus:ring-primary/20 hover:bg-background/60 transition-all">
+                  <SelectTrigger className="h-10.5 bg-background/40 border-border/50 rounded-lg text-xs font-semibold focus:ring-primary/20 hover:bg-background/60 transition-all">
                     <SelectValue placeholder={tr({ pt: "Todas Severidades", en: "All Severities", es: "Todas las Severidades", fr: "Toutes les Gravités" })} />
                   </SelectTrigger>
-                  <SelectContent className="border-border/50 bg-popover/95  rounded-xl">
+                  <SelectContent className="border-border/50 bg-popover/95  rounded-lg">
                     <SelectItem value="all" className="text-xs font-semibold rounded-lg">
                       {tr({ pt: "Todas Severidades", en: "All Severities", es: "Todas las Severidades", fr: "Toutes les Gravités" })}
                     </SelectItem>
@@ -671,7 +671,7 @@ const CveDashboard = () => {
                   setSelectedSeverity("all");
                   setSearchCveQuery("");
                 }}
-                className="h-10 px-4 rounded-xl text-xs text-muted-foreground hover:text-foreground hover:bg-muted/50 gap-1.5 transition-all font-semibold shrink-0 self-start md:self-end"
+                className="h-10 px-4 rounded-lg text-xs text-muted-foreground hover:text-foreground hover:bg-muted/50 gap-1.5 transition-all font-semibold shrink-0 self-start md:self-end"
               >
                 <X className="h-4 w-4" />
                 {tr({ pt: "Limpar Filtros", en: "Clear Filters", es: "Limpiar Filtros", fr: "Effacer les Filtres" })}
@@ -699,7 +699,7 @@ const CveDashboard = () => {
                   ))}
                 </div>
               ) : filteredExploitedCves.length === 0 ? (
-                <div className="p-12 border border-dashed rounded-xl text-center bg-card">
+                <div className="p-12 border border-dashed rounded-lg text-center bg-card">
                   <AlertTriangle className="h-12 w-12 text-muted-foreground/50 mx-auto mb-3" />
                   <p className="text-muted-foreground font-medium">{t("noCvesFound") || "No CVEs found"}</p>
                 </div>
@@ -758,12 +758,12 @@ const CveDashboard = () => {
                   ))}
                 </div>
               ) : cveError ? (
-                <div className="p-8 border border-destructive/20 rounded-xl bg-destructive/5 text-center">
+                <div className="p-8 border border-destructive/20 rounded-lg bg-destructive/5 text-center">
                   <AlertTriangle className="h-10 w-10 text-destructive mx-auto mb-3" />
                   <p className="text-destructive font-medium">{cveError}</p>
                 </div>
               ) : filteredRecentCves.length === 0 ? (
-                <div className="p-12 border border-dashed rounded-xl text-center bg-card">
+                <div className="p-12 border border-dashed rounded-lg text-center bg-card">
                   <AlertTriangle className="h-12 w-12 text-muted-foreground/50 mx-auto mb-3" />
                   <p className="text-muted-foreground font-medium">{t("noCvesFound") || "No CVEs found"}</p>
                 </div>
@@ -815,7 +815,7 @@ const CveDashboard = () => {
 
                           {/* Mitigation Section */}
                           {cve.mitigation && (
-                            <div className="p-3.5 rounded-xl bg-emerald-500/5 border border-emerald-500/10 space-y-1.5">
+                            <div className="p-3.5 rounded-lg bg-emerald-500/5 border border-emerald-500/10 space-y-1.5">
                               <h4 className="text-xs font-bold text-emerald-500 flex items-center gap-1.5 uppercase tracking-wider">
                                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
                                 Recommended Mitigation & Remediation

@@ -680,7 +680,7 @@ export const ThreatCorrelationGraph = ({
   };
 
   return (
-    <Card className="border-white/[0.04] bg-[#0B0E1A]/80   rounded-xl overflow-hidden animate-fade-in">
+    <Card className="border-white/[0.04] bg-[#0B0E1A]/80   rounded-lg overflow-hidden animate-fade-in">
       <div className="flex items-center justify-between px-5 py-3 border-b border-white/[0.04]">
         <div className="flex items-center gap-3">
           <h3 className="text-sm font-bold text-foreground">{language === "pt" ? "Correlação de Ameaças" : "Threat Correlation"}</h3>
@@ -951,7 +951,7 @@ export const ThreatCorrelationGraph = ({
               {/* Shared Fact Nodes (IP/Country/ISP/Port) */}
               {["country", "isp", "asn", "port", "verdict"].includes(displayNode.type) && (
                 <div className="space-y-4 text-xs leading-relaxed">
-                  <div className="bg-primary/5 border border-border/50 rounded-xl p-4 space-y-2">
+                  <div className="bg-primary/5 border border-border/50 rounded-lg p-4 space-y-2">
                     <div className="text-[11px] font-bold text-foreground flex items-center gap-1.5">
                       <Shield className="h-4 w-4 text-primary" />
                       {language === "pt" ? "Correlação de Dados Confirmada" : "Data Correlation Confirmed"}

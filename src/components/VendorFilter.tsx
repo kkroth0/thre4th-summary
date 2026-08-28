@@ -120,7 +120,7 @@ export function VendorFilter({ selectedVendors, onVendorsChange, className }: Ve
                     </span>
                 </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-2xl bg-background/95  border-border/50 shadow-2xl rounded-xl p-4 sm:p-5">
+            <DialogContent className="max-w-2xl bg-background/95  border-border/50 shadow-2xl rounded-lg p-4 sm:p-5">
                 <DialogHeader className="space-y-0.5">
                     <DialogTitle className="text-lg sm:text-xl font-bold tracking-tight flex items-center gap-2">
                         <span>Select Threat Intelligence Vendors</span>
@@ -133,7 +133,7 @@ export function VendorFilter({ selectedVendors, onVendorsChange, className }: Ve
                     </DialogDescription>
                 </DialogHeader>
 
-                <div className="bg-muted/10 border border-border/50 p-3.5 rounded-xl space-y-2 mt-1.5 animate-fade-in">
+                <div className="bg-muted/10 border border-border/50 p-3.5 rounded-lg space-y-2 mt-1.5 animate-fade-in">
                     <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/80">Quick Selection Tools</p>
                     <div className="flex flex-wrap gap-2">
                         <Button 
@@ -191,7 +191,7 @@ export function VendorFilter({ selectedVendors, onVendorsChange, className }: Ve
                                         aria-checked={tempSelected.includes(vendor.name)}
                                         tabIndex={0}
                                         className={cn(
-                                            "flex items-center justify-between py-2 px-3 rounded-xl border transition-all duration-200 cursor-pointer select-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50",
+                                            "flex items-center justify-between py-2 px-3 rounded-lg border transition-all duration-200 cursor-pointer select-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50",
                                             tempSelected.includes(vendor.name)
                                                 ? "bg-primary/10 border-border/50 hover:border-border/50 text-foreground shadow-sm shadow-primary/5"
                                                 : "bg-muted/10 border-border/30 hover:border-border/60 hover:bg-muted/20 text-muted-foreground"
@@ -244,7 +244,7 @@ export function VendorFilter({ selectedVendors, onVendorsChange, className }: Ve
                                         aria-checked={tempSelected.includes(vendor.name)}
                                         tabIndex={0}
                                         className={cn(
-                                            "flex items-center justify-between py-2 px-3 rounded-xl border transition-all duration-200 cursor-pointer select-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50",
+                                            "flex items-center justify-between py-2 px-3 rounded-lg border transition-all duration-200 cursor-pointer select-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50",
                                             tempSelected.includes(vendor.name)
                                                 ? "bg-primary/10 border-border/50 hover:border-border/50 text-foreground shadow-sm shadow-primary/5"
                                                 : "bg-muted/10 border-border/30 hover:border-border/60 hover:bg-muted/20 text-muted-foreground"

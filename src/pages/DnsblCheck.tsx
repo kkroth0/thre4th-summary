@@ -257,7 +257,7 @@ const DnsblCheck = () => {
 
                     {/* Search Panel — flat, ThreatBrief style */}
                     <div className={`w-full ${results.length === 0 ? "max-w-2xl mx-auto" : "max-w-none"}`}>
-                        <form onSubmit={handleSearch} className="flex flex-col sm:flex-row gap-2 rounded-xl bg-muted/40 p-2">
+                        <form onSubmit={handleSearch} className="flex flex-col sm:flex-row gap-2 rounded-lg bg-muted/40 p-2">
                             <div className="flex items-center gap-2 flex-1 px-2">
                                 <Shield className="h-4 w-4 text-muted-foreground shrink-0" />
                                 <Input
@@ -574,7 +574,7 @@ const DnsblCheck = () => {
 
                             {/* Providers Grid */}
                             {filteredResults.length === 0 ? (
-                                <div className="p-12 border border-dashed border-border/50 rounded-xl text-center bg-muted/40 ">
+                                <div className="p-12 border border-dashed border-border/50 rounded-lg text-center bg-muted/40 ">
                                     <Info className="h-10 w-10 text-muted-foreground/50 mx-auto mb-3" />
                                     <p className="text-muted-foreground font-medium">
                                         {language === 'pt' ? "Nenhum provedor encontrado para a filtragem atual." : "No providers found matching current filters."}

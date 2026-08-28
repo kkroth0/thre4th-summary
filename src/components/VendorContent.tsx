@@ -195,7 +195,7 @@ export const VendorContent = ({ vendor, onPivot }: VendorContentProps) => {
                         )}
 
                         {cidrResults && (
-                            <div className="space-y-2.5 bg-muted/40 border border-border/50 rounded-xl p-3 text-xs">
+                            <div className="space-y-2.5 bg-muted/40 border border-border/50 rounded-lg p-3 text-xs">
                                 <div className="flex justify-between items-center text-[10px] text-muted-foreground uppercase font-medium">
                                     <span>Subnet: {cidrResults.cidr}</span>
                                     <span>Type: {cidrResults.addressSpaceDesc || "Public"}</span>

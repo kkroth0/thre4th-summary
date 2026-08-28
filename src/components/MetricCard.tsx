@@ -49,7 +49,7 @@ export const MetricCard = ({
   return (
     <div
       title={title}
-      className={cn("rounded-xl border border-border/60 bg-card", s.pad, className)}
+      className={cn("rounded-lg border border-border/60 bg-card", s.pad, className)}
     >
       <div className="flex items-center justify-between gap-3">
         <span className={cn("font-bold uppercase tracking-wider text-muted-foreground", s.label)}>

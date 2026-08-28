@@ -140,13 +140,13 @@ export default function SapPatch() {
                     </div>
                 </div>
                 <div className="flex items-center gap-2">
-                    <Button variant="outline" size="sm" onClick={load} disabled={loading} className="rounded-xl">
+                    <Button variant="outline" size="sm" onClick={load} disabled={loading} className="rounded-lg">
                         <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
                         {pt ? "Atualizar" : "Refresh"}
                     </Button>
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                            <Button size="sm" disabled={!canExportSapPatch(data) || !!exporting} className="rounded-xl">
+                            <Button size="sm" disabled={!canExportSapPatch(data) || !!exporting} className="rounded-lg">
                                 <Download className="h-4 w-4" />
                                 {exporting ? "Exportando…" : "Exportar"}
                             </Button>
@@ -161,7 +161,7 @@ export default function SapPatch() {
             </div>
 
             {error && (
-                <div className="mt-4 flex items-center gap-3 p-4 rounded-xl border border-red-500/20 bg-red-500/5 text-sm text-red-500">
+                <div className="mt-4 flex items-center gap-3 p-4 rounded-lg border border-red-500/20 bg-red-500/5 text-sm text-red-500">
                     <AlertTriangle className="h-4 w-4 shrink-0" /> {error}
                 </div>
             )}
@@ -177,22 +177,22 @@ export default function SapPatch() {
 
             {/* Filters */}
             {data && (
-                <div className="mt-4 flex flex-col sm:flex-row items-stretch sm:items-center gap-3 bg-muted/40 border border-border/50 p-4 rounded-xl">
+                <div className="mt-4 flex flex-col sm:flex-row items-stretch sm:items-center gap-3 bg-muted/40 border border-border/50 p-4 rounded-lg">
                     <div className="relative flex-1">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                         <Input value={search} onChange={(e) => setSearch(e.target.value)}
                             placeholder={pt ? "Buscar nota, título ou CVE…" : "Search note, title or CVE…"}
-                            className="pl-9 h-9 text-sm rounded-xl bg-background border-border/50" />
+                            className="pl-9 h-9 text-sm rounded-lg bg-background border-border/50" />
                     </div>
                     <Select value={fPriority} onValueChange={setFPriority}>
-                        <SelectTrigger className="w-full sm:w-[170px] h-9 rounded-xl bg-background border-border/50"><SelectValue /></SelectTrigger>
+                        <SelectTrigger className="w-full sm:w-[170px] h-9 rounded-lg bg-background border-border/50"><SelectValue /></SelectTrigger>
                         <SelectContent>
                             <SelectItem value="ALL">{pt ? "Toda prioridade" : "Any priority"}</SelectItem>
                             {priorities.map((p) => <SelectItem key={p} value={p}>{p}</SelectItem>)}
                         </SelectContent>
                     </Select>
                     <Select value={fCvss} onValueChange={setFCvss}>
-                        <SelectTrigger className="w-full sm:w-[150px] h-9 rounded-xl bg-background border-border/50"><SelectValue /></SelectTrigger>
+                        <SelectTrigger className="w-full sm:w-[150px] h-9 rounded-lg bg-background border-border/50"><SelectValue /></SelectTrigger>
                         <SelectContent>
                             <SelectItem value="0">{pt ? "Qualquer CVSS" : "Any CVSS"}</SelectItem>
                             <SelectItem value="9">CVSS ≥ 9.0</SelectItem>
@@ -205,7 +205,7 @@ export default function SapPatch() {
 
             {/* Table */}
             {data && (
-                <div className="mt-4 rounded-xl border border-border/50 bg-muted/40 overflow-hidden">
+                <div className="mt-4 rounded-lg border border-border/50 bg-muted/40 overflow-hidden">
                     <div className="overflow-x-auto">
                         <table className="w-full text-sm">
                             <thead className="bg-muted/60 text-xs uppercase tracking-wide text-muted-foreground">

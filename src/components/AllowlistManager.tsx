@@ -73,7 +73,7 @@ export default function AllowlistManager() {
         <Card className="mb-5">
             <CardContent className="p-5 space-y-4">
                 <div className="flex items-start gap-3">
-                    <span className="h-11 w-11 rounded-xl bg-primary/10 ring-1 ring-inset ring-primary/20 flex items-center justify-center shrink-0">
+                    <span className="h-11 w-11 rounded-lg bg-primary/10 ring-1 ring-inset ring-primary/20 flex items-center justify-center shrink-0">
                         <ShieldCheck className="h-5 w-5 text-primary" />
                     </span>
                     <div className="min-w-0 flex-1">

@@ -255,6 +255,11 @@ All colors MUST be HSL.
   /* Uma moldura para os cabeçalhos: filete embaixo, sem card. Das oito páginas
      que escreviam a própria, três já faziam assim, três punham o título dentro
      de um card cinza com 24px de padding e duas não separavam nada. */
+  /* Raio de borda, uma regra: rounded-lg (var(--radius), 6px) para painéis,
+     cards e tabelas; rounded-md para controles; rounded-full só para chips,
+     pílulas e avatares. rounded-xl era 12px, o dobro do maior token do tema, e
+     por isso os cards de cabeçalho pareciam vir de outro produto. rounded-sm
+     fica para imagens de 16px e rounded-none para segmentos agrupados. */
   .page-head {
     @apply mb-6 flex flex-col gap-4 border-b border-border pb-4 sm:flex-row sm:items-end sm:justify-between;
   }

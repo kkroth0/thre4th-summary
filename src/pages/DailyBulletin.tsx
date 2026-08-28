@@ -97,7 +97,7 @@ const timeAgo = (iso: string, pt: boolean) => {
 const FailurePane: React.FC<{ job: BoletimJob; pt: boolean; onRetry: (job: BoletimJob) => void }> = ({ job, pt, onRetry }) => {
   const ajuda = explainFailure(job.error, pt);
   return (
-    <div className="rounded-xl border border-red-500/25 bg-red-500/[0.04] p-5">
+    <div className="rounded-lg border border-red-500/25 bg-red-500/[0.04] p-5">
       <div className="flex items-start gap-3">
         <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-red-700 dark:text-red-400" />
         <div className="min-w-0 flex-1">
@@ -466,7 +466,7 @@ const DailyBulletin: React.FC = () => {
                 <SelectTrigger
                   data-testid="report-generator-type-trigger"
                   aria-label={pt ? "Tipo do relatório" : "Report type"}
-                  className="h-10 w-[6.9rem] shrink-0 justify-between rounded-sm border-0 bg-muted/60 px-2.5 text-xs font-medium shadow-none focus:ring-0 sm:w-[7.75rem]"
+                  className="h-10 w-[6.9rem] shrink-0 justify-between rounded-md border-0 bg-muted/60 px-2.5 text-xs font-medium shadow-none focus:ring-0 sm:w-[7.75rem]"
                 >
                   <span className="truncate">
                     {pasteType === "vuln" ? (pt ? "Vuln." : "Vuln.") : (pt ? "Campanha" : "Campaign")}
@@ -477,7 +477,7 @@ const DailyBulletin: React.FC = () => {
                   <SelectItem value="campaign">{pt ? "Campanha" : "Campaign"}</SelectItem>
                 </SelectContent>
               </Select>
-              <Button onClick={() => { generate(pasteUrl.trim(), pasteType, ""); setPasteUrl(""); }} disabled={!pasteUrl.trim()} className="h-10 shrink-0 gap-2 rounded-sm px-3 sm:px-4">
+              <Button onClick={() => { generate(pasteUrl.trim(), pasteType, ""); setPasteUrl(""); }} disabled={!pasteUrl.trim()} className="h-10 shrink-0 gap-2 rounded-md px-3 sm:px-4">
                 <Sparkles className="h-4 w-4" /> {pt ? "Gerar Boletim" : "Generate Bulletin"}
               </Button>
             </div>
@@ -501,7 +501,7 @@ const DailyBulletin: React.FC = () => {
             </div>
           </div>
         ) : (
-          <div className="flex items-center gap-4 rounded-xl bg-muted/40 p-5">
+          <div className="flex items-center gap-4 rounded-lg bg-muted/40 p-5">
             <KeyRound className="h-5 w-5 text-muted-foreground shrink-0" />
             <div className="flex-1 min-w-0">
               <div className="text-sm font-medium">{pt ? "Entre para gerar" : "Sign in to generate"}</div>

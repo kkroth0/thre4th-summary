@@ -153,7 +153,7 @@ export function ReportPane({ job }: { job: BoletimJob | null }) {
 
   if (!job || !job.json) {
     return (
-      <div className="flex min-h-[420px] flex-col items-center justify-center gap-4 rounded-xl border border-dashed border-border/60 p-8 text-center">
+      <div className="flex min-h-[420px] flex-col items-center justify-center gap-4 rounded-lg border border-dashed border-border/60 p-8 text-center">
         <BrandMark className="h-11 w-11 opacity-80" />
         <div>
           <div className="text-sm font-medium">{pt ? "Nenhum relatório aberto" : "No report open"}</div>
@@ -170,7 +170,7 @@ export function ReportPane({ job }: { job: BoletimJob | null }) {
   const r = job.json;
   const usage = usageTag(r.consumo, pt);
   return (
-    <div className="rounded-xl border bg-card/40 p-5 lg:p-6">
+    <div className="rounded-lg border bg-card/40 p-5 lg:p-6">
       {/* toolbar: meta à esquerda, ações à direita */}
       <div className="flex flex-wrap items-center gap-2">
         {r.tlp && (

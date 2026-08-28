@@ -140,7 +140,7 @@ const HeroOpsPanel = ({ language }: { language: string }) => {
   ];
 
   return (
-    <div className="soc-panel relative overflow-hidden rounded-xl text-left">
+    <div className="soc-panel relative overflow-hidden rounded-lg text-left">
       <div className="flex items-center justify-between border-b border-border px-4 py-3">
         <div className="flex items-center gap-2">
           <span className="h-2.5 w-2.5 rounded-full bg-red-500" />
@@ -1556,7 +1556,7 @@ const Index = () => {
 
           {!isAnalyzing && results.length === 0 && (
             <section className="mx-auto max-w-5xl py-14 md:py-20">
-              <div className="soc-panel relative overflow-hidden rounded-xl border-primary/35 p-7 md:p-9">
+              <div className="soc-panel relative overflow-hidden rounded-lg border-primary/35 p-7 md:p-9">
                 <div className="absolute inset-x-0 top-0 h-1 bg-primary" />
                 <div className="flex flex-col gap-8 md:flex-row md:items-start md:justify-between">
                   <div className="max-w-2xl">

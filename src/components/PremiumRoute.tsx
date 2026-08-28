@@ -59,7 +59,7 @@ export function PremiumRoute({ children, feature }: { children: React.ReactNode;
         ) : (
           <Card>
             <CardContent className="flex flex-col items-center gap-4 p-7 text-center">
-              <span className="flex h-11 w-11 items-center justify-center rounded-xl border border-border bg-secondary">
+              <span className="flex h-11 w-11 items-center justify-center rounded-lg border border-border bg-secondary">
                 <Lock className="h-5 w-5 text-muted-foreground" />
               </span>
 
