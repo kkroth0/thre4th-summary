@@ -438,15 +438,15 @@ const DailyBulletin: React.FC = () => {
 
   return (
     <PageLayout width="max-w-7xl">
-      <PageHeader
-        title={pt ? "Geração de Relatórios" : "Report Generation"}
-        subtitle={pt
-          ? "Cole o link de um relatório ou notícia de segurança. Ele é resumido sozinho e você baixa o JSON pronto pro seu slide."
-          : "Paste a link to a security report or news post. It gets summarized on its own and you download the JSON for your slide."}
-      />
+      {/* FLX-01: o topo gastava 230px fixos — título, subtítulo, campo, seletor,
+          botão e linha de status — para uma ação ocasional: na maior parte do
+          tempo o analista está lendo um relatório pronto, não colando link novo.
+          O subtítulo virou o placeholder do campo, que é onde ele é lido na hora
+          certa, e o título ficou em linha única com a lista logo abaixo. */}
+      <PageHeader title={pt ? "Geração de Relatórios" : "Report Generation"} />
 
       {/* Generator — one calm input row, no card chrome */}
-      <section className="mb-8">
+      <section className="mb-6">
         {auth.authenticated ? (
           <div className="space-y-3">
             <div
@@ -454,7 +454,9 @@ const DailyBulletin: React.FC = () => {
               className="flex min-h-12 flex-row items-center gap-1 rounded-md border border-border bg-background p-1 shadow-sm sm:flex-row sm:items-center"
             >
               <Input
-                placeholder={pt ? "Cole uma URL…" : "Paste a URL…"}
+                placeholder={pt
+                  ? "Cole o link de um relatório ou notícia — sai o JSON pronto pro slide"
+                  : "Paste a link to a security report or news post — you get the JSON for your slide"}
                 value={pasteUrl}
                 onChange={(e) => setPasteUrl(e.target.value)}
                 onKeyDown={(e) => { if (e.key === "Enter" && pasteUrl.trim()) { generate(pasteUrl.trim(), pasteType, ""); setPasteUrl(""); } }}
@@ -494,7 +496,8 @@ const DailyBulletin: React.FC = () => {
                   ? `${auth.login} · ${pt ? "pronto para gerar" : "ready to generate"}`
                   : (pt ? "Cole uma URL para liberar a geração" : "Paste a URL to enable generation")}
               </span>
-              <Link to="/settings" className="ml-auto shrink-0 hover:text-foreground">{pt ? "Configurações" : "Settings"}</Link>
+              {/* Leva a origem, para Configurações poder oferecer a volta (FLX-06). */}
+              <Link to="/settings?from=/relatorios" className="ml-auto shrink-0 hover:text-foreground">{pt ? "Configurações" : "Settings"}</Link>
             </div>
           </div>
         ) : (

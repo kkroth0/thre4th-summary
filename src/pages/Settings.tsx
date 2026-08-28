@@ -1,5 +1,5 @@
-import { KeyRound, Loader2, Radar, Settings as SettingsIcon, ShieldCheck, SlidersHorizontal } from "lucide-react";
-import { Navigate, useSearchParams } from "react-router-dom";
+import { ArrowLeft, KeyRound, Loader2, Radar, Settings as SettingsIcon, ShieldCheck, SlidersHorizontal } from "lucide-react";
+import { Link, Navigate, useSearchParams } from "react-router-dom";
 import { AdminSettings } from "@/components/settings/AdminSettings";
 import { ApiKeysSettings } from "@/components/settings/ApiKeysSettings";
 import { MonitoringSettings } from "@/components/settings/MonitoringSettings";
@@ -7,6 +7,7 @@ import { PreferencesSettings } from "@/components/settings/PreferencesSettings";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PageLayout } from "@/components/PageLayout";
+import { useNavCatalog } from "@/components/Header";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 
@@ -17,6 +18,9 @@ export default function Settings() {
   const { auth, loading } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const pt = language === "pt";
+  // Todos os hooks antes de qualquer return: `loading` e o redirect abaixo
+  // saem cedo, e um hook depois deles rodaria em alguns renders e não em outros.
+  const { homeItem, navGroups } = useNavCatalog();
 
   if (loading) {
     return (
@@ -37,6 +41,17 @@ export default function Settings() {
         ? "admin"
         : "general";
 
+  // FLX-06: entrar aqui era saída sem volta — o botão do cabeçalho devolve
+  // para /analyzer, não para a tela de onde se veio. Quem manda o link passa a
+  // origem, e ela vira trilha.
+  //
+  // Só caminho interno: `//host` e `http://` sairiam do produto, e isso com um
+  // parâmetro de URL é redirecionamento aberto.
+  const rawFrom = searchParams.get("from") || "";
+  const from = /^\/[^/]/.test(rawFrom) ? rawFrom : "";
+  const fromLabel = [homeItem, ...navGroups.flatMap((g) => g.items)]
+    .find((nav) => nav.path === from)?.label || "";
+
   const selectSection = (value: string) => {
     const next = value as SettingsSection;
     setSearchParams(next === "general" ? {} : { section: next }, { replace: true });
@@ -45,6 +60,15 @@ export default function Settings() {
   return (
     <PageLayout width="max-w-4xl">
       <div className="mb-7">
+        {from && fromLabel && (
+          <nav aria-label="trilha" className="mb-2 flex items-center gap-1.5 text-sm text-muted-foreground">
+            <Link to={from} className="inline-flex items-center gap-1 hover:text-foreground">
+              <ArrowLeft className="h-3.5 w-3.5" /> {fromLabel}
+            </Link>
+            <span aria-hidden>/</span>
+            <span className="text-foreground">{tr({ pt: "Configurações", en: "Settings", es: "Configuración", fr: "Paramètres" })}</span>
+          </nav>
+        )}
         <h1 className="flex items-center gap-2 text-3xl font-bold"><SettingsIcon className="text-primary" /> {tr({ pt: "Configurações", en: "Settings", es: "Configuración", fr: "Paramètres" })}</h1>
         <p className="mt-1 text-muted-foreground">{tr({ pt: "Preferências, integrações e administração da sua conta.", en: "Account preferences, integrations, and administration.", es: "Preferencias, integraciones y administración de tu cuenta.", fr: "Préférences, intégrations et administration de votre compte." })}</p>
       </div>
