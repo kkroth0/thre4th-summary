@@ -19,12 +19,16 @@ para React 19 ou se sair correção na linha 7.x. Registrado em 2026-08-04.
 id = "GHSA-w3rx-r6r6-pgpr"
 ignoreUntil = 2027-02-10
 reason = """
-image-size: DoS por loop infinito no parser ICNS. Não alcançável — o image-size
-entra só como dependência do pptxgenjs e nenhum export chama addImage: os slides
-gerados são texto puro, então nenhum parser de imagem roda. Não existe versão
-corrigida (faixa <=2.0.2, e 2.0.2 é a última publicada); o npm audit só oferece
-downgrade do pptxgenjs 4.0.1 para 1.1.5, que quebra a exportação PPTX. Revisar
-quando sair image-size acima de 2.0.2. Registrado em 2026-08-10.
+image-size: DoS por loop infinito no parser ICNS. Não alcançável, por dois
+motivos independentes. O pptxgenjs declara `"browser": { "image-size": false }`,
+então o bundle do site nunca carrega a lib — `grep image-size dist/assets/*.js`
+dá zero, e o caminho que a usaria no build ESM está atrás de
+`typeof require !== 'undefined'`, falso no navegador. E nenhum export chama
+addImage: os slides gerados são texto puro. Não existe versão corrigida (faixa
+<=2.0.2, e 2.0.2 é a última publicada); o npm audit só oferece downgrade do
+pptxgenjs 4.0.1 para 1.1.5, que quebra a exportação PPTX. Revisar quando sair
+image-size acima de 2.0.2. Registrado em 2026-08-10, reconferido e dispensado no
+Dependabot (not_used) em 2026-08-28.
 """
 
 [[IgnoredVulns]]
