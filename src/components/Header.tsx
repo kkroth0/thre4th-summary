@@ -331,7 +331,7 @@ export function Header({ actions, logoAddon, onLogoClick, showBackButton = false
                       <Link to="/settings?section=admin">{pt ? "Acesso premium" : "Premium access"}</Link>
                     </DropdownMenuItem>
                     <DropdownMenuItem asChild>
-                      <Link to="/vendors">{pt ? "Fontes e integracoes" : "Sources and integrations"}</Link>
+                      <Link to="/vendors">{pt ? "Fontes e integrações" : "Sources and integrations"}</Link>
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
                   </>

@@ -4629,18 +4629,37 @@ app.get('/api/vendors/quotas', requireAuth, async (req, res) => {
 });
 
 app.get('/api/vendors/status', (req, res) => {
+    // Um item por fonte de VENDOR_IOC_SUPPORT (src/services/threatApi.ts), que é
+    // quem decide a quem a consulta vai. Faltavam nove nomes aqui, e a tela de
+    // Fontes de Dados deixava cada um deles em "VERIFICANDO" para sempre —
+    // ausente no mapa é indistinguível de resposta que não chegou. O contador do
+    // topo também dividia por 9 enquanto a página mostrava 18 cartões, e contava
+    // urlscan.io, que não é cartão nenhum.
+    //
     // Use getKeys() so providers configured only via numbered fallback vars
     // (e.g. VIRUSTOTAL2_API_KEY) still report as available.
     const hasKey = (envName) => getKeys(envName).length > 0;
     const status = {
+        // Precisam de chave: sem ela a rota responde erro.
         "VirusTotal": hasKey('VIRUSTOTAL_API_KEY'),
         "AbuseIPDB": hasKey('ABUSEIPDB_API_KEY'),
-        "AlienVault OTX": true,
         "Shodan": hasKey('SHODAN_API_KEY'),
-        "URLhaus": true,
         "Censys": hasKey('CENSYS_API_KEY'),
         "WHOIS": hasKey('WHOIS_API_KEY'),
-        "urlscan.io": hasKey('URLSCAN_API_KEY'),
+        "Hybrid Analysis": hasKey('HYBRID_ANALYSIS_API_KEY'),
+        "MetaDefender": hasKey('METADEFENDER_API_KEY'),
+        // Feeds públicos: consultam sem chave. PhishTank e Pulsedive aceitam
+        // chave opcional (app_key e "free"), então respondem de qualquer jeito.
+        "AlienVault OTX": true,
+        "URLhaus": true,
+        "MalwareBazaar": true,
+        "ThreatFox": true,
+        "PhishTank": true,
+        "Pulsedive": true,
+        "CIRCL hashlookup": true,
+        "PhishStats": true,
+        "OpenPhish": true,
+        "Team Cymru": true,
         "IP Geolocation": true
     };
     res.json(status);

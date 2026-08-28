@@ -1568,7 +1568,7 @@ const Index = () => {
                     </h1>
                     <p className="mt-4 text-base font-semibold leading-8 text-muted-foreground md:text-lg">
                       {language === "pt"
-                        ? "Consulte IPs, dominios, URLs ou hashes. A busca consolida reputacao, DNS, WHOIS, vendors e contexto operacional em um unico resultado."
+                        ? "Consulte IPs, domínios, URLs ou hashes. A busca consolida reputação, DNS, WHOIS, vendors e contexto operacional em um único resultado."
                         : "Query IPs, domains, URLs, or hashes. Search consolidates reputation, DNS, WHOIS, vendors and operational context into one result."}
                     </p>
                   </div>
@@ -1745,7 +1745,7 @@ const Index = () => {
                       <div>
                         <h2 className="text-2xl font-black tracking-tight">{t('vendorResults')}</h2>
                         <p className="mt-1 text-sm font-medium text-muted-foreground">
-                          {language === "pt" ? "Cards das bases consultadas, priorizados por relevancia operacional." : "Source cards, prioritized by operational relevance."}
+                          {language === "pt" ? "Cards das bases consultadas, priorizados por relevância operacional." : "Source cards, prioritized by operational relevance."}
                         </p>
                       </div>
                       <ViewToggle view={view} onViewChange={setView} />

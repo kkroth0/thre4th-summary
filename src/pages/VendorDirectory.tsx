@@ -78,6 +78,28 @@ const VENDOR_INFO: Record<string, { description: string; docLink: string; domain
         description: "Mapping of numeric IP networks to physical coordinates, ISP owners, regions, and timezone offsets.",
         docLink: "https://ip-api.com/docs",
         domain: "ip-api.com"
+    },
+    // Estas quatro são consultadas como as outras, mas não tinham verbete: o
+    // cartão saía com "Sem descrição." e sem link de documentação.
+    "ThreatFox": {
+        description: "abuse.ch database of indicators of compromise shared by the community, with malware family attribution.",
+        docLink: "https://threatfox.abuse.ch/api/",
+        domain: "abuse.ch"
+    },
+    "OpenPhish": {
+        description: "Feed of phishing URLs identified automatically, refreshed several times a day.",
+        docLink: "https://openphish.com/faq.html",
+        domain: "openphish.com"
+    },
+    "Team Cymru": {
+        description: "IP to ASN mapping and malware hash registry, served over public DNS by Team Cymru.",
+        docLink: "https://team-cymru.com/community-services/ip-asn-mapping/",
+        domain: "team-cymru.com"
+    },
+    "Censys": {
+        description: "Internet-wide scan data with open ports, certificates, and service banners per host.",
+        docLink: "https://docs.censys.com/",
+        domain: "censys.io"
     }
 };
 
@@ -134,7 +156,10 @@ const VendorDirectory = () => {
                             </p>
                         </div>
                         <div className="text-xs text-muted-foreground/80 md:text-right space-y-0.5">
-                            <div>API Connectors Status: <span className="text-emerald-500 font-semibold">{totalCount > 0 ? `${activeCount}/${totalCount} Active` : "Checking..."}</span></div>
+                            {/* DEN-07: o único rótulo em inglês que sobrou na tela. DEN-03: o
+                                denominador vem do mesmo mapa que pinta os cartões, então bate
+                                com o "As N fontes" do subtítulo. */}
+                            <div>{language === 'pt' ? "Conectores ativos: " : "Active connectors: "}<span className="text-emerald-500 font-semibold">{totalCount > 0 ? `${activeCount}/${totalCount}` : (language === 'pt' ? "verificando…" : "checking…")}</span></div>
                             <div>{language === 'pt' ? "Cache padrão: " : "Default cache TTL: "}<span className="font-mono">{language === 'pt' ? "30 minutos" : "30 minutes"}</span></div>
                         </div>
                     </div>

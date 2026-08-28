@@ -101,6 +101,9 @@ export const countBy = (items, fn) => {
         .map(([name, count]) => ({ name, count }));
 };
 
+// Sentinelas de "não sei" que as fontes mandam como se fossem valor.
+const unknownSector = (value) => (/^(not found|unknown|n\/a|none)$/i.test(value) ? '' : value);
+
 const text = (...values) => {
     for (const value of values) {
         if (value === undefined || value === null) continue;
@@ -126,7 +129,11 @@ export function normalizeVictim(v = {}, source = 'ransomware.live') {
         group: text(v.group_name, v.group, 'unknown'),
         country,
         countryName: COUNTRY_NAMES[country] || country || 'Unknown',
-        sector: text(v.activity, v.sector, v.industry, 'Not Found'),
+        // A ransomware.live manda a string 'Not Found' quando não sabe o setor —
+        // 17 das 96 vítimas da janela. Ela vazava para a tela ("Setor mais
+        // atingido: Not Found") e ainda liderava o ranking de setores. Vazio
+        // some do countBy e a tabela já mostra "-".
+        sector: unknownSector(text(v.activity, v.sector, v.industry)),
         published: text(v.published, v.attackdate, v.attack_date, v.date, v.discovered) || null,
         discovered: text(v.discovered, v.published, v.date, v.attackdate, v.attack_date) || null,
         description: description ? description.slice(0, 500) : '',

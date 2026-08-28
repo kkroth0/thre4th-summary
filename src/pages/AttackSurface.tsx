@@ -485,10 +485,10 @@ export default function AttackSurface() {
           {activeValidation && (
             <Alert className="mt-4 border-amber-500/30 bg-amber-500/10">
               <AlertTriangle className="h-4 w-4 text-amber-500" />
-              <AlertTitle>{pt ? "Validacao ativa habilitada" : "Active validation enabled"}</AlertTitle>
+              <AlertTitle>{pt ? "Validação ativa habilitada" : "Active validation enabled"}</AlertTitle>
               <AlertDescription>
                 {pt
-                  ? "O backend tentara conexao TCP apenas nos IPs publicos e portas retornadas pelos provedores. Use somente com autorizacao."
+                  ? "O backend tentará conexão TCP apenas nos IPs públicos e portas retornadas pelos provedores. Use somente com autorização."
                   : "The backend will attempt TCP connections only against public IPs and provider-observed ports. Use only with authorization."}
               </AlertDescription>
             </Alert>
@@ -503,7 +503,7 @@ export default function AttackSurface() {
             </h2>
             <p className="mx-auto mt-2 max-w-xl text-sm text-muted-foreground">
               {progress || (pt
-                ? "Consultando Shodan e validando exposicao. Leva alguns segundos."
+                ? "Consultando Shodan e validando exposição. Leva alguns segundos."
                 : "Querying Shodan and validating exposure. This takes a few seconds.")}
             </p>
           </div>
@@ -513,7 +513,7 @@ export default function AttackSurface() {
           <>
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
               <Metric icon={Server} label={pt ? "Ativos" : "Assets"} value={result.summary.totalAssets} />
-              <Metric icon={Activity} label={pt ? "Servicos" : "Services"} value={result.summary.totalServices} />
+              <Metric icon={Activity} label={pt ? "Serviços" : "Services"} value={result.summary.totalServices} />
               <Metric icon={ShieldAlert} label={pt ? "Critico/Alto" : "Critical/High"} value={result.summary.criticalHighFindings} />
               <Metric icon={CheckCircle2} label={pt ? "TCP aberto" : "TCP open"} value={result.summary.activelyConfirmedOpen} />
             </div>
@@ -554,7 +554,7 @@ export default function AttackSurface() {
                   <Input
                     value={textFilter}
                     onChange={(event) => setTextFilter(event.target.value)}
-                    placeholder={pt ? "Filtrar IP, CVE, servico..." : "Filter IP, CVE, service..."}
+                    placeholder={pt ? "Filtrar IP, CVE, serviço..." : "Filter IP, CVE, service..."}
                     className="h-9 sm:w-72"
                   />
                   <Button
@@ -588,7 +588,7 @@ export default function AttackSurface() {
                     {filteredFindings.length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={7} className="py-12 text-center text-muted-foreground">
-                          {pt ? "Nenhum servico corresponde aos filtros." : "No services match the filters."}
+                          {pt ? "Nenhum serviço corresponde aos filtros." : "No services match the filters."}
                         </TableCell>
                       </TableRow>
                     ) : (

@@ -14,10 +14,10 @@ test("threat map prioritizes recent ransomware victims before map context", asyn
   assert.ok(mapContext > -1, "ContextMapPanel component should exist");
   assert.ok(victimTable < mapContext, "victim table should be defined before map context");
   assert.match(source, /Ransomware Map/);
-  assert.match(source, /Vitimas recentes/);
-  assert.match(source, /Situacao agora/);
+  assert.match(source, /Vítimas recentes/);
+  assert.match(source, /Situação agora/);
   assert.match(source, /Fonte/);
-  assert.match(source, /Evidencia/);
+  assert.match(source, /Evidência/);
 });
 
 test("threat map exposes local triage controls for victims", async () => {
@@ -28,5 +28,5 @@ test("threat map exposes local triage controls for victims", async () => {
   assert.match(source, /countryFilter/);
   assert.match(source, /sectorFilter/);
   assert.match(source, /filteredVictims/);
-  assert.match(source, /placeholder=\{pt \? "Buscar vitima, grupo, pais ou setor"/);
+  assert.match(source, /placeholder=\{pt \? "Buscar vítima, grupo, país ou setor"/);
 });

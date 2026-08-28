@@ -521,7 +521,7 @@ const DailyBulletin: React.FC = () => {
           <details open className="group">
             <summary className="mb-1.5 flex cursor-pointer list-none items-center gap-1.5 text-xs font-medium uppercase tracking-wider text-muted-foreground hover:text-foreground [&::-webkit-details-marker]:hidden">
               <ChevronDown className="h-3.5 w-3.5 transition-transform group-open:rotate-0 -rotate-90" />
-              {pt ? "Seus relatorios" : "Your reports"}{jobs.length > 0 ? ` · ${jobs.length}` : ""}
+              {pt ? "Seus relatórios" : "Your reports"}{jobs.length > 0 ? ` · ${jobs.length}` : ""}
             </summary>
 
             {jobs.length > 0 && (

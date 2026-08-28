@@ -180,17 +180,17 @@ function VictimTable({
             <div>
               <div className="flex items-center gap-2">
                 <Clock3 className="h-5 w-5 text-primary" />
-                <h2 className="text-xl font-black tracking-tight">{pt ? "Vitimas recentes" : "Recent victims"}</h2>
+                <h2 className="text-xl font-black tracking-tight">{pt ? "Vítimas recentes" : "Recent victims"}</h2>
               </div>
               <p className="mt-1 text-sm font-medium text-muted-foreground">
                 {pt
-                  ? "Claims de ransomware ordenados para triagem rapida."
+                  ? "Claims de ransomware ordenados para triagem rápida."
                   : "Ransomware claims ordered for fast triage."}
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <Badge variant="outline">{compact(victims.length)} / {compact(totalVictims)}</Badge>
-              <Badge variant="secondary">{compact(evidenceCount)} {pt ? "com evidencia" : "with evidence"}</Badge>
+              <Badge variant="secondary">{compact(evidenceCount)} {pt ? "com evidência" : "with evidence"}</Badge>
             </div>
           </div>
 
@@ -200,7 +200,7 @@ function VictimTable({
               <Input
                 value={victimSearch}
                 onChange={(event) => setVictimSearch(event.target.value)}
-                placeholder={pt ? "Buscar vitima, grupo, pais ou setor" : "Search victim, crew, country, or sector"}
+                placeholder={pt ? "Buscar vítima, grupo, país ou setor" : "Search victim, crew, country, or sector"}
                 className="h-9 pl-9 text-sm"
               />
             </div>
@@ -214,7 +214,7 @@ function VictimTable({
               value={countryFilter}
               onValueChange={setCountryFilter}
               options={countryOptions}
-              allLabel={pt ? "Todos paises" : "All countries"}
+              allLabel={pt ? "Todos países" : "All countries"}
             />
             <FilterSelect
               value={sectorFilter}
@@ -232,13 +232,13 @@ function VictimTable({
                 <TableHeader>
                   <TableRow className="bg-muted/45 hover:bg-muted/45">
                     <TableHead className="w-[24%] px-3 text-[11px] font-black uppercase tracking-wide">
-                      {pt ? "Vitima" : "Victim"}
+                      {pt ? "Vítima" : "Victim"}
                     </TableHead>
                     <TableHead className="w-[14%] px-3 text-[11px] font-black uppercase tracking-wide">
                       {pt ? "Grupo" : "Crew"}
                     </TableHead>
                     <TableHead className="w-[13%] px-3 text-[11px] font-black uppercase tracking-wide">
-                      {pt ? "Pais" : "Country"}
+                      {pt ? "País" : "Country"}
                     </TableHead>
                     <TableHead className="w-[16%] px-3 text-[11px] font-black uppercase tracking-wide">
                       {pt ? "Setor" : "Sector"}
@@ -247,7 +247,7 @@ function VictimTable({
                       {pt ? "Descoberto" : "Discovered"}
                     </TableHead>
                     <TableHead className="w-[12%] px-3 text-[11px] font-black uppercase tracking-wide">
-                      {pt ? "Evidencia" : "Evidence"}
+                      {pt ? "Evidência" : "Evidence"}
                     </TableHead>
                     <TableHead className="w-[7%] px-3 text-right text-[11px] font-black uppercase tracking-wide">
                       {pt ? "Fonte" : "Source"}
@@ -338,7 +338,7 @@ function VictimTable({
           </>
         ) : (
           <div className="p-8 text-center text-sm font-medium text-muted-foreground">
-            {pt ? "Nenhuma vitima encontrada nesse filtro." : "No victims found for this filter."}
+            {pt ? "Nenhuma vítima encontrada nesse filtro." : "No victims found for this filter."}
           </div>
         )}
       </CardContent>
@@ -367,7 +367,7 @@ function SituationPanel({
         <div className="mb-4 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <ShieldAlert className="h-5 w-5 text-primary" />
-            <h2 className="text-lg font-black tracking-tight">{pt ? "Situacao agora" : "Current situation"}</h2>
+            <h2 className="text-lg font-black tracking-tight">{pt ? "Situação agora" : "Current situation"}</h2>
           </div>
           <Badge variant="outline" className={signal.tone}>
             {signal.label}
@@ -441,7 +441,7 @@ function ContextMapPanel({ data, pt }: { data: ThreatMapData; pt: boolean }) {
             <MapPinned className="h-4 w-4 text-primary" />
             <h2 className="text-sm font-black tracking-tight">{pt ? "Mapa contextual" : "Map context"}</h2>
           </div>
-          <Badge variant="outline">{data.countries.length} {pt ? "paises" : "countries"}</Badge>
+          <Badge variant="outline">{data.countries.length} {pt ? "países" : "countries"}</Badge>
         </div>
         <div className="bg-[linear-gradient(180deg,#0a1120,#0d1a2f)] p-2">
           <ThreatWorldMap countries={data.countries} />
@@ -763,25 +763,25 @@ const ThreatMap = () => {
   const signal: SignalState | null = data
     ? totalVictims >= 20 || data.activeGroups >= 6
       ? {
-        label: pt ? "Pressao alta" : "High pressure",
+        label: pt ? "Pressão alta" : "High pressure",
         tone: "text-red-500",
         copy: pt
-          ? "Volume ou dispersao acima do normal. Priorize vitimas novas, grupos lideres e setores com repeticao."
+          ? "Volume ou dispersão acima do normal. Priorize vítimas novas, grupos líderes e setores com repetição."
           : "Volume or spread is above normal. Prioritize new victims, leading crews, and repeated sectors.",
       }
       : totalVictims >= 8
         ? {
-          label: pt ? "Pressao moderada" : "Moderate pressure",
+          label: pt ? "Pressão moderada" : "Moderate pressure",
           tone: "text-amber-500",
           copy: pt
-            ? "Atividade relevante no recorte. Vale acompanhar claims com evidencia e paises recorrentes."
+            ? "Atividade relevante no recorte. Vale acompanhar claims com evidência e países recorrentes."
             : "Relevant activity in this window. Track claims with evidence and recurring countries.",
         }
         : {
-          label: pt ? "Pressao baixa" : "Low pressure",
+          label: pt ? "Pressão baixa" : "Low pressure",
           tone: "text-emerald-500",
           copy: pt
-            ? "Baixo volume no recorte atual. Mantenha observacao da proxima janela."
+            ? "Baixo volume no recorte atual. Mantenha observação da próxima janela."
             : "Low volume in the current window. Keep watching the next window.",
         }
     : null;
@@ -794,17 +794,17 @@ const ThreatMap = () => {
       icon: delta?.direction === "down" ? TrendingDown : TrendingUp,
       tone: deltaTone,
     },
-    { label: pt ? "Paises" : "Countries", value: data.countries.length, icon: Globe2 },
+    { label: pt ? "Países" : "Countries", value: data.countries.length, icon: Globe2 },
     { label: pt ? "Grupos" : "Crews", value: data.activeGroups, icon: Crosshair },
     { label: pt ? "Setores" : "Sectors", value: data.sectors?.length || 0, icon: Building2 },
   ] : [];
 
   const priority: PriorityItem[] = data ? [
-    { label: pt ? "Pais mais atingido" : "Top country", value: data.topCountry?.countryName || data.topCountry?.name || "-" },
+    { label: pt ? "País mais atingido" : "Top country", value: data.topCountry?.countryName || data.topCountry?.name || "-" },
     { label: pt ? "Grupo mais ativo" : "Top crew", value: topGroup?.name || "-" },
     { label: pt ? "Setor mais atingido" : "Top sector", value: topSector?.name || "-" },
-    { label: pt ? "LATAM" : "LATAM", value: `${compact(data.latam?.victims || 0)} ${pt ? "vitimas" : "victims"}` },
-    { label: pt ? "Ultima vitima" : "Latest victim", value: latestVictim?.name || "-" },
+    { label: pt ? "LATAM" : "LATAM", value: `${compact(data.latam?.victims || 0)} ${pt ? "vítimas" : "victims"}` },
+    { label: pt ? "Última vítima" : "Latest victim", value: latestVictim?.name || "-" },
   ] : [];
 
   return (

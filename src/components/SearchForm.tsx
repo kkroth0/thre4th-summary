@@ -95,7 +95,7 @@ export const SearchForm = ({
             <textarea
               ref={textareaRef}
               placeholder={language === "pt"
-                    ? "IPv4/IPv6, dominio, URL ou hash..."
+                    ? "IPv4/IPv6, domínio, URL ou hash..."
                     : "IPv4/IPv6, domain, URL, or hash..."
               }
               value={query}

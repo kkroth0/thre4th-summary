@@ -232,7 +232,7 @@ export function ExposureMonitorPanel() {
         <h2 className="mt-4 text-lg font-semibold">{pt ? "Attack Surface Monitor premium" : "Premium Attack Surface Monitor"}</h2>
         <p className="mx-auto mt-2 max-w-xl text-sm text-muted-foreground">
           {pt
-            ? "O scan manual continua disponivel. Entre com uma conta premium para salvar ativos, rodar snapshots e acompanhar drift de exposicao."
+            ? "O scan manual continua disponível. Entre com uma conta premium para salvar ativos, rodar snapshots e acompanhar drift de exposição."
             : "Manual scan remains available. Sign in with premium access to save assets, run snapshots, and track exposure drift."}
         </p>
       </div>
@@ -246,7 +246,7 @@ export function ExposureMonitorPanel() {
           <h2 className="text-xl font-semibold tracking-tight">Attack Surface Monitor</h2>
           <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
             {pt
-              ? "Salve ativos externos, rode snapshots e acompanhe drift em servicos, CVEs, risco e validacao TCP."
+              ? "Salve ativos externos, rode snapshots e acompanhe drift em serviços, CVEs, risco e validação TCP."
               : "Save external assets, run snapshots, and track drift in services, CVEs, risk, and TCP validation."}
           </p>
         </div>
@@ -258,7 +258,7 @@ export function ExposureMonitorPanel() {
 
       <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <MonitorMetric label={pt ? "Ativos" : "Assets"} value={assets.length} />
-        <MonitorMetric label={pt ? "Servicos" : "Services"} value={totals.services} />
+        <MonitorMetric label={pt ? "Serviços" : "Services"} value={totals.services} />
         <MonitorMetric label="Critical / High" value={totals.criticalHigh} />
         <MonitorMetric label={pt ? "Erros" : "Errors"} value={totals.errors} />
       </section>
@@ -482,7 +482,7 @@ export function ExposureMonitorPanel() {
           <div className="border-b border-border p-4">
             <h3 className="flex items-center gap-2 text-base font-semibold">
               <Clock className="h-4 w-4 text-primary" />
-              {selectedAsset?.label || (pt ? "Historico" : "History")}
+              {selectedAsset?.label || (pt ? "Histórico" : "History")}
             </h3>
           </div>
           <div className="flex flex-col gap-3 p-4">
