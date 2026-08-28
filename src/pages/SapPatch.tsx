@@ -1,3 +1,11 @@
+import { MetricCard, type MetricTone } from "@/components/MetricCard";
+
+const metricTone = (tone?: string): MetricTone =>
+  !tone ? "neutral"
+    : /red|destructive/.test(tone) ? "critical"
+    : /amber|yellow|orange/.test(tone) ? "warning"
+    : /emerald|green/.test(tone) ? "positive"
+    : "neutral";
 import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, Download, ExternalLink, RefreshCw, Search, ShieldCheck } from "lucide-react";
 import { PageLayout } from "@/components/PageLayout";
@@ -162,10 +170,7 @@ export default function SapPatch() {
             {data && (
                 <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
                     {kpis.map((k) => (
-                        <div key={k.label} className="p-4 rounded-xl border border-border/50 bg-muted/40 flex flex-col gap-1.5">
-                            <span className="text-xs text-muted-foreground">{k.label}</span>
-                            <span className={cn("text-2xl font-bold tabular-nums", k.accent)}>{k.value}</span>
-                        </div>
+                        <MetricCard key={k.label} label={k.label} value={k.value} tone={metricTone(k.accent)} />
                     ))}
                 </div>
             )}

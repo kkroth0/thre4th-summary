@@ -28,6 +28,15 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { PageLayout } from "@/components/PageLayout";
 import { ThreatWorldMap } from "@/components/ThreatWorldMap";
+import { MetricCard, type MetricTone } from "@/components/MetricCard";
+
+// As telas guardavam o tom como classe do Tailwind; o cartão pede o papel.
+const metricTone = (tone?: string): MetricTone =>
+  !tone ? "neutral"
+    : /red|destructive/.test(tone) ? "critical"
+    : /amber|yellow|orange/.test(tone) ? "warning"
+    : /emerald|green/.test(tone) ? "positive"
+    : "neutral";
 import { useLanguage } from "@/contexts/LanguageContext";
 import {
   fetchThreatMap,
@@ -859,18 +868,9 @@ const ThreatMap = () => {
           />
 
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+            {/* SIS-01: um desenho só de cartão de métrica, em três tamanhos. */}
             {kpis.map(({ label, value, icon: Icon, tone }) => (
-              <Card key={label}>
-                <CardContent className="p-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <span className="text-[11px] font-black uppercase tracking-wide text-muted-foreground">{label}</span>
-                    <Icon className={`h-4 w-4 ${tone || "text-primary"}`} />
-                  </div>
-                  <div className={`mt-2 font-mono text-2xl font-black md:text-3xl ${tone || "text-foreground"}`}>
-                    {value}
-                  </div>
-                </CardContent>
-              </Card>
+              <MetricCard key={label} label={label} value={value} icon={Icon} tone={metricTone(tone)} />
             ))}
           </div>
 
