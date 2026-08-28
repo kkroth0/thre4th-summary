@@ -180,34 +180,58 @@ export function useNavCatalog() {
   return { homeItem, navGroups };
 }
 
-// Abas das funcionalidades irmãs: quem está numa página do grupo vê as outras
-// do mesmo grupo como seletor, no lugar de voltar pro menu.
+// FLX-05: a barra mostrava só o grupo da página atual, então em /cves sumiam
+// as sete abas de Inteligência, em /analyzer não havia barra nenhuma, e metade
+// dos módulos só existia atrás do ícone de grade. Quem está no produto não
+// deveria precisar reabrir um menu para saber o que existe.
+//
+// Agora a barra é a mesma em toda página: os catorze módulos, na ordem dos três
+// grupos, com separador entre eles. A Consulta de Indicadores vem sempre
+// primeiro e fixa, por ser a ferramenta principal — era justamente a que nunca
+// aparecia. O menu de grade continua, como busca e atalho.
+//
+// Uma coluna à esquerda caberia melhor os catorze itens, como a auditoria
+// sugere, mas mudaria o gabarito de todas as telas de uma vez; a barra rolável
+// entrega a persistência sem esse risco.
 export function NavTabs() {
   const { pathname } = useLocation();
-  const { navGroups } = useNavCatalog();
-  const group = navGroups.find((g) => g.items.some((i) => isRouteActive(i.path, pathname)));
-  if (!group || group.items.length < 2) return null;
+  const { homeItem, navGroups } = useNavCatalog();
+  const grupoAtivo = navGroups.find((g) => g.items.some((i) => isRouteActive(i.path, pathname)));
+
+  const item = (nav: NavItem, dentroDoGrupoAtivo: boolean) => {
+    const active = isRouteActive(nav.path, pathname);
+    return (
+      <Link
+        key={nav.path}
+        to={nav.path}
+        title={nav.description}
+        aria-current={active ? "page" : undefined}
+        className={cn(
+          "whitespace-nowrap border-b-2 px-3 py-2.5 text-[13px] transition-colors",
+          active
+            ? "border-primary font-semibold text-foreground"
+            // O grupo da página atual fica em tom cheio; os outros recuam, para
+            // a barra continuar dizendo onde você está mesmo mostrando tudo.
+            : dentroDoGrupoAtivo
+              ? "border-transparent font-medium text-foreground/80 hover:text-foreground"
+              : "border-transparent font-medium text-muted-foreground/70 hover:text-foreground",
+        )}
+      >
+        {nav.label}
+      </Link>
+    );
+  };
 
   return (
     <div className="border-b border-border bg-background/60">
       <div className="scrollbar-none flex items-center gap-1 overflow-x-auto px-4 lg:px-6">
-        {group.items.map((item) => {
-          const active = isRouteActive(item.path, pathname);
-          return (
-            <Link
-              key={item.path}
-              to={item.path}
-              className={cn(
-                "whitespace-nowrap border-b-2 px-3 py-2.5 text-[13px] font-medium transition-colors",
-                active
-                  ? "border-primary text-foreground"
-                  : "border-transparent text-muted-foreground hover:text-foreground"
-              )}
-            >
-              {item.label}
-            </Link>
-          );
-        })}
+        {item(homeItem, true)}
+        {navGroups.map((group) => (
+          <div key={group.label} className="flex items-center gap-1">
+            <span aria-hidden className="mx-1 h-4 w-px shrink-0 bg-border" />
+            {group.items.map((nav) => item(nav, group === grupoAtivo))}
+          </div>
+        ))}
       </div>
     </div>
   );
