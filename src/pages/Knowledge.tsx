@@ -146,7 +146,9 @@ const Knowledge = () => {
                                                 >
                                                     {item.newSources
                                                         ? (pt ? `+${item.newSources} nova(s) de ${item.sourceCount}` : `+${item.newSources} new of ${item.sourceCount}`)
-                                                        : (pt ? `${item.sourceCount} fontes` : `${item.sourceCount} sources`)}
+                                                        : (pt
+                                                            ? `${item.sourceCount} ${item.sourceCount === 1 ? "fonte" : "fontes"}`
+                                                            : `${item.sourceCount} ${item.sourceCount === 1 ? "source" : "sources"}`)}
                                                 </Badge>
                                             ) : null}
                                         </p>

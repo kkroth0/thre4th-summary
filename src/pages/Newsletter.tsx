@@ -466,6 +466,10 @@ const Newsletter = () => {
         source: item.source,
         publishedAt: item.pubDate,
         cves: card.cves,
+        // As técnicas que o coletor inferiu do artigo. Sem elas a coluna
+        // Técnicas do Knowledge dependia do título citar "T1486", e ficava toda
+        // de traço.
+        techniques: [...new Set(card.sources.flatMap((source) => source.ttps ?? []))],
         storyId: card.storyId,
         sourceCount: new Set(card.sources.map((source) => source.source)).size,
       });

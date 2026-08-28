@@ -1725,6 +1725,8 @@ export interface KnowledgeInput {
     source?: string;
     publishedAt?: string;
     cves?: string[];
+    /** Técnicas inferidas pelo coletor ("T1486" ou "T1486 — Data Encrypted…"). */
+    techniques?: string[];
     storyId?: string;
     sourceCount?: number;
 }

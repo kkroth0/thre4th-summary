@@ -104,3 +104,25 @@ test('sourceCount inválido ou absurdo não entra', () => {
             `sourceCount tratado: ${sourceCount} -> ${item.followedSourceCount}`);
     }
 });
+
+test('as técnicas do coletor entram, como id, ao lado do que o título disser', () => {
+    // O rótulo do scoreArticle vem inteiro ("T1486 — Data Encrypted for Impact");
+    // o índice casa por id, então guardamos o id.
+    const item = normalizeKnowledgeInput({
+        title: 'Ransomware crew hits hospital, uses T1059.001 for execution',
+        url: 'https://a.example/1',
+        techniques: ['T1486 — Data Encrypted for Impact', 'T1078 — Valid Accounts'],
+    });
+
+    assert.deepEqual(item.techniques, ['T1059.001', 'T1078', 'T1486']);
+});
+
+test('técnica malformada do cliente é descartada, não salva como lixo', () => {
+    const item = normalizeKnowledgeInput({
+        title: 'T',
+        url: 'https://a.example/1',
+        techniques: ['banana', '', null, 'T99', { id: 'T1486' }],
+    });
+
+    assert.deepEqual(item.techniques, []);
+});

@@ -28,9 +28,10 @@ const uniq = (arr) => [...new Set(arr)].sort();
 /**
  * Valida e normaliza o que o cliente mandou salvar.
  *
- * As telas de origem (sugestões do boletim, advisories) já trazem `cves`, então
- * o resultado é a união disso com o que der pra extrair do título — que é onde
- * costuma aparecer o CVE ou o ID de técnica.
+ * As telas de origem (sugestões do boletim, advisories) já trazem `cves` e as
+ * técnicas que o scoreArticle inferiu do artigo, então o resultado é a união
+ * disso com o que der pra extrair do título. Título raramente cita "T1486" — a
+ * coluna Técnicas ficava toda de traço quando dependia só dele.
  *
  * Lança Error com mensagem pública; a rota traduz para 400.
  */
@@ -65,7 +66,13 @@ export function normalizeKnowledgeInput(input = {}, now = new Date().toISOString
         source: clean(input.source, 120),
         publishedAt: Number.isNaN(Date.parse(published)) ? '' : published,
         savedAt: now,
-        techniques: scanned.techniques,
+        // Aceita "T1486" e o rótulo inteiro do scoreArticle ("T1486 — Data
+        // Encrypted for Impact"); o índice casa por id.
+        techniques: uniq([
+            ...(Array.isArray(input.techniques) ? input.techniques : [])
+                .map((t) => (clean(t, 80).toUpperCase().match(/T\d{4}(?:\.\d{3})?/) || [''])[0]),
+            ...scanned.techniques,
+        ].filter(Boolean)),
         cves: uniq([
             ...(Array.isArray(input.cves) ? input.cves : []).map((c) => clean(c, 30).toUpperCase()),
             ...scanned.cves,
