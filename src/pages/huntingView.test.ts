@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { filterHunts, groupByDay, monthGrid, parseList } from "./huntingView.ts";
+import { filterHunts, groupByDay, monthGrid, parseList, buildQueryCards, groupQueryCards } from "./huntingView.ts";
 
 const hunts = [
   {
@@ -67,4 +67,50 @@ test("groupByDay ignora data quebrada em vez de criar chave lixo", () => {
   const byDay = groupByDay(runs, (run) => run.startedAt);
   assert.deepEqual(Object.keys(byDay).sort(), ["2026-08-03", "2026-08-11"]);
   assert.deepEqual(byDay["2026-08-03"].map((run) => run.id), ["a", "b"]);
+});
+
+// ─── FLX-04: 237 cartões chamados h001…h237 ────────────────────────────────
+// O nome bom já existia no catálogo pt-BR; a aba Queries só não fazia a junção.
+const kqls = [
+  { path: "sentinel/kql/daily/data-source-health.kql", folder: "daily", name: "data-source-health" },
+  { path: "sentinel/kql/hearth/h001.kql", folder: "hearth", name: "h001" },
+  { path: "sentinel/kql/hearth/h999.kql", folder: "hearth", name: "h999" },
+];
+const catalogo = [
+  {
+    queryPath: "sentinel/kql/hearth/h001.kql",
+    hypothesis: "Baseline de processos que acessam o lsass.exe",
+    cadence: "diária", technologies: ["Defender"], dataSources: ["DeviceEvents"],
+  },
+  {
+    queryPath: "sentinel/kql/daily/data-source-health.kql",
+    title: "Saúde da fonte de dados", cadence: "diária", technologies: [], dataSources: [],
+  },
+];
+
+test("a hipótese vira o título e o identificador desce para o apoio", () => {
+  const [saude, h001, h999] = buildQueryCards(kqls, catalogo);
+
+  assert.equal(h001.title, "Baseline de processos que acessam o lsass.exe");
+  assert.equal(h001.subtitle, "h001 · hearth", "o id continua visível, como apoio");
+  assert.deepEqual(h001.tags, ["Defender", "DeviceEvents"]);
+  assert.equal(saude.title, "Saúde da fonte de dados", "cai no title quando não há hipótese");
+
+  // Sem descrição, o identificador continua sendo o título — não inventamos nome.
+  assert.equal(h999.title, "h999");
+  assert.equal(h999.subtitle, "hearth");
+  assert.equal(h999.described, false);
+  assert.deepEqual(h999.tags, []);
+});
+
+test("agrupa por cadência, com a diária antes da semanal e a sem cadência por último", () => {
+  const cards = buildQueryCards(
+    [...kqls, { path: "p/m.kql", folder: "monthly", name: "m1" }],
+    [...catalogo, { queryPath: "p/m.kql", hypothesis: "Revisão mensal", cadence: "mensal" }],
+  );
+  const grupos = groupQueryCards(cards);
+
+  assert.deepEqual(grupos.map((g) => g.cadence), ["diária", "mensal", ""]);
+  assert.equal(grupos[0].cards.length, 2);
+  assert.equal(grupos[2].cards[0].path, "sentinel/kql/hearth/h999.kql");
 });

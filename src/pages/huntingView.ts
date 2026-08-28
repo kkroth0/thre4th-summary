@@ -106,3 +106,69 @@ export function groupByDay<T>(items: T[], dateOf: (item: T) => string | null | u
   }
   return byDay;
 }
+
+// ─── FLX-04: os 237 cartões chamados h001…h237 ─────────────────────────────
+// A aba Queries listava `name` (o identificador do arquivo) e `folder` ("hearth"),
+// e nada ali ajuda a escolher uma consulta. O nome bom já existe: o catálogo
+// pt-BR descreve as mesmas hunts, e o `queryPath` dele é o `path` do KQL.
+// Aqui é só a junção — dado novo, nenhum.
+
+export type QueryCardSource = { path: string; folder: string; name: string };
+export type QueryCatalogEntry = {
+  queryPath: string;
+  title?: string;
+  hypothesis?: string;
+  cadence?: string;
+  technologies?: string[];
+  dataSources?: string[];
+};
+
+export type QueryCard = {
+  path: string;
+  /** o que o analista lê primeiro: a hipótese, quando ela existe */
+  title: string;
+  /** identificador e pasta, agora como apoio */
+  subtitle: string;
+  cadence: string;
+  /** só quando o catálogo descreve; vazio não vira chip */
+  tags: string[];
+  described: boolean;
+};
+
+const CADENCE_ORDER = ["diária", "diaria", "semanal", "mensal", "intel"];
+
+export const cadenceRank = (cadence: string): number => {
+  const i = CADENCE_ORDER.indexOf((cadence || "").toLowerCase().trim());
+  return i === -1 ? CADENCE_ORDER.length : i;
+};
+
+export function buildQueryCards(queries: QueryCardSource[], catalog: QueryCatalogEntry[]): QueryCard[] {
+  const porCaminho = new Map(catalog.filter((c) => c.queryPath).map((c) => [c.queryPath, c]));
+
+  return (queries || []).map((q) => {
+    const descrito = porCaminho.get(q.path);
+    const titulo = (descrito?.hypothesis || descrito?.title || "").trim();
+    return {
+      path: q.path,
+      title: titulo || q.name,
+      // Quando há hipótese, o identificador desce para a linha de apoio; quando
+      // não há, ele já é o título e repeti-lo abaixo seria ruído.
+      subtitle: titulo ? [q.name, q.folder].filter(Boolean).join(" · ") : (q.folder || "raiz"),
+      cadence: (descrito?.cadence || "").trim(),
+      tags: [...(descrito?.technologies || []), ...(descrito?.dataSources || [])].filter(Boolean).slice(0, 3),
+      described: Boolean(titulo),
+    };
+  });
+}
+
+/** Agrupa por cadência, porque 237 cartões iguais em lista única não se escolhem. */
+export function groupQueryCards(cards: QueryCard[]): { cadence: string; cards: QueryCard[] }[] {
+  const grupos = new Map<string, QueryCard[]>();
+  for (const card of cards) {
+    const chave = card.cadence || "";
+    (grupos.get(chave) || grupos.set(chave, []).get(chave)!).push(card);
+  }
+  return [...grupos.entries()]
+    .map(([cadence, cards]) => ({ cadence, cards }))
+    .sort((a, b) => cadenceRank(a.cadence) - cadenceRank(b.cadence) || a.cadence.localeCompare(b.cadence));
+}

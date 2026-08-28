@@ -1,5 +1,5 @@
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
-import { CalendarRange, CheckCircle2, Copy, ExternalLink, FileCode2, FilterX, Loader2, Pencil, Play, Plus, Search, Sparkles, Trash2, Undo2 } from "lucide-react";
+import { CalendarRange, Check, CheckCircle2, Copy, ExternalLink, FileCode2, FilterX, Loader2, Pencil, Play, Plus, Search, Sparkles, Trash2, Undo2, WrapText } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
@@ -31,7 +31,7 @@ import {
   type KqlEntry, type MonthlySummary, type PrivateHunt, type PtbrHunt, type RunOutcome, type RunState, type ScheduledHunt,
   type TechniqueCoverage, type TechniqueCoverageNode,
 } from "@/services/threatApi";
-import { filterHunts, groupByDay, huntOrigin, monthGrid, parseList } from "./huntingView";
+import { buildQueryCards, filterHunts, groupByDay, groupQueryCards, huntOrigin, monthGrid, parseList } from "./huntingView";
 
 type HuntForm = {
   title: string; hypothesis: string; tactics: string; techniques: string; cves: string;
@@ -87,23 +87,44 @@ function FacetSelect({ label, value, options, onChange }: {
 }
 
 /** Bloco de consulta: KQL sempre identado, com copiar no canto. */
+// FLX-03: copiar já existia; o que faltava era ler a consulta inteira. Com
+// `overflow-x-auto` puro, a linha longa some à direita e selecionar com o mouse
+// vira trabalho. A quebra vem ligada, com opção de desligar para quem quer ver
+// a indentação original.
 function KqlBlock({ query, label = "Consulta KQL" }: { query: string; label?: string }) {
+  const [wrap, setWrap] = useState(true);
+  const [copied, setCopied] = useState(false);
   const pretty = formatKql(query);
   if (!pretty) return null;
+
+  const copiar = () => {
+    navigator.clipboard.writeText(pretty);
+    setCopied(true);
+    toast.success("Consulta copiada");
+    setTimeout(() => setCopied(false), 1600);
+  };
+
   return (
     <div className="rounded-md border bg-muted/40">
-      <div className="flex items-center justify-between border-b px-3 py-1.5">
+      <div className="flex items-center justify-between gap-2 border-b px-3 py-1.5">
         <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{label}</span>
-        <Button
-          size="sm"
-          variant="ghost"
-          className="h-7 gap-1.5 px-2 text-xs"
-          onClick={() => { navigator.clipboard.writeText(pretty); toast.success("Consulta copiada"); }}
-        >
-          <Copy className="h-3.5 w-3.5" /> Copiar
-        </Button>
+        <div className="flex items-center gap-1">
+          <Button
+            size="sm" variant="ghost" className="h-7 gap-1.5 px-2 text-xs"
+            onClick={() => setWrap((v) => !v)}
+            title={wrap ? "Mostrar sem quebra de linha" : "Quebrar linhas longas"}
+          >
+            <WrapText className="h-3.5 w-3.5" /> {wrap ? "Sem quebra" : "Quebrar"}
+          </Button>
+          <Button size="sm" variant="ghost" className="h-7 gap-1.5 px-2 text-xs" onClick={copiar}>
+            {copied ? <Check className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
+            {copied ? "Copiado" : "Copiar"}
+          </Button>
+        </div>
       </div>
-      <pre className="overflow-x-auto p-3 font-mono text-xs leading-relaxed"><code>{pretty}</code></pre>
+      <pre className={`p-3 font-mono text-xs leading-relaxed ${wrap ? "whitespace-pre-wrap break-words" : "overflow-x-auto"}`}>
+        <code>{pretty}</code>
+      </pre>
     </div>
   );
 }
@@ -1175,22 +1196,40 @@ const Hunting = () => {
             <Input value={kqlQuery} onChange={(event) => setKqlQuery(event.target.value)} placeholder="Filtrar por nome ou pasta…" className="pl-9" />
           </div>
 
-          <div className="grid gap-2 md:grid-cols-2">
-            {kqlIndex
-              .filter((item) => `${item.folder} ${item.name}`.toLowerCase().includes(kqlQuery.trim().toLowerCase()))
-              .slice(0, 60)
-              .map((item) => (
-                <button
-                  key={item.path}
-                  type="button"
-                  onClick={() => openKql(item.path)}
-                  className="rounded-md border p-3 text-left transition-colors hover:border-primary/50"
-                >
-                  <div className="truncate text-sm font-medium">{item.name}</div>
-                  <div className="mt-0.5 font-mono text-[11px] text-muted-foreground">{item.folder || "raiz"}</div>
-                </button>
-              ))}
-          </div>
+          {/* FLX-04: o cartão mostra a hipótese, não o identificador do arquivo.
+              O dado vem do catálogo pt-BR, que descreve as mesmas hunts — a aba
+              só não fazia a junção pelo queryPath. */}
+          {groupQueryCards(
+            buildQueryCards(kqlIndex, ptbrCatalog).filter((card) =>
+              `${card.title} ${card.subtitle} ${card.cadence}`.toLowerCase().includes(kqlQuery.trim().toLowerCase()))
+          ).map((grupo) => (
+            <section key={grupo.cadence || "sem-cadencia"} className="space-y-2">
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                {grupo.cadence || "Sem cadência definida"}
+                <span className="ml-2 font-normal normal-case tracking-normal">{grupo.cards.length}</span>
+              </h3>
+              <div className="grid gap-2 md:grid-cols-2">
+                {grupo.cards.map((card) => (
+                  <button
+                    key={card.path}
+                    type="button"
+                    onClick={() => openKql(card.path)}
+                    className="rounded-md border p-3 text-left transition-colors hover:border-primary/50"
+                  >
+                    <div className="truncate text-sm font-medium" title={card.title}>{card.title}</div>
+                    <div className="mt-0.5 font-mono text-[11px] text-muted-foreground">{card.subtitle}</div>
+                    {!!card.tags.length && (
+                      <div className="mt-1.5 flex flex-wrap gap-1">
+                        {card.tags.map((tag) => (
+                          <span key={tag} className="rounded border px-1.5 py-0.5 text-[10px] text-muted-foreground">{tag}</span>
+                        ))}
+                      </div>
+                    )}
+                  </button>
+                ))}
+              </div>
+            </section>
+          ))}
         </TabsContent>
 
         <TabsContent value="coverage">
@@ -1224,7 +1263,16 @@ const Hunting = () => {
         <DialogContent className="max-h-[92vh] w-[min(96vw,72rem)] max-w-none overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="font-mono text-sm">{openedKql?.path}</DialogTitle>
-            <DialogDescription>Somente leitura. Copie para rodar no Sentinel.</DialogDescription>
+            <DialogDescription className="flex flex-wrap items-center gap-x-2 gap-y-1">
+              <span>Somente leitura. Copie e rode no Sentinel.</span>
+              <a
+                href="https://portal.azure.com/#blade/Microsoft_Azure_Security_Insights/MainMenuBlade/7"
+                target="_blank" rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-primary hover:underline"
+              >
+                <ExternalLink className="h-3 w-3" /> Abrir os Logs do Sentinel
+              </a>
+            </DialogDescription>
           </DialogHeader>
           <KqlBlock query={openedKql?.query || ""} />
         </DialogContent>
