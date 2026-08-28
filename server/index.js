@@ -846,14 +846,10 @@ app.post('/api/phishstats', scanLimiter, async (req, res) => {
 });
 
 // Ransomware.live
-app.post('/api/ransomwarelive', scanLimiter, async (req, res) => {
-    try {
-        res.json(await getRecentRansomwareVictims());
-    } catch (error) {
-        const { status, message } = sanitizeError(error);
-        res.status(status).json({ error: message });
-    }
-});
+// A rota POST /api/ransomwarelive saiu junto com o vendor: ela devolvia o feed
+// de vítimas recentes ignorando a consulta, e ninguém mais a chamava. Os dados
+// continuam servidos por /api/intel/latam-threats e pelo mapa de ameaças, que
+// usam a mesma getRecentRansomwareVictims() logo abaixo.
 
 async function getRecentRansomwareVictims() {
     const now = Date.now();
@@ -2586,11 +2582,13 @@ app.post('/api/auth/logout', (req, res) => {
 // lookups de vendor. A geração de relatórios NÃO usa mais BYOK — roda na chave
 // OpenRouter compartilhada do servidor. Nunca devolve valores, só quais providers
 // estão configurados.
-const BYOK_PROVIDERS = new Set([
-    'virustotal', 'abuseipdb', 'shodan', 'alienvault', 'pulsedive',
-    'hybridanalysis', 'metadefender', 'censys',
-    'urlhaus', 'threatfox', 'phishtank', 'whois', 'dnsdumpster',
-]);
+// Só entra aqui o provider cuja chave é REALMENTE lida em alguma consulta.
+// Os outros doze (virustotal, abuseipdb, alienvault, pulsedive, censys,
+// hybridanalysis, metadefender, urlhaus, threatfox, phishtank, whois,
+// dnsdumpster) ficavam guardados cifrados, apareciam como "configurado" na tela
+// e nenhuma rota os lia — todas leem só process.env. Prometer o que não
+// acontece é pior do que não oferecer.
+const BYOK_PROVIDERS = new Set(['shodan']);
 function userKeysStatus(u) {
     const out = {};
     const m = (u && u.apiKeysEnc) || {};
@@ -2614,8 +2612,13 @@ app.put('/api/user/keys/:provider', requireAuth, (req, res) => {
 });
 app.delete('/api/user/keys/:provider', requireAuth, (req, res) => {
     const provider = String(req.params.provider || '').toLowerCase();
-    if (!BYOK_PROVIDERS.has(provider)) return res.status(400).json({ error: 'provider desconhecido' });
     const u = usersStore[req.user.sub];
+    // Apagar aceita provider fora da lista atual, de propósito: quem guardou
+    // chave de um dos doze que saíram precisa conseguir removê-la. Guarda
+    // estrita aqui prenderia um segredo cifrado no store para sempre.
+    if (!BYOK_PROVIDERS.has(provider) && !u?.apiKeysEnc?.[provider]) {
+        return res.status(400).json({ error: 'provider desconhecido' });
+    }
     if (u) {
         if (u.apiKeysEnc) delete u.apiKeysEnc[provider];
         u.updatedAt = new Date().toISOString();

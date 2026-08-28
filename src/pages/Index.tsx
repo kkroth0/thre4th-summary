@@ -1240,14 +1240,12 @@ const Index = () => {
       "Shodan": "shodan.io",
       "URLhaus": "abuse.ch",
       "MalwareBazaar": "abuse.ch",
-      "Google Safe Browsing": "google.com",
       "PhishTank": "phishtank.com",
       "Pulsedive": "pulsedive.com",
       "Hybrid Analysis": "hybrid-analysis.com",
       "CIRCL hashlookup": "circl.lu",
       "MetaDefender": "opswat.com",
       "PhishStats": "phishstats.info",
-      "Ransomware.live": "ransomware.live",
       "WHOIS": "who.is",
       "IP Geolocation": "ip-api.com",
       "Censys": "censys.io",
@@ -1276,14 +1274,12 @@ const Index = () => {
       case "Shodan": fallback = <Radar className="h-5 w-5 text-primary" />; break;
       case "URLhaus": fallback = <LinkIcon className="h-5 w-5 text-primary" />; break;
       case "MalwareBazaar": fallback = <Bug className="h-5 w-5 text-primary" />; break;
-      case "Google Safe Browsing": fallback = <Shield className="h-5 w-5 text-primary" />; break;
       case "PhishTank": fallback = <LinkIcon className="h-5 w-5 text-primary" />; break;
       case "Pulsedive": fallback = <Radar className="h-5 w-5 text-primary" />; break;
       case "Hybrid Analysis": fallback = <Bug className="h-5 w-5 text-primary" />; break;
       case "CIRCL hashlookup": fallback = <Database className="h-5 w-5 text-primary" />; break;
       case "MetaDefender": fallback = <Shield className="h-5 w-5 text-primary" />; break;
       case "PhishStats": fallback = <LinkIcon className="h-5 w-5 text-primary" />; break;
-      case "Ransomware.live": fallback = <Bug className="h-5 w-5 text-primary" />; break;
       case "WHOIS": fallback = <FileSearch className="h-5 w-5 text-primary" />; break;
       case "IP Geolocation": fallback = <Globe className="h-5 w-5 text-primary" />; break;
       default: fallback = <Shield className="h-5 w-5 text-primary" />; break;
@@ -1299,14 +1295,12 @@ const Index = () => {
       case "Shodan": return "https://shodan.io";
       case "URLhaus": return "https://urlhaus.abuse.ch";
       case "MalwareBazaar": return "https://bazaar.abuse.ch";
-      case "Google Safe Browsing": return "https://safebrowsing.google.com";
       case "PhishTank": return "https://phishtank.com";
       case "Pulsedive": return "https://pulsedive.com";
       case "Hybrid Analysis": return "https://hybrid-analysis.com";
       case "CIRCL hashlookup": return "https://hashlookup.circl.lu";
       case "MetaDefender": return "https://metadefender.opswat.com";
       case "PhishStats": return "https://phishstats.info";
-      case "Ransomware.live": return "https://ransomware.live";
       case "WHOIS": return undefined;
       case "IP Geolocation": return undefined;
       default: return undefined;

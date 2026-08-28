@@ -39,11 +39,6 @@ const VENDOR_INFO: Record<string, { description: string; docLink: string; domain
         docLink: "https://bazaar.abuse.ch/api/",
         domain: "abuse.ch"
     },
-    "Google Safe Browsing": {
-        description: "Google's Safe Browsing service provides lists of URLs for web resources that contain malicious content.",
-        docLink: "https://developers.google.com/safe-browsing/v4",
-        domain: "google.com"
-    },
     "PhishTank": {
         description: "PhishTank is a collaborative clearing house for sharing and verifying phishing data on the web.",
         docLink: "https://www.phishtank.com/developer_info.php",
@@ -73,11 +68,6 @@ const VENDOR_INFO: Record<string, { description: string; docLink: string; domain
         description: "Phishing statistics database and real-time public CTI feed provider.",
         docLink: "https://phishstats.info/",
         domain: "phishstats.info"
-    },
-    "Ransomware.live": {
-        description: "Tracking active ransomware operations, negotiation leak sites, and organization victims.",
-        docLink: "https://www.ransomware.live/api",
-        domain: "ransomware.live"
     },
     "WHOIS": {
         description: "Query databases storing registered assignees, creation dates, and network registrars for domain assets.",

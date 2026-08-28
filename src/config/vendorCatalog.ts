@@ -1,8 +1,8 @@
 export const SUPPORTED_VENDORS = Object.freeze([
   "IP Geolocation", "WHOIS", "VirusTotal", "AbuseIPDB", "AlienVault OTX",
-  "Shodan", "URLhaus", "MalwareBazaar", "ThreatFox", "Google Safe Browsing",
+  "Shodan", "URLhaus", "MalwareBazaar", "ThreatFox",
   "PhishTank", "Pulsedive", "Hybrid Analysis", "CIRCL hashlookup",
-  "MetaDefender", "PhishStats", "Ransomware.live", "OpenPhish", "Team Cymru", "Censys",
+  "MetaDefender", "PhishStats", "OpenPhish", "Team Cymru", "Censys",
 ] as const);
 
 export const normalizeVendorSelection = (saved: unknown): string[] => {

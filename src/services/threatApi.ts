@@ -39,9 +39,10 @@ export const VENDOR_IOC_SUPPORT: Record<string, ('ip' | 'domain' | 'hash' | 'url
     "OpenPhish": ['url', 'domain'],
     "Team Cymru": ['ip', 'hash'],
     "Censys": ['ip'],
-    // Intentionally excluded from per-IOC routing:
-    //  - "Ransomware.live": recent-victims feed, ignores the query entirely.
-    //  - "Google Safe Browsing": no backend endpoint implemented yet (would 404).
+    // "Ransomware.live" e "Google Safe Browsing" saíram: o primeiro é feed de
+    // vítimas recentes e ignora a consulta, o segundo nunca teve rota no server
+    // (consultar dava 404). Os dois ficavam no mapa de vendors sem nunca serem
+    // alcançados, porque este índice é que decide quem é consultado.
 };
 
 // Conservative allowlist: these repository endpoints use generic IPv6-capable
@@ -278,14 +279,6 @@ export const formatVendorData = (vendorName: string, data: any, query: string): 
                 };
             }
             return { "Status": "No data" };
-        case "Google Safe Browsing":
-            if (data.matches && data.matches.length > 0) {
-                return {
-                    "Status": "Unsafe",
-                    "Threat Type": data.matches[0].threatType,
-                };
-            }
-            return { "Status": "Safe" };
         case "PhishTank":
             return {
                 "Status": data.results?.in_database ? (data.results.valid ? "Verified Phishing" : "Not Phishing") : "Unknown",
@@ -368,19 +361,6 @@ export const formatVendorData = (vendorName: string, data: any, query: string): 
                 };
             }
             return { "Status": "Not found in phishing database" };
-        case "Ransomware.live":
-            const matches = data.filter((victim: any) =>
-                victim.post_url?.includes(query) || victim.website?.includes(query)
-            );
-            if (matches.length > 0) {
-                return {
-                    "Status": "Found in Ransomware Victims",
-                    "Matches": matches.length,
-                    "Group": matches[0].group_name || "Unknown",
-                    "Discovered": matches[0].discovered || "Unknown",
-                };
-            }
-            return { "Status": "Not found in ransomware database" };
         case "WHOIS":
             if (data.WhoisRecord) {
                 const record = data.WhoisRecord;
@@ -607,7 +587,6 @@ const getVendorLink = (vendorName: string, query: string): string | undefined =>
         case "URLhaus": return `https://urlhaus.abuse.ch/browse/search/${encodedQuery}/`;
         case "ThreatFox": return `https://threatfox.abuse.ch/browse/`;
         case "MalwareBazaar": return `https://bazaar.abuse.ch/browse/`;
-        case "Google Safe Browsing": return `https://transparencyreport.google.com/safe-browsing/search?url=${encodedQuery}`;
         case "PhishTank": return `https://phishtank.org/`;
         case "Pulsedive": return `https://pulsedive.com/indicator/?ioc=${encodedQuery}`;
 
@@ -615,7 +594,6 @@ const getVendorLink = (vendorName: string, query: string): string | undefined =>
         case "CIRCL hashlookup": return `https://hashlookup.circl.lu/`;
         case "MetaDefender": return `https://metadefender.opswat.com/results/ip/${query}`;
         case "PhishStats": return `https://phishstats.info/`;
-        case "Ransomware.live": return `https://ransomware.live/`;
 
         case "OpenPhish": return `https://openphish.com/`;
         case "Team Cymru": return `https://team-cymru.com/community-services/ip-asn-mapping/`;
@@ -793,7 +771,6 @@ export const fetchURLhausData = (query: string) => fetchFromBackend('urlhaus', q
 
 export const fetchMalwareBazaarData = (query: string) => fetchFromBackend('malwarebazaar', query, "MalwareBazaar");
 export const fetchThreatFoxData = (query: string) => fetchFromBackend('threatfox', query, "ThreatFox");
-export const fetchGoogleSafeBrowsingData = (query: string) => fetchFromBackend('googlesafebrowsing', query, "Google Safe Browsing");
 export const fetchPhishTankData = (query: string) => fetchFromBackend('phishtank', query, "PhishTank");
 export const fetchPulsediveData = (query: string) => fetchFromBackend('pulsedive', query, "Pulsedive");
 
@@ -801,7 +778,6 @@ export const fetchHybridAnalysisData = (query: string) => fetchFromBackend('hybr
 export const fetchCIRCLData = (query: string) => fetchFromBackend('circl', query, "CIRCL hashlookup");
 export const fetchMetaDefenderData = (query: string) => fetchFromBackend('metadefender', query, "MetaDefender");
 export const fetchPhishStatsData = (query: string) => fetchFromBackend('phishstats', query, "PhishStats");
-export const fetchRansomwareLiveData = (query: string) => fetchFromBackend('ransomwarelive', query, "Ransomware.live");
 export const fetchOpenPhishData = (query: string) => fetchFromBackend('openphish', query, "OpenPhish");
 export const fetchTeamCymruData = (query: string) => fetchFromBackend('teamcymru', query, "Team Cymru");
 export const fetchCensysData = (query: string) => fetchFromBackend('censys', query, "Censys");
@@ -856,14 +832,12 @@ const buildVendorMap = (query: string): Record<string, () => Promise<VendorData>
     "URLhaus": () => fetchURLhausData(query),
     "MalwareBazaar": () => fetchMalwareBazaarData(query),
     "ThreatFox": () => fetchThreatFoxData(query),
-    "Google Safe Browsing": () => fetchGoogleSafeBrowsingData(query),
     "PhishTank": () => fetchPhishTankData(query),
     "Pulsedive": () => fetchPulsediveData(query),
     "Hybrid Analysis": () => fetchHybridAnalysisData(query),
     "CIRCL hashlookup": () => fetchCIRCLData(query),
     "MetaDefender": () => fetchMetaDefenderData(query),
     "PhishStats": () => fetchPhishStatsData(query),
-    "Ransomware.live": () => fetchRansomwareLiveData(query),
     "OpenPhish": () => fetchOpenPhishData(query),
     "Team Cymru": () => fetchTeamCymruData(query),
     "Censys": () => fetchCensysData(query),

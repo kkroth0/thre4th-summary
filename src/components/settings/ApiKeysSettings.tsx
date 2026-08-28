@@ -33,33 +33,15 @@ interface Group {
   items: Provider[];
 }
 
+// Só o provider cuja chave é REALMENTE usada numa consulta. Os outros doze
+// ficavam aqui, guardavam a chave cifrada e apareciam como "configurado" —
+// mas nenhuma rota do server os lia, todas leem só a env. Oferecer campo que
+// não faz nada é pior do que não oferecer.
 const CATALOG: Group[] = [
   {
-    title: { pt: "Enriquecimento & Reputação", en: "Enrichment & Reputation" },
+    title: { pt: "Superfície de Ataque", en: "Attack Surface" },
     items: [
-      { id: "virustotal", label: "VirusTotal", url: "https://www.virustotal.com/gui/my-apikey" },
-      { id: "abuseipdb", label: "AbuseIPDB", url: "https://www.abuseipdb.com/account/api" },
       { id: "shodan", label: "Shodan", url: "https://account.shodan.io/" },
-      { id: "alienvault", label: "AlienVault OTX", url: "https://otx.alienvault.com/api" },
-      { id: "pulsedive", label: "Pulsedive", url: "https://pulsedive.com/api/" },
-      { id: "censys", label: "Censys", url: "https://search.censys.io/account/api" },
-    ],
-  },
-  {
-    title: { pt: "Malware & Arquivos", en: "Malware & Files" },
-    items: [
-      { id: "hybridanalysis", label: "Hybrid Analysis", url: "https://www.hybrid-analysis.com/" },
-      { id: "metadefender", label: "MetaDefender", url: "https://metadefender.opswat.com/" },
-      { id: "threatfox", label: "ThreatFox (abuse.ch)", url: "https://threatfox.abuse.ch/" },
-      { id: "urlhaus", label: "URLhaus (abuse.ch)", url: "https://urlhaus.abuse.ch/" },
-    ],
-  },
-  {
-    title: { pt: "Phishing & DNS", en: "Phishing & DNS" },
-    items: [
-      { id: "phishtank", label: "PhishTank", url: "https://www.phishtank.com/" },
-      { id: "dnsdumpster", label: "DNSDumpster", url: "https://dnsdumpster.com/" },
-      { id: "whois", label: "WHOIS" },
     ],
   },
 ];
