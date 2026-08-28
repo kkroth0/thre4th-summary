@@ -96,7 +96,7 @@ export const IocTimeline = ({ vendorData }: Props) => {
           <div className="flex flex-wrap items-center gap-2 text-xs">
             {[
               [pt ? "Primeiro" : "First", fmt(earliest.date)],
-              [pt ? "Ultimo" : "Latest", fmt(latest.date)],
+              [pt ? "Último" : "Latest", fmt(latest.date)],
               [pt ? "Bases" : "Sources", String(feedCount)],
               [pt ? "Eventos" : "Events", String(events.length)],
             ].map(([label, value]) => (

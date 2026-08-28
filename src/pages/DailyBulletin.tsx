@@ -465,7 +465,7 @@ const DailyBulletin: React.FC = () => {
               <Select value={pasteType} onValueChange={(v) => setPasteType(v as DeckType)}>
                 <SelectTrigger
                   data-testid="report-generator-type-trigger"
-                  aria-label={pt ? "Tipo do relatorio" : "Report type"}
+                  aria-label={pt ? "Tipo do relatório" : "Report type"}
                   className="h-10 w-[6.9rem] shrink-0 justify-between rounded-sm border-0 bg-muted/60 px-2.5 text-xs font-medium shadow-none focus:ring-0 sm:w-[7.75rem]"
                 >
                   <span className="truncate">
@@ -576,7 +576,7 @@ const DailyBulletin: React.FC = () => {
 
             {jobs.length === 0 ? (
               <p className="py-10 text-center text-sm text-muted-foreground">
-                {pt ? "Nenhum relatorio ainda. Cole uma URL ou gere a partir de uma sugestão." : "No reports yet. Paste a URL or generate from a suggestion."}
+                {pt ? "Nenhum relatório ainda. Cole uma URL ou gere a partir de uma sugestão." : "No reports yet. Paste a URL or generate from a suggestion."}
               </p>
             ) : (
               <div className="space-y-1.5">

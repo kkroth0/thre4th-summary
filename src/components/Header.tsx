@@ -318,11 +318,11 @@ export function Header({ actions, logoAddon, onLogoClick, showBackButton = false
                   <DropdownMenuTrigger asChild>
                     <Button variant="ghost" size="icon" className="h-8 w-8 rounded-md text-muted-foreground">
                       <SettingsIcon className="h-4 w-4" />
-                      <span className="sr-only">{pt ? "Configuracoes" : "Settings"}</span>
+                      <span className="sr-only">{pt ? "Configurações" : "Settings"}</span>
                     </Button>
                   </DropdownMenuTrigger>
                 </TooltipTrigger>
-                <TooltipContent>{pt ? "Configuracoes" : "Settings"}</TooltipContent>
+                <TooltipContent>{pt ? "Configurações" : "Settings"}</TooltipContent>
               </Tooltip>
               <DropdownMenuContent align="end" className="w-60">
                 {auth.isAdmin && (

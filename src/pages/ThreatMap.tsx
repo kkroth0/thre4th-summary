@@ -907,7 +907,7 @@ const ThreatMap = () => {
       ) : (
         <Card>
           <CardContent className="p-8 text-center text-sm font-medium text-muted-foreground">
-            {pt ? "Nao foi possivel carregar o mapa de ameacas." : "Threat map could not be loaded."}
+            {pt ? "Não foi possível carregar o mapa de ameaças." : "Threat map could not be loaded."}
           </CardContent>
         </Card>
       )}
