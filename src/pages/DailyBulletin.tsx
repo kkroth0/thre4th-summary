@@ -531,7 +531,9 @@ const DailyBulletin: React.FC = () => {
                   onCheckedChange={(value) => setPicked(value ? jobs.map((j) => j.id) : [])}
                   aria-label={pt ? "Selecionar todos" : "Select all"}
                 />
-                <span className="text-xs text-muted-foreground">
+                {/* DEN-06: text-muted-foreground mede 4,35:1 em 12px, abaixo
+                    do mínimo AA. Mesmo tom da linha de status acima. */}
+                <span className="text-xs text-slate-600 dark:text-slate-300">
                   {picked.length
                     ? (pt ? `${picked.length} selecionado(s)` : `${picked.length} selected`)
                     : (pt ? "Selecionar" : "Select")}
