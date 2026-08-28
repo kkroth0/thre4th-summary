@@ -176,3 +176,43 @@ export const filterStoryCards = <T extends StorySource>(
     if (options.orgOnly && card.orgScore <= 0) return false;
     return true;
   });
+
+// ─── EST-05: a severidade não dizia por quê ────────────────────────────────
+// "Long Term Support Channel Update for ChromeOS" saía como CRÍTICO e um
+// kernel com EPSS de 4% saía como BAIXO, sem nada explicando. Os sinais que
+// decidem já viajam no item — KEV, EPSS, CVSS — mas só existiam num tooltip,
+// que ninguém abre enquanto passa os olhos na lista.
+//
+// Aqui eles viram rótulos curtos. Só entra o que é medido: nada de inferir
+// severidade a partir do título.
+
+export type SeverityEvidenceItem = {
+  kev?: boolean;
+  epss?: number;
+  cvss?: number | null;
+  orgScore?: number;
+};
+
+export type SeverityChip = { label: string; tone: "kev" | "epss" | "cvss" | "org" };
+
+export function severityEvidence(item: SeverityEvidenceItem, pt: boolean): SeverityChip[] {
+  const chips: SeverityChip[] = [];
+
+  // KEV é o sinal mais forte: a CISA registrou exploração no mundo real.
+  if (item.kev) chips.push({ label: pt ? "Explorada (KEV)" : "Exploited (KEV)", tone: "kev" });
+
+  // EPSS só informa quando é alto o bastante para mudar a decisão. Abaixo de 5%
+  // o número vira ruído numa lista que já tem sete etiquetas.
+  if (typeof item.epss === "number" && item.epss >= 0.05) {
+    chips.push({ label: `EPSS ${Math.round(item.epss * 100)}%`, tone: "epss" });
+  }
+  if (typeof item.cvss === "number" && item.cvss > 0) {
+    chips.push({ label: `CVSS ${item.cvss.toFixed(1)}`, tone: "cvss" });
+  }
+  return chips;
+}
+
+/** O card não tem nenhum sinal medido — a severidade veio só do texto. */
+export const severityIsUnexplained = (item: SeverityEvidenceItem): boolean =>
+  !item.kev && !(typeof item.cvss === "number" && item.cvss > 0)
+  && !(typeof item.epss === "number" && item.epss >= 0.05);

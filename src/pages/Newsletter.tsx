@@ -18,7 +18,7 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
-import { NEWS_CATEGORY_ORDER, countByCategory, filterNewsletterAdvisories, filterStoryCards, formatNewsletterDate, groupAdvisoriesIntoStories } from "./newsletterView";
+import { NEWS_CATEGORY_ORDER, countByCategory, filterNewsletterAdvisories, filterStoryCards, formatNewsletterDate, groupAdvisoriesIntoStories, severityEvidence } from "./newsletterView";
 import type { StoryCard } from "./newsletterView";
 import { generateBoletim, saveKnowledge } from "@/services/threatApi";
 import { useOrgProfile } from "@/hooks/useOrgProfile";
@@ -761,6 +761,25 @@ const Newsletter = () => {
                               {severityLabel(item.severity, language)}
                             </Badge>
                           )}
+                          {/* EST-05: o veredito passa a vir com a prova ao lado.
+                              KEV, EPSS e CVSS já viajavam no item, mas só num
+                              tooltip — e ninguém abre tooltip passando os olhos
+                              na lista. Card sem sinal medido não ganha etiqueta
+                              nenhuma, que é a informação honesta: a severidade
+                              ali veio do texto. */}
+                          {severityEvidence(item, language === "pt").map((chip) => (
+                            <span
+                              key={chip.label}
+                              className={cn(
+                                "rounded border px-1.5 py-0 font-mono text-[10px] font-bold uppercase tracking-wider",
+                                chip.tone === "kev"
+                                  ? "border-red-500/40 bg-red-500/10 text-red-600 dark:text-red-400"
+                                  : "border-border text-muted-foreground",
+                              )}
+                            >
+                              {chip.label}
+                            </span>
+                          ))}
                           {card.orgScore > 0 && (
                             <Badge
                               variant="outline"

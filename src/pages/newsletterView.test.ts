@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { filterNewsletterAdvisories, formatNewsletterDate, NEWS_CATEGORY_ORDER, countByCategory, filterStoryCards, groupAdvisoriesIntoStories } from "./newsletterView.ts";
+import { filterNewsletterAdvisories, formatNewsletterDate, NEWS_CATEGORY_ORDER, countByCategory, filterStoryCards, groupAdvisoriesIntoStories, severityEvidence, severityIsUnexplained } from "./newsletterView.ts";
 
 test("formats today's full date in the selected language", () => {
   const date = new Date("2026-07-13T12:00:00-03:00");
@@ -169,4 +169,25 @@ test("sem orgOnly, nada é escondido — o contexto ou filtra tudo ou nada", () 
     orgItem({ link: "b", storyId: "b", orgScore: 0 }),
   ]);
   assert.equal(filterStoryCards(cards, { category: "" }).length, 2);
+});
+
+// ─── EST-05: a severidade precisa mostrar de onde veio ──────────────────────
+test("os sinais medidos viram rótulos, do mais forte para o mais fraco", () => {
+  const chips = severityEvidence({ kev: true, epss: 0.42, cvss: 9.8 }, true);
+  assert.deepEqual(chips.map((c) => c.label), ["Explorada (KEV)", "EPSS 42%", "CVSS 9.8"]);
+});
+
+test("EPSS baixo não vira etiqueta", () => {
+  // O kernel do achado: EPSS de 4% marcado como BAIXO. O número não muda a
+  // decisão e só competiria com as outras sete etiquetas do card.
+  assert.deepEqual(severityEvidence({ epss: 0.04 }, true), []);
+  assert.deepEqual(severityEvidence({ epss: 0.05 }, true).map((c) => c.label), ["EPSS 5%"]);
+});
+
+test("card sem nenhum sinal medido é reconhecido como tal", () => {
+  // "Long Term Support Channel Update for ChromeOS" marcado como CRÍTICO.
+  assert.equal(severityIsUnexplained({}), true);
+  assert.equal(severityIsUnexplained({ cvss: 0 }), true, "CVSS zero não é sinal");
+  assert.equal(severityIsUnexplained({ kev: true }), false);
+  assert.equal(severityIsUnexplained({ cvss: 7.5 }), false);
 });
