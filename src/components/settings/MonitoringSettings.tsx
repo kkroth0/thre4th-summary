@@ -60,14 +60,26 @@ export function MonitoringSettings() {
               ? (pt ? "Carregando watchlist…" : "Loading watchlist…")
               : assetState === "error"
                 ? (pt ? "Watchlist indisponível." : "Watchlist unavailable.")
-                : pt
-                  ? `${assetState} ativo(s) na watchlist${lastRun ? ` · última varredura em ${new Date(lastRun).toLocaleString("pt-BR")}` : ""}.`
-                  : `${assetState} asset(s) on the watchlist${lastRun ? ` · last scan ${new Date(lastRun).toLocaleString("en-US")}` : ""}.`}
+                : assetState === 0
+                  // EST-04: "0 ativo(s) na watchlist." não convidava a nada.
+                  // Estado vazio precisa dizer o que entra ali e para que serve.
+                  ? (pt
+                    ? "Nenhum ativo monitorado. Adicione domínios e IPs da organização para que a varredura acuse exposição nova sem você pedir."
+                    : "No assets monitored yet. Add your organization's domains and IPs so scans flag new exposure without you asking.")
+                  : pt
+                    ? `${assetState} ativo(s) na watchlist${lastRun ? ` · última varredura em ${new Date(lastRun).toLocaleString("pt-BR")}` : ""}.`
+                    : `${assetState} asset(s) on the watchlist${lastRun ? ` · last scan ${new Date(lastRun).toLocaleString("en-US")}` : ""}.`}
           </CardDescription>
         </CardHeader>
         <CardContent>
           {/* Resumo e link, não um segundo CRUD: a tela de resultados continua dona do assunto. */}
-          <Button asChild variant="outline"><Link to="/attack-surface?mode=monitor">{pt ? "Abrir a watchlist" : "Open the watchlist"}</Link></Button>
+          <Button asChild variant={assetState === 0 ? "default" : "outline"}>
+            <Link to="/attack-surface?mode=monitor">
+              {assetState === 0
+                ? (pt ? "Adicionar o primeiro ativo" : "Add the first asset")
+                : (pt ? "Abrir a watchlist" : "Open the watchlist")}
+            </Link>
+          </Button>
         </CardContent>
       </Card>
     </div>

@@ -161,7 +161,15 @@ export function ApiKeysSettings() {
       <div className="flex items-start justify-between gap-3">
         <div>
           <h2 className="text-xl font-semibold">{pt ? "Chaves de API" : "API Keys"}</h2>
-          <p className="mt-1 text-sm text-muted-foreground">{pt ? "Suas integrações BYOK, cifradas no servidor." : "Your BYOK integrations, encrypted on the server."}</p>
+          {/* FLX-07: as chaves apareciam em dois lugares — aqui e em Admin >
+              Integrações — sem dizer qual vence quando as duas existem. A regra
+              está no código (getUserApiKey(...) || process.env), então ela pode
+              ser dita com todas as letras. */}
+          <p className="mt-1 text-sm text-muted-foreground">
+            {pt
+              ? "Sua chave, cifrada no servidor. Ela tem precedência sobre a chave da plataforma nos scans de exposição; sem ela, a plataforma usa a própria."
+              : "Your key, encrypted on the server. It takes precedence over the platform key in exposure scans; without it, the platform uses its own."}
+          </p>
         </div>
         <Badge variant="secondary" className="mt-1 shrink-0">{configured}/{total} {pt ? "config." : "set"}</Badge>
       </div>
