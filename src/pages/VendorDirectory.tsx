@@ -150,7 +150,7 @@ const VendorDirectory = () => {
         <PageLayout width="max-w-6xl">
                 <div className="space-y-6">
                     {/* Header bar and stats summary */}
-                    <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-muted/40 p-6 rounded-xl border border-border/50 ">
+                    <div className="page-head">
                         <div>
                             <h1 className="page-title">
                                 {language === 'pt' ? 'Fontes de Dados' : 'Data Sources'}

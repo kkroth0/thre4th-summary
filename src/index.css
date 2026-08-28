@@ -252,6 +252,13 @@ All colors MUST be HSL.
     @apply mt-1 text-sm leading-snug text-muted-foreground;
   }
 
+  /* Uma moldura para os cabeçalhos: filete embaixo, sem card. Das oito páginas
+     que escreviam a própria, três já faziam assim, três punham o título dentro
+     de um card cinza com 24px de padding e duas não separavam nada. */
+  .page-head {
+    @apply mb-6 flex flex-col gap-4 border-b border-border pb-4 sm:flex-row sm:items-end sm:justify-between;
+  }
+
   .soc-chip {
     @apply inline-flex items-center gap-2 rounded-full border px-3 py-1 text-[11px] font-bold uppercase tracking-wider;
     border-color: hsl(var(--border));

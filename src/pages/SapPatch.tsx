@@ -125,7 +125,7 @@ export default function SapPatch() {
     return (
         <PageLayout width="max-w-6xl">
             {/* Header */}
-            <div className="flex flex-col lg:flex-row justify-between items-start lg:items-end gap-4 bg-muted/40 p-6 rounded-xl border border-border/50">
+            <div className="page-head">
                 <div>
                     <h1 className="page-title">{pt ? "Correções SAP" : "SAP Fixes"}</h1>
                     <div className="page-lede flex flex-wrap items-center gap-2">

@@ -345,7 +345,7 @@ export default function AttackSurface() {
   return (
     <PageLayout width="max-w-7xl">
       <div className="flex flex-col gap-6">
-        <header className="flex flex-col gap-4 border-b border-border pb-6 lg:flex-row lg:items-end lg:justify-between">
+        <header className="page-head">
           <div className="max-w-3xl">
             <h1 className="page-title">
               {pt ? "Superfície de Ataque" : "Attack Surface"}

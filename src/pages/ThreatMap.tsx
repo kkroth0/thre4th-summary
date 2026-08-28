@@ -788,7 +788,7 @@ const ThreatMap = () => {
 
   return (
     <PageLayout width="max-w-7xl" showBackButton={false}>
-      <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+      <div className="page-head">
         <div>
           <h1 className="page-title">
             {pt ? "Vítimas de Ransomware" : "Ransomware Victims"}

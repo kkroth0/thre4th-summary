@@ -275,7 +275,7 @@ const PatchTuesday = () => {
             <div className="flex-1 p-4 md:p-8">
                 <div className="max-w-6xl mx-auto space-y-6">
                     {/* Title + month selector */}
-                    <div className="flex flex-col lg:flex-row justify-between items-start lg:items-end gap-4 bg-muted/40 p-6 rounded-xl border border-border/50 ">
+                    <div className="page-head">
                         <div>
                             <h1 className="page-title">
                                 {isPt ? "Patch Tuesday Microsoft" : "Microsoft Patch Tuesday"}

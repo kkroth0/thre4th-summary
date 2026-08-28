@@ -532,13 +532,13 @@ const Newsletter = () => {
         <div className="space-y-6">
 
           {/* Page Title Row */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b pb-4">
+          <div className="page-head">
             <div>
-              <h1 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
+              <h1 className="page-title flex items-center gap-2">
                 <Mail className="h-6 w-6 text-primary" />
                 {language === "pt" ? "Notícias de Segurança" : "Security News"}
               </h1>
-              <p className="text-xs text-muted-foreground mt-1">
+              <p className="page-lede">
                 {language === "pt"
                   ? "Agregador de notícias e avisos de segurança de múltiplas fontes de inteligência contra ameaças"
                   : "Threat intelligence news and security advisories aggregated from multiple sources"}

@@ -392,7 +392,7 @@ const CveDashboard = () => {
   return (
     <PageLayout width="max-w-7xl">
         <div className="space-y-6">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b pb-4">
+          <div className="page-head">
             <div>
               <h1 className="page-title">
                 {language === "pt" ? "Vulnerabilidades" : "Vulnerabilities"}

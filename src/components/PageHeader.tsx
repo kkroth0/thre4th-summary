@@ -9,19 +9,18 @@ interface PageHeaderProps {
 }
 
 /**
- * Page title block in the ThreatBrief style: a large semibold heading with a
- * muted subtitle. Use once at the top of a page, inside PageLayout.
+ * Page title block: title, supporting line and optional actions, under the one
+ * frame every page uses (`.page-head` — rule under the title, no card).
+ * Use once at the top of a page, inside PageLayout.
  */
 export function PageHeader({ title, subtitle, actions, className = "" }: PageHeaderProps) {
   return (
-    <header className={`mb-6 ${className}`}>
-      <div className="flex items-start justify-between gap-4">
+    <header className={`page-head ${className}`}>
+      <div>
         <h1 className="page-title">{title}</h1>
-        {actions && <div className="shrink-0">{actions}</div>}
+        {subtitle && <p className="page-lede">{subtitle}</p>}
       </div>
-      {subtitle && (
-        <p className="page-lede">{subtitle}</p>
-      )}
+      {actions && <div className="shrink-0">{actions}</div>}
     </header>
   );
 }
