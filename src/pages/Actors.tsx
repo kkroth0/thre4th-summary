@@ -219,7 +219,13 @@ function ActorRow({
           </Avatar>
           <div className="min-w-0">
             <div className="truncate text-sm font-semibold text-foreground">{actor.name}</div>
-            <p className="truncate text-xs text-muted-foreground">
+            {/* DEN-05: os aliases sumiam no meio do corte. Duas linhas com
+                quebra dizem mais do que uma linha truncada, e o title guarda a
+                lista inteira. */}
+            <p
+              className="text-xs leading-tight text-muted-foreground [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2] overflow-hidden"
+              title={actor.aliases.join(", ")}
+            >
               {aliases.length > 0
                 ? `${aliases.join(", ")}${actor.aliases.length > aliases.length ? ` +${actor.aliases.length - aliases.length}` : ""}`
                 : pt ? "Sem aliases conhecidos" : "No known aliases"}
@@ -227,10 +233,16 @@ function ActorRow({
           </div>
         </div>
       </TableCell>
-      <TableCell className="hidden truncate px-2 py-2 text-xs text-muted-foreground sm:table-cell">
+      <TableCell
+        className="hidden px-2 py-2 text-xs leading-tight text-muted-foreground sm:table-cell"
+        title={actor.country || ""}
+      >
         {actor.country || "—"}
       </TableCell>
-      <TableCell className="hidden truncate px-2 py-2 text-xs text-muted-foreground lg:table-cell">
+      <TableCell
+        className="hidden px-2 py-2 text-xs leading-tight text-muted-foreground lg:table-cell"
+        title={actor.motivation || ""}
+      >
         {actor.motivation || "—"}
       </TableCell>
       <TableCell className="px-2 py-2 text-right font-mono text-xs font-semibold">

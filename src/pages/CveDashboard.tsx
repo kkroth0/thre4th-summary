@@ -540,7 +540,7 @@ const CveDashboard = () => {
                   {tr({ pt: "Fabricantes Mais Visados (CISA KEV)", en: "Top Targeted Vendors (CISA KEV)", es: "Proveedores Más Atacados (CISA KEV)", fr: "Fournisseurs les Plus Ciblés (CISA KEV)" })}
                 </CardTitle>
                 <CardDescription className="text-xs">
-                  {tr({ pt: "Fabricantes com maior frequência no catálogo de exploração activa", en: "Most targeted vendors in CISA's Known Exploited Vulnerabilities catalog", es: "Proveedores con mayor frecuencia en el catálogo de explotación activa de CISA", fr: "Fournisseurs les plus fréquents dans le catalogue d'exploitation active de la CISA" })}
+                  {tr({ pt: "Fabricantes com maior frequência no catálogo de exploração ativa", en: "Most targeted vendors in CISA's Known Exploited Vulnerabilities catalog", es: "Proveedores con mayor frecuencia en el catálogo de explotación activa de CISA", fr: "Fournisseurs les plus fréquents dans le catalogue d'exploitation active de la CISA" })}
                 </CardDescription>
               </CardHeader>
               <CardContent className="pt-4 flex-1 flex flex-col justify-center space-y-3.5">

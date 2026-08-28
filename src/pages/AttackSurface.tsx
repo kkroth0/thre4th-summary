@@ -306,7 +306,7 @@ export default function AttackSurface() {
         if (abortsBatch(message)) {
           stopped = true;
           batchWarnings.push(pt
-            ? "Coleta interrompida: creditos Shodan esgotados ou chave sem acesso."
+            ? "Coleta interrompida: créditos Shodan esgotados ou chave sem acesso."
             : "Collection stopped: Shodan credits exhausted or key without access.");
         }
       }
@@ -405,7 +405,7 @@ export default function AttackSurface() {
                 {credits && (
                   <Badge variant="outline" className="h-9 gap-1.5 font-normal">
                     <Radar className="h-3.5 w-3.5" />
-                    {credits.queryCredits ?? "?"} {pt ? "creditos" : "credits"}
+                    {credits.queryCredits ?? "?"} {pt ? "créditos" : "credits"}
                     {credits.plan ? ` - ${credits.plan}` : ""}
                   </Badge>
                 )}

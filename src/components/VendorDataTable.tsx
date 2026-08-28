@@ -12,6 +12,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { useLanguage } from "@/contexts/LanguageContext";
 import { ArrowUpDown, Search, ExternalLink, ShieldAlert, Network, Globe, Activity, Cpu } from "lucide-react";
 
 // ── Category Mapping ──
@@ -111,6 +112,7 @@ type SortField = "name" | "status" | "dataCount";
 type SortOrder = "asc" | "desc";
 
 export const VendorDataTable = ({ vendorData, getVendorLink }: VendorDataTableProps) => {
+  const { language } = useLanguage();
   const [searchTerm, setSearchTerm] = useState("");
   const [sortField, setSortField] = useState<SortField>("name");
   const [sortOrder, setSortOrder] = useState<SortOrder>("asc");
@@ -240,7 +242,7 @@ export const VendorDataTable = ({ vendorData, getVendorLink }: VendorDataTablePr
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
-            placeholder="Search vendors..."
+            placeholder={language === "pt" ? "Filtrar fontes…" : "Search vendors…"}
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="pl-9"

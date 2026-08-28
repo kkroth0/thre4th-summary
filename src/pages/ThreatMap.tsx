@@ -222,10 +222,10 @@ function VictimTable({
               <Table className="table-fixed" stickyHeader>
                 <TableHeader>
                   <TableRow className="bg-muted/45 hover:bg-muted/45">
-                    <TableHead className="w-[28%] px-3 text-[11px] font-black uppercase tracking-wide">
+                    <TableHead className="w-[24%] px-3 text-[11px] font-black uppercase tracking-wide">
                       {pt ? "Vitima" : "Victim"}
                     </TableHead>
-                    <TableHead className="w-[12%] px-3 text-[11px] font-black uppercase tracking-wide">
+                    <TableHead className="w-[14%] px-3 text-[11px] font-black uppercase tracking-wide">
                       {pt ? "Grupo" : "Crew"}
                     </TableHead>
                     <TableHead className="w-[13%] px-3 text-[11px] font-black uppercase tracking-wide">
@@ -255,14 +255,17 @@ function VictimTable({
                         </div>
                       </TableCell>
                       <TableCell className="px-3 py-3">
-                        <Badge variant="secondary" className="max-w-full truncate">
+                        <Badge variant="secondary" className="max-w-full whitespace-normal break-words text-left">
                           {victim.group || "-"}
                         </Badge>
                       </TableCell>
-                      <TableCell className="truncate px-3 py-3 font-medium">
+                      {/* DEN-05: "United States ..." cortado não diz nada. Quebra
+                          em duas linhas em vez de truncar, e o nome inteiro fica
+                          no title para quem passa o mouse. */}
+                      <TableCell className="px-3 py-3 font-medium leading-tight" title={victim.countryName || victim.country || ""}>
                         {victim.countryName || victim.country || "-"}
                       </TableCell>
-                      <TableCell className="truncate px-3 py-3 text-muted-foreground">
+                      <TableCell className="px-3 py-3 leading-tight text-muted-foreground" title={victim.sector || ""}>
                         {victim.sector || "-"}
                       </TableCell>
                       <TableCell className="px-3 py-3 font-mono text-xs text-muted-foreground">

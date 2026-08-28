@@ -112,6 +112,8 @@ const VendorDirectory = () => {
 
     // Unique IOC Types across all vendors
     const iocTypes = ["ALL", "IP", "DOMAIN", "HASH", "URL", "CVE"];
+    // O rótulo é traduzido; o valor "ALL" continua sendo a chave do filtro.
+    const typeLabel = (type: string) => (type === "ALL" ? (language === 'pt' ? "TODOS" : "ALL") : type);
 
     const activeCount = Object.values(apiStatuses).filter(Boolean).length;
     const totalCount = Object.keys(apiStatuses).length;
@@ -133,7 +135,7 @@ const VendorDirectory = () => {
                         </div>
                         <div className="text-xs text-muted-foreground/80 md:text-right space-y-0.5">
                             <div>API Connectors Status: <span className="text-emerald-500 font-semibold">{totalCount > 0 ? `${activeCount}/${totalCount} Active` : "Checking..."}</span></div>
-                            <div>Default Cache TTL: <span className="font-mono">30 minutes</span></div>
+                            <div>{language === 'pt' ? "Cache padrão: " : "Default cache TTL: "}<span className="font-mono">{language === 'pt' ? "30 minutos" : "30 minutes"}</span></div>
                         </div>
                     </div>
 
@@ -143,7 +145,7 @@ const VendorDirectory = () => {
                             <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground/60" />
                             <Input
                                 type="text"
-                                placeholder="Search vendors..."
+                                placeholder={language === 'pt' ? "Filtrar fontes…" : "Search vendors…"}
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
                                 className="pl-9 h-9 text-xs rounded-full bg-background border-border/50 focus-visible:ring-primary/30"
@@ -164,7 +166,7 @@ const VendorDirectory = () => {
                                             : "text-muted-foreground hover:text-foreground hover:bg-muted/30"
                                     }`}
                                 >
-                                    {type}
+                                    {typeLabel(type)}
                                 </Button>
                             ))}
                         </div>
@@ -200,7 +202,7 @@ const VendorDirectory = () => {
                                                         apiStatuses[name] ? (
                                                             <span className="inline-flex items-center gap-1.5 text-[9px] font-black tracking-wider px-2 py-0.5 rounded bg-emerald-500 text-neutral-950 shadow-sm shadow-emerald-500/20 shrink-0">
                                                                 <span className="h-1.5 w-1.5 rounded-full bg-neutral-950 animate-pulse" />
-                                                                API ON
+                                                                {language === 'pt' ? "ATIVA" : "API ON"}
                                                             </span>
                                                         ) : (
                                                             <span className="inline-flex items-center gap-1.5 text-[9px] font-black tracking-wider px-2 py-0.5 rounded bg-red-500/10 text-red-500 border border-red-500/20 shrink-0">
@@ -211,7 +213,7 @@ const VendorDirectory = () => {
                                                     ) : (
                                                         <span className="inline-flex items-center gap-1.5 text-[9px] font-black tracking-wider px-2 py-0.5 rounded bg-muted/40 text-muted-foreground border border-muted/50 animate-pulse shrink-0">
                                                             <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground" />
-                                                            CHECKING
+                                                            {language === 'pt' ? "VERIFICANDO" : "CHECKING"}
                                                         </span>
                                                     )}
                                                     {info?.docLink && (
@@ -228,7 +230,7 @@ const VendorDirectory = () => {
                                                 </div>
                                             </div>
                                             <p className="text-xs text-muted-foreground/90 line-clamp-2 leading-relaxed" title={info?.description}>
-                                                {info?.description || "No description available."}
+                                                {info?.description || (language === 'pt' ? "Sem descrição." : "No description available.")}
                                             </p>
                                         </div>
 
