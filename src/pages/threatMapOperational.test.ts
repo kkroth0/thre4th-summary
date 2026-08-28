@@ -11,7 +11,7 @@ test("threat map leads with victims and carries no world map", async () => {
   // O mapa-múndi saiu: era desenho sem uso de triagem, e a página já responde
   // "quem, onde, quando" na tabela e no painel de situação.
   assert.doesNotMatch(source, /ThreatWorldMap|ContextMapPanel/);
-  assert.match(source, /Ransomware Map/);
+  assert.match(source, /Ransomware Victims/);
   assert.match(source, /Vítimas recentes/);
   assert.match(source, /Situação agora/);
   assert.match(source, /Fonte/);

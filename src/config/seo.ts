@@ -109,14 +109,14 @@ export const PUBLIC_SEO_ROUTES: SeoRoute[] = [
     changefreq: "daily",
     metadata: {
       pt: {
-        title: "Mapa de Ameacas e Ransomware | ThreatSumm4ry",
+        title: "Vitimas de Ransomware | ThreatSumm4ry",
         description:
-          "Visualize vitimas de ransomware por pais e acompanhe distribuicao geografica de incidentes para analise de inteligencia.",
+          "Vitimas reivindicadas por grupos de ransomware, com grupo, pais, setor, data e a evidencia de cada reivindicacao.",
       },
       en: {
-        title: "Threat Map and Ransomware Activity | ThreatSumm4ry",
+        title: "Ransomware Victims | ThreatSumm4ry",
         description:
-          "Visualize ransomware victims by country and follow geographic incident distribution for threat intelligence analysis.",
+          "Victims claimed by ransomware crews, with group, country, sector, date and the evidence behind each claim.",
       },
     },
   },

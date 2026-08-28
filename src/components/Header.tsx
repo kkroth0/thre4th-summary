@@ -140,7 +140,7 @@ export function useNavCatalog() {
         },
         {
           path: "/threat-map",
-          label: tr({ pt: "Mapa de Ransomware", en: "Ransomware Map", es: "Mapa de Ransomware", fr: "Carte des Rançongiciels" }),
+          label: tr({ pt: "Vítimas de Ransomware", en: "Ransomware Victims", es: "Víctimas de Ransomware", fr: "Victimes de rançongiciels" }),
           description: pt ? "Vítimas de ransomware por país." : "Ransomware victims by country.",
           icon: MapPinned,
         },
