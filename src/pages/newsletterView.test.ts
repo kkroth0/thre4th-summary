@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { filterNewsletterAdvisories, formatNewsletterDate, NEWS_CATEGORY_ORDER, countByCategory, filterStoryCards, groupAdvisoriesIntoStories, severityEvidence, severityIsUnexplained } from "./newsletterView.ts";
+import { filterNewsletterAdvisories, formatNewsletterDate, NEWS_CATEGORY_ORDER, countByCategory, filterStoryCards, groupAdvisoriesIntoStories, severityEvidence, severityIsUnexplained, activeFilterChips } from "./newsletterView.ts";
 
 test("formats today's full date in the selected language", () => {
   const date = new Date("2026-07-13T12:00:00-03:00");
@@ -190,4 +190,23 @@ test("card sem nenhum sinal medido é reconhecido como tal", () => {
   assert.equal(severityIsUnexplained({ cvss: 0 }), true, "CVSS zero não é sinal");
   assert.equal(severityIsUnexplained({ kev: true }), false);
   assert.equal(severityIsUnexplained({ cvss: 7.5 }), false);
+});
+
+// ─── DEN-02: o que está filtrando precisa estar à vista ─────────────────────
+test("cada filtro ativo vira um chip, e nenhum inativo aparece", () => {
+  const chips = activeFilterChips(
+    { severity: "Critical", kevOnly: true, orgOnly: false, sortByRelevance: true, search: "  fortinet  " },
+    true,
+  );
+  assert.deepEqual(chips.map((c) => c.label), [
+    "Severidade: Critical", "Só KEV", "Por relevância", '"fortinet"',
+  ]);
+  assert.deepEqual(chips.map((c) => c.key), ["severity", "kevOnly", "sortByRelevance", "search"]);
+});
+
+test("feed sem filtro não mostra chip nenhum", () => {
+  assert.deepEqual(
+    activeFilterChips({ severity: "all", kevOnly: false, orgOnly: false, sortByRelevance: false, search: "   " }, true),
+    [],
+  );
 });

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { Link } from "react-router-dom";
-import { ArrowLeft, Globe, BookOpen, AlertTriangle, Search, Mail, Eye, Sparkles, Filter, ChevronDown, RefreshCw, Calendar, Share2, Loader2, Bookmark } from "lucide-react";
+import { ArrowLeft, Globe, BookOpen, AlertTriangle, Search, Mail, Eye, Sparkles, Filter, ChevronDown, RefreshCw, Calendar, Share2, Loader2, Bookmark, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -18,7 +18,7 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
-import { NEWS_CATEGORY_ORDER, countByCategory, filterNewsletterAdvisories, filterStoryCards, formatNewsletterDate, groupAdvisoriesIntoStories, severityEvidence } from "./newsletterView";
+import { NEWS_CATEGORY_ORDER, countByCategory, filterNewsletterAdvisories, filterStoryCards, formatNewsletterDate, groupAdvisoriesIntoStories, severityEvidence, activeFilterChips } from "./newsletterView";
 import type { StoryCard } from "./newsletterView";
 import { generateBoletim, saveKnowledge } from "@/services/threatApi";
 import { useOrgProfile } from "@/hooks/useOrgProfile";
@@ -502,6 +502,20 @@ const Newsletter = () => {
     kevOnly,
     orgOnly,
   ].filter(Boolean).length;
+  // DEN-02: o que está filtrando saía só como número no botão. Cada filtro
+  // ativo vira chip removível, para o leitor ver e desfazer sem reabrir o
+  // popover — e para não achar que o feed está curto quando ele está filtrado.
+  const filterChips = activeFilterChips(
+    { severity: selectedSeverity, kevOnly, orgOnly, sortByRelevance, search: searchNews },
+    language === "pt",
+  );
+  const removeFilter = (key: string) => {
+    if (key === "severity") setSelectedSeverity("all");
+    if (key === "kevOnly") setKevOnly(false);
+    if (key === "orgOnly") setOrgOnly(false);
+    if (key === "sortByRelevance") setSortByRelevance(false);
+    if (key === "search") setSearchNews("");
+  };
   const clearFilters = () => {
     setSelectedSeverity("all");
     setSortByRelevance(false);
@@ -694,6 +708,38 @@ const Newsletter = () => {
                   </button>
                 ))}
               </div>
+
+              {/* DEN-02: os chips de categoria são o filtro primário, porque
+                  carregam contagem. Abaixo deles, o que veio do popover e da
+                  busca aparece como chip removível — antes só existia como
+                  número dentro do botão Filtros. */}
+              {!!filterChips.length && (
+                <div className="mb-4 flex flex-wrap items-center gap-1.5">
+                  <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                    {language === "pt" ? "Filtrando por" : "Filtering by"}
+                  </span>
+                  {filterChips.map((chip) => (
+                    <button
+                      key={chip.key}
+                      type="button"
+                      onClick={() => removeFilter(chip.key)}
+                      className="inline-flex items-center gap-1 rounded-full border border-primary/40 bg-primary/10 px-2.5 py-1 text-xs text-primary transition hover:bg-primary/20"
+                      aria-label={`${language === "pt" ? "Remover filtro" : "Remove filter"}: ${chip.label}`}
+                    >
+                      {chip.label}
+                      <X className="h-3 w-3" />
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={clearFilters}
+                    className="ml-1 text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+                  >
+                    {language === "pt" ? "limpar tudo" : "clear all"}
+                  </button>
+                </div>
+              )}
+
               {loadingNews ? (
                 <div className="space-y-4">
                   {[1, 2, 3].map((n) => (

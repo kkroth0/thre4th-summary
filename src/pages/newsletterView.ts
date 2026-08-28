@@ -216,3 +216,32 @@ export function severityEvidence(item: SeverityEvidenceItem, pt: boolean): Sever
 export const severityIsUnexplained = (item: SeverityEvidenceItem): boolean =>
   !item.kev && !(typeof item.cvss === "number" && item.cvss > 0)
   && !(typeof item.epss === "number" && item.epss >= 0.05);
+
+// ─── DEN-02: filtro ativo invisível ────────────────────────────────────────
+// A barra tinha busca, botão de Filtros e chips de categoria disputando o mesmo
+// espaço, e o que estava filtrando só aparecia como um número no botão — para
+// saber quais, ou remover um, era preciso reabrir o popover.
+
+export type NewsFilterState = {
+  severity: string;
+  kevOnly: boolean;
+  orgOnly: boolean;
+  sortByRelevance: boolean;
+  search: string;
+};
+
+export type ActiveFilterChip = { key: keyof NewsFilterState; label: string };
+
+export function activeFilterChips(state: NewsFilterState, pt: boolean): ActiveFilterChip[] {
+  const chips: ActiveFilterChip[] = [];
+  if (state.severity && state.severity !== "all") {
+    chips.push({ key: "severity", label: `${pt ? "Severidade" : "Severity"}: ${state.severity}` });
+  }
+  if (state.kevOnly) chips.push({ key: "kevOnly", label: pt ? "Só KEV" : "KEV only" });
+  if (state.orgOnly) chips.push({ key: "orgOnly", label: pt ? "Só da organização" : "Org only" });
+  // Ordenar não filtra, mas muda o que aparece primeiro — o leitor precisa saber
+  // que a ordem não é a cronológica.
+  if (state.sortByRelevance) chips.push({ key: "sortByRelevance", label: pt ? "Por relevância" : "By relevance" });
+  if (state.search.trim()) chips.push({ key: "search", label: `"${state.search.trim()}"` });
+  return chips;
+}
