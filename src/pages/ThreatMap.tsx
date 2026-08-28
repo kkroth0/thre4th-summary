@@ -9,7 +9,6 @@ import {
   Globe2,
   Layers,
   Loader2,
-  MapPinned,
   RadioTower,
   Search,
   ShieldAlert,
@@ -27,7 +26,6 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { PageLayout } from "@/components/PageLayout";
-import { ThreatWorldMap } from "@/components/ThreatWorldMap";
 import { MetricCard, type MetricTone } from "@/components/MetricCard";
 
 // As telas guardavam o tom como classe do Tailwind; o cartão pede o papel.
@@ -426,25 +424,6 @@ function SituationPanel({
               </span>
             </div>
           ))}
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-function ContextMapPanel({ data, pt }: { data: ThreatMapData; pt: boolean }) {
-  return (
-    <Card className="overflow-hidden">
-      <CardContent className="p-0">
-        <div className="flex items-center justify-between border-b border-border px-4 py-3">
-          <div className="flex items-center gap-2">
-            <MapPinned className="h-4 w-4 text-primary" />
-            <h2 className="text-sm font-black tracking-tight">{pt ? "Mapa contextual" : "Map context"}</h2>
-          </div>
-          <Badge variant="outline">{data.countries.length} {pt ? "países" : "countries"}</Badge>
-        </div>
-        <div className="bg-[linear-gradient(180deg,#0a1120,#0d1a2f)] p-2">
-          <ThreatWorldMap countries={data.countries} />
         </div>
       </CardContent>
     </Card>
@@ -900,7 +879,6 @@ const ThreatMap = () => {
                 deltaTone={deltaTone}
                 generatedAt={data.generatedAt}
               />
-              <ContextMapPanel data={data} pt={pt} />
             </div>
           </div>
         </div>
