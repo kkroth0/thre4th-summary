@@ -948,9 +948,11 @@ const Hunting = () => {
           {boardView === "ongoing" ? (
             // Visao continua: nao depende do mes escolhido — diz onde cada hunt
             // com ritmo esta agora.
-            <div className="overflow-hidden rounded-lg border">
+            <div className="max-h-[calc(100vh-16rem)] overflow-auto rounded-lg border">
               <table className="w-full text-sm">
-                <thead className="border-b bg-muted/40 text-left text-[11px] uppercase tracking-wide text-muted-foreground">
+                {/* FLX-02: o cabeçalho fica enquanto as hunts rolam. Precisa de
+                    fundo opaco, senão as linhas passam por baixo. */}
+                <thead className="sticky top-0 z-10 border-b bg-muted text-left text-[11px] uppercase tracking-wide text-muted-foreground shadow-[0_1px_0_hsl(var(--border))]">
                   <tr>
                     <th className="px-4 py-2 font-semibold">Hunt</th>
                     <th className="px-4 py-2 font-semibold">Ritmo</th>

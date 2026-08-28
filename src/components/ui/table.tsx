@@ -2,13 +2,28 @@ import * as React from "react";
 
 import { cn } from "@/lib/utils";
 
-const Table = React.forwardRef<HTMLTableElement, React.HTMLAttributes<HTMLTableElement>>(
-  ({ className, ...props }, ref) => (
-    <div className="relative w-full overflow-auto">
-      <table ref={ref} className={cn("w-full caption-bottom text-sm", className)} {...props} />
-    </div>
-  ),
-);
+// `stickyHeader` prende o cabeçalho enquanto a tabela rola.
+//
+// Precisa da rolagem PRÓPRIA da tabela: o wrapper já tem overflow-auto, e o CSS
+// não permite overflow-x:auto com overflow-y:visible — um eixo em auto força o
+// outro. Então sticky-no-viewport é impossível aqui, e a saída é limitar a
+// altura e rolar dentro. O seletor pega thead tanto do TableHeader quanto de um
+// <thead> escrito à mão.
+//
+// O fundo é obrigatório: sem ele as linhas passam por baixo do cabeçalho.
+const Table = React.forwardRef<
+  HTMLTableElement,
+  React.HTMLAttributes<HTMLTableElement> & { stickyHeader?: boolean; maxHeightClass?: string }
+>(({ className, stickyHeader, maxHeightClass = "max-h-[calc(100vh-16rem)]", ...props }, ref) => (
+  <div
+    className={cn(
+      "relative w-full overflow-auto",
+      stickyHeader && `${maxHeightClass} [&_thead]:sticky [&_thead]:top-0 [&_thead]:z-10 [&_thead_tr]:bg-card [&_thead]:shadow-[0_1px_0_hsl(var(--border))]`,
+    )}
+  >
+    <table ref={ref} className={cn("w-full caption-bottom text-sm", className)} {...props} />
+  </div>
+));
 Table.displayName = "Table";
 
 const TableHeader = React.forwardRef<HTMLTableSectionElement, React.HTMLAttributes<HTMLTableSectionElement>>(

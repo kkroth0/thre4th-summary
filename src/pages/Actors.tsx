@@ -774,8 +774,8 @@ function ThreatModelTab({ actors, sectors, targets, huntTechniques, pt, onOpen }
                 </div>
               )}
 
-              <div className="overflow-hidden rounded-lg border border-border">
-                <Table>
+              <div className="rounded-lg border border-border">
+                <Table stickyHeader>
                   <TableHeader>
                     <TableRow className="hover:bg-transparent">
                       <TableHead className="h-9 px-2 text-[10px] font-semibold uppercase tracking-wide">{pt ? "Grupo" : "Group"}</TableHead>
@@ -1186,8 +1186,8 @@ const Actors = () => {
                 {pt ? "Nenhum ator encontrado com estes filtros." : "No actor matches these filters."}
               </div>
             ) : (
-              <div className="overflow-hidden rounded-lg border border-border">
-                <Table className="table-fixed">
+              <div className="rounded-lg border border-border">
+                <Table className="table-fixed" stickyHeader>
                   <TableHeader>
                     <TableRow className="hover:bg-transparent">
                       <TableHead className="h-9 w-[34%] px-2 text-[10px] font-semibold uppercase tracking-wide">

@@ -219,7 +219,7 @@ function VictimTable({
         {victims.length ? (
           <>
             <div className="hidden md:block">
-              <Table className="table-fixed">
+              <Table className="table-fixed" stickyHeader>
                 <TableHeader>
                   <TableRow className="bg-muted/45 hover:bg-muted/45">
                     <TableHead className="w-[28%] px-3 text-[11px] font-black uppercase tracking-wide">
