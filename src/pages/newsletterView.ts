@@ -111,16 +111,45 @@ export interface StoryCard<T extends StorySource = StorySource> {
   sources: T[];
 }
 
+// EST-05: a lista abria com USN-8666-3, USN-8644-3, USN-8661-3 e USN-8688-1 em
+// sequência — dois deles com exatamente as mesmas CVEs. Um aviso de distribuição
+// por dia é notícia; oito são ruído com o mesmo texto. O identificador do aviso
+// diz de quem ele é, e é isso que agrupa: mesmo fornecedor, mesmo dia, um card.
+const ADVISORY_VENDORS: [RegExp, string][] = [
+  [/^USN-/i, "Ubuntu"],
+  [/^(DSA|DLA)-/i, "Debian"],
+  [/^RH(SA|BA|EA)-/i, "Red Hat"],
+  [/^ELSA-/i, "Oracle Linux"],
+  [/^(openSUSE-SU|SUSE-SU)-/i, "SUSE"],
+  [/^FEDORA-/i, "Fedora"],
+  [/^GLSA-/i, "Gentoo"],
+  [/^MFSA-/i, "Mozilla"],
+];
+
+/** O fornecedor por trás do identificador do aviso, ou null se não for um. */
+export const advisoryVendor = (title: string): string | null => {
+  const clean = (title || "").trim();
+  for (const [pattern, vendor] of ADVISORY_VENDORS) if (pattern.test(clean)) return vendor;
+  return null;
+};
+
+const ROLLUP = "vendor-advisory:";
+
 // An item with no storyId is its own story. The grouping is enrichment: if the
 // server could not group, the reader still sees every headline.
 export const groupAdvisoriesIntoStories = <T extends StorySource>(
   advisories: T[],
-  options: { sortByRelevance?: boolean } = {},
+  options: { sortByRelevance?: boolean; pt?: boolean } = {},
 ): StoryCard<T>[] => {
   const byStory = new Map<string, StoryCard<T>>();
+  const vendorOfKey = new Map<string, string>();
 
   for (const item of advisories) {
-    const key = item.storyId || `link:${item.link}`;
+    const vendor = advisoryVendor(item.title);
+    const day = (item.pubDate || "").slice(0, 10);
+    const rollup = vendor && day ? `${ROLLUP}${vendor}:${day}` : null;
+    if (rollup) vendorOfKey.set(rollup, vendor as string);
+    const key = rollup || item.storyId || `link:${item.link}`;
     const card = byStory.get(key);
     if (!card) {
       byStory.set(key, {
@@ -154,6 +183,14 @@ export const groupAdvisoriesIntoStories = <T extends StorySource>(
   for (const card of cards) {
     card.categories.sort((a, b) => (NEWS_CATEGORY_ORDER as readonly string[]).indexOf(a) - (NEWS_CATEGORY_ORDER as readonly string[]).indexOf(b));
     card.primaryCategory = card.categories[0] ?? null;
+    // Aviso sozinho continua com o título dele: um card de resumo com um item
+    // dentro esconderia a manchete e não pouparia linha nenhuma.
+    const vendor = vendorOfKey.get(card.storyId);
+    if (vendor && card.sources.length > 1) {
+      card.title = options.pt
+        ? `${vendor} · ${card.sources.length} avisos de segurança`
+        : `${vendor} · ${card.sources.length} security advisories`;
+    }
   }
   // O contexto filtra (orgOnly), nunca reordena: ou é tudo, ou é só o contexto.
   return options.sortByRelevance

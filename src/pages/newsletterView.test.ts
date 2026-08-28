@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { filterNewsletterAdvisories, formatNewsletterDate, NEWS_CATEGORY_ORDER, countByCategory, filterStoryCards, groupAdvisoriesIntoStories, severityEvidence, severityIsUnexplained, activeFilterChips } from "./newsletterView.ts";
+import { filterNewsletterAdvisories, formatNewsletterDate, NEWS_CATEGORY_ORDER, countByCategory, filterStoryCards, groupAdvisoriesIntoStories, severityEvidence, severityIsUnexplained, activeFilterChips, advisoryVendor } from "./newsletterView.ts";
 
 test("formats today's full date in the selected language", () => {
   const date = new Date("2026-07-13T12:00:00-03:00");
@@ -209,4 +209,40 @@ test("feed sem filtro não mostra chip nenhum", () => {
     activeFilterChips({ severity: "all", kevOnly: false, orgOnly: false, sortByRelevance: false, search: "   " }, true),
     [],
   );
+});
+
+// ─── EST-05: avisos de distribuição repetidos no mesmo dia ──────────────────
+
+test("avisos do mesmo fornecedor no mesmo dia viram um card só", () => {
+  const cards = groupAdvisoriesIntoStories([
+    advisory({ title: "USN-8666-3: Linux kernel (GCP FIPS) vulnerabilities", link: "https://u.example/1", storyId: "s1", cves: ["CVE-2020-24588"], pubDate: "2026-08-28T09:00:00.000Z" }),
+    advisory({ title: "USN-8661-3: Linux kernel vulnerabilities", link: "https://u.example/2", storyId: "s2", cves: ["CVE-2025-27558"], pubDate: "2026-08-28T11:00:00.000Z" }),
+  ], { pt: true });
+
+  assert.equal(cards.length, 1, "storyId diferente não impede o agrupamento por fornecedor e dia");
+  assert.equal(cards[0].title, "Ubuntu · 2 avisos de segurança");
+  assert.deepEqual(cards[0].cves, ["CVE-2020-24588", "CVE-2025-27558"], "as CVEs dos dois avisos ficam no card");
+  assert.equal(cards[0].sources.length, 2, "cada aviso continua acessível na linha do tempo");
+});
+
+test("aviso de fornecedor sozinho mantém o próprio título", () => {
+  const cards = groupAdvisoriesIntoStories([
+    advisory({ title: "USN-8688-1: PAM vulnerability", link: "https://u.example/3", pubDate: "2026-08-28T09:00:00.000Z" }),
+  ], { pt: true });
+
+  assert.equal(cards[0].title, "USN-8688-1: PAM vulnerability");
+});
+
+test("avisos do mesmo fornecedor em dias diferentes continuam separados", () => {
+  const cards = groupAdvisoriesIntoStories([
+    advisory({ title: "USN-8666-3: Linux kernel vulnerabilities", link: "https://u.example/1", pubDate: "2026-08-28T09:00:00.000Z" }),
+    advisory({ title: "USN-8600-1: OpenSSL vulnerability", link: "https://u.example/2", pubDate: "2026-08-27T09:00:00.000Z" }),
+  ], { pt: true });
+
+  assert.equal(cards.length, 2);
+});
+
+test("notícia comum não é confundida com aviso de fornecedor", () => {
+  assert.equal(advisoryVendor("Ransomware crew hits hospital"), null);
+  assert.equal(advisoryVendor("DSA-5812-1 chromium security update"), "Debian");
 });

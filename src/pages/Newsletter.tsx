@@ -488,10 +488,10 @@ const Newsletter = () => {
 
   const storyCards = useMemo(
     () => filterStoryCards(
-      groupAdvisoriesIntoStories(filteredAdvisories, { sortByRelevance }),
+      groupAdvisoriesIntoStories(filteredAdvisories, { sortByRelevance, pt: language === "pt" }),
       { category: categoryFilter, orgOnly: orgOnly && Boolean(orgModel) },
     ),
-    [filteredAdvisories, sortByRelevance, orgModel, categoryFilter, orgOnly],
+    [filteredAdvisories, sortByRelevance, orgModel, categoryFilter, orgOnly, language],
   );
   const categoryCounts = useMemo(() => countByCategory(groupAdvisoriesIntoStories(filteredAdvisories)), [filteredAdvisories]);
 
@@ -858,7 +858,7 @@ const Newsletter = () => {
                             depois, e traduzir quebraria a busca. */}
                         <h3 className={cn("mt-2 font-bold text-foreground", featured ? "text-lg leading-snug" : "text-base leading-snug")}>
                           <a href={item.link} target="_blank" rel="noopener noreferrer" className="hover:text-primary transition-colors">
-                            {enr?.title || item.title}
+                            {enr?.title || card.title}
                           </a>
                         </h3>
 
