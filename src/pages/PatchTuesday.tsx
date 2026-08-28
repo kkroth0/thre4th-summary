@@ -277,10 +277,10 @@ const PatchTuesday = () => {
                     {/* Title + month selector */}
                     <div className="flex flex-col lg:flex-row justify-between items-start lg:items-end gap-4 bg-muted/40 p-6 rounded-xl border border-border/50 ">
                         <div>
-                            <h1 className="text-3xl font-semibold tracking-tight">
+                            <h1 className="page-title">
                                 {isPt ? "Patch Tuesday Microsoft" : "Microsoft Patch Tuesday"}
                             </h1>
-                            <p className="mt-2 max-w-xl leading-relaxed text-muted-foreground">
+                            <p className="page-lede max-w-xl">
                                 {isPt
                                     ? "Correções do ciclo mensal da Microsoft, direto da API do MSRC, com exportação em PDF, PPTX e Excel."
                                     : "Fixes from Microsoft's monthly cycle, straight from the MSRC API, exportable to PDF, PPTX and Excel."}

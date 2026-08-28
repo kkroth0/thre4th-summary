@@ -51,7 +51,7 @@ const Profile = () => {
   return shell(
     <>
       <div className="mb-6">
-        <h1 className="text-3xl font-bold">{pt ? "Perfil" : "Profile"}</h1>
+        <h1 className="page-title">{pt ? "Perfil" : "Profile"}</h1>
         <p className="text-muted-foreground mt-1">{pt ? "Sua conta e sessão." : "Your account and session."}</p>
       </div>
 

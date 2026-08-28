@@ -394,10 +394,10 @@ const CveDashboard = () => {
         <div className="space-y-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b pb-4">
             <div>
-              <h1 className="text-3xl font-semibold tracking-tight">
+              <h1 className="page-title">
                 {language === "pt" ? "Vulnerabilidades" : "Vulnerabilities"}
               </h1>
-              <p className="mt-2 leading-relaxed text-muted-foreground">
+              <p className="page-lede">
                 {tr({
                   pt: "CVEs recentes com severidade, probabilidade de exploração (EPSS) e presença no catálogo KEV da CISA.",
                   en: "Recent CVEs with severity, exploitation probability (EPSS) and presence in CISA's KEV catalog.",

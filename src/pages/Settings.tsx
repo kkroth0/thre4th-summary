@@ -69,7 +69,7 @@ export default function Settings() {
             <span className="text-foreground">{tr({ pt: "Configurações", en: "Settings", es: "Configuración", fr: "Paramètres" })}</span>
           </nav>
         )}
-        <h1 className="flex items-center gap-2 text-3xl font-bold"><SettingsIcon className="text-primary" /> {tr({ pt: "Configurações", en: "Settings", es: "Configuración", fr: "Paramètres" })}</h1>
+        <h1 className="flex items-center gap-2 page-title"><SettingsIcon className="text-primary" /> {tr({ pt: "Configurações", en: "Settings", es: "Configuración", fr: "Paramètres" })}</h1>
         <p className="mt-1 text-muted-foreground">{tr({ pt: "Preferências, integrações e administração da sua conta.", en: "Account preferences, integrations, and administration.", es: "Preferencias, integraciones y administración de tu cuenta.", fr: "Préférences, intégrations et administration de votre compte." })}</p>
       </div>
 

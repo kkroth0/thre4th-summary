@@ -127,8 +127,8 @@ export default function SapPatch() {
             {/* Header */}
             <div className="flex flex-col lg:flex-row justify-between items-start lg:items-end gap-4 bg-muted/40 p-6 rounded-xl border border-border/50">
                 <div>
-                    <h1 className="text-3xl font-semibold tracking-tight">{pt ? "Correções SAP" : "SAP Fixes"}</h1>
-                    <div className="mt-2 flex flex-wrap items-center gap-2 leading-relaxed text-muted-foreground">
+                    <h1 className="page-title">{pt ? "Correções SAP" : "SAP Fixes"}</h1>
+                    <div className="page-lede flex flex-wrap items-center gap-2">
                         <span>{pt
                             ? "Notas de segurança do patch day mensal da SAP, com severidade e produto afetado."
                             : "Security notes from SAP's monthly patch day, with severity and affected product."}</span>

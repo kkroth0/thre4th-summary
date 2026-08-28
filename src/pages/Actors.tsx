@@ -1008,10 +1008,10 @@ const Actors = () => {
                 MITRE + MISP + Ransomware.live
               </span>
             </div>
-            <h1 className="text-3xl font-semibold tracking-tight">
+            <h1 className="page-title">
               {actorPageCopy(language).title}
             </h1>
-            <p className="mt-2 max-w-2xl leading-relaxed text-muted-foreground">
+            <p className="page-lede max-w-2xl">
               {pt
                 ? "Aliases, origem, motivação, técnicas mapeadas e referências de cada grupo, lado a lado."
                 : "Aliases, origin, motivation, mapped techniques and references for each group, side by side."}

@@ -152,10 +152,10 @@ const VendorDirectory = () => {
                     {/* Header bar and stats summary */}
                     <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-muted/40 p-6 rounded-xl border border-border/50 ">
                         <div>
-                            <h1 className="text-3xl font-semibold tracking-tight">
+                            <h1 className="page-title">
                                 {language === 'pt' ? 'Fontes de Dados' : 'Data Sources'}
                             </h1>
-                            <p className="mt-2 max-w-2xl leading-relaxed text-muted-foreground">
+                            <p className="page-lede max-w-2xl">
                                 {language === 'pt'
                                     ? `As ${vendorsList.length} fontes que alimentam as consultas, o que cada uma cobre e quais estão ativas.`
                                     : `The ${vendorsList.length} sources behind every lookup, what each one covers and which are active.`}

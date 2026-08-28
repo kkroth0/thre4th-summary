@@ -14,13 +14,13 @@ interface PageHeaderProps {
  */
 export function PageHeader({ title, subtitle, actions, className = "" }: PageHeaderProps) {
   return (
-    <header className={`mb-10 ${className}`}>
+    <header className={`mb-6 ${className}`}>
       <div className="flex items-start justify-between gap-4">
-        <h1 className="text-3xl font-semibold tracking-tight">{title}</h1>
+        <h1 className="page-title">{title}</h1>
         {actions && <div className="shrink-0">{actions}</div>}
       </div>
       {subtitle && (
-        <p className="text-muted-foreground mt-2 leading-relaxed">{subtitle}</p>
+        <p className="page-lede">{subtitle}</p>
       )}
     </header>
   );

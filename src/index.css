@@ -241,6 +241,17 @@ All colors MUST be HSL.
     box-shadow: 0 1px 2px hsl(0 0% 0% / 0.04);
   }
 
+  /* FLX-01: o topo gastava 445px antes da primeira linha de trabalho, e cada
+     página escrevia o próprio cabeçalho com as mesmas classes soltas. Título e
+     linha de apoio agora vivem aqui, num lugar só, e cabem em ~60px. */
+  .page-title {
+    @apply text-2xl font-semibold tracking-tight;
+  }
+
+  .page-lede {
+    @apply mt-1 text-sm leading-snug text-muted-foreground;
+  }
+
   .soc-chip {
     @apply inline-flex items-center gap-2 rounded-full border px-3 py-1 text-[11px] font-bold uppercase tracking-wider;
     border-color: hsl(var(--border));

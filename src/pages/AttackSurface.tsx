@@ -347,10 +347,10 @@ export default function AttackSurface() {
       <div className="flex flex-col gap-6">
         <header className="flex flex-col gap-4 border-b border-border pb-6 lg:flex-row lg:items-end lg:justify-between">
           <div className="max-w-3xl">
-            <h1 className="text-3xl font-semibold tracking-tight">
+            <h1 className="page-title">
               {pt ? "Superfície de Ataque" : "Attack Surface"}
             </h1>
-            <p className="mt-2 max-w-2xl leading-relaxed text-muted-foreground">
+            <p className="page-lede max-w-2xl">
               {pt
                 ? "Serviços expostos do seu perímetro, pelo Shodan. Importação em massa, exportação XLSX e acompanhamento do que muda nos ativos salvos."
                 : "Exposed services on your perimeter, via Shodan. Bulk import, XLSX export, and tracking of what changes across saved assets."}

@@ -571,10 +571,10 @@ const PhishingAnalyzer = () => {
           {/* Header Row */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b pb-4">
             <div>
-              <h1 className="text-3xl font-semibold tracking-tight">
+              <h1 className="page-title">
                 {language === "pt" ? "Análise de Phishing" : "Phishing Analysis"}
               </h1>
-              <p className="mt-2 leading-relaxed text-muted-foreground">
+              <p className="page-lede">
                 {mode === "eml"
                   ? (language === "pt"
                     ? "O e-mail suspeito, aberto por dentro: remetente, autenticação, links e anexos. O .eml é lido aqui no navegador e nunca sai da sua máquina."
