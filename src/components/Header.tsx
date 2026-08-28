@@ -34,6 +34,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { BrandMark } from "@/components/BrandMark";
 import { actorPageCopy } from "@/pages/actorsView";
+import { IOC_SOURCE_COUNT } from "@/services/threatApi";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { cn } from "@/lib/utils";
@@ -72,7 +73,7 @@ export function useNavCatalog() {
   const homeItem: NavItem = {
     path: "/analyzer",
     label: tr({ pt: "Consulta de Indicadores", en: "Indicator Lookup", es: "Consulta de Indicadores", fr: "Recherche d'Indicateurs" }),
-    description: pt ? "IP, domínio, link ou hash em 21 fontes." : "IP, domain, link or hash across 21 sources.",
+    description: pt ? `IP, domínio, link ou hash em ${IOC_SOURCE_COUNT} fontes.` : `IP, domain, link or hash across ${IOC_SOURCE_COUNT} sources.`,
     icon: Search,
   };
 

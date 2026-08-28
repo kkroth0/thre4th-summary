@@ -55,7 +55,10 @@ export const PUBLIC_SEO_ROUTES: SeoRoute[] = [
     changefreq: "weekly",
     metadata: {
       pt: {
-        title: "Busca de IOCs em 21 fontes | ThreatSumm4ry",
+        // Estático de propósito: título de SEO não pode variar a cada deploy, senão
+        // o buscador reindexa por nada. Conferir contra IOC_SOURCE_COUNT ao mexer
+        // na lista de vendors.
+        title: "Busca de IOCs em 18 fontes | ThreatSumm4ry",
         description:
           "Analise IPv4, IPv6, dominios, URLs e hashes em fontes CTI como VirusTotal, AbuseIPDB, Shodan, OTX e abuse.ch em uma unica busca.",
       },

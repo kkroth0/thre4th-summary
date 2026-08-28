@@ -33,7 +33,7 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { MultiIpSummary } from "@/components/MultiIpSummary";
-import { fetchThreatDataProgressive, saveScan } from "@/services/threatApi";
+import { fetchThreatDataProgressive, saveScan, IOC_SOURCE_COUNT } from "@/services/threatApi";
 import { ScanHistory } from "@/components/ScanHistory";
 import { useToast } from "@/hooks/use-toast";
 import { SearchForm } from "@/components/SearchForm";
@@ -1369,8 +1369,8 @@ const Index = () => {
                 </h2>
                 <p className="text-xs text-muted-foreground">
                   {language === "pt"
-                    ? "IP, domínio, URL ou hash · 21 fontes"
-                    : "IP, domain, URL or hash · 21 sources"}
+                    ? `IP, domínio, URL ou hash · ${IOC_SOURCE_COUNT} fontes`
+                    : `IP, domain, URL or hash · ${IOC_SOURCE_COUNT} sources`}
                 </p>
               </div>
               <SearchForm

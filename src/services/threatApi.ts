@@ -45,6 +45,11 @@ export const VENDOR_IOC_SUPPORT: Record<string, ('ip' | 'domain' | 'hash' | 'url
     // alcançados, porque este índice é que decide quem é consultado.
 };
 
+// Quantas fontes o produto realmente consulta. Derivado, nunca escrito à mão:
+// a UI dizia "21 fontes" em três lugares enquanto o diretório dizia 18, e a
+// diferença só cresceu quando vendor entrou ou saiu. Um número, uma origem.
+export const IOC_SOURCE_COUNT = Object.keys(VENDOR_IOC_SUPPORT).length;
+
 // Conservative allowlist: these repository endpoints use generic IPv6-capable
 // indicator/host/IP paths. OTX is explicitly `/IPv4/`; Team Cymru reverses IPv4
 // octets, so neither may receive a direct IPv6 query.
