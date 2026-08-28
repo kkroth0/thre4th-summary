@@ -367,17 +367,35 @@ function SituationPanel({
 
         <p className="mb-4 text-sm font-medium leading-6 text-muted-foreground">{signal.copy}</p>
 
+        {/* EST-06: o delta só existe se a janela anterior tiver dado. A fonte
+            (/v2/recentvictims) devolve uma fatia fixa de 100 vítimas dos últimos
+            dias, então a janela anterior costuma vir vazia — e aí o delta saía
+            "+100 (100%)" ao lado de "Claims 100", repetindo o total e não
+            informando nada. Sem comparação, dizemos isso. */}
         <div className="grid gap-2 border-y border-border py-4 text-xs">
-          <div className="flex items-center justify-between gap-3">
-            <span className="text-muted-foreground">{pt ? "Delta" : "Delta"}</span>
-            <span className={`font-mono font-bold ${deltaTone}`}>
-              {delta.victims > 0 ? "+" : ""}{compact(delta.victims)} ({compact(delta.percent)}%)
-            </span>
-          </div>
-          <div className="flex items-center justify-between gap-3">
-            <span className="text-muted-foreground">{pt ? "Janela anterior" : "Previous window"}</span>
-            <span className="font-mono font-bold">{compact(delta.previousVictims)}</span>
-          </div>
+          {delta.previousVictims > 0 ? (
+            <>
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-muted-foreground">Delta</span>
+                <span className={`font-mono font-bold ${deltaTone}`}>
+                  {delta.victims > 0 ? "+" : ""}{compact(delta.victims)} ({compact(delta.percent)}%)
+                </span>
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-muted-foreground">{pt ? "Janela anterior" : "Previous window"}</span>
+                <span className="font-mono font-bold">{compact(delta.previousVictims)}</span>
+              </div>
+            </>
+          ) : (
+            <div className="flex items-start justify-between gap-3">
+              <span className="text-muted-foreground">{pt ? "Comparação" : "Comparison"}</span>
+              <span className="max-w-[62%] text-right font-medium text-muted-foreground">
+                {pt
+                  ? "A fonte só publica as vítimas mais recentes; não há janela anterior para comparar."
+                  : "The source only publishes the most recent victims; there is no previous window to compare."}
+              </span>
+            </div>
+          )}
           <div className="flex items-center justify-between gap-3">
             <span className="text-muted-foreground">{pt ? "Atualizado" : "Updated"}</span>
             <span className="font-mono font-bold">{fmtDate(generatedAt)}</span>

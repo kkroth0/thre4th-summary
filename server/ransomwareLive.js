@@ -278,6 +278,11 @@ export function buildThreatMapResponse(rawVictims, {
         delta: {
             victims: deltaVictims,
             previousVictims: previous.totalVictims,
+            // 100% quando não há janela anterior é convenção, não medida: a
+            // /v2/recentvictims devolve uma fatia fixa das vítimas mais recentes
+            // (medido em 2026-08-28: 100 itens cobrindo 3 dias, iguais para
+            // days=3, 7 e 30), então a janela anterior quase sempre vem vazia.
+            // Quem desenha precisa olhar previousVictims antes de mostrar delta.
             percent: previous.totalVictims > 0 ? Math.round((deltaVictims / previous.totalVictims) * 100) : (current.totalVictims > 0 ? 100 : 0),
             direction: deltaVictims > 0 ? 'up' : deltaVictims < 0 ? 'down' : 'flat',
         },

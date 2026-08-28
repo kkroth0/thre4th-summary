@@ -56,6 +56,8 @@ const PHASES = [
   { pt: "Montando o boletim…", en: "Assembling the bulletin…" },
 ];
 const phaseIndex = (elapsedMs: number) => (elapsedMs < 15000 ? 0 : elapsedMs < 40000 ? 1 : 2);
+// Teto do worker, o mesmo que aparece na mensagem de falha ("timeout após 240s").
+const JOB_TIMEOUT_S = 240;
 
 // Minimal status: a small dot + a muted label. Colour only where it means
 // something. DEN-06 da auditoria: os tons -600 mediam 3,77:1 em 12px, abaixo do
@@ -145,7 +147,8 @@ const JobListItem: React.FC<{
   onSelect: (job: BoletimJob) => void;
   onPick: (id: string, picked: boolean) => void;
   onRetry: (job: BoletimJob) => void;
-}> = ({ job: j, selected, picked, nowMs, pt, onSelect, onPick, onRetry }) => {
+  onCancel: (job: BoletimJob) => void;
+}> = ({ job: j, selected, picked, nowMs, pt, onSelect, onPick, onRetry, onCancel }) => {
   const st = JOB_STATUS[j.status] || JOB_STATUS.pending;
   const elapsed = Math.max(0, nowMs - new Date(j.createdAt).getTime());
   const clickable = canOpenJob(j);
@@ -180,7 +183,11 @@ const JobListItem: React.FC<{
           </div>
         </div>
         {j.status === "pending" && (
-          <span className="text-xs text-muted-foreground shrink-0 tabular-nums">{Math.floor(elapsed / 1000)}s</span>
+          // EST-02: o número sozinho não diz se está perto do fim. O limite do
+          // worker é 240s, então o tempo aparece contra ele.
+          <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+            {Math.floor(elapsed / 1000)}s / {JOB_TIMEOUT_S}s
+          </span>
         )}
         {j.status === "done" && (
           <span className="rounded border px-1.5 py-0.5 font-mono text-[10px] uppercase text-muted-foreground shrink-0">{j.type}</span>
@@ -207,10 +214,19 @@ const JobListItem: React.FC<{
           <div className="relative h-1 w-full overflow-hidden rounded-full bg-muted">
             <span className="absolute top-0 h-full rounded-full bg-primary/70 animate-indeterminate" />
           </div>
-          <div className="mt-1.5 text-xs text-muted-foreground">
-            {j.queuePosition && j.queuePosition > 0
-              ? (pt ? `Na fila, ${j.queuePosition} na sua frente` : `In queue, ${j.queuePosition} ahead of you`)
-              : (pt ? PHASES[phaseIndex(elapsed)].pt : PHASES[phaseIndex(elapsed)].en)}
+          <div className="mt-1.5 flex items-center gap-2 text-xs text-muted-foreground">
+            <span className="min-w-0 flex-1 truncate">
+              {j.queuePosition && j.queuePosition > 0
+                ? (pt ? `Na fila, ${j.queuePosition} na sua frente` : `In queue, ${j.queuePosition} ahead of you`)
+                : (pt ? PHASES[phaseIndex(elapsed)].pt : PHASES[phaseIndex(elapsed)].en)}
+            </span>
+            <Button
+              size="sm" variant="ghost"
+              className="h-6 shrink-0 px-2 text-xs text-muted-foreground hover:text-foreground"
+              onClick={(e) => { e.stopPropagation(); onCancel(j); }}
+            >
+              {pt ? "Cancelar" : "Cancel"}
+            </Button>
           </div>
         </div>
       )}
@@ -401,6 +417,20 @@ const DailyBulletin: React.FC = () => {
 
   const retryJob = (j: BoletimJob) => { generate(j.url, j.type, j.title); };
 
+  // EST-02: a geração leva minutos e não tinha como desistir. Apagar o job é o
+  // que o servidor já sabe fazer; o worker que estiver rodando termina sozinho e
+  // o resultado é descartado por não ter mais dono na lista.
+  const cancelJob = async (j: BoletimJob) => {
+    setJobs((current) => current.filter((job) => job.id !== j.id));
+    if (selectedId === j.id) setSelectedId("");
+    try {
+      await deleteJob(j.id);
+      toast.success(pt ? "Geração cancelada" : "Generation cancelled");
+    } catch {
+      toast.error(pt ? "Falha ao cancelar" : "Failed to cancel");
+    }
+  };
+
   // Report currently opened on the right pane.
   const selectedJob = jobs.find((j) => j.id === selectedId && j.status === "done" && j.json) || null;
   // O item que falhou não tem relatório para o ReportPane, mas tem diagnóstico.
@@ -558,6 +588,7 @@ const DailyBulletin: React.FC = () => {
                     onSelect={selectJob}
                     onPick={togglePick}
                     onRetry={retryJob}
+                    onCancel={cancelJob}
                   />
                 ))}
               </div>
