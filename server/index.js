@@ -2882,10 +2882,16 @@ app.get('/api/feed/jobs/pending', (req, res) => {
     if (!requireFeedSecret(req, res)) return;
     expireStaleJobs();
     // Sem BYOK: todo job pending vai pro worker. A chave OpenRouter é do servidor
-    // (no .env do worker), não viaja no payload. Só encaminhamos o modelo — e
-    // apenas quando este servidor pinar um: o --model do worker sobrescreve a
-    // cadeia do motor, então um default aqui viraria um segundo lugar pra
-    // atualizar (e silenciosamente venceria o motor, que é quem sabe o assunto).
+    // (no .env do worker), não viaja no payload. Só encaminhamos o modelo quando
+    // este servidor pinar um DE PROPÓSITO — o --model do worker sobrescreve a
+    // cadeia do motor (primário + fallbacks), que é quem sabe o assunto.
+    //
+    // Variável dedicada, NÃO OPENROUTER_MODEL: essa também alimenta a análise
+    // on-demand do próprio site, vive setada em produção (o .env.example a
+    // entrega preenchida) e assim pinava o modelo no worker sem ninguém pedir —
+    // um modelo lento/degradado ali fazia toda geração bater o teto de 240s.
+    // Vazia por padrão: quem decide o modelo do boletim é o motor.
+    const workerModel = (process.env.FEED_WORKER_MODEL || '').trim();
     const pending = Object.values(jobsStore)
         .filter((j) => j.status === 'pending')
         .map((j) => ({
@@ -2893,7 +2899,7 @@ app.get('/api/feed/jobs/pending', (req, res) => {
             url: j.url,
             type: j.type,
             title: j.title,
-            ...(process.env.OPENROUTER_MODEL ? { model: process.env.OPENROUTER_MODEL } : {}),
+            ...(workerModel ? { model: workerModel } : {}),
         }));
     res.json({ pending });
 });
