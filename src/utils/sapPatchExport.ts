@@ -14,6 +14,9 @@ import {
     highlightCard, kpiPill, nvdCveUrl, scrubXml, styleHeaderRow, workbookMetadata,
     fmtMonthPt, monthSlashYear, type PptxFactory,
 } from './deckTemplate';
+import {
+    SAP_REPORT, allCves, priorityLabel, cvssLabel, categoryGlossaryLines, noteSpeakerNotes,
+} from './sapPatchDeckContent';
 
 const BRAND = '2563EB';
 
@@ -123,30 +126,7 @@ export async function exportSapPatchPDF(s: SapPatchSummary): Promise<void> {
 // workbook, exactly as the Patch Tuesday deck does it; the slides carry the
 // selection a room can actually read.
 
-const REPORT = 'SAP Security Patch Day';
-
-const allCves = (note: { cves: string[] }): string => (note.cves.length > 0 ? note.cves.join(', ') : 'Não informada');
-
-const priorityLabel = (priority: string): string => {
-    if (/hot news/i.test(priority)) return 'Crítica (Hot News)';
-    if (/critical/i.test(priority)) return 'Crítica';
-    if (/high/i.test(priority)) return 'Alta';
-    if (/medium/i.test(priority)) return 'Média';
-    if (/low/i.test(priority)) return 'Baixa';
-    return priority;
-};
-
-const cvssLabel = (cvss: number | null): string => (cvss == null ? 'Não informado' : cvss.toFixed(1));
-
-const CATEGORY_EXPLANATIONS: Record<string, string> = {
-    'RCE / Corrupção de memória': 'Execução de código ou comprometimento de memória.',
-    'Configuração / Credenciais': 'Riscos associados a autenticação, senhas ou configuração.',
-    'Ausência de autorização': 'Validações insuficientes de acesso ou privilégio.',
-    'Injeção': 'Entrada não confiável interpretada por aplicações.',
-    'Traversal / Divulgação': 'Acesso indevido a caminhos ou exposição de informações.',
-    'Falsificação / Redirecionamento': 'Manipulação de identidade, tráfego ou destino.',
-    'Outras': 'Demais tipos de vulnerabilidade publicados no ciclo.',
-};
+const REPORT = SAP_REPORT;
 
 const addCoverSlide = (pptx: PptxGenJS, summary: SapPatchSummary): void => {
     const slide = coverSlide(pptx, REPORT, summary.releaseDate);
@@ -226,11 +206,8 @@ const addConsolidatedSlide = (pptx: PptxGenJS, summary: SapPatchSummary, analysi
     );
 
     deckText(slide, 'Descrição Executiva da Vulnerabilidade:', { x: 0.481, y: 3.13, w: 2.849, h: 0.225, ...sectionLabel });
-    deckText(slide, 
-        analysis.categoryCounts.map(({ category }) => ({
-            text: `${category}: ${CATEGORY_EXPLANATIONS[category] ?? ''}`.trim(),
-            options: { breakLine: true, bullet: true },
-        })),
+    deckText(slide,
+        categoryGlossaryLines(analysis).map((text) => ({ text, options: { breakLine: true, bullet: true } })),
         { x: 0.469, y: 3.32, w: 4.441, h: 1.826, fontFace: FONT_LIGHT, fontSize: 8, color: DECK.white }
     );
 
@@ -317,20 +294,7 @@ const addHighlightsSlide = (pptx: PptxGenJS, summary: SapPatchSummary, analysis:
     });
 
     // Every note reaches the presenter, including the ones the grid could not hold.
-    slide.addNotes(
-        analysis.notes
-            .map((note) =>
-                [
-                    `SAP Note ${note.note}`,
-                    `Título completo: ${note.title}`,
-                    `CVE: ${allCves(note)}`,
-                    `Severidade: ${priorityLabel(note.priority)} · CVSS ${cvssLabel(note.cvss)}`,
-                    `Categoria: ${note.category} · Produto: ${note.product}`,
-                    note.isUpdate ? 'Nota atualizada' : 'Nota nova neste ciclo',
-                ].join('\n')
-            )
-            .join('\n\n')
-    );
+    slide.addNotes(noteSpeakerNotes(analysis.notes));
 
     attachmentNote(slide);
 };

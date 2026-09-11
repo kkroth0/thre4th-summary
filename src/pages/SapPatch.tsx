@@ -43,7 +43,7 @@ const cvssClass = (score: number | null) => {
     return "text-muted-foreground";
 };
 
-type ExportKind = "pdf" | "pptx" | "excel";
+type ExportKind = "pdf" | "pptx" | "excel" | "json";
 const PAGE_SIZE = 25;
 
 export const canExportSapPatch = (data: SapPatchSummary | null): boolean =>
@@ -101,9 +101,14 @@ export default function SapPatch() {
         }
         setExporting(kind);
         try {
-            const exports = await import("@/utils/sapPatchExport");
-            const fn = { pdf: exports.exportSapPatchPDF, pptx: exports.exportSapPatchPPTX, excel: exports.exportSapPatchExcel }[kind];
-            await fn(data);
+            if (kind === "json") {
+                const { exportSapPatchCtiflowJSON } = await import("@/utils/sapPatchCtiflow");
+                exportSapPatchCtiflowJSON(data);
+            } else {
+                const exports = await import("@/utils/sapPatchExport");
+                const fn = { pdf: exports.exportSapPatchPDF, pptx: exports.exportSapPatchPPTX, excel: exports.exportSapPatchExcel }[kind];
+                await fn(data);
+            }
         } catch (e) {
             toast({ title: pt ? "Falha no export" : "Export failed", description: (e as Error).message, variant: "destructive" });
         } finally {
@@ -157,6 +162,7 @@ export default function SapPatch() {
                             <DropdownMenuItem onClick={() => runExport("pdf")}>PDF</DropdownMenuItem>
                             <DropdownMenuItem onClick={() => runExport("pptx")}>PowerPoint</DropdownMenuItem>
                             <DropdownMenuItem onClick={() => runExport("excel")}>Excel</DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => runExport("json")}>JSON (CTIFLOW)</DropdownMenuItem>
                         </DropdownMenuContent>
                     </DropdownMenu>
                 </div>
