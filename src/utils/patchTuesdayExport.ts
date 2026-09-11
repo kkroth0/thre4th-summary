@@ -15,6 +15,10 @@ import {
     highlightCard, kpiPill, msrcCveUrl, nvdCveUrl, scrubXml, styleHeaderRow, workbookMetadata,
     fmtMonthPt, fmtLongDatePt, fmtShortDatePt, monthSlashYear, type PptxFactory,
 } from './deckTemplate';
+import {
+    FAMILY_PT, IMPACT_SHORT, IMPACT_GLOSSARY, pt, familyPt, statusTagPt,
+    zeroDays, criticalImpactMix, executiveOpeningParts, immediatePriorities,
+} from './patchTuesdayDeckContent';
 
 // ---- Shared palette / helpers -------------------------------------------------
 
@@ -330,48 +334,14 @@ const severityCellColor = (data: CellHookData, col: number) => {
 // Metadata carries no company name (pptx.company stays blank) — the deck is
 // handed over and presented under the reader's own name.
 
-const FAMILY_PT: Record<string, string> = {
-    'Azure & Cloud': 'Azure e nuvem',
-    'Developer Tools & .NET': 'Ferramentas de desenvolvimento e .NET',
-    'Other Microsoft Products': 'Outros produtos Microsoft',
-};
-
-// Short forms used on the highlight card tags, where a full impact name would wrap.
-const IMPACT_SHORT: Record<string, string> = {
-    'Remote Code Execution': 'RCE',
-    'Elevation of Privilege': 'EoP',
-    'Security Feature Bypass': 'Bypass',
-    'Information Disclosure': 'Info. Disc.',
-    'Denial of Service': 'DoS',
-};
-
-const pt = (map: Record<string, string>, value: string) => map[value] || value;
-
-const statusPt = (v: PatchVulnerability): string => {
-    if (v.exploited) return 'Explor. ativa';
-    if (v.publiclyDisclosed) return 'Pública';
-    return v.severity === 'Critical' ? 'Crítica' : v.severity;
-};
-
 // ---- Slides ------------------------------------------------------------------
 
 const addCoverSlide = (pptx: PptxGenJS, s: PatchTuesdaySummary): void => {
     coverSlide(pptx, 'Microsoft Patch Tuesday', s.initialReleaseDate);
 };
 
-// Zero-days are the CVEs Microsoft flags as exploited or already public. The full
-// catalog is the source of truth; topCves stands in when a caller hands over a
-// summary without it.
-const zeroDays = (s: PatchTuesdaySummary): PatchVulnerability[] => {
-    const isZeroDay = (v: PatchVulnerability) => v.exploited || v.publiclyDisclosed;
-    const fromCatalog = s.vulnerabilities.filter(isZeroDay);
-    return fromCatalog.length ? fromCatalog : s.topCves.filter(isZeroDay);
-};
-
 const addExecutiveSummarySlide = (pptx: PptxGenJS, s: PatchTuesdaySummary): void => {
-    const t = s.totals;
     const slide = contentSlide(pptx, 'Sumário Executivo', 2, s.initialReleaseDate);
-    const zds = zeroDays(s);
 
     // Header band, gradient like the rule but tall enough to carry the cycle name.
     gradientBar(pptx, slide, 0.469, 0.871, 8.968, 0.295);
@@ -382,27 +352,24 @@ const addExecutiveSummarySlide = (pptx: PptxGenJS, s: PatchTuesdaySummary): void
 
     const light = { fontFace: FONT_LIGHT, fontSize: 9, color: DECK.white };
     const strong = { fontFace: FONT, fontSize: 9, color: DECK.white, bold: true };
+    // Prose and numbers come from patchTuesdayDeckContent, the one place the deck
+    // and the CTIFLOW JSON export both read them from.
+    const parts = executiveOpeningParts(s);
     const opening: PptxGenJS.TextProps[] = [
-        { text: `O ciclo de ${fmtMonthPt(s.initialReleaseDate)} corrige `, options: light },
-        { text: `${t.total} vulnerabilidades`, options: strong },
-        { text: ', incluindo ', options: light },
-        { text: `${t.critical} críticas e ${zds.length} zero-days`, options: strong },
-        { text: '. ', options: { ...light, breakLine: true } },
+        { text: parts.lead, options: light },
+        { text: parts.total, options: strong },
+        { text: parts.mid, options: light },
+        { text: parts.emphasis, options: strong },
+        { text: parts.end, options: { ...light, breakLine: true } },
     ];
-    if (zds.length) {
-        opening.push({ text: 'Zero-Days: ', options: strong });
-        opening.push({
-            text: `${zds.map((v) => `${v.family} (${v.cve})`).join(', ')}. `,
-            options: light,
-        });
+    if (parts.zeroDaysList) {
+        opening.push({ text: parts.zeroDaysLabel, options: strong });
+        opening.push({ text: parts.zeroDaysList, options: light });
     }
     // The number the audience will compare against the press coverage. Saying why
     // it differs on the slide is cheaper than answering it live.
-    if (t.upstream > 0) {
-        opening.push({
-            text: `${t.upstream} CVEs de código upstream (Chromium/Edge e pacotes do Azure Linux) ficam fora da contagem: são republicações da Microsoft, não correções em produtos próprios.`,
-            options: light,
-        });
+    if (parts.upstreamNote) {
+        opening.push({ text: parts.upstreamNote, options: light });
     }
     deckText(slide, opening, { x: 0.477, y: 1.242, w: 8.968, h: 0.984, lineSpacingMultiple: 1.25, valign: 'middle' });
 
@@ -418,56 +385,15 @@ const addExecutiveSummarySlide = (pptx: PptxGenJS, s: PatchTuesdaySummary): void
     deckText(slide, 'Produtos Afetados x Número de CVEs:', { x: 0.574, y: 2.572, w: 3.82, h: 0.25, ...cardLabel });
     deckText(slide, 'Prioridades imediatas', { x: 5.187, y: 2.581, w: 2.1, h: 0.225, ...cardLabel });
 
-    darkBarChart(pptx, slide, s.byFamily.slice(0, 8).map((f) => ({ ...f, name: pt(FAMILY_PT, f.name) })), { x: 0.5, y: 2.86, w: 4.1, h: 1.86 }, DECK.cardAlt);
+    darkBarChart(pptx, slide, s.byFamily.slice(0, 8).map((f) => ({ ...f, name: familyPt(f.name) })), { x: 0.5, y: 2.86, w: 4.1, h: 1.86 }, DECK.cardAlt);
 
-    const priorities: string[] = [];
-    if (t.exploited > 0) {
-        const targets = zds.filter((v) => v.exploited).map((v) => v.family);
-        priorities.push(
-            `Priorizar imediatamente ${targets.length ? targets.join(' e ') : 'os ativos expostos'}, considerando a existência de vulnerabilidades já exploradas em ataques.`
-        );
-    }
-    if (t.disclosed > 0) {
-        priorities.push(
-            `Antecipar a correção das ${t.disclosed} CVE(s) divulgadas publicamente: detalhes de exploração podem já estar circulando.`
-        );
-    }
-    priorities.push(
-        `Acelerar a atualização de ${s.byFamily.slice(0, 4).map((f) => pt(FAMILY_PT, f.name)).join(', ')}, priorizando serviços de identidade, segurança e colaboração.`
-    );
-    priorities.push(
-        'Validar a aplicação dos patches nos ativos afetados, acompanhar falhas de instalação e tratar rapidamente sistemas sem suporte, exceções ou atualizações pendentes.'
-    );
-    deckText(slide, 
-        priorities.map((text) => ({ text, options: { breakLine: true, paraSpaceAfter: 6 } })),
+    deckText(slide,
+        immediatePriorities(s).map((text) => ({ text, options: { breakLine: true, paraSpaceAfter: 6 } })),
         { x: 5.187, y: 2.822, w: 4.047, h: 1.95, fontFace: FONT_LIGHT, fontSize: 8, color: DECK.white, lineSpacingMultiple: 1.15 }
     );
 
     attachmentNote(slide);
 };
-
-// The impact mix of the critical set is what the right column of the consolidated
-// slide lists. `vulnerabilities` is the full catalog; when a caller hands over a
-// summary without it, the cycle-wide impact split is the honest stand-in.
-const criticalImpactMix = (s: PatchTuesdaySummary): NamedCount[] => {
-    const counts = new Map<string, number>();
-    for (const v of s.vulnerabilities) {
-        if (v.severity !== 'Critical') continue;
-        counts.set(v.impact, (counts.get(v.impact) || 0) + 1);
-    }
-    const rows = [...counts.entries()].map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count);
-    return (rows.length ? rows : s.byImpact).slice(0, 4);
-};
-
-const IMPACT_GLOSSARY = [
-    'Tampering: alteração não autorizada de dados, arquivos ou configurações.',
-    'Security Feature Bypass: contorno de mecanismos e controles de segurança.',
-    'DoS: interrupção ou indisponibilidade de sistemas e serviços.',
-    'Spoofing: falsificação de identidade ou origem para enganar sistemas e usuários.',
-    'Information Disclosure: exposição indevida de informações sensíveis ou confidenciais.',
-    'Remote Code Execution (RCE): execução arbitrária de código no sistema afetado.',
-    'Elevation of Privilege: obtenção de permissões superiores às originalmente concedidas.',
-];
 
 const addConsolidatedSlide = (pptx: PptxGenJS, s: PatchTuesdaySummary): void => {
     const t = s.totals;
@@ -563,7 +489,7 @@ const addHighlightsSlide = (pptx: PptxGenJS, s: PatchTuesdaySummary): void => {
             x: x + 0.109, y: y + 0.51, w: cardW - 0.22, h: 0.187,
             fontFace: FONT_LIGHT, fontSize: 9, bold: true, color: DECK.white, fit: 'shrink',
         });
-        deckText(slide, `${pt(IMPACT_SHORT, v.impact)} | ${statusPt(v)}`, {
+        deckText(slide, `${pt(IMPACT_SHORT, v.impact)} | ${statusTagPt(v)}`, {
             x: x + 0.137, y: y + 0.741, w: cardW - 0.27, h: 0.165,
             fontFace: FONT_LIGHT, fontSize: 7, bold: true, color: DECK.muted,
         });

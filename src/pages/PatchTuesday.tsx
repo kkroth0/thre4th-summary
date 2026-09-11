@@ -9,6 +9,7 @@ const metricTone = (tone?: string): MetricTone =>
 import { useEffect, useMemo, useState } from "react";
 import {
     FileText,
+    FileJson,
     Presentation,
     Sheet,
     ShieldAlert,
@@ -56,6 +57,7 @@ import {
     exportPatchTuesdayPPTX,
     exportPatchTuesdayExcel,
 } from "@/utils/patchTuesdayExport";
+import { exportPatchTuesdayCtiflowJSON } from "@/utils/patchTuesdayCtiflow";
 
 const SEV_STYLES: Record<string, string> = {
     Critical: "bg-red-500/10 text-red-500 border-red-500/20",
@@ -65,7 +67,7 @@ const SEV_STYLES: Record<string, string> = {
     Unknown: "bg-slate-500/10 text-slate-400 border-slate-500/20",
 };
 
-type ExportKind = "pdf" | "pptx" | "xlsx";
+type ExportKind = "pdf" | "pptx" | "xlsx" | "json";
 
 const PatchTuesday = () => {
     const { language } = useLanguage();
@@ -192,12 +194,18 @@ const PatchTuesday = () => {
         try {
             if (kind === "pdf") await exportPatchTuesdayPDF(summary);
             else if (kind === "pptx") await exportPatchTuesdayPPTX(summary);
+            else if (kind === "json") exportPatchTuesdayCtiflowJSON(summary);
             else await exportPatchTuesdayExcel(summary);
             toast({
                 title: isPt ? "Documento gerado" : "Document generated",
-                description: isPt
-                    ? `O arquivo ${kind.toUpperCase()} foi baixado.`
-                    : `Your ${kind.toUpperCase()} file has been downloaded.`,
+                description:
+                    kind === "json"
+                        ? isPt
+                            ? "O JSON para o CTIFLOW foi baixado."
+                            : "The CTIFLOW JSON has been downloaded."
+                        : isPt
+                          ? `O arquivo ${kind.toUpperCase()} foi baixado.`
+                          : `Your ${kind.toUpperCase()} file has been downloaded.`,
             });
         } catch (e) {
             toast({
@@ -270,6 +278,7 @@ const PatchTuesday = () => {
         { kind: "pdf", label: "PDF", icon: FileText, cls: "bg-red-500/10 text-red-500 hover:bg-red-500/20 border-red-500/20" },
         { kind: "pptx", label: "PowerPoint", icon: Presentation, cls: "bg-orange-500/10 text-orange-500 hover:bg-orange-500/20 border-orange-500/20" },
         { kind: "xlsx", label: "Excel", icon: Sheet, cls: "bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20 border-emerald-500/20" },
+        { kind: "json", label: "JSON (CTIFLOW)", icon: FileJson, cls: "bg-sky-500/10 text-sky-500 hover:bg-sky-500/20 border-sky-500/20" },
     ];
 
     return (
@@ -284,8 +293,8 @@ const PatchTuesday = () => {
                             </h1>
                             <p className="page-lede max-w-xl">
                                 {isPt
-                                    ? "Correções do ciclo mensal da Microsoft, direto da API do MSRC, com exportação em PDF, PPTX e Excel."
-                                    : "Fixes from Microsoft's monthly cycle, straight from the MSRC API, exportable to PDF, PPTX and Excel."}
+                                    ? "Correções do ciclo mensal da Microsoft, direto da API do MSRC, com exportação em PDF, PPTX, Excel e JSON para o CTIFLOW."
+                                    : "Fixes from Microsoft's monthly cycle, straight from the MSRC API, exportable to PDF, PPTX, Excel and CTIFLOW JSON."}
                             </p>
                             <Badge variant="outline" className="mt-3 font-normal">MSRC</Badge>
                         </div>
