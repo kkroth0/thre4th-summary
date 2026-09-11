@@ -13,7 +13,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { downloadBoletimDeck, fetchJobRelated, type BoletimJob, type BoletimReport, type PrivateHunt } from "@/services/threatApi";
 import { buildHuntLink } from "@/pages/dailyBulletinView";
-import { exportBoletimJSON } from "@/utils/boletimExport";
+import { exportBoletimJSON, exportBoletimIocsExcel, canExportBoletimIocs } from "@/utils/boletimExport";
 
 // Host da URL pra exibição compacta ("fortiguard.com" em vez do link inteiro).
 export const hostOf = (url?: string): string => {
@@ -104,10 +104,11 @@ function ReportRelations({ job, pt }: { job: BoletimJob; pt: boolean }) {
 function ExportMenu({ job, pt }: { job: BoletimJob; pt: boolean }) {
   const { auth } = useAuth();
   const [busy, setBusy] = useState(false);
-  const run = async (format: "json" | "pdf" | "pptx") => {
+  const run = async (format: "json" | "pdf" | "pptx" | "iocs") => {
     setBusy(true);
     try {
       if (format === "json") exportBoletimJSON(job);
+      else if (format === "iocs") await exportBoletimIocsExcel(job);
       else await downloadBoletimDeck(job, format);
     } catch (error) {
       toast.error((error as Error).message || (pt ? "Falha ao exportar" : "Export failed"));
@@ -126,6 +127,11 @@ function ExportMenu({ job, pt }: { job: BoletimJob; pt: boolean }) {
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
         <DropdownMenuItem onSelect={() => void run("json")}>JSON</DropdownMenuItem>
+        {/* Só o que o deck não mostra por inteiro: o template de campanha lista no
+            máximo 6 IOCs, e o de vulnerabilidade não tem slide de IOCs nenhum. */}
+        <DropdownMenuItem disabled={!canExportBoletimIocs(job)} onSelect={() => void run("iocs")}>
+          IOCs (Excel){canExportBoletimIocs(job) ? "" : pt ? " — indisponível" : " — unavailable"}
+        </DropdownMenuItem>
         {/* Deck e PDF só existem se o worker os anexou. Boletim antigo não tem, e
             oferecer o item levaria a um 404 — ou pior, num navegador com a aba
             velha em memória, a um arquivo montado pelo código antigo, com o nome
