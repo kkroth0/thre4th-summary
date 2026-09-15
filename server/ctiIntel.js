@@ -74,7 +74,11 @@ export const CTI_CATEGORIES = {
         score: -100, label: 'Noise Detected', exact_match: true,
         terms: ['carreira', 'vaga', 'emprego', 'salário', 'demanda', 'profissão', 'mercado de trabalho',
             'startup', 'investimento', 'rodada', 'aporte', 'fundo', 'financiamento', 'curiosidade',
-            'tutorial', 'como fazer', 'dica', 'webinar', 'palestra', 'curso'],
+            'tutorial', 'como fazer', 'dica', 'webinar', 'palestra', 'curso',
+            // Dark Reading marca a agenda de evento com este prefixo no título
+            // ("[Virtual Event] ..."); \b ainda casa nas bordas de "virtual"/
+            // "event" mesmo com colchete colado, então não precisa do "[]" aqui.
+            'virtual event'],
     },
     NOISE_VOLUME: {
         score: -50, label: 'Low Interest', exact_match: true,
@@ -94,8 +98,16 @@ const buildRe = (terms, exact) => {
     return exact ? new RegExp(`\\b(${body})\\b`, 'i') : new RegExp(body, 'i');
 };
 
-// Pre-compile category regexes once at module load
+// Pre-compile category regexes once at module load. Only NOISE_PENALTY (pure
+// marketing/career/tutorial content) is held back for the gate in scoreArticle
+// below — it fires only when nothing else signals real threat-intel content.
+// NOISE_VOLUME is a different kind of penalty: it targets content that IS real
+// (has CVEs, has signal) but is so overrepresented in one feed that it drowns
+// out everything else (Ubuntu's flood of per-flavor Linux kernel USNs is
+// exactly this — each one cites real CVEs). Gating that one the same way would
+// defeat its own purpose, so it stays unconditional in COMPILED.
 const COMPILED = [];
+const NOISE_COMPILED = [];
 let REGIONAL_EXACT = null;
 let REGIONAL_SUB = null;
 let REGIONAL_SCORE = 40;
@@ -108,9 +120,9 @@ for (const [id, data] of Object.entries(CTI_CATEGORIES)) {
         if (data.substring_terms?.length) REGIONAL_SUB = buildRe(data.substring_terms, false);
         continue;
     }
-    if (data.terms?.length) {
-        COMPILED.push({ id, label: data.label, score: data.score, re: buildRe(data.terms, !!data.exact_match) });
-    }
+    if (!data.terms?.length) continue;
+    const entry = { id, label: data.label, score: data.score, re: buildRe(data.terms, !!data.exact_match) };
+    (id === 'NOISE_PENALTY' ? NOISE_COMPILED : COMPILED).push(entry);
 }
 
 // Consume the CVSS vector version (":3.1", "v4.0") before grabbing the 0-10 base
@@ -406,7 +418,7 @@ export function scoreArticle(text, weightBoost = 0) {
     const categories = [];
     const assets = [];
 
-    // Keyword categories (includes the negative NOISE_* buckets)
+    // Keyword categories
     for (const c of COMPILED) {
         const m = c.re.exec(lower);
         if (!m) continue;
@@ -448,6 +460,21 @@ export function scoreArticle(text, weightBoost = 0) {
         }
     }
 
+    // Noise penalty (career/marketing/tutorial content) only fires when
+    // nothing above found a concrete threat-intel signal — a genuine advisory
+    // that happens to mention "webinar" or "curso" in passing shouldn't be
+    // tanked by the same rule meant to filter a pure career/marketing post.
+    const hasConcreteSignal = categories.length > 0 || cves.length > 0 || (cvss !== null && cvss >= 7.0);
+    if (!hasConcreteSignal) {
+        for (const c of NOISE_COMPILED) {
+            const m = c.re.exec(lower);
+            if (!m) continue;
+            raw += c.score;
+            categories.push(c.label);
+            reasons.push(`${c.label} (${m[0]})`);
+        }
+    }
+
     // Source confidence — only counts when the item already has content signal,
     // so a priority feed can't approve noise on its own.
     const boost = Number(weightBoost) || 0;
@@ -471,6 +498,49 @@ export function scoreArticle(text, weightBoost = 0) {
         ttps: matchLabels(lower, TTP_RULES),
         assets: [...new Set(assets)],
     };
+}
+
+// ─── Ubuntu kernel notice collapsing ────────────────────────────────────────
+// USN republica a mesma rodada de CVE de kernel uma vez por flavor (linux,
+// linux-aws, linux-gcp, linux-oem-6.8, linux-raspi...), quase sempre no mesmo
+// dia — o leitor via cinco cards quase idênticos de "... vulnerabilities" para
+// um único evento real. Colapsar em um só card mantém todo CVE e todo link
+// original (na description); só para de inundar o feed com N cópias.
+const UBUNTU_SOURCE = 'Ubuntu Security Notices';
+const KERNEL_TITLE_RE = /^linux\b.*vulnerabilit/i;
+const KERNEL_PACKAGE_RE = /^([\w.-]+)/;
+
+export function collapseKernelNotices(items) {
+    const byDay = new Map();
+    const passthrough = [];
+    for (const item of items) {
+        if (item.source === UBUNTU_SOURCE && KERNEL_TITLE_RE.test(item.title || '')) {
+            const day = String(item.pubDate || '').slice(0, 10);
+            if (!byDay.has(day)) byDay.set(day, []);
+            byDay.get(day).push(item);
+        } else {
+            passthrough.push(item);
+        }
+    }
+
+    const collapsed = [];
+    for (const group of byDay.values()) {
+        if (group.length === 1) { collapsed.push(group[0]); continue; }
+        // O mais severo vira a base do card: nenhum CVE crítico fica escondido
+        // atrás de um flavor mais brando publicado no mesmo lote.
+        const sorted = [...group].sort((a, b) => (b.score || 0) - (a.score || 0) || a.title.localeCompare(b.title));
+        const primary = sorted[0];
+        const flavors = [...new Set(group.map((g) => (g.title.match(KERNEL_PACKAGE_RE) || ['', ''])[1]))].filter(Boolean).sort();
+        const flavorList = flavors.length > 6 ? `${flavors.slice(0, 6).join(', ')}, +${flavors.length - 6}` : flavors.join(', ');
+        collapsed.push({
+            ...primary,
+            title: `Linux kernel vulnerabilities — ${group.length} Ubuntu flavors patched (${flavorList})`,
+            description: group.map((g) => `${g.title}: ${g.link}`).join(' · '),
+            cves: [...new Set(group.flatMap((g) => g.cves || []))],
+        });
+    }
+
+    return [...passthrough, ...collapsed];
 }
 
 // ─── Feed catalog (ported/merged from data/cti_feeds.json) ─────────────────
@@ -498,6 +568,13 @@ export const CTI_FEEDS = [
     { url: 'https://www.exploit-db.com/rss.xml', source: 'Exploit-DB', layer: 1, weight_boost: 15 },
     { url: 'https://www.tenable.com/blog/feed', source: 'Tenable', layer: 1, weight_boost: 15 },
     { url: 'https://blog.qualys.com/feed', source: 'Qualys', layer: 1, weight_boost: 15 },
+    { url: 'https://www.oracle.com/ocom/groups/public/@otn/documents/webcontent/rss-otn-sec.xml', source: 'Oracle Security Alerts', layer: 1, weight_boost: 20 },
+    { url: 'https://filestore.fortinet.com/fortiguard/rss/threatsignal.xml', source: 'FortiGuard Threat Signal', layer: 1, weight_boost: 15 },
+    { url: 'https://www.microsoft.com/en-us/security/blog/feed/', source: 'Microsoft Security Blog', layer: 1, weight_boost: 15 },
+    { url: 'https://www.crowdstrike.com/en-us/blog/feed', source: 'CrowdStrike Blog', layer: 1, weight_boost: 15 },
+    { url: 'https://www.sentinelone.com/labs/feed/', source: 'SentinelOne Labs', layer: 1, weight_boost: 15 },
+    { url: 'https://www.welivesecurity.com/en/rss/feed/', source: 'ESET WeLiveSecurity', layer: 1, weight_boost: 15 },
+    { url: 'https://thedfirreport.com/feed/', source: 'The DFIR Report', layer: 1, weight_boost: 15 },
 
     // Layer 2 — TI news & reporting
     { url: 'https://www.bleepingcomputer.com/feed/', source: 'BleepingComputer', layer: 2, weight_boost: 10 },
@@ -507,6 +584,9 @@ export const CTI_FEEDS = [
     { url: 'https://therecord.media/feed/', source: 'The Record', layer: 2, weight_boost: 5 },
     { url: 'https://www.darkreading.com/rss.xml', source: 'Dark Reading', layer: 2, weight_boost: 10 },
     { url: 'https://www.helpnetsecurity.com/feed/', source: 'Help Net Security', layer: 2, weight_boost: 10 },
+    { url: 'https://www.recordedfuture.com/feed', source: 'Recorded Future', layer: 2, weight_boost: 10 },
+    { url: 'https://malpedia.caad.fkie.fraunhofer.de/feeds/rss/latest', source: 'Malpedia', layer: 2, weight_boost: 8 },
+    { url: 'https://www.proofpoint.com/us/threat-insight-blog.xml', source: 'Proofpoint TI', layer: 2, weight_boost: 12 },
 
     // Layer 3 — Threat research labs
     { url: 'https://isc.sans.edu/rssfeed_full.xml', source: 'SANS ISC', layer: 3, weight_boost: 10 },
@@ -523,6 +603,21 @@ export const CTI_FEEDS = [
     { url: 'https://unit42.paloaltonetworks.com/category/top-cyberthreats/feed/', source: 'Unit 42 Top Cyberthreats', layer: 3, weight_boost: 15 },
     { url: 'https://feeds.feedburner.com/threatintelligence/pvexyqv7v0v/', source: 'Mandiant', layer: 3, weight_boost: 15 },
     { url: 'https://www.elastic.co/security-labs/rss/feed.xml', source: 'Elastic Security', layer: 3, weight_boost: 5 },
+    { url: 'https://cloudblog.withgoogle.com/topics/threat-intelligence/rss/', source: 'Google Cloud Threat Intelligence', layer: 3, weight_boost: 15 },
+    { url: 'https://www.reversinglabs.com/blog/rss.xml', source: 'ReversingLabs', layer: 3, weight_boost: 10 },
+    { url: 'https://www.sekoia.com/blog/rss.xml', source: 'Sekoia', layer: 3, weight_boost: 12 },
+    { url: 'https://securitylabs.datadoghq.com/rss/feed.xml', source: 'Datadog Security Labs', layer: 3, weight_boost: 10 },
+    { url: 'https://www.wiz.io/feed/rss.xml', source: 'Wiz Blog', layer: 3, weight_boost: 10 },
+    { url: 'https://www.malwarebytes.com/blog/feed/', source: 'Malwarebytes TI', layer: 3, weight_boost: 10 },
+    { url: 'https://cyble.com/blog/feed/', source: 'Cyble', layer: 3, weight_boost: 10 },
+    { url: 'https://any.run/cybersecurity-blog/rss/', source: 'ANY.RUN Blog', layer: 3, weight_boost: 8 },
+    { url: 'https://blog.aquasec.com/rss.xml', source: 'Aqua Security', layer: 3, weight_boost: 8 },
+    { url: 'https://trustedsec.com/feed.rss', source: 'TrustedSec', layer: 3, weight_boost: 10 },
+    { url: 'https://industrialcyber.co/feed/', source: 'Industrial Cyber', layer: 3, weight_boost: 10 },
+    { url: 'https://objective-see.org/rss.xml', source: 'Objective-See', layer: 3, weight_boost: 8 },
+    { url: 'https://www.sophos.com/en-us/category/security-operations/feed', source: 'Sophos Security Operations', layer: 3, weight_boost: 8 },
+    { url: 'https://www.sophos.com/en-us/category/threat-research/feed', source: 'Sophos Threat Research', layer: 3, weight_boost: 10 },
+    { url: 'https://www.cybereason.com/blog/rss.xml', source: 'Cybereason', layer: 3, weight_boost: 8 },
 
     // Layer 4 — LATAM / BR regional
     { url: 'https://www.cisoadvisor.com.br/feed/', source: 'CISO Advisor BR', layer: 4, weight_boost: 15 },

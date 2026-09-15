@@ -45,6 +45,7 @@ interface Advisory {
   pubDate: string;
   description: string;
   source: string;
+  weight_boost?: number; // confiança/prioridade da fonte (0-20), do catálogo CTI_FEEDS
   // CTI relevance enrichment (from the specialized collector)
   score?: number;
   severity?: string; // Critical | High | Medium | Low
@@ -216,6 +217,7 @@ const Newsletter = () => {
             pubDate: item.pubDate as string,
             description: item.description as string,
             source: item.source as string,
+            weight_boost: typeof item.weight_boost === "number" ? item.weight_boost : undefined,
             score: typeof item.score === "number" ? item.score : undefined,
             severity: typeof item.severity === "string" ? (item.severity as string) : undefined,
             categories: Array.isArray(item.categories) ? (item.categories as string[]) : undefined,
@@ -842,7 +844,25 @@ const Newsletter = () => {
                               </span>
                             </Badge>
                           )}
-                          <span className="ml-auto font-mono text-xs text-muted-foreground" title={new Date(item.pubDate).toLocaleString()}>
+                          {/* Fonte + prioridade sempre visíveis na linha, não só quando o
+                              card expande — antes só apareciam dentro de "Fontes" e só
+                              para matéria com mais de uma cobertura. */}
+                          {item.source && (
+                            <span
+                              className="ml-auto flex shrink-0 items-center gap-1 rounded border border-border px-1.5 py-0 font-mono text-[10px] font-semibold text-muted-foreground"
+                              title={
+                                typeof item.weight_boost === "number"
+                                  ? `${language === "pt" ? "Prioridade da fonte" : "Source priority"}: ${item.weight_boost}/20`
+                                  : undefined
+                              }
+                            >
+                              <span className="max-w-[140px] truncate text-foreground/80">{item.source}</span>
+                              {typeof item.weight_boost === "number" && (
+                                <span className="text-primary">P{item.weight_boost}</span>
+                              )}
+                            </span>
+                          )}
+                          <span className="font-mono text-xs text-muted-foreground" title={new Date(item.pubDate).toLocaleString()}>
                             {relTime(item.pubDate, language)}
                           </span>
                           <button

@@ -15,7 +15,7 @@ import * as cheerio from 'cheerio';
 import {
     scoreArticle, localizeEnrichment, severityFromScore, extractIOCs, CTI_FEEDS,
     extractReadableText, collectArtifactLinks, githubArtifact, ARTIFACT_TEXT_FILE,
-    protectTerms, restoreTerms,
+    protectTerms, restoreTerms, collapseKernelNotices,
 } from './ctiIntel.js';
 import { actorTargeting } from './actorProfile.js';
 import { buildSoftwareIndex, buildActorNameIndex } from './actorSoftware.js';
@@ -1684,6 +1684,28 @@ function effectiveFeeds() {
     return catalogFeeds().filter((f) => f.enabled);
 }
 
+// Uma falha passageira de rede (timeout, 5xx) costuma se resolver sozinha —
+// tentar de novo com um respiro curto evita que ela custe o ciclo de refresh
+// inteiro, já que o próximo só vem horas depois. Uma fonte realmente fora do
+// ar ainda acaba marcada como falha em feedHealth, só que depois destas
+// tentativas em vez de uma.
+const FEED_FETCH_RETRIES = 3;
+const FEED_RETRY_BACKOFF_MS = [1000, 3000];
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function fetchFeedWithRetry(url, options) {
+    let lastError;
+    for (let attempt = 0; attempt < FEED_FETCH_RETRIES; attempt++) {
+        try {
+            return await axios.get(url, options);
+        } catch (err) {
+            lastError = err;
+            if (attempt < FEED_FETCH_RETRIES - 1) await sleep(FEED_RETRY_BACKOFF_MS[attempt]);
+        }
+    }
+    throw lastError;
+}
+
 // Background newsletter feed refresher
 async function refreshNewsletterFeed() {
     try {
@@ -1693,7 +1715,7 @@ async function refreshNewsletterFeed() {
 
         const feedPromises = feeds.map(async (f) => {
             try {
-                const response = await axios.get(f.url, {
+                const response = await fetchFeedWithRetry(f.url, {
                     headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36' },
                     timeout: 8000
                 });
@@ -1726,7 +1748,7 @@ async function refreshNewsletterFeed() {
                 // Respeita o mesmo interruptor dos feeds RSS: se a fonte aparece
                 // desligável na tela, desligar precisa desligar de verdade.
                 sources: SCRAPE_SOURCES.filter((source) => !feedOverrides.disabled.includes(source.url)),
-                fetchText: async (url) => (await axios.get(url, {
+                fetchText: async (url) => (await fetchFeedWithRetry(url, {
                     headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36' },
                     timeout: 8000,
                 })).data,
@@ -1763,7 +1785,12 @@ async function refreshNewsletterFeed() {
             const existing = byUrl.get(key);
             if (!existing || (item.score || 0) > (existing.score || 0)) byUrl.set(key, item);
         }
-        const items = [...byUrl.values()];
+        // Ubuntu publica uma USN por flavor de kernel (linux, linux-aws,
+        // linux-gcp, linux-oem-6.8...) na mesma rodada de CVE — sem isto o
+        // feed enchia de cinco cards quase idênticos por dia. Roda antes do
+        // KEV/EPSS de propósito: o card colapsado herda a união dos CVEs dos
+        // originais, e cada um precisa passar por aquele cruzamento.
+        const items = collapseKernelNotices([...byUrl.values()]);
 
         // Cross-reference CVEs with CISA KEV (actively exploited) + FIRST EPSS
         // (exploit probability). KEV is the strongest actionable signal, so it
