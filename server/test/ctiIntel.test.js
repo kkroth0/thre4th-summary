@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { protectTerms, restoreTerms, scoreArticle, CTI_FEEDS, collapseKernelNotices } from '../ctiIntel.js';
+import { protectTerms, restoreTerms, scoreArticle, CTI_FEEDS, collapseKernelNotices, isTransientFeedError } from '../ctiIntel.js';
 
 // ─── Proteção de terminologia na tradução ──────────────────────────────────
 
@@ -69,6 +69,30 @@ test('advisory real não perde a penalidade de ruído por citar termo promociona
 });
 
 // ─── Catálogo de feeds (CTI_FEEDS) ──────────────────────────────────────────
+
+// ─── Erro transitório vs. permanente no fetch de feed ──────────────────────
+
+test('5xx e 429 são transitórios; 4xx comum não é', () => {
+    assert.equal(isTransientFeedError({ response: { status: 503 } }), true);
+    assert.equal(isTransientFeedError({ response: { status: 500 } }), true);
+    assert.equal(isTransientFeedError({ response: { status: 429 } }), true);
+    assert.equal(isTransientFeedError({ response: { status: 404 } }), false);
+    assert.equal(isTransientFeedError({ response: { status: 403 } }), false);
+});
+
+test('timeout e conexão resetada são transitórios; falha de DNS não é', () => {
+    assert.equal(isTransientFeedError({ code: 'ECONNABORTED' }), true);
+    assert.equal(isTransientFeedError({ code: 'ETIMEDOUT' }), true);
+    assert.equal(isTransientFeedError({ code: 'ECONNRESET' }), true);
+    assert.equal(isTransientFeedError({ code: 'ECONNREFUSED' }), true);
+    assert.equal(isTransientFeedError({ code: 'ENOTFOUND' }), false);
+    assert.equal(isTransientFeedError({ code: 'EAI_AGAIN' }), false);
+});
+
+test('erro sem status e sem code reconhecido não é transitório', () => {
+    assert.equal(isTransientFeedError({}), false);
+    assert.equal(isTransientFeedError(new Error('boom')), false);
+});
 
 test('CTI_FEEDS não tem URL duplicada', () => {
     const urls = CTI_FEEDS.map((f) => f.url);

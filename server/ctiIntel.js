@@ -500,6 +500,24 @@ export function scoreArticle(text, weightBoost = 0) {
     };
 }
 
+// ─── Transient vs. permanent feed-fetch failures ───────────────────────────
+// A retry only pays off against a failure that might not repeat: a 5xx, a
+// dropped connection, a rate limit. A 404, a DNS failure, or a WAF that stalls
+// the TLS handshake for a non-browser client (measured against Sophos'
+// feed URLs, 2026-09-15: 10s of TLS renegotiation, zero bytes, every time)
+// looks exactly the same on the next attempt — retrying those three times
+// just adds ~20s of dead weight to every refresh cycle for a feed that was
+// never coming back up this run.
+export function isTransientFeedError(err) {
+    const status = err?.response?.status;
+    if (status) return status >= 500 || status === 429;
+    // No HTTP response at all: a network/timeout-level failure. ENOTFOUND/
+    // EAI_AGAIN (DNS) are deliberately excluded — a hostname that doesn't
+    // resolve now won't resolve differently a second later.
+    const code = err?.code;
+    return code === 'ECONNABORTED' || code === 'ETIMEDOUT' || code === 'ECONNRESET' || code === 'ECONNREFUSED';
+}
+
 // ─── Ubuntu kernel notice collapsing ────────────────────────────────────────
 // USN republica a mesma rodada de CVE de kernel uma vez por flavor (linux,
 // linux-aws, linux-gcp, linux-oem-6.8, linux-raspi...), quase sempre no mesmo
@@ -615,8 +633,13 @@ export const CTI_FEEDS = [
     { url: 'https://trustedsec.com/feed.rss', source: 'TrustedSec', layer: 3, weight_boost: 10 },
     { url: 'https://industrialcyber.co/feed/', source: 'Industrial Cyber', layer: 3, weight_boost: 10 },
     { url: 'https://objective-see.org/rss.xml', source: 'Objective-See', layer: 3, weight_boost: 8 },
-    { url: 'https://www.sophos.com/en-us/category/security-operations/feed', source: 'Sophos Security Operations', layer: 3, weight_boost: 8 },
-    { url: 'https://www.sophos.com/en-us/category/threat-research/feed', source: 'Sophos Threat Research', layer: 3, weight_boost: 10 },
+    // Sophos removida: as duas URLs travam a renegociação TLS e nunca respondem
+    // pra um cliente sem navegador (bot mitigation), confirmado em 2026-09-15
+    // com curl puro contra ambas — não é falha transitória que um retry resolve,
+    // é bloqueio permanente. Mantida como URL, não linha em branco, pra quem for
+    // reativar não perder o porquê de ter saído.
+    // { url: 'https://www.sophos.com/en-us/category/security-operations/feed', source: 'Sophos Security Operations', layer: 3, weight_boost: 8 },
+    // { url: 'https://www.sophos.com/en-us/category/threat-research/feed', source: 'Sophos Threat Research', layer: 3, weight_boost: 10 },
     { url: 'https://www.cybereason.com/blog/rss.xml', source: 'Cybereason', layer: 3, weight_boost: 8 },
 
     // Layer 4 — LATAM / BR regional

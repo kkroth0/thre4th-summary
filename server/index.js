@@ -15,7 +15,7 @@ import * as cheerio from 'cheerio';
 import {
     scoreArticle, localizeEnrichment, severityFromScore, extractIOCs, CTI_FEEDS,
     extractReadableText, collectArtifactLinks, githubArtifact, ARTIFACT_TEXT_FILE,
-    protectTerms, restoreTerms, collapseKernelNotices,
+    protectTerms, restoreTerms, collapseKernelNotices, isTransientFeedError,
 } from './ctiIntel.js';
 import { actorTargeting } from './actorProfile.js';
 import { buildSoftwareIndex, buildActorNameIndex } from './actorSoftware.js';
@@ -1694,16 +1694,18 @@ const FEED_RETRY_BACKOFF_MS = [1000, 3000];
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function fetchFeedWithRetry(url, options) {
-    let lastError;
     for (let attempt = 0; attempt < FEED_FETCH_RETRIES; attempt++) {
         try {
             return await axios.get(url, options);
         } catch (err) {
-            lastError = err;
-            if (attempt < FEED_FETCH_RETRIES - 1) await sleep(FEED_RETRY_BACKOFF_MS[attempt]);
+            // Um 404, uma falha de DNS ou um bloqueio de WAF vão parecer
+            // idênticos na próxima tentativa — só vale esperar e tentar de novo
+            // quando o erro é do tipo que pode mesmo se resolver sozinho.
+            const isLastAttempt = attempt === FEED_FETCH_RETRIES - 1;
+            if (isLastAttempt || !isTransientFeedError(err)) throw err;
+            await sleep(FEED_RETRY_BACKOFF_MS[attempt]);
         }
     }
-    throw lastError;
 }
 
 // Background newsletter feed refresher
