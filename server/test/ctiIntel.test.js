@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { protectTerms, restoreTerms, scoreArticle, CTI_FEEDS, collapseKernelNotices, isTransientFeedError } from '../ctiIntel.js';
+import { protectTerms, restoreTerms, scoreArticle, CTI_FEEDS, collapseKernelNotices, isTransientFeedError, isPureNoise } from '../ctiIntel.js';
 
 // ─── Proteção de terminologia na tradução ──────────────────────────────────
 
@@ -51,6 +51,27 @@ test('agenda de evento do Dark Reading ("[Virtual Event] ...") recebe a penalida
 
     assert.equal(result.score, 0);
     assert.ok(result.reasons.some((r) => r.startsWith('Noise Detected')));
+});
+
+// ─── isPureNoise: o feed dropa o item, não só rebaixa o score ──────────────
+// scoreArticle só rebaixa; quem decide se o item chega a entrar no feed é
+// isPureNoise, chamado no coletor (refreshNewsletterFeed). O bug real era
+// exatamente esse: o score ia a 0, mas nada usava esse 0 pra tirar o item de
+// vista — na ordenação padrão (por data) ele continuava aparecendo.
+
+test('item com Noise Detected é ruído puro', () => {
+    const { categories } = scoreArticle('[Virtual Event] How to Defend Against AI-Powered Attacks');
+    assert.equal(isPureNoise(categories), true);
+});
+
+test('advisory real não é ruído puro mesmo citando termo promocional de passagem', () => {
+    const { categories } = scoreArticle('Critical RCE actively exploited in the wild, CVE-2026-1234 — join us for a webinar recap');
+    assert.equal(isPureNoise(categories), false);
+});
+
+test('isPureNoise não quebra com categories ausente ou vazio', () => {
+    assert.equal(isPureNoise(undefined), false);
+    assert.equal(isPureNoise([]), false);
 });
 
 test('post puramente promocional recebe a penalidade de ruído', () => {

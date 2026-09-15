@@ -500,6 +500,18 @@ export function scoreArticle(text, weightBoost = 0) {
     };
 }
 
+// Item cujo NOISE_PENALTY disparou (agenda de evento, vaga, "webinar") não é
+// baixa prioridade — é lixo que não deveria ocupar vaga no feed. Antes só
+// afundava a 0 no score e continuava aparecendo em qualquer ordenação que não
+// fosse "por relevância" (o padrão da tela é por data). O feed usa isto pra
+// dropar o item de vez antes de servir a /api/newsletter, em vez de só
+// rebaixar. Note: o gate em scoreArticle já garante que isto só dispara
+// quando nenhuma categoria/CVE/CVSS real também bateu no mesmo texto.
+export const NOISE_LABEL = CTI_CATEGORIES.NOISE_PENALTY.label;
+export function isPureNoise(categories) {
+    return Array.isArray(categories) && categories.includes(NOISE_LABEL);
+}
+
 // ─── Transient vs. permanent feed-fetch failures ───────────────────────────
 // A retry only pays off against a failure that might not repeat: a 5xx, a
 // dropped connection, a rate limit. A 404, a DNS failure, or a WAF that stalls

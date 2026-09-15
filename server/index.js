@@ -15,7 +15,7 @@ import * as cheerio from 'cheerio';
 import {
     scoreArticle, localizeEnrichment, severityFromScore, extractIOCs, CTI_FEEDS,
     extractReadableText, collectArtifactLinks, githubArtifact, ARTIFACT_TEXT_FILE,
-    protectTerms, restoreTerms, collapseKernelNotices, isTransientFeedError,
+    protectTerms, restoreTerms, collapseKernelNotices, isTransientFeedError, isPureNoise,
 } from './ctiIntel.js';
 import { actorTargeting } from './actorProfile.js';
 import { buildSoftwareIndex, buildActorNameIndex } from './actorSoftware.js';
@@ -1723,10 +1723,15 @@ async function refreshNewsletterFeed() {
                 });
                 // Enrich each item with the CTI relevance score + categorization.
                 // `reasons` is kept so the UI can explain WHY an item scored.
-                const enriched = parseFeed(response.data, f.source, f.layer).map((item) => {
-                    const intel = scoreArticle(`${item.title} ${item.text || item.description}`, f.weight_boost);
-                    return { ...item, weight_boost: f.weight_boost, ...intel };
-                });
+                // Ruído puro (agenda de evento, vaga, "webinar") não entra no
+                // feed — a tela ordena por data por padrão, então só rebaixar
+                // o score não bastava para tirá-lo de vista.
+                const enriched = parseFeed(response.data, f.source, f.layer)
+                    .map((item) => {
+                        const intel = scoreArticle(`${item.title} ${item.text || item.description}`, f.weight_boost);
+                        return { ...item, weight_boost: f.weight_boost, ...intel };
+                    })
+                    .filter((item) => !isPureNoise(item.categories));
                 feedHealth.set(f.url, { ok: true, count: enriched.length, error: null, at: new Date().toISOString() });
                 return enriched;
             } catch (err) {
@@ -1758,10 +1763,12 @@ async function refreshNewsletterFeed() {
                 now: new Date(),
                 maxNew: 10,
             });
-            scraped = result.items.map((item) => ({
-                ...item,
-                ...scoreArticle(`${item.title} ${item.description}`, item.weight_boost),
-            }));
+            scraped = result.items
+                .map((item) => ({
+                    ...item,
+                    ...scoreArticle(`${item.title} ${item.description}`, item.weight_boost),
+                }))
+                .filter((item) => !isPureNoise(item.categories));
             // Poda pelo fim mais antigo: o mapa não pode crescer sem limite.
             const entries = Object.entries(result.seen).sort((a, b) => String(b[1]).localeCompare(String(a[1]))).slice(0, 2000);
             scrapeSeen = Object.fromEntries(entries);
