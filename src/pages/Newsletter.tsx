@@ -195,8 +195,18 @@ const Newsletter = () => {
   const [secondsRemaining, setSecondsRemaining] = useState(300);
 
   // Load from Cache on mount
+  //
+  // O merge abaixo só soma/atualiza (loadNews nunca remove um item ausente da
+  // resposta do servidor — de propósito, pra manter no ar o que já rolou pra
+  // fora da janela do feed ao vivo). Isso significa que um item reclassificado
+  // como ruído puro (isPureNoise no backend) depois de já cacheado no
+  // navegador fica preso aqui pra sempre: passou a ser excluído de toda
+  // resposta nova, mas nada nunca reavalia o que já está salvo. Foi assim que
+  // os "[Virtual Event]" do Dark Reading sobreviveram ao fix do servidor —
+  // mudar a chave é o jeito de invalidar o cache de todo mundo de uma vez.
+  // Bump esta chave de novo (_v3, _v4...) se o mesmo tipo de bug se repetir.
   useEffect(() => {
-    const cached = localStorage.getItem("cached_cti_advisories");
+    const cached = localStorage.getItem("cached_cti_advisories_v2");
     if (cached) {
       try {
         const parsed = JSON.parse(cached);
@@ -283,7 +293,7 @@ const Newsletter = () => {
         merged.sort((a, b) => new Date(b.pubDate).getTime() - new Date(a.pubDate).getTime());
         const capped = merged.slice(0, 400);
         try {
-          localStorage.setItem("cached_cti_advisories", JSON.stringify(capped));
+          localStorage.setItem("cached_cti_advisories_v2", JSON.stringify(capped));
         } catch {
           /* quota exceeded — keep the in-memory list, skip persistence */
         }
