@@ -26,6 +26,10 @@ const REASONS: Record<string, { pt: string; en: string }> = {
   "brand-glued": { pt: "marca colada em outra palavra", en: "brand glued to another word" },
   certstream: { pt: "pescado no Certificate Transparency", en: "caught in Certificate Transparency" },
   "live-page": { pt: "página no ar", en: "page is live" },
+  // Resolução DNS contínua (recheckHitsDns) — independente do urlscan reescanear.
+  "dns-went-live": { pt: "domínio começou a resolver (A/AAAA)", en: "domain started resolving (A/AAAA)" },
+  "dns-mx-appeared": { pt: "MX configurado — pronto para e-mail", en: "MX configured — ready for email" },
+  "dns-infra-changed": { pt: "trocou de IP ou nameserver", en: "IP or nameserver changed" },
 };
 
 const scoreTone = (score: number): string =>

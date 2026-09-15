@@ -63,6 +63,7 @@ import { parseFeed } from './feedParse.js';
 import { createStoryStore } from './newsStoryStore.js';
 import {
     PHISH_LIMITS, createPhishWatchStore, createUrlscanSearch, runDuePhishWatch, runProfileWatch,
+    createDnsResolver, recheckHitsDns,
 } from './phishingWatch.js';
 import {
     OPEN_STATUS, applyStatus, attachEvidence, buildDailyDigest, createTicketStore, markDns,
@@ -147,6 +148,13 @@ const phishWatchStore = createPhishWatchStore({ filePath: PHISH_WATCH_PATH, read
 const urlscanSearch = () => (process.env.URLSCAN_API_KEY
     ? createUrlscanSearch({ apiKey: process.env.URLSCAN_API_KEY })
     : null);
+// Resolução direta contra os nameservers, sem depender de o urlscan reescanear.
+const phishDnsResolver = createDnsResolver({
+    resolve4: dns.promises.resolve4,
+    resolve6: dns.promises.resolve6,
+    resolveMx: dns.promises.resolveMx,
+    resolveNs: dns.promises.resolveNs,
+});
 
 const PHISH_TICKETS_PATH = path.join(__dirname, '.phish-tickets.json');
 const phishTicketStore = createTicketStore({ filePath: PHISH_TICKETS_PATH, readFileSync: fs.readFileSync, writeJsonAtomic });
@@ -2705,6 +2713,10 @@ async function runPhishWatchTick() {
     });
     // Depois da rodada: o que já está na fila ainda está no ar?
     await recheckTicketDns();
+    // E o que ainda nem virou ticket — domínio novo que estava parqueado pode
+    // ter subido A/MX na última hora, e ninguém vai notar até o urlscan
+    // resolver reescanear por conta própria.
+    await recheckHitsDns({ store: phishWatchStore, resolveDns: phishDnsResolver });
 }
 
 async function runExposureSchedulerTick() {

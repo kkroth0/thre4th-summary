@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import {
     PHISH_LIMITS, buildQuery, normalizeBrandTerm, normalizeBrands, scoreHit, hitFromResult,
     mergeHits, applyRetention, selectDueProfiles, createUrlscanSearch, createPhishWatchStore,
-    runProfileWatch, runDuePhishWatch,
+    runProfileWatch, runDuePhishWatch, createDnsResolver, markHitDns, recheckHitsDns,
 } from '../phishingWatch.js';
 
 const FIXTURE = JSON.parse(fs.readFileSync(new URL('./fixtures/urlscanSearch.json', import.meta.url), 'utf8'));
@@ -265,4 +265,103 @@ test('perfil que falha não derruba os outros', async () => {
     assert.equal(outcome.attempted, 2);
     assert.equal(outcome.completed, 1);
     assert.equal(outcome.failed, 1);
+});
+
+// ─── Resolução DNS contínua ─────────────────────────────────────────────────
+
+const hitWithDns = (dns, over = {}) => ({
+    id: 'p1:mau.com', profileId: 'p1', ownerId: 'u1', apexDomain: 'mau.com',
+    status: 'new', score: 40, reasons: ['fresh-domain'],
+    firstSeen: '2026-08-25T10:00:00Z', lastSeen: '2026-08-25T10:00:00Z', title: '',
+    dns: { checkedAt: null, a: [], aaaa: [], mx: [], ns: [], events: [], ...dns },
+    ...over,
+});
+
+test('createDnsResolver junta os quatro tipos de registro, um tipo faltando não derruba os outros', async () => {
+    const resolve = createDnsResolver({
+        resolve4: async () => ['1.2.3.4'],
+        resolve6: async () => { throw new Error('sem AAAA'); },
+        resolveMx: async () => [{ exchange: 'mail.mau.com', priority: 10 }],
+        resolveNs: async () => ['ns1.mau.com'],
+    });
+
+    assert.deepEqual(await resolve('mau.com'), {
+        a: ['1.2.3.4'], aaaa: [], mx: ['mail.mau.com'], ns: ['ns1.mau.com'],
+    });
+});
+
+test('domínio que não resolvia nada e passa a ter A sobe o score com dns-went-live', () => {
+    const hit = hitWithDns({});
+    const updated = markHitDns(hit, { a: ['1.2.3.4'], aaaa: [], mx: [], ns: ['ns1.mau.com'] }, { at: '2026-08-26T00:00:00Z' });
+
+    assert.equal(updated.score, 65);
+    assert.ok(updated.reasons.includes('dns-went-live'));
+    assert.deepEqual(updated.dns.a, ['1.2.3.4']);
+    assert.equal(updated.dns.events.at(-1).kind, 'went-live');
+});
+
+test('MX aparecendo soma dns-mx-appeared além do went-live, no mesmo recheck', () => {
+    const hit = hitWithDns({});
+    const updated = markHitDns(hit, { a: ['1.2.3.4'], aaaa: [], mx: ['mail.mau.com'], ns: [] }, { at: '2026-08-26T00:00:00Z' });
+
+    assert.ok(updated.reasons.includes('dns-went-live'));
+    assert.ok(updated.reasons.includes('dns-mx-appeared'));
+    assert.equal(updated.score, 85);
+});
+
+test('domínio já no ar que troca de IP soma dns-infra-changed, sem repetir went-live', () => {
+    const hit = hitWithDns({ a: ['1.1.1.1'], ns: ['ns1.old.com'], checkedAt: '2026-08-25T00:00:00Z' });
+    const updated = markHitDns(hit, { a: ['2.2.2.2'], aaaa: [], mx: [], ns: ['ns1.old.com'] }, { at: '2026-08-26T00:00:00Z' });
+
+    assert.deepEqual(updated.reasons, ['fresh-domain', 'dns-infra-changed']);
+    assert.equal(updated.score, 55);
+});
+
+test('mesmo IP e mesmo NS no recheck não gera sinal nenhum', () => {
+    const hit = hitWithDns({ a: ['1.1.1.1'], ns: ['ns1.old.com'], checkedAt: '2026-08-25T00:00:00Z' });
+    const updated = markHitDns(hit, { a: ['1.1.1.1'], aaaa: [], mx: [], ns: ['ns1.old.com'] }, { at: '2026-08-26T00:00:00Z' });
+
+    assert.deepEqual(updated.reasons, hit.reasons);
+    assert.equal(updated.score, hit.score);
+    assert.equal(updated.dns.events.length, 0);
+});
+
+test('score nunca passa de 100 mesmo com os três sinais de uma vez', () => {
+    const hit = hitWithDns({}, { score: 90 });
+    const updated = markHitDns(hit, { a: ['1.2.3.4'], aaaa: [], mx: ['mail.mau.com'], ns: ['ns1.mau.com'] }, { at: '2026-08-26T00:00:00Z' });
+
+    assert.equal(updated.score, 100);
+});
+
+test('recheckHitsDns só consulta quem venceu a janela, e dispensado nunca entra', async () => {
+    const { store } = memoryStore();
+    const stale = hitWithDns({ checkedAt: '2026-08-25T00:00:00Z' }, { id: 'p1:stale.com', apexDomain: 'stale.com' });
+    const fresh = hitWithDns({ checkedAt: NOW.toISOString() }, { id: 'p1:fresh.com', apexDomain: 'fresh.com' });
+    const dismissed = hitWithDns({}, { id: 'p1:dismissed.com', apexDomain: 'dismissed.com', status: 'dismissed' });
+    store.absorb('p1', [stale, fresh, dismissed], new Date('2026-08-25T00:00:00Z'));
+
+    const queried = [];
+    const outcome = await recheckHitsDns({
+        store,
+        now: NOW,
+        resolveDns: async (domain) => { queried.push(domain); return { a: ['1.2.3.4'], aaaa: [], mx: [], ns: [] }; },
+    });
+
+    assert.deepEqual(queried, ['stale.com']);
+    assert.equal(outcome.checked, 1);
+    assert.equal(outcome.changed, 1);
+});
+
+test('recheckHitsDns não derruba a rodada se um domínio falhar ao resolver', async () => {
+    const { store } = memoryStore();
+    const hit = hitWithDns({}, { id: 'p1:mau.com', apexDomain: 'mau.com' });
+    store.absorb('p1', [hit], new Date('2026-08-25T00:00:00Z'));
+
+    const outcome = await recheckHitsDns({
+        store, now: NOW,
+        resolveDns: async () => { throw new Error('timeout'); },
+    });
+
+    assert.equal(outcome.checked, 1);
+    assert.equal(outcome.changed, 0);
 });

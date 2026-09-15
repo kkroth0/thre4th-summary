@@ -135,6 +135,11 @@ export function hitFromResult(result, { profileId, ownerId, terms, now }) {
         firstSeen: seenAt,
         lastSeen: seenAt,
         status: 'new',
+        // Preenchido por recheckHitsDns, independente do urlscan reescanear ou
+        // não — resolução DNS direta contra os nameservers, não um dado que o
+        // urlscan já trouxe. Começa vazio: o achado pode ser mais novo que a
+        // primeira rodada de recheck.
+        dns: { checkedAt: null, a: [], aaaa: [], mx: [], ns: [], events: [] },
     };
     return { ...base, ...scoreHit(base) };
 }
@@ -202,6 +207,122 @@ export function applyRetention(hits, { profileId, now = new Date() } = {}) {
         ...fresh.sort((a, b) => b.score - a.score || bySeen(a, b)).slice(0, PHISH_LIMITS.newHitsPerProfile),
         ...triaged.sort(bySeen).slice(0, PHISH_LIMITS.triagedPerProfile),
     ];
+}
+
+// ─── Resolução DNS contínua ─────────────────────────────────────────────────
+// Descoberta (acima) é o urlscan achando o domínio; isto é nosso, independente
+// de o urlscan reescanear ou não. Um domínio pode ficar dias parqueado e virar
+// A+MX de uma hora pra outra — sem checar isto direto contra os nameservers,
+// ninguém percebe até o urlscan resolver revisitar por conta própria, o que
+// pode nunca acontecer pra um domínio que não gerou tráfego novo.
+//
+// Três sinais, cada um mais forte que o anterior:
+//   went-live      — não resolvia nada, passou a ter A/AAAA (infra sendo montada)
+//   mx-appeared    — passou a aceitar e-mail (pronto pra campanha por e-mail,
+//                    não só página fake)
+//   infra-changed  — já resolvia e trocou de IP ou de nameserver (o atacante
+//                    mudou de casa depois de já estar no ar)
+
+const dnsHasAny = (d) => Boolean(d && ((d.a || []).length || (d.aaaa || []).length));
+
+const sameSet = (a, b) => {
+    const sa = new Set(a || []);
+    const sb = new Set(b || []);
+    if (sa.size !== sb.size) return false;
+    for (const value of sa) if (!sb.has(value)) return false;
+    return true;
+};
+
+/**
+ * Resolve os quatro tipos de registro que decidem os três sinais acima.
+ * Resolvers entram por parâmetro (mesmo molde de createUrlscanSearch): o
+ * teste não toca a rede, e index.js injeta dns.promises.* de verdade.
+ * Uma falha de tipo específico (ex: domínio sem MX) não derruba os outros —
+ * um domínio sem registro nenhum não é erro, é o estado "ainda não resolve".
+ */
+export function createDnsResolver({ resolve4, resolve6, resolveMx, resolveNs }) {
+    const safe = async (fn, domain) => {
+        try { return await fn(domain); } catch { return []; }
+    };
+    return async function resolveDomainDns(domain) {
+        const [a, aaaa, mx, ns] = await Promise.all([
+            safe(resolve4, domain),
+            safe(resolve6, domain),
+            safe(resolveMx, domain),
+            safe(resolveNs, domain),
+        ]);
+        return { a, aaaa, ns, mx: mx.map((record) => record?.exchange).filter(Boolean) };
+    };
+}
+
+/**
+ * Compara o estado novo com o gravado e decide quais sinais dispararam.
+ * Puro: quem resolve o DNS de verdade é resolveDomainDns, isto só compara.
+ */
+export function markHitDns(hit, resolved, { at } = {}) {
+    const prev = hit.dns || { checkedAt: null, a: [], aaaa: [], mx: [], ns: [], events: [] };
+    const next = {
+        checkedAt: at,
+        a: resolved.a || [], aaaa: resolved.aaaa || [], mx: resolved.mx || [], ns: resolved.ns || [],
+        events: [...(prev.events || [])],
+    };
+
+    const newReasons = [];
+    let scoreBump = 0;
+
+    if (!dnsHasAny(prev) && dnsHasAny(next)) {
+        next.events.push({ at, kind: 'went-live' });
+        newReasons.push('dns-went-live');
+        scoreBump += 25;
+    }
+    if (!(prev.mx || []).length && next.mx.length) {
+        next.events.push({ at, kind: 'mx-appeared' });
+        newReasons.push('dns-mx-appeared');
+        scoreBump += 20;
+    }
+    // Só conta troca de infra depois de já estar no ar — a primeira vez que A/NS
+    // aparece já é 'went-live' acima, não uma "mudança" de algo que não existia.
+    if (dnsHasAny(prev) && dnsHasAny(next) && (!sameSet(prev.a, next.a) || !sameSet(prev.ns, next.ns))) {
+        next.events.push({ at, kind: 'infra-changed' });
+        newReasons.push('dns-infra-changed');
+        scoreBump += 15;
+    }
+
+    if (!newReasons.length) return { ...hit, dns: next };
+    return {
+        ...hit,
+        dns: next,
+        score: Math.min(100, hit.score + scoreBump),
+        reasons: [...new Set([...(hit.reasons || []), ...newReasons])],
+    };
+}
+
+// Mesma cadência da descoberta: recheck de hora em hora é o suficiente pra
+// pegar a infra subindo sem martelar os nameservers de domínio nenhum.
+export async function recheckHitsDns({ store, resolveDns, now = new Date(), intervalMs = PHISH_LIMITS.runIntervalMs }) {
+    const cutoff = now.getTime() - intervalMs;
+    const nowIso = now.toISOString();
+    let checked = 0;
+    let changed = 0;
+
+    for (const hit of store.allActive()) {
+        const checkedAt = hit.dns?.checkedAt ? new Date(hit.dns.checkedAt).getTime() : 0;
+        if (checkedAt > cutoff) continue;
+        checked += 1;
+
+        let resolved;
+        try {
+            resolved = await resolveDns(hit.apexDomain);
+        } catch {
+            resolved = { a: [], aaaa: [], mx: [], ns: [] };
+        }
+
+        const updated = markHitDns(hit, resolved, { at: nowIso });
+        if (updated.dns.events.length > (hit.dns?.events?.length || 0)) changed += 1;
+        store.updateHit(hit.id, updated);
+    }
+
+    return { checked, changed };
 }
 
 export function selectDueProfiles(profiles, runs = {}, now = new Date()) {
@@ -333,6 +454,20 @@ export function createPhishWatchStore({ filePath, readFileSync, writeJsonAtomic 
             state.runs[profileId] = { ...(state.runs[profileId] || {}), ...run };
             save();
             return state.runs[profileId];
+        },
+        // Todo dono, todo perfil — o recheck de DNS não filtra por quem está
+        // olhando a tela, roda em cima de tudo que ainda pode virar phishing de
+        // verdade. Dispensado sai porque já é falso positivo confirmado: não há
+        // porquê continuar gastando consulta DNS nele.
+        allActive() {
+            return state.hits.filter((hit) => hit.status !== 'dismissed');
+        },
+        updateHit(hitId, updated) {
+            const idx = state.hits.findIndex((item) => item.id === hitId);
+            if (idx === -1) return null;
+            state.hits[idx] = updated;
+            save();
+            return updated;
         },
         dropProfile(profileId) {
             state.hits = state.hits.filter((hit) => hit.profileId !== profileId);

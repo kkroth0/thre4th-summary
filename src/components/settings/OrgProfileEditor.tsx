@@ -243,8 +243,8 @@ export function OrgProfileEditor() {
               <Label htmlFor="org-brand">{pt ? "Marcas e domínios" : "Brands and domains"}</Label>
               <p className="text-xs text-muted-foreground">
                 {pt
-                  ? "O que a vigilância de phishing procura em domínios recém-criados. Pode digitar o domínio inteiro — vale o nome, não o final."
-                  : "What the phishing watch looks for in freshly registered domains. Paste the whole domain if you like — only the name counts."}
+                  ? "O que a vigilância de phishing procura em domínios recém-criados. Pode digitar o domínio inteiro — vale o nome, não o final. Não precisa ser a marca: termo de isca comum (\"login\", \"seguranca\") também vigia domínio novo sem depender do nome exato."
+                  : "What the phishing watch looks for in freshly registered domains. Paste the whole domain if you like — only the name counts. Doesn't have to be the brand itself: a common lure term (\"login\", \"security\") also watches new domains without depending on the exact name."}
               </p>
               <div className="flex gap-2">
                 <Input
