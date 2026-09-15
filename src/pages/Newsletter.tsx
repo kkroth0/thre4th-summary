@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import { Link } from "react-router-dom";
-import { ArrowLeft, Globe, BookOpen, AlertTriangle, Search, Mail, Eye, Sparkles, Filter, ChevronDown, RefreshCw, Calendar, Share2, Loader2, Bookmark, X } from "lucide-react";
+import { ArrowLeft, Globe, BookOpen, AlertTriangle, Search, Mail, Eye, Filter, ChevronDown, RefreshCw, Share2, Loader2, Bookmark, X, PencilLine, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -17,9 +17,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
-import { NEWS_CATEGORY_ORDER, countByCategory, filterNewsletterAdvisories, filterStoryCards, formatNewsletterDate, groupAdvisoriesIntoStories, severityEvidence, activeFilterChips } from "./newsletterView";
+import { NEWS_CATEGORY_ORDER, countByCategory, filterNewsletterAdvisories, filterStoryCards, groupAdvisoriesIntoStories, severityEvidence, activeFilterChips, TIME_RANGES } from "./newsletterView";
+import type { TimeRange } from "./newsletterView";
 import type { StoryCard } from "./newsletterView";
 import { generateBoletim, saveKnowledge } from "@/services/threatApi";
 import { useOrgProfile } from "@/hooks/useOrgProfile";
@@ -171,7 +171,7 @@ const buildShareText = (item: Advisory, e: EnrichData | undefined, lang: string)
 };
 
 const Newsletter = () => {
-  const { t, language } = useLanguage();
+  const { language } = useLanguage();
   
   // Newsletter States
   const [advisories, setAdvisories] = useState<Advisory[]>([]);
@@ -181,6 +181,8 @@ const Newsletter = () => {
   const [selectedSeverity, setSelectedSeverity] = useState<string>("all");
   const [sortByRelevance, setSortByRelevance] = useState<boolean>(false);
   const [kevOnly, setKevOnly] = useState<boolean>(false);
+  const [timeRange, setTimeRange] = useState<TimeRange>("all");
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const { profiles: orgProfiles, activeId: orgProfileId, setActiveId: setOrgProfileId, model: orgModel } = useOrgProfile();
   const [orgOnly, setOrgOnly] = useState(false);
   // Links já guardados no Knowledge — só pra desabilitar o botão. A verdade
@@ -321,6 +323,21 @@ const Newsletter = () => {
     };
     // loadNews is stable for the component lifetime; run once on mount.
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Atalho "/" foca a busca — só quando o foco não está já num campo de
+  // digitação, senão "/" vira caractere normal em vez de atalho.
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== "/" || e.metaKey || e.ctrlKey || e.altKey) return;
+      const target = e.target as HTMLElement | null;
+      const typing = target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable);
+      if (typing) return;
+      e.preventDefault();
+      searchInputRef.current?.focus();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
   // Time formatting helper
@@ -489,9 +506,15 @@ const Newsletter = () => {
     severity: selectedSeverity,
     kevOnly,
     sortByRelevance,
-  }), orgModel), [advisories, searchNews, selectedSeverity, sortByRelevance, kevOnly, orgModel]);
+    timeRange,
+  }), orgModel), [advisories, searchNews, selectedSeverity, sortByRelevance, kevOnly, timeRange, orgModel]);
 
   const [categoryFilter, setCategoryFilter] = useState("");
+  // A lista de categorias cresce (9 hoje); só as com maior volume ficam à vista,
+  // o resto entra por "Ver todas" — senão a barra vira duas linhas de pílula
+  // toda vez que uma categoria rara aparece.
+  const [showAllCategories, setShowAllCategories] = useState(false);
+  const VISIBLE_CATEGORY_CAP = 5;
 
   const storyCards = useMemo(
     () => filterStoryCards(
@@ -501,6 +524,17 @@ const Newsletter = () => {
     [filteredAdvisories, sortByRelevance, orgModel, categoryFilter, orgOnly, language],
   );
   const categoryCounts = useMemo(() => countByCategory(groupAdvisoriesIntoStories(filteredAdvisories)), [filteredAdvisories]);
+  // Ordenadas por volume no momento — é o que ajuda a escolher o que ler
+  // primeiro; a ordem de precedência (NEWS_CATEGORY_ORDER) só decide qual
+  // categoria "ganha" quando uma matéria cabe em mais de uma, não em que
+  // ordem os filtros aparecem aqui.
+  const categoriesByVolume = useMemo(
+    () => NEWS_CATEGORY_ORDER.filter((name) => categoryCounts[name])
+      .slice().sort((a, b) => categoryCounts[b] - categoryCounts[a]),
+    [categoryCounts],
+  );
+  const visibleCategories = showAllCategories ? categoriesByVolume : categoriesByVolume.slice(0, VISIBLE_CATEGORY_CAP);
+  const hiddenCategoryCount = categoriesByVolume.length - visibleCategories.length;
 
   // How many filters are narrowing the feed — drives the badge on the Filters button.
   const activeFilterCount = [
@@ -508,12 +542,13 @@ const Newsletter = () => {
     sortByRelevance,
     kevOnly,
     orgOnly,
+    timeRange !== "all",
   ].filter(Boolean).length;
   // DEN-02: o que está filtrando saía só como número no botão. Cada filtro
   // ativo vira chip removível, para o leitor ver e desfazer sem reabrir o
   // popover — e para não achar que o feed está curto quando ele está filtrado.
   const filterChips = activeFilterChips(
-    { severity: selectedSeverity, kevOnly, orgOnly, sortByRelevance, search: searchNews },
+    { severity: selectedSeverity, kevOnly, orgOnly, sortByRelevance, search: searchNews, timeRange },
     language === "pt",
   );
   const removeFilter = (key: string) => {
@@ -521,6 +556,7 @@ const Newsletter = () => {
     if (key === "kevOnly") setKevOnly(false);
     if (key === "orgOnly") setOrgOnly(false);
     if (key === "sortByRelevance") setSortByRelevance(false);
+    if (key === "timeRange") setTimeRange("all");
     if (key === "search") setSearchNews("");
   };
   const clearFilters = () => {
@@ -528,6 +564,7 @@ const Newsletter = () => {
     setSortByRelevance(false);
     setKevOnly(false);
     setOrgOnly(false);
+    setTimeRange("all");
   };
 
   return (
@@ -547,104 +584,141 @@ const Newsletter = () => {
                   : "Threat intelligence news and security advisories aggregated from multiple sources"}
               </p>
             </div>
-            {/* Auto-polling / última atualização — status enxuto + gestão de fontes */}
-            <div className="flex items-center gap-3 shrink-0">
-              <div className="flex items-center gap-2 text-xs text-muted-foreground tabular-nums">
-                <span className={`h-1.5 w-1.5 rounded-full ${isRefreshingNews ? "bg-primary animate-pulse" : "bg-green-500"}`} />
-                {isRefreshingNews
-                  ? (language === "pt" ? "atualizando…" : "refreshing…")
-                  : (
-                    <span>
-                      {language === "pt" ? "atualizado " : "updated "}
-                      {lastUpdatedNews ? lastUpdatedNews.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "—"}
-                      <span className="text-muted-foreground/40"> · {language === "pt" ? "próx." : "next"} </span>
-                      {formatTime(secondsRemaining)}
-                    </span>
-                  )}
+
+            {/* Duas leituras rápidas: quando os dados ficaram velhos, e quanto
+                está na tela agora — os dois números que respondem "ainda vale
+                confiar nisso?" sem abrir nada. */}
+            <div className="flex shrink-0 items-stretch gap-4">
+              <div className="text-right">
+                <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                  {language === "pt" ? "Última atualização" : "Last update"}
+                </div>
+                <div
+                  className="flex items-center justify-end gap-1.5 font-mono text-sm font-bold tabular-nums text-foreground"
+                  title={!isRefreshingNews ? `${language === "pt" ? "Próxima em" : "Next in"} ${formatTime(secondsRemaining)}` : undefined}
+                >
+                  <span className={cn("h-1.5 w-1.5 rounded-full", isRefreshingNews ? "bg-primary animate-pulse" : "bg-green-500")} />
+                  {isRefreshingNews
+                    ? (language === "pt" ? "atualizando…" : "refreshing…")
+                    : (lastUpdatedNews ? lastUpdatedNews.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "—")}
+                </div>
+              </div>
+              <div className="w-px bg-border" aria-hidden />
+              <div className="text-right">
+                <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                  {language === "pt" ? "Sinais ativos" : "Active signals"}
+                </div>
+                <div className="font-mono text-sm font-bold tabular-nums text-primary" title={language === "pt" ? "Histórias na visão atual, já com os filtros aplicados" : "Stories in the current view, filters applied"}>
+                  {storyCards.length}
+                </div>
               </div>
             </div>
           </div>
 
-          {/* Date + search + filters — one bar */}
-          <div className="flex flex-col xl:flex-row xl:items-center gap-3 bg-card border p-3 rounded-lg">
-            <div className="flex items-center gap-2.5 shrink-0">
-              <Calendar className="h-4 w-4 text-primary shrink-0" />
-              <span className="text-sm font-semibold text-foreground capitalize whitespace-nowrap">
-                {formatNewsletterDate(new Date(), language)}
-              </span>
+          {/* Busca + filtros — uma barra só */}
+          <div className="flex flex-col gap-3 rounded-lg border bg-card p-3">
+            <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input
+                  ref={searchInputRef}
+                  placeholder={language === "pt" ? "Buscar por CVE, vetor, alvo..." : "Search by CVE, vector, target..."}
+                  value={searchNews}
+                  onChange={(e) => setSearchNews(e.target.value)}
+                  className="pl-9 pr-9 bg-card border-border/50"
+                />
+                {!searchNews && (
+                  <kbd className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
+                    /
+                  </kbd>
+                )}
+              </div>
+
+              {/* Severidade em pílula: é o filtro mais usado, então fica sempre
+                  à vista em vez de atrás de um popover. */}
+              <div className="flex shrink-0 items-center gap-1 rounded-md border border-border/60 bg-background p-0.5">
+                {([
+                  ["all", language === "pt" ? "Todas" : "All"],
+                  ["Critical", language === "pt" ? "Críticas" : "Critical"],
+                  ["High", language === "pt" ? "Alta" : "High"],
+                  ["Medium", language === "pt" ? "Média" : "Medium"],
+                  ["Low", language === "pt" ? "Baixa" : "Low"],
+                ] as const).map(([value, label]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => setSelectedSeverity(value)}
+                    aria-pressed={selectedSeverity === value}
+                    className={cn(
+                      "rounded px-2.5 py-1.5 text-xs font-semibold transition-colors",
+                      selectedSeverity === value ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground",
+                    )}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
             </div>
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder={t("searchAdvisories") || "Search advisories..."}
-                value={searchNews}
-                onChange={(e) => setSearchNews(e.target.value)}
-                className="pl-9 bg-card border-border/50"
-              />
-            </div>
-            
-            {/* Filters & Actions */}
-            <div className="flex items-center gap-1.5 shrink-0">
-              {/* All filters collapsed into one popover — keeps the bar clean */}
+
+            <div className="flex flex-wrap items-center gap-2">
+              <Select value={timeRange} onValueChange={(v) => setTimeRange(v as TimeRange)}>
+                <SelectTrigger className="h-9 w-auto gap-1.5 text-xs font-semibold">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {TIME_RANGES.map((range) => (
+                    <SelectItem key={range} value={range}>
+                      {range === "all" && (language === "pt" ? "Todo o período" : "All time")}
+                      {range === "24h" && (language === "pt" ? "Últimas 24h" : "Last 24h")}
+                      {range === "7d" && (language === "pt" ? "Últimos 7 dias" : "Last 7 days")}
+                      {range === "30d" && (language === "pt" ? "Últimos 30 dias" : "Last 30 days")}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <Select value={sortByRelevance ? "relevance" : "recent"} onValueChange={(v) => setSortByRelevance(v === "relevance")}>
+                <SelectTrigger className="h-9 w-auto gap-1.5 text-xs font-semibold">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="recent">{language === "pt" ? "Mais recentes" : "Most recent"}</SelectItem>
+                  <SelectItem value="relevance">{language === "pt" ? "Mais relevantes" : "Most relevant"}</SelectItem>
+                </SelectContent>
+              </Select>
+
+              {/* KEV + contexto de organização — usados com menos frequência,
+                  continuam atrás de um popover pra não competir por espaço. */}
               <Popover>
                 <PopoverTrigger asChild>
                   <Button
-                    variant={activeFilterCount > 0 ? "default" : "outline"}
+                    variant={kevOnly || orgOnly ? "default" : "outline"}
                     size="sm"
-                    className="h-9 text-xs font-semibold px-3 gap-1.5"
+                    className="h-9 gap-1.5 px-3 text-xs font-semibold"
                   >
                     <Filter className="h-3.5 w-3.5" />
-                    {language === "pt" ? "Filtros" : "Filters"}
-                    {activeFilterCount > 0 && (
+                    {language === "pt" ? "Mais filtros" : "More filters"}
+                    {(kevOnly || orgOnly) && (
                       <Badge variant="secondary" className="ml-0.5 h-4 min-w-[16px] px-1 text-[10px] tabular-nums">
-                        {activeFilterCount}
+                        {[kevOnly, orgOnly].filter(Boolean).length}
                       </Badge>
                     )}
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent align="end" className="w-72 space-y-3">
-                  {/* Severity */}
-                  <div className="space-y-1.5">
-                    <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                      {language === "pt" ? "Severidade" : "Severity"}
-                    </div>
-                    <Select value={selectedSeverity} onValueChange={setSelectedSeverity}>
-                      <SelectTrigger className="h-8 text-xs font-semibold">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">{language === "pt" ? "Toda Severidade" : "All Severity"}</SelectItem>
-                        <SelectItem value="Critical">Critical</SelectItem>
-                        <SelectItem value="High">High</SelectItem>
-                        <SelectItem value="Medium">Medium</SelectItem>
-                        <SelectItem value="Low">Low</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <Separator />
-
-                  {/* Sort + KEV toggles */}
-                  <div className="grid grid-cols-2 gap-1.5">
-                    <Button
-                      variant={sortByRelevance ? "default" : "outline"}
-                      size="sm"
-                      className="h-8 text-xs font-semibold gap-1.5"
-                      onClick={() => setSortByRelevance((v) => !v)}
-                    >
-                      <Sparkles className="h-3.5 w-3.5" />
-                      {language === "pt" ? "Relevância" : "Relevance"}
-                    </Button>
-                    <Button
-                      variant={kevOnly ? "default" : "outline"}
-                      size="sm"
-                      className={`h-8 text-xs font-semibold gap-1.5 ${kevOnly ? "bg-red-600 hover:bg-red-600/90 text-white" : "text-red-500 border-red-500/30 hover:bg-red-500/5"}`}
-                      onClick={() => setKevOnly((v) => !v)}
-                    >
-                      <AlertTriangle className="h-3.5 w-3.5" />
-                      {language === "pt" ? "Explorado" : "Exploited"}
-                    </Button>
-                  </div>
+                  <Button
+                    variant={kevOnly ? "default" : "outline"}
+                    size="sm"
+                    className={cn(
+                      "h-8 w-full justify-start gap-1.5 text-xs font-semibold",
+                      !kevOnly && "text-red-500 border-red-500/30 hover:bg-red-500/5",
+                      kevOnly && "bg-red-600 hover:bg-red-600/90 text-white",
+                    )}
+                    onClick={() => setKevOnly((v) => !v)}
+                  >
+                    <AlertTriangle className="h-3.5 w-3.5" />
+                    {language === "pt" ? "Só explorada ativamente (KEV)" : "Actively exploited only (KEV)"}
+                  </Button>
 
                   {orgProfiles.length > 0 && (
                     <div className="space-y-2 border-t pt-3">
@@ -677,14 +751,12 @@ const Newsletter = () => {
               </Popover>
 
               <Button
-                variant="outline"
-                size="icon"
                 disabled={loadingNews || isRefreshingNews}
                 onClick={() => loadNews()}
-                className="h-9 w-9 border-border/50 hover:bg-primary/5 shrink-0"
-                title={language === "pt" ? "Atualizar feeds" : "Refresh feeds"}
+                className="ml-auto h-9 gap-1.5 px-3 text-xs font-semibold"
               >
-                <RefreshCw className={`h-4 w-4 ${(loadingNews || isRefreshingNews) ? "animate-spin" : ""}`} />
+                <RefreshCw className={cn("h-3.5 w-3.5", (loadingNews || isRefreshingNews) && "animate-spin")} />
+                {language === "pt" ? "Atualizar agora" : "Refresh now"}
               </Button>
             </div>
           </div>
@@ -694,7 +766,10 @@ const Newsletter = () => {
             {/* News Feed */}
             <div className="space-y-4">
               {/* Loading/Error/News List */}
-              <div className="flex flex-wrap gap-2 pb-3">
+              <div className="flex flex-wrap items-center gap-2 pb-3">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                  {language === "pt" ? "Categorias" : "Categories"}
+                </span>
                 <button
                   type="button"
                   onClick={() => setCategoryFilter("")}
@@ -703,7 +778,7 @@ const Newsletter = () => {
                 >
                   {language === "pt" ? "Todas" : "All"}
                 </button>
-                {NEWS_CATEGORY_ORDER.filter((name) => categoryCounts[name]).map((name) => (
+                {visibleCategories.map((name) => (
                   <button
                     key={name}
                     type="button"
@@ -714,6 +789,17 @@ const Newsletter = () => {
                     {name} <span className="tabular-nums opacity-60">{categoryCounts[name]}</span>
                   </button>
                 ))}
+                {categoriesByVolume.length > VISIBLE_CATEGORY_CAP && (
+                  <button
+                    type="button"
+                    onClick={() => setShowAllCategories((v) => !v)}
+                    className="text-xs font-medium text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+                  >
+                    {showAllCategories
+                      ? (language === "pt" ? "Ver menos" : "Show less")
+                      : (language === "pt" ? `Ver todas (+${hiddenCategoryCount})` : `Show all (+${hiddenCategoryCount})`)}
+                  </button>
+                )}
               </div>
 
               {/* DEN-02: os chips de categoria são o filtro primário, porque
@@ -800,7 +886,7 @@ const Newsletter = () => {
                         {/* Severidade e hora, com o chevron do card à direita. A seta
                             controla o corpo inteiro (sumário + fontes + ações), não um
                             pedaço: um disclosure por card em vez de um por seção. */}
-                        <div className="flex items-center gap-2.5">
+                        <div className="flex flex-wrap items-center gap-2.5">
                           {item.severity && (
                             <Badge
                               title={item.reasons?.length ? `${language === "pt" ? "Por quê" : "Why"}: ${item.reasons.join(" · ")}` : undefined}
@@ -844,36 +930,86 @@ const Newsletter = () => {
                               </span>
                             </Badge>
                           )}
-                          {/* Fonte + prioridade sempre visíveis na linha, não só quando o
-                              card expande — antes só apareciam dentro de "Fontes" e só
-                              para matéria com mais de uma cobertura. */}
-                          {item.source && (
-                            <span
-                              className="ml-auto flex shrink-0 items-center gap-1 rounded border border-border px-1.5 py-0 font-mono text-[10px] font-semibold text-muted-foreground"
-                              title={
-                                typeof item.weight_boost === "number"
-                                  ? `${language === "pt" ? "Prioridade da fonte" : "Source priority"}: ${item.weight_boost}/20`
-                                  : undefined
-                              }
-                            >
-                              <span className="max-w-[140px] truncate text-foreground/80">{item.source}</span>
-                              {typeof item.weight_boost === "number" && (
-                                <span className="text-primary">P{item.weight_boost}</span>
-                              )}
+                          {/* Fonte + prioridade + ações, sempre visíveis na linha — antes
+                              a fonte só aparecia expandido, e as 4 ações (boletim, artigo,
+                              compartilhar, seguir) ficavam escondidas no rodapé expandido. */}
+                          <div className="ml-auto flex flex-wrap items-center justify-end gap-1.5">
+                            {item.source && (
+                              <span
+                                className="flex shrink-0 items-center gap-1 rounded border border-border px-1.5 py-0 font-mono text-[10px] font-semibold text-muted-foreground"
+                                title={
+                                  typeof item.weight_boost === "number"
+                                    ? `${language === "pt" ? "Prioridade da fonte" : "Source priority"}: ${item.weight_boost}/20`
+                                    : undefined
+                                }
+                              >
+                                <span className="max-w-[140px] truncate text-foreground/80">{item.source}</span>
+                                {typeof item.weight_boost === "number" && (
+                                  <span className="text-primary">P{item.weight_boost}</span>
+                                )}
+                              </span>
+                            )}
+                            <span className="font-mono text-xs text-muted-foreground" title={new Date(item.pubDate).toLocaleString()}>
+                              {relTime(item.pubDate, language)}
                             </span>
-                          )}
-                          <span className="font-mono text-xs text-muted-foreground" title={new Date(item.pubDate).toLocaleString()}>
-                            {relTime(item.pubDate, language)}
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => toggleExpand(card, featured)}
-                            aria-expanded={isExpanded(card, featured)}
-                            aria-label={language === "pt" ? "Expandir" : "Expand"}
-                            className="text-muted-foreground transition-colors hover:text-foreground"
-                          >
-                            <ChevronDown className={cn("h-4 w-4 transition-transform", !isExpanded(card, featured) && "-rotate-90")} />
-                          </button>
+
+                            <div className="flex items-center gap-0.5 border-l border-border pl-1.5">
+                              <Button
+                                variant="ghost" size="icon"
+                                onClick={() => makeBoletim(card)}
+                                disabled={boletimBusy === card.storyId}
+                                title={language === "pt" ? "Gerar Boletim" : "Generate Bulletin"}
+                                aria-label={language === "pt" ? "Gerar Boletim" : "Generate Bulletin"}
+                                className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                              >
+                                {boletimBusy === card.storyId
+                                  ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                  : <PencilLine className="h-3.5 w-3.5" />}
+                              </Button>
+                              <Button
+                                asChild variant="ghost" size="icon"
+                                title={language === "pt" ? "Ver artigo" : "Read article"}
+                                className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                              >
+                                <a href={item.link} target="_blank" rel="noopener noreferrer" aria-label={language === "pt" ? "Ver artigo" : "Read article"}>
+                                  <ExternalLink className="h-3.5 w-3.5" />
+                                </a>
+                              </Button>
+                              <Button
+                                variant="ghost" size="icon"
+                                onClick={() => shareAdvisory(card)}
+                                title={language === "pt" ? "Compartilhar" : "Share"}
+                                aria-label={language === "pt" ? "Compartilhar" : "Share"}
+                                className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                              >
+                                <Share2 className="h-3.5 w-3.5" />
+                              </Button>
+                              <Button
+                                variant="ghost" size="icon"
+                                onClick={() => keepAdvisory(card)}
+                                disabled={savedLinks.has(item.link)}
+                                title={savedLinks.has(item.link)
+                                  ? (language === "pt" ? "Seguindo" : "Following")
+                                  : (language === "pt" ? "Seguir" : "Follow")}
+                                aria-label={savedLinks.has(item.link)
+                                  ? (language === "pt" ? "Seguindo" : "Following")
+                                  : (language === "pt" ? "Seguir" : "Follow")}
+                                className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                              >
+                                <Bookmark className={cn("h-3.5 w-3.5", savedLinks.has(item.link) && "fill-current text-primary")} />
+                              </Button>
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={() => toggleExpand(card, featured)}
+                              aria-expanded={isExpanded(card, featured)}
+                              aria-label={language === "pt" ? "Expandir" : "Expand"}
+                              className="text-muted-foreground transition-colors hover:text-foreground"
+                            >
+                              <ChevronDown className={cn("h-4 w-4 transition-transform", !isExpanded(card, featured) && "-rotate-90")} />
+                            </button>
+                          </div>
                         </div>
 
                         {/* Só a manchete grande recebe o título normalizado e traduzido
@@ -981,41 +1117,6 @@ const Newsletter = () => {
                               </div>
                             )}
 
-                            <div className="mt-4 flex items-center gap-2 border-t pt-3">
-                              <Button
-                                size="sm"
-                                onClick={() => makeBoletim(card)}
-                                disabled={boletimBusy === card.storyId}
-                                className="h-8 px-3 text-xs font-semibold"
-                              >
-                                {boletimBusy === card.storyId && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
-                                {language === "pt" ? "Gerar Boletim" : "Generate Bulletin"}
-                              </Button>
-                              <Button asChild variant="outline" size="sm" className="h-8 px-3 text-xs font-semibold">
-                                <a href={item.link} target="_blank" rel="noopener noreferrer">
-                                  {language === "pt" ? "Ver artigo" : "Read article"}
-                                </a>
-                              </Button>
-                              <Button
-                                variant="ghost" size="icon"
-                                onClick={() => shareAdvisory(card)}
-                                title={language === "pt" ? "Compartilhar" : "Share"}
-                                className="ml-auto h-8 w-8 text-muted-foreground hover:text-foreground"
-                              >
-                                <Share2 className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                variant="ghost" size="icon"
-                                onClick={() => keepAdvisory(card)}
-                                disabled={savedLinks.has(item.link)}
-                                title={savedLinks.has(item.link)
-                                  ? (language === "pt" ? "Seguindo" : "Following")
-                                  : (language === "pt" ? "Seguir" : "Follow")}
-                                className="h-8 w-8 text-muted-foreground hover:text-foreground"
-                              >
-                                <Bookmark className={cn("h-4 w-4", savedLinks.has(item.link) && "fill-current text-primary")} />
-                              </Button>
-                            </div>
                           </>
                         )}
                       </div>

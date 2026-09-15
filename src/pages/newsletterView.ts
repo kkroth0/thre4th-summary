@@ -11,11 +11,20 @@ export interface NewsletterFilterItem {
   score?: number;
 }
 
+// "all" nunca filtra — as demais são uma janela em horas a partir de `now`.
+export const TIME_RANGES = ["all", "24h", "7d", "30d"] as const;
+export type TimeRange = (typeof TIME_RANGES)[number];
+const TIME_RANGE_HOURS: Record<Exclude<TimeRange, "all">, number> = { "24h": 24, "7d": 24 * 7, "30d": 24 * 30 };
+
 export interface NewsletterFilterOptions {
   search: string;
   severity: string;
   kevOnly: boolean;
   sortByRelevance: boolean;
+  // Opcional: telas antigas que ainda não passam período continuam sem filtrar
+  // por data, exatamente como hoje.
+  timeRange?: TimeRange;
+  now?: Date;
 }
 
 const LOCALES: Record<Language, string> = {
@@ -47,6 +56,8 @@ export const filterNewsletterAdvisories = <T extends NewsletterFilterItem>(
   options: NewsletterFilterOptions,
 ): T[] => {
   const query = options.search.toLowerCase();
+  const range = options.timeRange ?? "all";
+  const cutoff = range === "all" ? null : (options.now ?? new Date()).getTime() - TIME_RANGE_HOURS[range] * 3600_000;
   const filtered = advisories.filter((item) => {
     const matchesSearch = item.title.toLowerCase().includes(query)
       || item.description.toLowerCase().includes(query)
@@ -55,6 +66,12 @@ export const filterNewsletterAdvisories = <T extends NewsletterFilterItem>(
     if (!matchesSearch) return false;
     if (options.severity !== "all" && item.severity !== options.severity) return false;
     if (options.kevOnly && !item.kev) return false;
+    // Item sem data parseável não é descartado pelo período — silenciar uma
+    // notícia por falta de metadado é pior do que mostrá-la fora de hora.
+    if (cutoff !== null) {
+      const published = new Date(item.pubDate).getTime();
+      if (!Number.isNaN(published) && published < cutoff) return false;
+    }
 
     return true;
   });
@@ -265,9 +282,16 @@ export type NewsFilterState = {
   orgOnly: boolean;
   sortByRelevance: boolean;
   search: string;
+  timeRange?: TimeRange;
 };
 
 export type ActiveFilterChip = { key: keyof NewsFilterState; label: string };
+
+const TIME_RANGE_LABEL: Record<Exclude<TimeRange, "all">, { pt: string; en: string }> = {
+  "24h": { pt: "Últimas 24h", en: "Last 24h" },
+  "7d": { pt: "Últimos 7 dias", en: "Last 7 days" },
+  "30d": { pt: "Últimos 30 dias", en: "Last 30 days" },
+};
 
 export function activeFilterChips(state: NewsFilterState, pt: boolean): ActiveFilterChip[] {
   const chips: ActiveFilterChip[] = [];
@@ -280,5 +304,8 @@ export function activeFilterChips(state: NewsFilterState, pt: boolean): ActiveFi
   // que a ordem não é a cronológica.
   if (state.sortByRelevance) chips.push({ key: "sortByRelevance", label: pt ? "Por relevância" : "By relevance" });
   if (state.search.trim()) chips.push({ key: "search", label: `"${state.search.trim()}"` });
+  if (state.timeRange && state.timeRange !== "all") {
+    chips.push({ key: "timeRange", label: TIME_RANGE_LABEL[state.timeRange][pt ? "pt" : "en"] });
+  }
   return chips;
 }

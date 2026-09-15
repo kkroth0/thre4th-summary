@@ -25,6 +25,40 @@ test("keeps matching advisories from different months", () => {
   assert.deepEqual(result.map((item) => item.title), ["July item", "June item"]);
 });
 
+test("timeRange corta pelo relógio informado, não pelo do sistema", () => {
+  const now = new Date("2026-08-10T12:00:00.000Z");
+  const advisories = [
+    { title: "1h atrás", description: "", source: "Feed", pubDate: "2026-08-10T11:00:00.000Z" },
+    { title: "2 dias atrás", description: "", source: "Feed", pubDate: "2026-08-08T12:00:00.000Z" },
+    { title: "40 dias atrás", description: "", source: "Feed", pubDate: "2026-07-01T12:00:00.000Z" },
+  ];
+  const base = { search: "", severity: "all", kevOnly: false, sortByRelevance: false, now };
+
+  assert.deepEqual(
+    filterNewsletterAdvisories(advisories, { ...base, timeRange: "24h" }).map((i) => i.title),
+    ["1h atrás"],
+  );
+  assert.deepEqual(
+    filterNewsletterAdvisories(advisories, { ...base, timeRange: "7d" }).map((i) => i.title),
+    ["1h atrás", "2 dias atrás"],
+  );
+  assert.deepEqual(
+    filterNewsletterAdvisories(advisories, { ...base, timeRange: "all" }).map((i) => i.title),
+    ["1h atrás", "2 dias atrás", "40 dias atrás"],
+  );
+});
+
+test("timeRange nunca descarta item com data ilegível", () => {
+  const now = new Date("2026-08-10T12:00:00.000Z");
+  const advisories = [{ title: "sem data", description: "", source: "Feed", pubDate: "" }];
+
+  const result = filterNewsletterAdvisories(advisories, {
+    search: "", severity: "all", kevOnly: false, sortByRelevance: false, timeRange: "24h", now,
+  });
+
+  assert.equal(result.length, 1);
+});
+
 const advisory = (over: Record<string, unknown> = {}) => ({
   title: "T", description: "", link: "https://a.example/1", pubDate: "2026-08-10T00:00:00.000Z",
   source: "Feed", storyId: "s1", actors: [], newsCategories: [], primaryCategory: null, cves: [], ...over,
@@ -209,6 +243,13 @@ test("feed sem filtro não mostra chip nenhum", () => {
     activeFilterChips({ severity: "all", kevOnly: false, orgOnly: false, sortByRelevance: false, search: "   " }, true),
     [],
   );
+});
+
+test("período vira chip removível quando diferente de 'all', em pt e en", () => {
+  const state = { severity: "all", kevOnly: false, orgOnly: false, sortByRelevance: false, search: "", timeRange: "24h" as const };
+  assert.deepEqual(activeFilterChips(state, true), [{ key: "timeRange", label: "Últimas 24h" }]);
+  assert.deepEqual(activeFilterChips(state, false), [{ key: "timeRange", label: "Last 24h" }]);
+  assert.deepEqual(activeFilterChips({ ...state, timeRange: "all" }, true), []);
 });
 
 // ─── EST-05: avisos de distribuição repetidos no mesmo dia ──────────────────
