@@ -482,6 +482,13 @@ const DailyBulletin: React.FC = () => {
                   <SelectItem value="campaign">{pt ? "Campanha" : "Campaign"}</SelectItem>
                 </SelectContent>
               </Select>
+              {/* Rótulo sempre visível: o seletor é a única pista de que dá pra
+                  trocar o design do deck, e o aria-label só ajuda quem usa leitor
+                  de tela. Sem isso, "Avançado"/"Básico"/"Premium" sozinho não diz
+                  a que se refere até o analista clicar. */}
+              <span className="hidden shrink-0 pl-1.5 text-xs text-muted-foreground sm:inline">
+                Template:
+              </span>
               <Select
                 value={deckTemplate}
                 onValueChange={(v) => { setDeckTemplate(v as DeckTemplate); saveDeckTemplate(v as DeckTemplate); }}
@@ -489,6 +496,7 @@ const DailyBulletin: React.FC = () => {
                 <SelectTrigger
                   data-testid="report-generator-template-trigger"
                   aria-label={pt ? "Template do deck" : "Deck template"}
+                  title={pt ? "Selecione o template do deck" : "Select the deck template"}
                   className="h-10 w-[6.9rem] shrink-0 justify-between rounded-md border-0 bg-muted/60 px-2.5 text-xs font-medium shadow-none focus:ring-0 sm:w-[7.75rem]"
                 >
                   <span className="truncate">
