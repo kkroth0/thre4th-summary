@@ -25,6 +25,19 @@ export function orphanDeckFiles(files, store) {
     return (files || []).filter((file) => !store?.[file.replace(/\.(pptx|pdf)(\.tmp)?$/, '')]);
 }
 
+/**
+ * Template do deck pedido para o boletim: 'avancado' (SRR novo, padrão),
+ * 'basico' (SRR V2) ou 'premium' (um modelo por subtipo de ameaça). Qualquer
+ * outro valor cai no padrão; o worker repassa ao motor com --template.
+ */
+export function normalizeDeckTemplate(raw) {
+    const s = String(raw || '').trim().toLowerCase()
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    if (s === 'basico' || s === 'basic') return 'basico';
+    if (s === 'premium') return 'premium';
+    return 'avancado';
+}
+
 /** Metadado do job sem o boletim. A lista carrega isso; o JSON só no detalhe. */
 export function jobSummary(job) {
     const { json, ...meta } = job || {};

@@ -185,6 +185,15 @@ export function ReportPane({ job }: { job: BoletimJob | null }) {
           </Badge>
         )}
         <Badge variant="secondary" className="font-mono text-[10px] uppercase">{job.type}</Badge>
+        {job.template && (
+          <Badge variant="outline" className="text-[10px]">
+            {job.template === "basico"
+              ? (pt ? "Template básico" : "Basic template")
+              : job.template === "premium"
+                ? (pt ? "Template premium" : "Premium template")
+                : (pt ? "Template avançado" : "Advanced template")}
+          </Badge>
+        )}
         {r.generated_at && (
           <span className="text-xs text-muted-foreground" title={pt ? "Geração do boletim" : "Report generated"}>
             {fmtDate(r.generated_at, pt)}

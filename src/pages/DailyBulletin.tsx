@@ -29,7 +29,8 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import {
   fetchDailySuggestions, generateBoletim, fetchJob, fetchJobList, deleteJob,
-  type DailySuggestion, type BoletimJob, type DeckType,
+  type DailySuggestion, type BoletimJob, type DeckType, type DeckTemplate,
+  loadDeckTemplate, saveDeckTemplate,
 } from "@/services/threatApi";
 import { exportBoletimJSON } from "@/utils/boletimExport";
 import {
@@ -191,7 +192,9 @@ const JobListItem: React.FC<{
           </span>
         )}
         {j.status === "done" && (
-          <span className="rounded border px-1.5 py-0.5 font-mono text-[10px] uppercase text-muted-foreground shrink-0">{j.type}</span>
+          <span className="rounded border px-1.5 py-0.5 font-mono text-[10px] uppercase text-muted-foreground shrink-0">
+            {j.type}{j.template ? ` · ${j.template === "basico" ? (pt ? "básico" : "basic") : j.template === "premium" ? "premium" : (pt ? "avançado" : "advanced")}` : ""}
+          </span>
         )}
       </div>
       {j.status === "error" && (
@@ -247,6 +250,7 @@ const DailyBulletin: React.FC = () => {
   const requestedJobId = searchParams.get("job") || "";
   const [pasteUrl, setPasteUrl] = useState(() => searchParams.get("url") || "");
   const [pasteType, setPasteType] = useState<DeckType>("vuln");
+  const [deckTemplate, setDeckTemplate] = useState<DeckTemplate>(loadDeckTemplate);
   const [jobs, setJobs] = useState<BoletimJob[]>([]);
   const [picked, setPicked] = useState<string[]>([]);
   const [prefs, setPrefs] = useState<SuggestionPrefs>(loadPrefs);
@@ -345,14 +349,14 @@ const DailyBulletin: React.FC = () => {
     return () => clearInterval(t);
   }, [jobs]);
 
-  const generate = async (url: string, type: DeckType, title: string) => {
+  const generate = async (url: string, type: DeckType, title: string, template: DeckTemplate = deckTemplate) => {
     if (!auth?.authenticated) { toast.error(pt ? "Entre com o GitHub para gerar" : "Sign in with GitHub to generate"); return; }
     if (!/^https?:\/\//i.test(url)) { toast.error(pt ? "URL inválida" : "Invalid URL"); return; }
     try {
-      const { id } = await generateBoletim(url, type, title);
+      const { id } = await generateBoletim(url, type, title, template);
       const now = new Date().toISOString();
       setJobs((prev) => [
-        { id, url, type, title, status: "pending", json: null, error: null, createdAt: now, updatedAt: now },
+        { id, url, type, template, title, status: "pending", json: null, error: null, createdAt: now, updatedAt: now },
         ...prev,
       ]);
       toast.success(pt ? "Começou. O relatório abre aqui quando ficar pronto." : "Started. The report opens here when it's ready.");
@@ -416,7 +420,7 @@ const DailyBulletin: React.FC = () => {
     }
   };
 
-  const retryJob = (j: BoletimJob) => { generate(j.url, j.type, j.title); };
+  const retryJob = (j: BoletimJob) => { generate(j.url, j.type, j.title, j.template ?? deckTemplate); };
 
   // EST-02: a geração leva minutos e não tinha como desistir. Apagar o job é o
   // que o servidor já sabe fazer; o worker que estiver rodando termina sozinho e
@@ -476,6 +480,29 @@ const DailyBulletin: React.FC = () => {
                 <SelectContent>
                   <SelectItem value="vuln">{pt ? "Vulnerabilidade" : "Vulnerability"}</SelectItem>
                   <SelectItem value="campaign">{pt ? "Campanha" : "Campaign"}</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select
+                value={deckTemplate}
+                onValueChange={(v) => { setDeckTemplate(v as DeckTemplate); saveDeckTemplate(v as DeckTemplate); }}
+              >
+                <SelectTrigger
+                  data-testid="report-generator-template-trigger"
+                  aria-label={pt ? "Template do deck" : "Deck template"}
+                  className="h-10 w-[6.9rem] shrink-0 justify-between rounded-md border-0 bg-muted/60 px-2.5 text-xs font-medium shadow-none focus:ring-0 sm:w-[7.75rem]"
+                >
+                  <span className="truncate">
+                    {deckTemplate === "avancado"
+                      ? (pt ? "Avançado" : "Advanced")
+                      : deckTemplate === "premium"
+                        ? "Premium"
+                        : (pt ? "Básico" : "Basic")}
+                  </span>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="avancado">{pt ? "Template Avançado" : "Advanced template"}</SelectItem>
+                  <SelectItem value="basico">{pt ? "Template Básico (V2)" : "Basic template (V2)"}</SelectItem>
+                  <SelectItem value="premium">{pt ? "Template Premium (por subtipo)" : "Premium template (per subtype)"}</SelectItem>
                 </SelectContent>
               </Select>
               <Button onClick={() => { generate(pasteUrl.trim(), pasteType, ""); setPasteUrl(""); }} disabled={!pasteUrl.trim()} className="h-10 shrink-0 gap-2 rounded-md px-3 sm:px-4">

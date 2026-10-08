@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { isJobId, jobSummary, orphanDeckFiles, pruneJobsMap } from '../feedJobs.js';
+import { isJobId, jobSummary, normalizeDeckTemplate, orphanDeckFiles, pruneJobsMap } from '../feedJobs.js';
 
 const job = (id, status, ownerSub, day, extra = {}) => ({
     id,
@@ -97,4 +97,13 @@ test('varredura devolve só os decks sem job, inclusive o .tmp de gravação int
         'ffffffff-bbbb-4ccc-8ddd-eeeeeeeeeeee.pptx.tmp',
     ]);
     assert.deepEqual(orphanDeckFiles([], store), []);
+});
+
+test('normalizeDeckTemplate: avançado é o padrão, básico/premium só quando pedido', () => {
+    assert.equal(normalizeDeckTemplate(undefined), 'avancado');
+    assert.equal(normalizeDeckTemplate('avancado'), 'avancado');
+    assert.equal(normalizeDeckTemplate('Básico'), 'basico');
+    assert.equal(normalizeDeckTemplate('basic'), 'basico');
+    assert.equal(normalizeDeckTemplate('Premium'), 'premium');
+    assert.equal(normalizeDeckTemplate('qualquer'), 'avancado');
 });
