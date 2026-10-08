@@ -38,6 +38,19 @@ export function normalizeDeckTemplate(raw) {
     return 'avancado';
 }
 
+/**
+ * Tipo de boletim pedido: 'vuln', 'campaign' ou 'auto' (padrao -- o motor
+ * classifica sozinho depois de raspar a URL, mesma heuristica deterministica
+ * que ja e o padrao do proprio CLI do motor). Qualquer outro valor cai em
+ * 'auto': sem o campo, o pedido nao forca um tipo que pode estar errado.
+ */
+export function normalizeDeckRequestType(raw) {
+    const s = String(raw || '').trim().toLowerCase();
+    if (s === 'vuln' || s === 'vulnerability' || s === 'vulnerabilidade') return 'vuln';
+    if (s === 'campaign' || s === 'campanha') return 'campaign';
+    return 'auto';
+}
+
 /** Metadado do job sem o boletim. A lista carrega isso; o JSON só no detalhe. */
 export function jobSummary(job) {
     const { json, ...meta } = job || {};

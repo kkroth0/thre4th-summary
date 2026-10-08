@@ -1018,7 +1018,10 @@ export const fetchDnsLookup = async (domain: string): Promise<DnsLookupResult> =
 // ─── Boletim diário (Feed Generator) ───────────────────────────────────────
 // 1 URL = 1 boletim: o front escolhe uma URL -> o worker na VPS gera o JSON ->
 // download -> o .pptx oficial é preenchido localmente com os templates.
-export type DeckType = 'vuln' | 'campaign';
+// 'auto' só existe do lado do PEDIDO: o motor classifica sozinho depois de
+// raspar a URL (mesma heurística que já é o padrão do CLI dele), e o job que
+// volta pronto já traz o tipo concreto resolvido (deck_type no JSON).
+export type DeckType = 'vuln' | 'campaign' | 'auto';
 
 // Template do deck: 'avancado' = SRR novo (fundo branco, painéis, ícones e
 // números de destaque); 'basico' = SRR V2; 'premium' = um modelo fechado por

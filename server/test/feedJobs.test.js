@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { isJobId, jobSummary, normalizeDeckTemplate, orphanDeckFiles, pruneJobsMap } from '../feedJobs.js';
+import { isJobId, jobSummary, normalizeDeckRequestType, normalizeDeckTemplate, orphanDeckFiles, pruneJobsMap } from '../feedJobs.js';
 
 const job = (id, status, ownerSub, day, extra = {}) => ({
     id,
@@ -106,4 +106,14 @@ test('normalizeDeckTemplate: avançado é o padrão, básico/premium só quando 
     assert.equal(normalizeDeckTemplate('basic'), 'basico');
     assert.equal(normalizeDeckTemplate('Premium'), 'premium');
     assert.equal(normalizeDeckTemplate('qualquer'), 'avancado');
+});
+
+test('normalizeDeckRequestType: auto é o padrão, vuln/campaign só quando pedido', () => {
+    assert.equal(normalizeDeckRequestType(undefined), 'auto');
+    assert.equal(normalizeDeckRequestType('auto'), 'auto');
+    assert.equal(normalizeDeckRequestType('vuln'), 'vuln');
+    assert.equal(normalizeDeckRequestType('Vulnerabilidade'), 'vuln');
+    assert.equal(normalizeDeckRequestType('campaign'), 'campaign');
+    assert.equal(normalizeDeckRequestType('Campanha'), 'campaign');
+    assert.equal(normalizeDeckRequestType('qualquer'), 'auto');
 });

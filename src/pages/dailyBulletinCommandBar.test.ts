@@ -15,8 +15,11 @@ test("report generator uses a single-line desktop command bar", async () => {
 
   assert.match(commandBar, /sm:flex-row/);
   assert.match(commandBar, /sm:items-center/);
-  assert.match(commandBar, /data-testid="report-generator-type-trigger"/);
-  assert.match(commandBar, /pasteType === "vuln"/);
+  assert.match(commandBar, /data-testid="report-generator-template-trigger"/);
+  // Tipo (vuln/campanha) não tem mais seletor manual -- o motor classifica
+  // sozinho depois de raspar a URL; o pedido sempre manda "auto".
+  assert.doesNotMatch(commandBar, /data-testid="report-generator-type-trigger"/);
+  assert.match(commandBar, /generate\(pasteUrl\.trim\(\), "auto", ""\)/);
   assert.doesNotMatch(commandBar, /<SelectValue\s*\/>/);
   assert.doesNotMatch(commandBar, /flex-col gap-2 rounded-xl bg-muted\/40 p-2/);
 });

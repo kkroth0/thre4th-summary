@@ -249,7 +249,6 @@ const DailyBulletin: React.FC = () => {
   const [searchParams] = useSearchParams();
   const requestedJobId = searchParams.get("job") || "";
   const [pasteUrl, setPasteUrl] = useState(() => searchParams.get("url") || "");
-  const [pasteType, setPasteType] = useState<DeckType>("vuln");
   const [deckTemplate, setDeckTemplate] = useState<DeckTemplate>(loadDeckTemplate);
   const [jobs, setJobs] = useState<BoletimJob[]>([]);
   const [picked, setPicked] = useState<string[]>([]);
@@ -464,24 +463,14 @@ const DailyBulletin: React.FC = () => {
                   : "Paste a link to a security report or news post — you get the JSON for your slide"}
                 value={pasteUrl}
                 onChange={(e) => setPasteUrl(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter" && pasteUrl.trim()) { generate(pasteUrl.trim(), pasteType, ""); setPasteUrl(""); } }}
+                onKeyDown={(e) => { if (e.key === "Enter" && pasteUrl.trim()) { generate(pasteUrl.trim(), "auto", ""); setPasteUrl(""); } }}
                 className="h-10 min-w-0 flex-1 border-0 bg-transparent px-3 text-sm shadow-none focus-visible:ring-0"
               />
-              <Select value={pasteType} onValueChange={(v) => setPasteType(v as DeckType)}>
-                <SelectTrigger
-                  data-testid="report-generator-type-trigger"
-                  aria-label={pt ? "Tipo do relatório" : "Report type"}
-                  className="h-10 w-[6.9rem] shrink-0 justify-between rounded-md border-0 bg-muted/60 px-2.5 text-xs font-medium shadow-none focus:ring-0 sm:w-[7.75rem]"
-                >
-                  <span className="truncate">
-                    {pasteType === "vuln" ? (pt ? "Vuln." : "Vuln.") : (pt ? "Campanha" : "Campaign")}
-                  </span>
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="vuln">{pt ? "Vulnerabilidade" : "Vulnerability"}</SelectItem>
-                  <SelectItem value="campaign">{pt ? "Campanha" : "Campaign"}</SelectItem>
-                </SelectContent>
-              </Select>
+              {/* Tipo (vulnerabilidade/campanha) saiu do seletor manual: o motor já
+                  classifica sozinho (mesma heurística que é o padrão do próprio
+                  CLI), e manter os dois seletores lado a lado — tipo E template --
+                  tinha ficado redundante com o subtipo do premium já sendo
+                  inferido. O tipo resolvido aparece no badge do job depois. */}
               {/* Rótulo sempre visível: o seletor é a única pista de que dá pra
                   trocar o design do deck, e o aria-label só ajuda quem usa leitor
                   de tela. Sem isso, "Avançado"/"Básico"/"Premium" sozinho não diz
@@ -513,7 +502,7 @@ const DailyBulletin: React.FC = () => {
                   <SelectItem value="premium">{pt ? "Template Premium (por subtipo)" : "Premium template (per subtype)"}</SelectItem>
                 </SelectContent>
               </Select>
-              <Button onClick={() => { generate(pasteUrl.trim(), pasteType, ""); setPasteUrl(""); }} disabled={!pasteUrl.trim()} className="h-10 shrink-0 gap-2 rounded-md px-3 sm:px-4">
+              <Button onClick={() => { generate(pasteUrl.trim(), "auto", ""); setPasteUrl(""); }} disabled={!pasteUrl.trim()} className="h-10 shrink-0 gap-2 rounded-md px-3 sm:px-4">
                 <Sparkles className="h-4 w-4" /> {pt ? "Gerar Boletim" : "Generate Bulletin"}
               </Button>
             </div>

@@ -25,7 +25,7 @@ import { shodanAxios } from './shodanGate.js';
 import { otxThrottled, OTX_TIMEOUT_MS } from './otxGate.js';
 import { harvestResearchIocs, findMentions } from './newsIocs.js';
 import { groupByField, refsOfReport, relatedTo, techniqueCoverage } from './attackIndex.js';
-import { isJobId, jobSummary, normalizeDeckTemplate, orphanDeckFiles, pruneJobsMap } from './feedJobs.js';
+import { isJobId, jobSummary, normalizeDeckRequestType, normalizeDeckTemplate, orphanDeckFiles, pruneJobsMap } from './feedJobs.js';
 import { parseHearthData } from './hearth.js';
 import { parseSentinelTables, catalogSources } from './sentinelTables.js';
 import { parsePtbrHunt, isHuntPath } from './huntsPtbr.js';
@@ -2797,7 +2797,8 @@ function expireStaleJobs() {
 }
 
 // Front pede a geração de UMA url. Requer login + chave OpenRouter própria (BYOK).
-//   POST /api/feed/generate  { url, type, title?, template? }
+//   POST /api/feed/generate  { url, type?, title?, template? }
+// type: 'auto' (padrão -- o motor classifica) | 'vuln' | 'campaign'.
 // template: 'avancado' (SRR novo, padrão) | 'basico' (SRR V2) | 'premium' (um modelo por subtipo).
 app.post('/api/feed/generate', requirePremium, scanLimiter, async (req, res) => {
     try {
@@ -2808,7 +2809,7 @@ app.post('/api/feed/generate', requirePremium, scanLimiter, async (req, res) => 
             .filter(Boolean)
             .slice(0, MAX_STORY_SOURCES);
         const url = urls[0] || '';
-        const type = req.body?.type === 'campaign' ? 'campaign' : 'vuln';
+        const type = normalizeDeckRequestType(req.body?.type);
         const title = (req.body?.title || '').toString().slice(0, 300);
         const template = normalizeDeckTemplate(req.body?.template);
         if (!urls.length || !urls.every((u) => /^https?:\/\//i.test(u))) {
@@ -2965,6 +2966,12 @@ app.post('/api/feed/job/result', (req, res) => {
     else if (req.body?.json && typeof req.body.json === 'object') {
         job.status = 'done';
         job.json = req.body.json;
+        // O pedido pode ter sido 'auto' (motor decide depois de raspar a URL);
+        // o JSON que volta sempre tem o tipo concreto que o motor escolheu
+        // (deck_type), e é esse que o badge da lista deve mostrar -- não 'auto'.
+        if (job.json.deck_type === 'vuln' || job.json.deck_type === 'campaign') {
+            job.type = job.json.deck_type;
+        }
         // Indexa na entrega: é o único momento em que o boletim chega. Guardar
         // techniques/cves no job evita varrer o JSON inteiro a cada listagem.
         Object.assign(job, refsOfReport(job.json));
