@@ -16,8 +16,10 @@ test("report generator uses a single-line desktop command bar", async () => {
   assert.match(commandBar, /sm:flex-row/);
   assert.match(commandBar, /sm:items-center/);
   assert.match(commandBar, /data-testid="report-generator-template-trigger"/);
-  // Tipo (vuln/campanha) não tem mais seletor manual -- o motor classifica
-  // sozinho depois de raspar a URL; o pedido sempre manda "auto".
+  // Subtipo (malware/phishing/ransomware/cve_unica/cve_varias, ou automático)
+  // substitui o antigo seletor de tipo -- um subtipo concreto já implica o
+  // tipo, então não precisa escolher os dois.
+  assert.match(commandBar, /data-testid="report-generator-subtype-trigger"/);
   assert.doesNotMatch(commandBar, /data-testid="report-generator-type-trigger"/);
   assert.match(commandBar, /generate\(pasteUrl\.trim\(\), "auto", ""\)/);
   assert.doesNotMatch(commandBar, /<SelectValue\s*\/>/);

@@ -1025,9 +1025,8 @@ export type DeckType = 'vuln' | 'campaign' | 'auto';
 
 // Template do deck: 'avancado' = SRR novo (fundo branco, painéis, ícones e
 // números de destaque); 'basico' = SRR V2; 'premium' = um modelo fechado por
-// subtipo de ameaça (malware, phishing, ransomware/APT, CVE única ou várias —
-// o motor escolhe sozinho, o analista só pede "premium"). A escolha fica
-// salva no navegador.
+// subtipo de ameaça (malware, phishing, ransomware/APT, CVE única ou várias).
+// A escolha fica salva no navegador.
 export type DeckTemplate = 'avancado' | 'basico' | 'premium';
 const DECK_TEMPLATE_KEY = 'ts-deck-template';
 
@@ -1042,6 +1041,28 @@ export const loadDeckTemplate = (): DeckTemplate => {
 
 export const saveDeckTemplate = (template: DeckTemplate): void => {
     try { localStorage.setItem(DECK_TEMPLATE_KEY, template); } catch { /* modo privado */ }
+};
+
+// Subtipo do template premium (só importa quando DeckTemplate === 'premium'):
+// 'auto' (padrão) deixa o motor decidir pelo conteúdo do boletim; um valor
+// concreto também define o DeckType sozinho (phishing é sempre campanha,
+// cve_unica é sempre vulnerabilidade) -- o motor resolve isso, o front só
+// manda o subtipo.
+export type DeckSubtype = 'auto' | 'malware' | 'phishing' | 'ransomware' | 'cve_unica' | 'cve_varias';
+const DECK_SUBTYPE_KEY = 'ts-deck-subtype';
+const DECK_SUBTYPES: DeckSubtype[] = ['malware', 'phishing', 'ransomware', 'cve_unica', 'cve_varias'];
+
+export const loadDeckSubtype = (): DeckSubtype => {
+    try {
+        const raw = localStorage.getItem(DECK_SUBTYPE_KEY) as DeckSubtype | null;
+        return raw && DECK_SUBTYPES.includes(raw) ? raw : 'auto';
+    } catch {
+        return 'auto';
+    }
+};
+
+export const saveDeckSubtype = (subtype: DeckSubtype): void => {
+    try { localStorage.setItem(DECK_SUBTYPE_KEY, subtype); } catch { /* modo privado */ }
 };
 
 export interface DailySuggestion {
@@ -1118,6 +1139,7 @@ export interface BoletimJob {
     url: string;
     type: DeckType;
     template?: DeckTemplate;   // ausente em boletim anterior à escolha de template
+    subtype?: DeckSubtype;     // só com template premium; ausente/'auto' = motor escolheu
     title: string;
     status: 'pending' | 'done' | 'error';
     json: BoletimReport | null;
@@ -1153,11 +1175,12 @@ export const deleteJob = async (id: string): Promise<void> => {
 /** `urls` é uma story consolidada; uma URL só continua valendo. */
 export const generateBoletim = async (
     urls: string | string[], type: DeckType, title = '', template: DeckTemplate = loadDeckTemplate(),
+    subtype: DeckSubtype = 'auto',
 ): Promise<{ id: string; status: string }> => {
     const r = await fetch('/api/feed/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ urls: Array.isArray(urls) ? urls : [urls], type, title, template }),
+        body: JSON.stringify({ urls: Array.isArray(urls) ? urls : [urls], type, title, template, subtype }),
     });
     if (!r.ok) {
         const e = await r.json().catch(() => ({}));

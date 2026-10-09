@@ -51,6 +51,20 @@ export function normalizeDeckRequestType(raw) {
     return 'auto';
 }
 
+const DECK_SUBTYPES = ['malware', 'phishing', 'ransomware', 'cve_unica', 'cve_varias'];
+
+/**
+ * Subtipo do template premium, pedido manualmente em vez do automático:
+ * 'malware', 'phishing', 'ransomware', 'cve_unica' ou 'cve_varias'. Padrão
+ * 'auto' -- o motor decide pelo conteúdo do boletim (--subtype no motor).
+ * Um subtipo concreto já implica o tipo (phishing é sempre campaign,
+ * cve_unica é sempre vuln); é o motor que resolve isso, não aqui.
+ */
+export function normalizeDeckSubtype(raw) {
+    const s = String(raw || '').trim().toLowerCase().replace(/[\s-]+/g, '_');
+    return DECK_SUBTYPES.includes(s) ? s : 'auto';
+}
+
 /** Metadado do job sem o boletim. A lista carrega isso; o JSON só no detalhe. */
 export function jobSummary(job) {
     const { json, ...meta } = job || {};

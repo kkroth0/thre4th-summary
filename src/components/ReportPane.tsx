@@ -194,6 +194,17 @@ export function ReportPane({ job }: { job: BoletimJob | null }) {
                 : (pt ? "Template avançado" : "Advanced template")}
           </Badge>
         )}
+        {job.subtype && job.subtype !== "auto" && (
+          <Badge variant="outline" className="text-[10px]">
+            {{
+              malware: "Malware/Infostealer",
+              phishing: "Phishing",
+              ransomware: "Ransomware/APT",
+              cve_unica: pt ? "CVE única" : "Single CVE",
+              cve_varias: pt ? "Várias CVEs" : "Multi-CVE",
+            }[job.subtype]}
+          </Badge>
+        )}
         {r.generated_at && (
           <span className="text-xs text-muted-foreground" title={pt ? "Geração do boletim" : "Report generated"}>
             {fmtDate(r.generated_at, pt)}

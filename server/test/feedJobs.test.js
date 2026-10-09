@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { isJobId, jobSummary, normalizeDeckRequestType, normalizeDeckTemplate, orphanDeckFiles, pruneJobsMap } from '../feedJobs.js';
+import { isJobId, jobSummary, normalizeDeckRequestType, normalizeDeckSubtype, normalizeDeckTemplate, orphanDeckFiles, pruneJobsMap } from '../feedJobs.js';
 
 const job = (id, status, ownerSub, day, extra = {}) => ({
     id,
@@ -116,4 +116,16 @@ test('normalizeDeckRequestType: auto é o padrão, vuln/campaign só quando pedi
     assert.equal(normalizeDeckRequestType('campaign'), 'campaign');
     assert.equal(normalizeDeckRequestType('Campanha'), 'campaign');
     assert.equal(normalizeDeckRequestType('qualquer'), 'auto');
+});
+
+test('normalizeDeckSubtype: auto é o padrão, subtipo concreto só quando pedido', () => {
+    assert.equal(normalizeDeckSubtype(undefined), 'auto');
+    assert.equal(normalizeDeckSubtype('auto'), 'auto');
+    assert.equal(normalizeDeckSubtype('malware'), 'malware');
+    assert.equal(normalizeDeckSubtype('Phishing'), 'phishing');
+    assert.equal(normalizeDeckSubtype('ransomware'), 'ransomware');
+    assert.equal(normalizeDeckSubtype('cve_unica'), 'cve_unica');
+    assert.equal(normalizeDeckSubtype('cve-unica'), 'cve_unica');
+    assert.equal(normalizeDeckSubtype('CVE Varias'), 'cve_varias');
+    assert.equal(normalizeDeckSubtype('qualquer'), 'auto');
 });

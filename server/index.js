@@ -25,7 +25,7 @@ import { shodanAxios } from './shodanGate.js';
 import { otxThrottled, OTX_TIMEOUT_MS } from './otxGate.js';
 import { harvestResearchIocs, findMentions } from './newsIocs.js';
 import { groupByField, refsOfReport, relatedTo, techniqueCoverage } from './attackIndex.js';
-import { isJobId, jobSummary, normalizeDeckRequestType, normalizeDeckTemplate, orphanDeckFiles, pruneJobsMap } from './feedJobs.js';
+import { isJobId, jobSummary, normalizeDeckRequestType, normalizeDeckSubtype, normalizeDeckTemplate, orphanDeckFiles, pruneJobsMap } from './feedJobs.js';
 import { parseHearthData } from './hearth.js';
 import { parseSentinelTables, catalogSources } from './sentinelTables.js';
 import { parsePtbrHunt, isHuntPath } from './huntsPtbr.js';
@@ -2797,9 +2797,11 @@ function expireStaleJobs() {
 }
 
 // Front pede a geração de UMA url. Requer login + chave OpenRouter própria (BYOK).
-//   POST /api/feed/generate  { url, type?, title?, template? }
+//   POST /api/feed/generate  { url, type?, title?, template?, subtype? }
 // type: 'auto' (padrão -- o motor classifica) | 'vuln' | 'campaign'.
 // template: 'avancado' (SRR novo, padrão) | 'basico' (SRR V2) | 'premium' (um modelo por subtipo).
+// subtype (só importa com template premium): 'auto' (padrão) | 'malware' |
+// 'phishing' | 'ransomware' | 'cve_unica' | 'cve_varias'.
 app.post('/api/feed/generate', requirePremium, scanLimiter, async (req, res) => {
     try {
         // Mesma forma do /api/newsletter/enrich: `urls` é a story consolidada,
@@ -2812,6 +2814,7 @@ app.post('/api/feed/generate', requirePremium, scanLimiter, async (req, res) => 
         const type = normalizeDeckRequestType(req.body?.type);
         const title = (req.body?.title || '').toString().slice(0, 300);
         const template = normalizeDeckTemplate(req.body?.template);
+        const subtype = normalizeDeckSubtype(req.body?.subtype);
         if (!urls.length || !urls.every((u) => /^https?:\/\//i.test(u))) {
             return res.status(400).json({ error: 'url http(s) obrigatória' });
         }
@@ -2838,7 +2841,7 @@ app.post('/api/feed/generate', requirePremium, scanLimiter, async (req, res) => 
         }
         const id = crypto.randomUUID();
         const now = new Date().toISOString();
-        jobsStore[id] = { id, ownerSub: req.user.sub, url, urls, type, template, title, status: 'pending', json: null, error: null, createdAt: now, updatedAt: now };
+        jobsStore[id] = { id, ownerSub: req.user.sub, url, urls, type, template, subtype, title, status: 'pending', json: null, error: null, createdAt: now, updatedAt: now };
         pruneJobs();
         saveJobs();
         res.json({ id, status: 'pending' });
@@ -2951,6 +2954,8 @@ app.get('/api/feed/jobs/pending', (req, res) => {
             type: j.type,
             // Job anterior ao campo sai no padrão do motor (SRR_TEMPLATE do worker).
             ...(j.template ? { template: j.template } : {}),
+            // Só importa com template premium; 'auto' (padrão) o motor escolhe.
+            ...(j.subtype && j.subtype !== 'auto' ? { subtype: j.subtype } : {}),
             title: j.title,
             ...(workerModel ? { model: workerModel } : {}),
         }));

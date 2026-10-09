@@ -29,8 +29,8 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import {
   fetchDailySuggestions, generateBoletim, fetchJob, fetchJobList, deleteJob,
-  type DailySuggestion, type BoletimJob, type DeckType, type DeckTemplate,
-  loadDeckTemplate, saveDeckTemplate,
+  type DailySuggestion, type BoletimJob, type DeckType, type DeckTemplate, type DeckSubtype,
+  loadDeckTemplate, saveDeckTemplate, loadDeckSubtype, saveDeckSubtype,
 } from "@/services/threatApi";
 import { exportBoletimJSON } from "@/utils/boletimExport";
 import {
@@ -194,6 +194,7 @@ const JobListItem: React.FC<{
         {j.status === "done" && (
           <span className="rounded border px-1.5 py-0.5 font-mono text-[10px] uppercase text-muted-foreground shrink-0">
             {j.type}{j.template ? ` · ${j.template === "basico" ? (pt ? "básico" : "basic") : j.template === "premium" ? "premium" : (pt ? "avançado" : "advanced")}` : ""}
+            {j.subtype && j.subtype !== "auto" ? ` · ${j.subtype}` : ""}
           </span>
         )}
       </div>
@@ -250,6 +251,7 @@ const DailyBulletin: React.FC = () => {
   const requestedJobId = searchParams.get("job") || "";
   const [pasteUrl, setPasteUrl] = useState(() => searchParams.get("url") || "");
   const [deckTemplate, setDeckTemplate] = useState<DeckTemplate>(loadDeckTemplate);
+  const [deckSubtype, setDeckSubtype] = useState<DeckSubtype>(loadDeckSubtype);
   const [jobs, setJobs] = useState<BoletimJob[]>([]);
   const [picked, setPicked] = useState<string[]>([]);
   const [prefs, setPrefs] = useState<SuggestionPrefs>(loadPrefs);
@@ -348,14 +350,17 @@ const DailyBulletin: React.FC = () => {
     return () => clearInterval(t);
   }, [jobs]);
 
-  const generate = async (url: string, type: DeckType, title: string, template: DeckTemplate = deckTemplate) => {
+  const generate = async (
+    url: string, type: DeckType, title: string, template: DeckTemplate = deckTemplate,
+    subtype: DeckSubtype = deckSubtype,
+  ) => {
     if (!auth?.authenticated) { toast.error(pt ? "Entre com o GitHub para gerar" : "Sign in with GitHub to generate"); return; }
     if (!/^https?:\/\//i.test(url)) { toast.error(pt ? "URL inválida" : "Invalid URL"); return; }
     try {
-      const { id } = await generateBoletim(url, type, title, template);
+      const { id } = await generateBoletim(url, type, title, template, subtype);
       const now = new Date().toISOString();
       setJobs((prev) => [
-        { id, url, type, template, title, status: "pending", json: null, error: null, createdAt: now, updatedAt: now },
+        { id, url, type, template, subtype, title, status: "pending", json: null, error: null, createdAt: now, updatedAt: now },
         ...prev,
       ]);
       toast.success(pt ? "Começou. O relatório abre aqui quando ficar pronto." : "Started. The report opens here when it's ready.");
@@ -419,7 +424,9 @@ const DailyBulletin: React.FC = () => {
     }
   };
 
-  const retryJob = (j: BoletimJob) => { generate(j.url, j.type, j.title, j.template ?? deckTemplate); };
+  const retryJob = (j: BoletimJob) => {
+    generate(j.url, j.type, j.title, j.template ?? deckTemplate, j.subtype ?? deckSubtype);
+  };
 
   // EST-02: a geração leva minutos e não tinha como desistir. Apagar o job é o
   // que o servidor já sabe fazer; o worker que estiver rodando termina sozinho e
@@ -466,11 +473,44 @@ const DailyBulletin: React.FC = () => {
                 onKeyDown={(e) => { if (e.key === "Enter" && pasteUrl.trim()) { generate(pasteUrl.trim(), "auto", ""); setPasteUrl(""); } }}
                 className="h-10 min-w-0 flex-1 border-0 bg-transparent px-3 text-sm shadow-none focus-visible:ring-0"
               />
-              {/* Tipo (vulnerabilidade/campanha) saiu do seletor manual: o motor já
-                  classifica sozinho (mesma heurística que é o padrão do próprio
-                  CLI), e manter os dois seletores lado a lado — tipo E template --
-                  tinha ficado redundante com o subtipo do premium já sendo
-                  inferido. O tipo resolvido aparece no badge do job depois. */}
+              {/* Tipo (vulnerabilidade/campanha) não tem seletor PRÓPRIO: o motor
+                  classifica sozinho por padrão (mesma heurística do CLI), e um
+                  subtipo concreto do seletor abaixo já implica o tipo (phishing é
+                  sempre campanha, cve_unica é sempre vulnerabilidade) -- não faz
+                  sentido escolher os dois separado quando um decide o outro. */}
+              <span className="hidden shrink-0 pl-1.5 text-xs text-muted-foreground sm:inline">
+                Subtipo:
+              </span>
+              <Select
+                value={deckSubtype}
+                onValueChange={(v) => { setDeckSubtype(v as DeckSubtype); saveDeckSubtype(v as DeckSubtype); }}
+              >
+                <SelectTrigger
+                  data-testid="report-generator-subtype-trigger"
+                  aria-label={pt ? "Subtipo da ameaça" : "Threat subtype"}
+                  title={pt ? "Escolha o subtipo (ou deixe automático)" : "Choose the subtype (or leave it automatic)"}
+                  className="h-10 w-[7.5rem] shrink-0 justify-between rounded-md border-0 bg-muted/60 px-2.5 text-xs font-medium shadow-none focus:ring-0 sm:w-[8.5rem]"
+                >
+                  <span className="truncate">
+                    {{
+                      auto: pt ? "Automático" : "Automatic",
+                      malware: "Malware",
+                      phishing: "Phishing",
+                      ransomware: "Ransomware",
+                      cve_unica: pt ? "CVE única" : "Single CVE",
+                      cve_varias: pt ? "Várias CVEs" : "Multi-CVE",
+                    }[deckSubtype]}
+                  </span>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="auto">{pt ? "Automático (padrão)" : "Automatic (default)"}</SelectItem>
+                  <SelectItem value="malware">Malware/Infostealer</SelectItem>
+                  <SelectItem value="phishing">Phishing</SelectItem>
+                  <SelectItem value="ransomware">Ransomware/APT</SelectItem>
+                  <SelectItem value="cve_unica">{pt ? "Vulnerabilidade (CVE única)" : "Vulnerability (single CVE)"}</SelectItem>
+                  <SelectItem value="cve_varias">{pt ? "Vulnerabilidade (várias CVEs)" : "Vulnerability (multiple CVEs)"}</SelectItem>
+                </SelectContent>
+              </Select>
               {/* Rótulo sempre visível: o seletor é a única pista de que dá pra
                   trocar o design do deck, e o aria-label só ajuda quem usa leitor
                   de tela. Sem isso, "Avançado"/"Básico"/"Premium" sozinho não diz
@@ -708,7 +748,10 @@ const DailyBulletin: React.FC = () => {
                     </a>
                     {s.kev && <ShieldAlert className="h-3.5 w-3.5 text-red-500 shrink-0" aria-label="CISA KEV" />}
                     {s.cves?.[0] && <span className="hidden xl:inline text-[11px] font-mono text-muted-foreground shrink-0">{s.cves[0]}</span>}
-                    <Button size="sm" variant="ghost" onClick={() => generate(s.url, s.suggestedType, s.title)} className="h-7 px-2 text-primary shrink-0 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+                    {/* subtype "auto" explícito: suggestedType já vem resolvido pelo
+                        próprio servidor, e herdar o subtipo manual da barra (se houver
+                        um concreto) forçaria um tipo que pode contradizer suggestedType. */}
+                    <Button size="sm" variant="ghost" onClick={() => generate(s.url, s.suggestedType, s.title, deckTemplate, "auto")} className="h-7 px-2 text-primary shrink-0 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
                       <Sparkles className="h-3.5 w-3.5 mr-1" /> {pt ? "Gerar Boletim" : "Generate Bulletin"}
                     </Button>
                   </div>
