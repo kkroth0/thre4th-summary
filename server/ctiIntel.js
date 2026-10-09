@@ -184,11 +184,37 @@ const ATTACK_TTPS = {
     'T1027 — Obfuscated Files or Information': ['obfuscation', 'obfuscated', 'ofuscação', 'ofuscado'],
 };
 
+// Sub-técnicas de phishing, pro dashboard de tendências poder quebrar por
+// técnica (não só contar quantos artigos a categoria Phishing pegou). Mesmo
+// vocabulário do newsCategories.js's PHISHING, quebrado por rótulo em vez de
+// um OR só — propósito diferente (breakdown, não um boolean de categoria).
+const PHISHING_TECHNIQUES = {
+    'ClickFix': ['clickfix'],
+    'AiTM / Adversary-in-the-Middle': ['aitm', 'adversary-in-the-middle', 'adversary in the middle'],
+    'Device Code Phishing': ['device code phishing', 'device code attack'],
+    'Browser-in-the-Browser': ['bitb', 'browser-in-the-browser', 'browser in the browser'],
+    'Vishing': ['vishing'],
+    'Smishing': ['smishing'],
+    'Quishing': ['quishing'],
+    'OAuth Consent Phishing': ['oauth consent phishing', 'oauth consent'],
+    'Phishing-as-a-Service': ['phaas', 'phishing-as-a-service', 'phishing as a service', 'phishing kit'],
+    'Business Email Compromise': ['business email compromise', 'bec'],
+    'Brand Impersonation': ['brand impersonation'],
+    'Credential Harvesting': ['credential harvesting', 'credential phishing'],
+    'Malvertising': ['malvertising'],
+    'Tech Support Scam': ['tech support scam'],
+    'Pig Butchering': ['pig butchering'],
+    'Callback Phishing': ['callback phishing'],
+    'Typosquatting': ['typosquatting'],
+    'Fake Recruiter / Job Lure': ['fake recruiter', 'job lure'],
+};
+
 // Pre-compile each label -> single word-boundary regex over its keywords
 export const compileLabelMap = (map) =>
     Object.entries(map).map(([label, terms]) => ({ label, re: buildRe(terms, true) }));
 export const SECTOR_RULES = compileLabelMap(TARGET_SECTORS);
 const TTP_RULES = compileLabelMap(ATTACK_TTPS);
+const PHISHING_TECHNIQUE_RULES = compileLabelMap(PHISHING_TECHNIQUES);
 
 // scoreArticle's ttps are display labels ("T1566 — Phishing"), always built
 // from this file's own ATTACK_TTPS keys — so the id is reliably the prefix
@@ -504,6 +530,7 @@ export function scoreArticle(text, weightBoost = 0) {
         threats: matchLabels(lower, THREAT_RULES),
         sectors: matchLabels(lower, SECTOR_RULES),
         ttps: matchLabels(lower, TTP_RULES),
+        phishingTechniques: matchLabels(lower, PHISHING_TECHNIQUE_RULES),
         assets: [...new Set(assets)],
     };
 }

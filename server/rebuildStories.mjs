@@ -60,6 +60,10 @@ for (const story of stories) {
             // (T####), não os rótulos do scoreArticle, então vão direto.
             iocs: source.iocs || null,
             ttpIds: [...(source.ttps || [])],
+            // Não é sinal de merge (newsStories.js nunca lê isto em
+            // signals()), então basta copiar — nenhum rebuild precisa
+            // re-extrair da fonte, que de qualquer forma não é guardada.
+            sellerHandle: source.sellerHandle || null,
         };
         item.actors = matchActors(item.title, index);
         item.malware = matchMalware(item.title, malwareIndex);

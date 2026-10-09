@@ -61,10 +61,12 @@ import { buildActorIndex, matchActors } from './actorMatch.js';
 import { buildMalwareIndex, matchMalware } from './malwareMatch.js';
 import { buildCampaignIndex, matchCampaigns } from './campaignMatch.js';
 import { explainCorrelation } from './correlationEvidence.js';
+import { extractSellerHandle, findRelatedBySeller, storySellerHandle } from './darkWebHandle.js';
 import { categorize } from './newsCategories.js';
 import { mergeIntoStories } from './newsStories.js';
 import { parseFeed } from './feedParse.js';
 import { createStoryStore } from './newsStoryStore.js';
+import { createNewsArchiveStore } from './newsArchiveStore.js';
 import {
     PHISH_LIMITS, createPhishWatchStore, createUrlscanSearch, runDuePhishWatch, runProfileWatch,
     createDnsResolver, recheckHitsDns,
@@ -145,6 +147,8 @@ const dailyEditionStore = createEditionStore({ filePath: DAILY_SUMMARIES_PATH, w
 
 const NEWS_STORIES_PATH = path.join(__dirname, '.news-stories.json');
 const newsStoryStore = createStoryStore({ filePath: NEWS_STORIES_PATH, readFileSync: fs.readFileSync, writeJsonAtomic });
+const NEWS_ARCHIVE_PATH = path.join(__dirname, '.news-archive.json');
+const newsArchiveStore = createNewsArchiveStore({ filePath: NEWS_ARCHIVE_PATH, readFileSync: fs.readFileSync, writeJsonAtomic });
 
 const PHISH_WATCH_PATH = path.join(__dirname, '.phish-watch.json');
 const phishWatchStore = createPhishWatchStore({ filePath: PHISH_WATCH_PATH, readFileSync: fs.readFileSync, writeJsonAtomic });
@@ -1904,6 +1908,7 @@ async function refreshNewsletterFeed() {
                 // via the `...intel` spread above) — this just derives the
                 // stable T#### ids newsStories.js compares across articles.
                 item.ttpIds = ttpIdsFrom(item.ttps);
+                item.sellerHandle = extractSellerHandle(`${item.title} ${paraAtor}`);
                 const { categories, primary } = categorize(item);
                 item.newsCategories = categories;
                 item.primaryCategory = primary;
@@ -1913,6 +1918,20 @@ async function refreshNewsletterFeed() {
             newsStoryStore.save(stories);
             const storyByLink = new Map(stories.flatMap((story) => story.sources.map((source) => [source.link, story.id])));
             for (const item of unifiedFeed) item.storyId = storyByLink.get(item.link) || null;
+
+            // Arquivo permanente: todo item que passou pelo boletim entra aqui
+            // pra sempre (newsStoryStore acima só guarda 60 dias) — link,
+            // título, fonte, data e categorias, consultável via
+            // /api/news/archive e exportável.
+            newsArchiveStore.add(unifiedFeed.map((item) => ({
+                link: item.link,
+                title: item.title,
+                source: item.source,
+                pubDate: item.pubDate,
+                categories: item.newsCategories,
+                primaryCategory: item.primaryCategory,
+                phishingTechniques: item.phishingTechniques,
+            })));
         } catch (error) {
             console.error('news story grouping failed:', error.message);
         }
@@ -1980,6 +1999,30 @@ app.get('/api/news/stories', requirePremium, async (req, res) => {
     }
 });
 
+// Arquivo permanente do feed (link, título, fonte, data, categorias) — nunca
+// podado, ao contrário de /api/news/stories (60 dias). Alimenta o dashboard
+// de tendências de phishing e a exportação em /phishing-analyzer, mas serve
+// qualquer categoria, não só Phishing.
+//   GET /api/news/archive?category=Phishing&from=2026-08-01&to=2026-10-08
+app.get('/api/news/archive', requirePremium, (req, res) => {
+    try {
+        res.set('Cache-Control', 'private, max-age=300');
+        res.json({
+            total: newsArchiveStore.size(),
+            rows: newsArchiveStore.list({
+                category: (req.query.category || '').toString() || undefined,
+                source: (req.query.source || '').toString() || undefined,
+                from: (req.query.from || '').toString() || undefined,
+                to: (req.query.to || '').toString() || undefined,
+                limit: Math.min(parseInt(req.query.limit, 10) || 5000, 20000),
+            }),
+        });
+    } catch (error) {
+        const { status, message } = sanitizeError(error);
+        res.status(status).json({ error: message });
+    }
+});
+
 // Quem já mencionou este indicador. Alimenta o Enriquecimento: o achado que
 // interessa não é "o IP existe", é "saiu no Unit 42, atribuído ao FunkSec".
 // requirePremium igual às outras rotas de notícia — é o mesmo acervo.
@@ -2001,7 +2044,15 @@ app.get('/api/news/stories/:id', requirePremium, (req, res) => {
     const story = newsStoryStore.get(String(req.params.id));
     if (!story) return res.status(404).json({ error: 'story not found' });
     res.set('Cache-Control', 'public, max-age=300');
-    res.json({ ...story, correlationEvidence: explainCorrelation(story) });
+    const sellerHandle = storySellerHandle(story);
+    res.json({
+        ...story,
+        correlationEvidence: explainCorrelation(story),
+        // Relacionado, não fundido: outra história do mesmo vendedor de dark
+        // web é informação real, mas vítimas diferentes não são a mesma
+        // notícia (ver darkWebHandle.js).
+        relatedBySeller: sellerHandle ? findRelatedBySeller(newsStoryStore.all(), sellerHandle, story.id) : [],
+    });
 });
 
 // ─── Feed Generator · sugestões do boletim diário ─────────────────────────

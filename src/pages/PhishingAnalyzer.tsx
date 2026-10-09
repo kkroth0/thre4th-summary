@@ -23,6 +23,7 @@ import { detectTyposquat } from "@/utils/typosquat";
 import { exportIOCsJSON, exportIOCsSTIX } from "@/utils/threatExport";
 import { BrandHunt } from "@/components/phishing/BrandHunt";
 import { PhishTickets } from "@/components/phishing/PhishTickets";
+import { PhishingTrends } from "@/components/phishing/PhishingTrends";
 
 interface ScoreSignal {
   label: string;
@@ -168,7 +169,7 @@ const PhishingAnalyzer = () => {
   // A página tem dois trabalhos: analisar um e-mail que chegou, e caçar domínio
   // de phishing antes de ele chegar. As abas de dentro pertencem ao e-mail
   // analisado, então a troca de trabalho mora aqui em cima.
-  const [mode, setMode] = useState<"eml" | "hunt" | "tickets">("eml");
+  const [mode, setMode] = useState<"eml" | "hunt" | "tickets" | "trends">("eml");
   const [fileName, setFileName] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   // Live threat-intel enrichment (reuses the main scan engine).
@@ -607,6 +608,7 @@ const PhishingAnalyzer = () => {
               { key: "eml" as const, label: language === "pt" ? "Analisar e-mail" : "Analyze email" },
               { key: "hunt" as const, label: language === "pt" ? "Caça a domínios" : "Domain hunt" },
               { key: "tickets" as const, label: language === "pt" ? "Tickets" : "Tickets" },
+              { key: "trends" as const, label: language === "pt" ? "Tendências" : "Trends" },
             ]).map((tab) => (
               <button
                 key={tab.key}
@@ -624,6 +626,8 @@ const PhishingAnalyzer = () => {
             <PhishTickets />
           ) : mode === "hunt" ? (
             <BrandHunt />
+          ) : mode === "trends" ? (
+            <PhishingTrends />
           ) : !parsedData ? (
             /* Dropzone and Sample Loader Card */
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

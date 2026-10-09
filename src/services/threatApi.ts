@@ -2236,14 +2236,59 @@ export interface CorrelationEvidence {
     sourceLinks: string[];
 }
 
-// Por que o servidor agrupou estas fontes numa história só — calculado sob
-// demanda (não no feed plano, que tem ~1200 itens por refresh) quando o
-// usuário expande um card com mais de uma fonte. Falha aqui não pode escalar:
-// o card já mostra a timeline de fontes sem isto, é só a explicação que falta.
-export const fetchStoryCorrelation = async (storyId: string): Promise<CorrelationEvidence[]> => {
+export interface RelatedBySeller {
+    storyId: string;
+    title: string;
+    link: string | null;
+}
+
+export interface StoryDetail {
+    correlationEvidence: CorrelationEvidence[];
+    // Outra história do mesmo vendedor de dark web (handle extraído da frase
+    // "an actor using the handle 'X'") — relacionada, NUNCA fundida: vítimas
+    // diferentes continuam sendo notícias diferentes (ver server/darkWebHandle.js).
+    relatedBySeller: RelatedBySeller[];
+}
+
+// Por que o servidor agrupou estas fontes numa história só, e quais outras
+// histórias compartilham o mesmo vendedor de dark web — calculado sob demanda
+// (não no feed plano, que tem ~1200 itens por refresh) quando o usuário
+// expande um card com mais de uma fonte. Falha aqui não pode escalar: o card
+// já mostra a timeline de fontes sem isto, é só a explicação que falta.
+export const fetchStoryDetail = async (storyId: string): Promise<StoryDetail> => {
+    const empty: StoryDetail = { correlationEvidence: [], relatedBySeller: [] };
     const response = await fetch(`/api/news/stories/${encodeURIComponent(storyId)}`);
-    if (!response.ok) return [];
-    return (await response.json()).correlationEvidence || [];
+    if (!response.ok) return empty;
+    const data = await response.json();
+    return { correlationEvidence: data.correlationEvidence || [], relatedBySeller: data.relatedBySeller || [] };
+};
+
+export interface NewsArchiveRow {
+    link: string;
+    title: string;
+    source: string;
+    pubDate: string;
+    categories: string[];
+    primaryCategory: string | null;
+    phishingTechniques: string[];
+    archivedAt: string;
+}
+
+// Arquivo permanente do feed (nunca podado, ao contrário do /api/newsletter
+// de 10 min e do /api/news/stories de 60 dias). Usado pelo dashboard de
+// tendências de phishing e pela exportação em /phishing-analyzer.
+export const fetchNewsArchive = async (
+    params: { category?: string; source?: string; from?: string; to?: string; limit?: number } = {},
+): Promise<{ total: number; rows: NewsArchiveRow[] }> => {
+    const query = new URLSearchParams();
+    if (params.category) query.set('category', params.category);
+    if (params.source) query.set('source', params.source);
+    if (params.from) query.set('from', params.from);
+    if (params.to) query.set('to', params.to);
+    if (params.limit) query.set('limit', String(params.limit));
+    const response = await fetch(`/api/news/archive${query.toString() ? `?${query}` : ''}`);
+    if (!response.ok) throw new Error(`News archive API error: ${response.status}`);
+    return response.json();
 };
 
 export const ENRICHMENT_VENDORS = [

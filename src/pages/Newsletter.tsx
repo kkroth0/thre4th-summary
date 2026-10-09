@@ -21,7 +21,7 @@ import { cn } from "@/lib/utils";
 import { NEWS_CATEGORY_ORDER, countByCategory, filterNewsletterAdvisories, filterStoryCards, groupAdvisoriesIntoStories, severityEvidence, activeFilterChips, TIME_RANGES } from "./newsletterView";
 import type { TimeRange } from "./newsletterView";
 import type { StoryCard } from "./newsletterView";
-import { generateBoletim, saveKnowledge, fetchStoryCorrelation, type CorrelationEvidence, type CorrelationEvidenceType } from "@/services/threatApi";
+import { generateBoletim, saveKnowledge, fetchStoryDetail, type StoryDetail, type CorrelationEvidenceType } from "@/services/threatApi";
 import { useOrgProfile } from "@/hooks/useOrgProfile";
 import { annotateOrg, type OrgMatch } from "@/utils/orgRelevance";
 
@@ -419,7 +419,7 @@ const Newsletter = () => {
   // ── Actionable analysis: expand + lazy LLM enrichment + share ──
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [enrichment, setEnrichment] = useState<Record<string, { loading: boolean; data?: EnrichData }>>({});
-  const [correlation, setCorrelation] = useState<Record<string, { loading: boolean; data?: CorrelationEvidence[] }>>({});
+  const [correlation, setCorrelation] = useState<Record<string, { loading: boolean; data?: StoryDetail }>>({});
 
   // storyId do servidor é um sha1(link) de 12 hex (ver newsStories.js). O
   // agrupamento do cliente (newsletterView.ts) também produz chaves sintéticas
@@ -427,17 +427,18 @@ const Newsletter = () => {
   // não têm uma Story persistida no servidor pra explicar.
   const isServerStoryId = (id: string) => /^[0-9a-f]{12}$/.test(id);
 
-  const getCorrelation = async (storyId: string): Promise<CorrelationEvidence[]> => {
+  const getCorrelation = async (storyId: string): Promise<StoryDetail> => {
     const cached = correlation[storyId]?.data;
     if (cached) return cached;
     setCorrelation(p => ({ ...p, [storyId]: { loading: true } }));
+    const empty: StoryDetail = { correlationEvidence: [], relatedBySeller: [] };
     try {
-      const data = await fetchStoryCorrelation(storyId);
+      const data = await fetchStoryDetail(storyId);
       setCorrelation(p => ({ ...p, [storyId]: { loading: false, data } }));
       return data;
     } catch {
-      setCorrelation(p => ({ ...p, [storyId]: { loading: false, data: [] } }));
-      return [];
+      setCorrelation(p => ({ ...p, [storyId]: { loading: false, data: empty } }));
+      return empty;
     }
   };
 
@@ -1195,19 +1196,43 @@ const Newsletter = () => {
                                     <div className="mt-2 text-[11px] text-muted-foreground">
                                       {language === "pt" ? "Calculando correlação…" : "Computing correlation…"}
                                     </div>
-                                  ) : (correlation[card.storyId]?.data ?? []).length > 0 && (
-                                    <div className="mt-2 flex flex-wrap gap-1.5">
-                                      {correlation[card.storyId]!.data!.map((ev, i) => (
-                                        <span
-                                          key={`${ev.type}-${ev.value}-${i}`}
-                                          title={ev.sourceLinks.join(", ")}
-                                          className="inline-flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[11px] text-emerald-700 dark:text-emerald-400"
-                                        >
-                                          <CheckCircle2 className="h-3 w-3" />
-                                          {EVIDENCE_LABEL[ev.type]?.[language === "pt" ? "pt" : "en"] ?? ev.type}: {ev.value}
-                                        </span>
-                                      ))}
-                                    </div>
+                                  ) : (
+                                    <>
+                                      {(correlation[card.storyId]?.data?.correlationEvidence ?? []).length > 0 && (
+                                        <div className="mt-2 flex flex-wrap gap-1.5">
+                                          {correlation[card.storyId]!.data!.correlationEvidence.map((ev, i) => (
+                                            <span
+                                              key={`${ev.type}-${ev.value}-${i}`}
+                                              title={ev.sourceLinks.join(", ")}
+                                              className="inline-flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[11px] text-emerald-700 dark:text-emerald-400"
+                                            >
+                                              <CheckCircle2 className="h-3 w-3" />
+                                              {EVIDENCE_LABEL[ev.type]?.[language === "pt" ? "pt" : "en"] ?? ev.type}: {ev.value}
+                                            </span>
+                                          ))}
+                                        </div>
+                                      )}
+                                      {/* Mesmo vendedor de dark web em outra história — relacionado,
+                                          nunca fundido: vítimas diferentes continuam sendo notícias
+                                          diferentes (ver server/darkWebHandle.js). */}
+                                      {(correlation[card.storyId]?.data?.relatedBySeller ?? []).length > 0 && (
+                                        <div className="mt-2 flex flex-wrap gap-1.5">
+                                          {correlation[card.storyId]!.data!.relatedBySeller.map((rel) => (
+                                            <a
+                                              key={rel.storyId}
+                                              href={rel.link ?? undefined}
+                                              target="_blank"
+                                              rel="noopener noreferrer"
+                                              title={rel.title}
+                                              className="inline-flex max-w-[280px] items-center gap-1 rounded-full border border-border px-2 py-0.5 text-[11px] text-muted-foreground hover:border-primary/40 hover:text-foreground"
+                                            >
+                                              <span className="shrink-0">{language === "pt" ? "Mesmo vendedor:" : "Same seller:"}</span>
+                                              <span className="truncate">{rel.title}</span>
+                                            </a>
+                                          ))}
+                                        </div>
+                                      )}
+                                    </>
                                   )
                                 )}
 

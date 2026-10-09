@@ -297,6 +297,12 @@ const newStory = (item) => ({
         // responde nada que a varredura das fontes não responda, e seria um
         // segundo lugar para dessincronizar.
         iocs: item.iocs || null,
+        // Handle de vendedor de dark web (ver darkWebHandle.js) — por fonte,
+        // igual iocs, e pelo mesmo motivo deliberadamente NUNCA entra em
+        // signals()/isSameStory(): mesmo vendedor, vítima diferente, é
+        // notícia diferente (mesma regra que já vale pra ator). O que isto
+        // habilita é "mostrar relacionado" via findRelatedBySeller, não merge.
+        sellerHandle: item.sellerHandle || null,
     }],
 });
 

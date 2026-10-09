@@ -138,6 +138,18 @@ test('menção a linux kernel com CVE real ainda leva a penalidade de volume', (
     const withoutKernel = scoreArticle('CVE-2026-9999 fixed in some other package');
 
     assert.ok(withKernel.reasons.some((r) => r.startsWith('Low Interest')));
+});
+
+// ─── phishingTechniques — pro dashboard de tendências de phishing ──────────
+
+test('scoreArticle reconhece sub-técnicas de phishing, uma ou várias por artigo', () => {
+    assert.deepEqual(scoreArticle('New ClickFix campaign spreads via fake CAPTCHA').phishingTechniques, ['ClickFix']);
+    const multi = scoreArticle('Vishing crew pairs AiTM kits with device code phishing to bypass MFA').phishingTechniques;
+    assert.deepEqual([...multi].sort(), ['AiTM / Adversary-in-the-Middle', 'Device Code Phishing', 'Vishing'].sort());
+});
+
+test('scoreArticle sem vocabulário de phishing devolve lista vazia', () => {
+    assert.deepEqual(scoreArticle('Ransomware group leaks stolen hospital records').phishingTechniques, []);
     assert.ok(withKernel.score < withoutKernel.score);
 });
 
