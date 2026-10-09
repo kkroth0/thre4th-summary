@@ -6,7 +6,7 @@ const item = (over = {}) => ({ title: '', description: '', threats: [], cves: []
 
 test('a ordem de precedência é a acordada', () => {
     assert.deepEqual(NEWS_CATEGORIES, [
-        'Ransomware', 'APTs', 'Data Leaks', 'OT/ICS', 'Vulnerabilities', 'Malware', 'Microsoft',
+        'Ransomware', 'APTs', 'Data Leaks', 'OT/ICS', 'Vulnerabilities', 'Malware', 'Phishing', 'Microsoft',
         'Finance/Banking', 'Health/Pharma',
     ]);
 });
@@ -88,6 +88,29 @@ test('Vulnerabilities vem de CVE, de classe de falha ou de exploração ativa', 
 test('Malware não inclui ransomware, que tem categoria própria', () => {
     assert.deepEqual(categorize(item({ title: 'x', threats: ['Infostealer'] })).categories, ['Malware']);
     assert.deepEqual(categorize(item({ title: 'x', threats: ['Ransomware'] })).categories, ['Ransomware']);
+});
+
+// Vocabulário do levantamento próprio de campanhas de phishing (ago-out/2026).
+test('Phishing reconhece as técnicas do levantamento de campanhas', () => {
+    const titles = [
+        'New phishing campaign targets bank customers',
+        'Spear-phishing wave delivers malware to defense contractors',
+        'Smishing campaign impersonates delivery companies',
+        'Vishing scam tricks employees into granting remote access',
+        'ClickFix technique spreads via fake CAPTCHA pages',
+        'Device code phishing bypasses MFA at scale',
+        'Attackers use adversary-in-the-middle kits to steal session tokens',
+        'New PhaaS platform offers phishing-as-a-service to affiliates',
+        'Campanha de golpe de phishing atinge clientes de banco digital',
+        'Ataque de engenharia social usa falso suporte técnico',
+    ];
+    for (const title of titles) {
+        assert.ok(categorize(item({ title })).categories.includes('Phishing'), title);
+    }
+});
+
+test('Phishing também vem do threat label já computado pelo scoreArticle', () => {
+    assert.deepEqual(categorize(item({ title: 'x', threats: ['Phishing'] })).categories, ['Phishing']);
 });
 
 test('Microsoft reconhece a marca e os produtos', () => {

@@ -166,7 +166,7 @@ test("categorias são ordenadas pela precedência, não pela ordem de inserção
 
 test("a ordem das categorias é a mesma do servidor", () => {
   assert.deepEqual(NEWS_CATEGORY_ORDER, [
-    "Ransomware", "APTs", "Data Leaks", "OT/ICS", "Vulnerabilities", "Malware", "Microsoft",
+    "Ransomware", "APTs", "Data Leaks", "OT/ICS", "Vulnerabilities", "Malware", "Phishing", "Microsoft",
     "Finance/Banking", "Health/Pharma",
   ]);
 });

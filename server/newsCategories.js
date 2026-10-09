@@ -8,7 +8,7 @@
 // Os dois últimos são baldes de *setor*, não de ameaça: ficam no fim para nunca
 // roubarem a categoria principal de "ransomware em hospital" ou "APT em banco".
 export const NEWS_CATEGORIES = [
-    'Ransomware', 'APTs', 'Data Leaks', 'OT/ICS', 'Vulnerabilities', 'Malware', 'Microsoft',
+    'Ransomware', 'APTs', 'Data Leaks', 'OT/ICS', 'Vulnerabilities', 'Malware', 'Phishing', 'Microsoft',
     'Finance/Banking', 'Health/Pharma',
 ];
 
@@ -38,6 +38,13 @@ const HEALTH = /\b(?:hospitals?|hospitais|hospitalar(?:es)?|health ?care|health 
 // Malware families that are not ransomware — ransomware has its own bucket.
 const MALWARE_THREATS = new Set(['Trojan', 'Infostealer', 'Wiper', 'Backdoor', 'Botnet', 'Spyware', 'Rootkit']);
 
+// Termos vindos de um levantamento próprio de ~280 campanhas de phishing
+// (ago-out/2026, fontes abertas) — só os coinados/compostos sem ambiguidade
+// entraram, mesma régua do resto do arquivo. Deixados de fora de propósito:
+// "RMM"/"malvertising"/"SEO poisoning" sozinhos — são técnica de entrega
+// pós-isca, não a isca; entram como Malware, não aqui, ou a notícia dupla.
+const PHISHING = /\b(?:phishing|spear[- ]?phishing|smishing|vishing|quishing|clickfix|credential harvesting|brand impersonation|business email compromise|\bbec\b|adversary[- ]in[- ]the[- ]middle|\baitm\b|device code phishing|oauth consent phishing|browser[- ]in[- ]the[- ]browser|\bbitb\b|fake captcha|captcha falso|phishing[- ]as[- ]a[- ]service|\bphaas\b|phishing kit|qr code (?:phishing|falso|malicioso)|typosquatting|tech support scam|pig butchering|callback phishing|fake recruiter|isca de emprego|vaga falsa|engenharia social|golpe de phishing)\b/i;
+
 export function categorize(item) {
     if (!item || typeof item !== 'object') return { categories: [], primary: null };
 
@@ -55,6 +62,7 @@ export function categorize(item) {
         'OT/ICS': OT_ICS.test(text),
         Vulnerabilities: cves.length > 0 || VULN_CLASS.test(text),
         Malware: threats.some((t) => MALWARE_THREATS.has(t)),
+        Phishing: threats.includes('Phishing') || PHISHING.test(text),
         Microsoft: MICROSOFT.test(text),
         // Setor sai só do título: é quem *foi atacado*, e a manchete sempre diz.
         // O corpo cita setor de passagem ("from healthcare and finance to
