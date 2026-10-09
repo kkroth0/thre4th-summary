@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { collectArticleTexts } from '../articleCollector.js';
-import { enrichFeedItems, applyVulnerabilityContext } from '../feedEnrichment.js';
+import { enrichFeedItems, applyVulnerabilityContext, topicCvesOf } from '../feedEnrichment.js';
 import { scoreArticle } from '../ctiIntel.js';
 import { mergeIntoStories } from '../newsStories.js';
 import { categorize } from '../newsCategories.js';
@@ -13,6 +13,15 @@ const cache = () => {
     return { get: (key) => map.get(key), set: (key, value) => map.set(key, value) };
 };
 const enrich = (items, texts) => enrichFeedItems(items, { texts, actors: () => [], malware: () => [], campaigns: () => [], seller: () => null, categorize });
+
+test('CVE principal tem foco próprio, sem perder vulnerabilidades históricas da pesquisa', () => {
+    const body = 'The new flaw is tracked as CVE-2026-107406.\n\nEarlier vulnerabilities CVE-2026-88771 and CVE-2026-88772 were patched last week.';
+    const [report] = enrich([item({ title: 'Citrix NetScaler emergency patch' })], new Map([[item().link, body]]));
+    assert.deepEqual(report.topicCves, ['CVE-2026-107406']);
+    assert.deepEqual(report.cves, ['CVE-2026-107406', 'CVE-2026-88771', 'CVE-2026-88772']);
+    assert.deepEqual(topicCvesOf('CVE-2026-88779 fix', '', body), ['CVE-2026-88779']);
+    assert.deepEqual(topicCvesOf('NetScaler third flaw', 'Earlier CVE-2026-8877 was chained.\nThe vulnerability is tracked as CVE-2026-88779.'), ['CVE-2026-88779']);
+});
 
 test('NetScaler: notícias de três fontes correlacionam após extrair CVE do corpo, mantendo outra falha separada', async () => {
     const raw = [

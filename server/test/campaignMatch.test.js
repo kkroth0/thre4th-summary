@@ -13,6 +13,14 @@ const index = buildCampaignIndex([
 
 const ids = (text) => matchCampaigns(text, index).map((hit) => hit.id).sort();
 
+test('campanha explicitamente nomeada fora do catálogo pode correlacionar novas coberturas', () => {
+    assert.equal(ids("A malware campaign dubbed 'Midnight Mimosa' was discovered.")[0], 'reported:midnight-mimosa');
+    assert.equal(ids('The campaign, dubbed Midnight Mimosa, affects devices.')[0], 'reported:midnight-mimosa');
+    assert.deepEqual(ids('An Android malware campaign expands globally.'), []);
+    assert.deepEqual(ids('The campaign was discussed by Midnight Mimosa researchers.'), []);
+    assert.deepEqual(ids('The campaign named Operation Dream Job is active.'), ['c1'], 'nomes já catalogados não duplicam');
+});
+
 test('nome multi-palavra casa sem precisar de contexto', () => {
     assert.deepEqual(ids('Operation Dream Job infrastructure linked to new intrusion'), ['c1']);
     assert.deepEqual(ids('Researchers tie new activity to Operation North Star'), ['c1']);

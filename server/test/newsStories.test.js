@@ -348,7 +348,7 @@ test('manchete parecida do mesmo veículo em outro dia é a próxima edição', 
         chrome('11', 'Chrome Beta for Android Update'),
         chrome('11', 'Chrome for Android Update'),
     ], new Date('2026-08-12T12:00:00Z'));
-    assert.equal(mesmoDia.length, 1, 'no mesmo dia é o mesmo lote de release');
+    assert.equal(mesmoDia.length, 2, 'beta e stable são releases diferentes mesmo no mesmo dia');
 });
 
 test('classe da falha não é assunto: produtos diferentes não viram uma história', () => {
@@ -501,7 +501,7 @@ test('fonte com mais campanhas que o teto não empresta nenhuma', () => {
     assert.equal(stories.length, 2, 'um apanhado com mais de MAX_TOPIC_CAMPAIGNS não deveria emprestar campanha nenhuma');
 });
 
-test('TTP em comum une quando há também um termo raro em comum', () => {
+test('contexto suficiente do título pode unir; TTP não reduz o limiar', () => {
     const stories = mergeIntoStories([], [
         item({ title: 'New phishing kit targets banking customers', link: 'https://a.example/1', ttpIds: ['T1566'] }),
         item({ title: 'Banking customers hit by fresh phishing wave', link: 'https://b.example/2', ttpIds: ['T1566'] }),

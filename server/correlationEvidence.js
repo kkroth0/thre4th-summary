@@ -3,7 +3,7 @@
 // its sources actually have in common. Kept as its own module rather than
 // folded into newsStories.js for the same reason actorMatch.js/newsIocs.js
 // are their own files — one small module, one job.
-import { rareTerms } from './newsStories.js';
+import { rareTerms, compareNewsSources } from './newsStories.js';
 
 const normIoc = (value) => String(value || '').trim().toLowerCase();
 
@@ -82,4 +82,17 @@ export function explainCorrelation(story) {
     for (const hit of sharedValues(termPairs)) evidence.push({ type: 'rare-term', ...hit });
 
     return evidence;
+}
+
+// Distinguishes the actual event identity rule from incidental shared facts.
+// Common TTPs remain useful context chips, but are never presented as the
+// reason two publications became one event.
+export function explainCorrelationDecisions(story) {
+    const decisions = [];
+    const sources = story?.sources || [];
+    for (let i = 0; i < sources.length; i++) for (let j = i + 1; j < sources.length; j++) {
+        const result = compareNewsSources(sources[i], sources[j], story.campaigns || []);
+        if (result.sameEvent) decisions.push({ ...result, sourceLinks: [sources[i].link, sources[j].link] });
+    }
+    return decisions;
 }

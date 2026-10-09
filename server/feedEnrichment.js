@@ -1,7 +1,27 @@
 import { scoreArticle, extractIOCs, ttpIdsFrom, isPureNoise, severityFromScore } from './ctiIntel.js';
 import { contentHash } from './articleCollector.js';
 
-export const EXTRACTION_VERSION = 'feed-v3';
+export const EXTRACTION_VERSION = 'feed-v4';
+
+// Keep all mentioned CVEs for research/KEV, but use only the article's focus
+// to group coverage. A patch report often recounts older, unrelated flaws.
+export function topicCvesOf(title, feedText, bodyText = '') {
+    const cves = (text) => [...new Set((String(text || '').match(/\bCVE-\d{4}-\d{4,}\b/gi) || []).map((cve) => cve.toUpperCase()))];
+    const headline = cves(title);
+    if (headline.length) return headline;
+    for (const text of [bodyText, feedText]) {
+        const blocks = String(text || '').split(/\n\s*\n|[\r\n]+/).filter(Boolean);
+        const focus = blocks.slice(0, 8).find((block) => cves(block).length
+            && /\b(?:tracked|identified|designated|assigned)\s+(?:as|under)\b/i.test(block)
+            && !/\b(?:previous|earlier|older|last year)\b/i.test(block));
+        if (focus) return cves(focus);
+        for (const block of blocks) {
+            const values = cves(block);
+            if (values.length) return values;
+        }
+    }
+    return [];
+}
 
 export function enrichFeedItems(items, { texts = new Map(), actors, malware, campaigns, seller, categorize } = {}) {
     return items.map((item) => {
@@ -11,6 +31,7 @@ export function enrichFeedItems(items, { texts = new Map(), actors, malware, cam
             actors: actors(text), malware: malware(text), campaigns: campaigns(text),
             iocs: extractIOCs(text), sellerHandle: seller(text),
             contentHash: contentHash(text), extractionVersion: EXTRACTION_VERSION,
+            topicCves: topicCvesOf(item.title, item.text || item.description || '', texts.get(item.link) || ''),
         };
         enriched.ttpIds = ttpIdsFrom(enriched.ttps);
         const result = categorize(enriched);

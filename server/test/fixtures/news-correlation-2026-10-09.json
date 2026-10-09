@@ -1,0 +1,2974 @@
+{
+  "description": "Public RSS metadata from 12 sources; selected false merges and matching coverage reviewed on 2026-10-09. No article bodies. Expected labels refer to event coverage, not merely shared vendors/techniques. Baseline IDs were produced by correlation v2 on RSS-only evidence. Current evidence includes up to 40 bounded body attempts (21 successful).",
+  "evaluationAt": "2026-10-09T16:15:01.000Z",
+  "items": [
+    {
+      "title": "Cisco NX-OS Software NX-API Remote Code Execution Vulnerability",
+      "link": "https://sec.cloudapps.cisco.com/security/center/content/CiscoSecurityAdvisory/cisco-sa-napi-rce-r2shwu2j?vs_f=Cisco+Security+Advisory%26vs_cat%3DSecurity+Intelligence%26vs_type%3DRSS%26vs_p%3DCisco+NX-OS+Software+NX-API+Remote+Code+Execution+Vulnerability%26vs_k%3D1",
+      "source": "Cisco PSIRT",
+      "pubDate": "2026-10-08T17:11:23.000Z",
+      "score": 100,
+      "severity": "Critical",
+      "cves": [
+        "CVE-2026-76471"
+      ],
+      "topicCves": [
+        "CVE-2026-76471"
+      ],
+      "actors": [],
+      "malware": [],
+      "campaigns": [],
+      "ttpIds": [
+        "T1190",
+        "T1498"
+      ],
+      "iocs": {
+        "ips": [],
+        "domains": [],
+        "hashes": [],
+        "urls": []
+      },
+      "vendors": [
+        {
+          "id": "cisco",
+          "name": "Cisco",
+          "sector": "networking",
+          "matched": "Cisco NX-OS"
+        }
+      ],
+      "assets": [
+        "Cisco"
+      ],
+      "newsCategories": [
+        "Vulnerabilities"
+      ],
+      "primaryCategory": "Vulnerabilities",
+      "extractionVersion": "feed-v4",
+      "expectedEvent": "independent:https://sec.cloudapps.cisco.com/security/center/content/CiscoSecurityAdvisory/cisco-sa-napi-rce-r2shwu2j?vs_f=Cisco+Security+Advisory%26vs_cat%3DSecurity+Intelligence%26vs_type%3DRSS%26vs_p%3DCisco+NX-OS+Software+NX-API+Remote+Code+Execution+Vulnerability%26vs_k%3D1",
+      "baselineStoryId": "98321fc18b35"
+    },
+    {
+      "title": "Cisco Nexus 3000 and 9000 Series Switches MPLS OAM Remote Code Execution Vulnerability",
+      "link": "https://sec.cloudapps.cisco.com/security/center/content/CiscoSecurityAdvisory/cisco-sa-moam-rce-uBTzYV7?vs_f=Cisco+Security+Advisory%26vs_cat%3DSecurity+Intelligence%26vs_type%3DRSS%26vs_p%3DCisco+Nexus+3000+and+9000+Series+Switches+MPLS+OAM+Remote+Code+Execution+Vulnerability%26vs_k%3D1",
+      "source": "Cisco PSIRT",
+      "pubDate": "2026-10-07T19:00:00.000Z",
+      "score": 100,
+      "severity": "Critical",
+      "cves": [
+        "CVE-2026-76465"
+      ],
+      "topicCves": [
+        "CVE-2026-76465"
+      ],
+      "actors": [],
+      "malware": [],
+      "campaigns": [],
+      "ttpIds": [
+        "T1190",
+        "T1498"
+      ],
+      "iocs": {
+        "ips": [],
+        "domains": [],
+        "hashes": [],
+        "urls": []
+      },
+      "vendors": [
+        {
+          "id": "cisco",
+          "name": "Cisco",
+          "sector": "networking",
+          "matched": "Cisco"
+        }
+      ],
+      "assets": [
+        "Cisco"
+      ],
+      "newsCategories": [
+        "Vulnerabilities"
+      ],
+      "primaryCategory": "Vulnerabilities",
+      "extractionVersion": "feed-v4",
+      "expectedEvent": "independent:https://sec.cloudapps.cisco.com/security/center/content/CiscoSecurityAdvisory/cisco-sa-moam-rce-uBTzYV7?vs_f=Cisco+Security+Advisory%26vs_cat%3DSecurity+Intelligence%26vs_type%3DRSS%26vs_p%3DCisco+Nexus+3000+and+9000+Series+Switches+MPLS+OAM+Remote+Code+Execution+Vulnerability%26vs_k%3D1",
+      "baselineStoryId": "98321fc18b35"
+    },
+    {
+      "title": "Cisco License (Smart Software Manager) On-Prem Security Hardening Release: October 2026",
+      "link": "https://sec.cloudapps.cisco.com/security/center/content/CiscoSecurityAdvisory/cisco-sa-hardening-ssm-Ph77wdhf?vs_f=Cisco+Security+Advisory%26vs_cat%3DSecurity+Intelligence%26vs_type%3DRSS%26vs_p%3DCisco+License+%28Smart+Software+Manager%29+On-Prem+Security+Hardening+Release%3A+October+2026%26vs_k%3D1",
+      "source": "Cisco PSIRT",
+      "pubDate": "2026-10-07T19:00:00.000Z",
+      "score": 100,
+      "severity": "Critical",
+      "cves": [
+        "CVE-2026-76480",
+        "CVE-2026-76482",
+        "CVE-2026-76483",
+        "CVE-2026-76484"
+      ],
+      "topicCves": [
+        "CVE-2026-76480",
+        "CVE-2026-76482",
+        "CVE-2026-76483",
+        "CVE-2026-76484"
+      ],
+      "actors": [],
+      "malware": [],
+      "campaigns": [],
+      "ttpIds": [],
+      "iocs": {
+        "ips": [],
+        "domains": [],
+        "hashes": [],
+        "urls": []
+      },
+      "vendors": [
+        {
+          "id": "cisco",
+          "name": "Cisco",
+          "sector": "networking",
+          "matched": "Cisco"
+        }
+      ],
+      "assets": [
+        "Cisco"
+      ],
+      "newsCategories": [
+        "Vulnerabilities"
+      ],
+      "primaryCategory": "Vulnerabilities",
+      "extractionVersion": "feed-v4",
+      "expectedEvent": "independent:https://sec.cloudapps.cisco.com/security/center/content/CiscoSecurityAdvisory/cisco-sa-hardening-ssm-Ph77wdhf?vs_f=Cisco+Security+Advisory%26vs_cat%3DSecurity+Intelligence%26vs_type%3DRSS%26vs_p%3DCisco+License+%28Smart+Software+Manager%29+On-Prem+Security+Hardening+Release%3A+October+2026%26vs_k%3D1",
+      "baselineStoryId": "98321fc18b35"
+    },
+    {
+      "title": "Cisco Nexus 3000 and 9000 Series Switches NGOAM Remote Code Execution Vulnerabilities",
+      "link": "https://sec.cloudapps.cisco.com/security/center/content/CiscoSecurityAdvisory/cisco-sa-ngoam-rce-LWKQ4BU?vs_f=Cisco+Security+Advisory%26vs_cat%3DSecurity+Intelligence%26vs_type%3DRSS%26vs_p%3DCisco+Nexus+3000+and+9000+Series+Switches+NGOAM+Remote+Code+Execution+Vulnerabilities%26vs_k%3D1",
+      "source": "Cisco PSIRT",
+      "pubDate": "2026-10-07T19:00:00.000Z",
+      "score": 100,
+      "severity": "Critical",
+      "cves": [
+        "CVE-2026-76485",
+        "CVE-2026-76486",
+        "CVE-2026-76501"
+      ],
+      "topicCves": [
+        "CVE-2026-76485",
+        "CVE-2026-76486",
+        "CVE-2026-76501"
+      ],
+      "actors": [],
+      "malware": [],
+      "campaigns": [],
+      "ttpIds": [
+        "T1190",
+        "T1498"
+      ],
+      "iocs": {
+        "ips": [],
+        "domains": [],
+        "hashes": [],
+        "urls": []
+      },
+      "vendors": [
+        {
+          "id": "cisco",
+          "name": "Cisco",
+          "sector": "networking",
+          "matched": "Cisco"
+        }
+      ],
+      "assets": [
+        "Cisco"
+      ],
+      "newsCategories": [
+        "Vulnerabilities"
+      ],
+      "primaryCategory": "Vulnerabilities",
+      "extractionVersion": "feed-v4",
+      "expectedEvent": "independent:https://sec.cloudapps.cisco.com/security/center/content/CiscoSecurityAdvisory/cisco-sa-ngoam-rce-LWKQ4BU?vs_f=Cisco+Security+Advisory%26vs_cat%3DSecurity+Intelligence%26vs_type%3DRSS%26vs_p%3DCisco+Nexus+3000+and+9000+Series+Switches+NGOAM+Remote+Code+Execution+Vulnerabilities%26vs_k%3D1",
+      "baselineStoryId": "98321fc18b35"
+    },
+    {
+      "title": "Cisco Application Policy Infrastructure Controller Security Hardening Release: October 2026",
+      "link": "https://sec.cloudapps.cisco.com/security/center/content/CiscoSecurityAdvisory/cisco-sa-hardening-apic-UOXWtfh?vs_f=Cisco+Security+Advisory%26vs_cat%3DSecurity+Intelligence%26vs_type%3DRSS%26vs_p%3DCisco+Application+Policy+Infrastructure+Controller+Security+Hardening+Release%3A+October+2026%26vs_k%3D1",
+      "source": "Cisco PSIRT",
+      "pubDate": "2026-10-07T19:00:00.000Z",
+      "score": 100,
+      "severity": "Critical",
+      "cves": [
+        "CVE-2026-76498",
+        "CVE-2026-76499",
+        "CVE-2026-76500"
+      ],
+      "topicCves": [
+        "CVE-2026-76498",
+        "CVE-2026-76499",
+        "CVE-2026-76500"
+      ],
+      "actors": [],
+      "malware": [],
+      "campaigns": [],
+      "ttpIds": [],
+      "iocs": {
+        "ips": [],
+        "domains": [],
+        "hashes": [],
+        "urls": []
+      },
+      "vendors": [
+        {
+          "id": "cisco",
+          "name": "Cisco",
+          "sector": "networking",
+          "matched": "Cisco"
+        }
+      ],
+      "assets": [
+        "Cisco"
+      ],
+      "newsCategories": [
+        "Vulnerabilities"
+      ],
+      "primaryCategory": "Vulnerabilities",
+      "extractionVersion": "feed-v4",
+      "expectedEvent": "independent:https://sec.cloudapps.cisco.com/security/center/content/CiscoSecurityAdvisory/cisco-sa-hardening-apic-UOXWtfh?vs_f=Cisco+Security+Advisory%26vs_cat%3DSecurity+Intelligence%26vs_type%3DRSS%26vs_p%3DCisco+Application+Policy+Infrastructure+Controller+Security+Hardening+Release%3A+October+2026%26vs_k%3D1",
+      "baselineStoryId": "98321fc18b35"
+    },
+    {
+      "title": "Cisco NX-OS Software Control Plane Denial of Service Vulnerability",
+      "link": "https://sec.cloudapps.cisco.com/security/center/content/CiscoSecurityAdvisory/cisco-sa-nxos-nscpdos-SnderkC7?vs_f=Cisco+Security+Advisory%26vs_cat%3DSecurity+Intelligence%26vs_type%3DRSS%26vs_p%3DCisco+NX-OS+Software+Control+Plane+Denial+of+Service+Vulnerability%26vs_k%3D1",
+      "source": "Cisco PSIRT",
+      "pubDate": "2026-10-07T19:00:00.000Z",
+      "score": 100,
+      "severity": "Critical",
+      "cves": [
+        "CVE-2026-20173"
+      ],
+      "topicCves": [
+        "CVE-2026-20173"
+      ],
+      "actors": [],
+      "malware": [],
+      "campaigns": [],
+      "ttpIds": [
+        "T1498"
+      ],
+      "iocs": {
+        "ips": [],
+        "domains": [],
+        "hashes": [],
+        "urls": []
+      },
+      "vendors": [
+        {
+          "id": "cisco",
+          "name": "Cisco",
+          "sector": "networking",
+          "matched": "Cisco NX-OS"
+        }
+      ],
+      "assets": [
+        "Cisco"
+      ],
+      "newsCategories": [
+        "Vulnerabilities"
+      ],
+      "primaryCategory": "Vulnerabilities",
+      "extractionVersion": "feed-v4",
+      "expectedEvent": "independent:https://sec.cloudapps.cisco.com/security/center/content/CiscoSecurityAdvisory/cisco-sa-nxos-nscpdos-SnderkC7?vs_f=Cisco+Security+Advisory%26vs_cat%3DSecurity+Intelligence%26vs_type%3DRSS%26vs_p%3DCisco+NX-OS+Software+Control+Plane+Denial+of+Service+Vulnerability%26vs_k%3D1",
+      "baselineStoryId": "98321fc18b35"
+    },
+    {
+      "title": "Cisco License (Smart Software Manager) On-Prem Vulnerabilities",
+      "link": "https://sec.cloudapps.cisco.com/security/center/content/CiscoSecurityAdvisory/cisco-sa-ssm-access-nttb2dhE?vs_f=Cisco+Security+Advisory%26vs_cat%3DSecurity+Intelligence%26vs_type%3DRSS%26vs_p%3DCisco+License+%28Smart+Software+Manager%29+On-Prem+Vulnerabilities%26vs_k%3D1",
+      "source": "Cisco PSIRT",
+      "pubDate": "2026-10-07T19:00:00.000Z",
+      "score": 80,
+      "severity": "Critical",
+      "cves": [
+        "CVE-2026-20328",
+        "CVE-2026-76437",
+        "CVE-2026-76452",
+        "CVE-2026-76454"
+      ],
+      "topicCves": [
+        "CVE-2026-20328",
+        "CVE-2026-76437",
+        "CVE-2026-76452",
+        "CVE-2026-76454"
+      ],
+      "actors": [],
+      "malware": [],
+      "campaigns": [],
+      "ttpIds": [
+        "T1498"
+      ],
+      "iocs": {
+        "ips": [],
+        "domains": [],
+        "hashes": [],
+        "urls": []
+      },
+      "vendors": [
+        {
+          "id": "cisco",
+          "name": "Cisco",
+          "sector": "networking",
+          "matched": "Cisco"
+        }
+      ],
+      "assets": [
+        "Cisco"
+      ],
+      "newsCategories": [
+        "Vulnerabilities"
+      ],
+      "primaryCategory": "Vulnerabilities",
+      "extractionVersion": "feed-v4",
+      "expectedEvent": "independent:https://sec.cloudapps.cisco.com/security/center/content/CiscoSecurityAdvisory/cisco-sa-ssm-access-nttb2dhE?vs_f=Cisco+Security+Advisory%26vs_cat%3DSecurity+Intelligence%26vs_type%3DRSS%26vs_p%3DCisco+License+%28Smart+Software+Manager%29+On-Prem+Vulnerabilities%26vs_k%3D1",
+      "baselineStoryId": "98321fc18b35"
+    },
+    {
+      "title": "Cisco NX-OS Software Security Hardening Release: October 2026",
+      "link": "https://sec.cloudapps.cisco.com/security/center/content/CiscoSecurityAdvisory/cisco-sa-hardening-nxosw1-cWzSbtR?vs_f=Cisco+Security+Advisory%26vs_cat%3DSecurity+Intelligence%26vs_type%3DRSS%26vs_p%3DCisco+NX-OS+Software+Security+Hardening+Release%3A+October+2026%26vs_k%3D1",
+      "source": "Cisco PSIRT",
+      "pubDate": "2026-10-07T19:00:00.000Z",
+      "score": 100,
+      "severity": "Critical",
+      "cves": [
+        "CVE-2026-76453",
+        "CVE-2026-76455",
+        "CVE-2026-76456",
+        "CVE-2026-76457",
+        "CVE-2026-76458",
+        "CVE-2026-76459"
+      ],
+      "topicCves": [
+        "CVE-2026-76453",
+        "CVE-2026-76455",
+        "CVE-2026-76456",
+        "CVE-2026-76457",
+        "CVE-2026-76458",
+        "CVE-2026-76459"
+      ],
+      "actors": [],
+      "malware": [],
+      "campaigns": [],
+      "ttpIds": [],
+      "iocs": {
+        "ips": [],
+        "domains": [],
+        "hashes": [],
+        "urls": []
+      },
+      "vendors": [
+        {
+          "id": "cisco",
+          "name": "Cisco",
+          "sector": "networking",
+          "matched": "Cisco NX-OS"
+        }
+      ],
+      "assets": [
+        "Cisco"
+      ],
+      "newsCategories": [
+        "Vulnerabilities"
+      ],
+      "primaryCategory": "Vulnerabilities",
+      "extractionVersion": "feed-v4",
+      "expectedEvent": "independent:https://sec.cloudapps.cisco.com/security/center/content/CiscoSecurityAdvisory/cisco-sa-hardening-nxosw1-cWzSbtR?vs_f=Cisco+Security+Advisory%26vs_cat%3DSecurity+Intelligence%26vs_type%3DRSS%26vs_p%3DCisco+NX-OS+Software+Security+Hardening+Release%3A+October+2026%26vs_k%3D1",
+      "baselineStoryId": "98321fc18b35"
+    },
+    {
+      "title": "CVE-2026-71343 Windows Remote Access Connection Manager Remote Code Execution Vulnerability",
+      "link": "https://msrc.microsoft.com/update-guide/vulnerability/CVE-2026-71343",
+      "source": "Microsoft MSRC",
+      "pubDate": "2026-10-06T14:00:00.000Z",
+      "score": 50,
+      "severity": "High",
+      "cves": [
+        "CVE-2026-71343"
+      ],
+      "topicCves": [
+        "CVE-2026-71343"
+      ],
+      "actors": [],
+      "malware": [],
+      "campaigns": [],
+      "ttpIds": [
+        "T1190"
+      ],
+      "iocs": {
+        "ips": [],
+        "domains": [],
+        "hashes": [],
+        "urls": []
+      },
+      "vendors": [],
+      "assets": [],
+      "newsCategories": [
+        "Vulnerabilities",
+        "Microsoft"
+      ],
+      "primaryCategory": "Vulnerabilities",
+      "extractionVersion": "feed-v4",
+      "expectedEvent": "independent:https://msrc.microsoft.com/update-guide/vulnerability/CVE-2026-71343",
+      "baselineStoryId": "1e107ea18fdb"
+    },
+    {
+      "title": "CVE-2026-96940 Microsoft Exchange Server Elevation of Privilege Vulnerability",
+      "link": "https://msrc.microsoft.com/update-guide/vulnerability/CVE-2026-96940",
+      "source": "Microsoft MSRC",
+      "pubDate": "2026-10-02T14:00:00.000Z",
+      "score": 60,
+      "severity": "High",
+      "cves": [
+        "CVE-2026-96940"
+      ],
+      "topicCves": [
+        "CVE-2026-96940"
+      ],
+      "actors": [],
+      "malware": [],
+      "campaigns": [],
+      "ttpIds": [
+        "T1068"
+      ],
+      "iocs": {
+        "ips": [],
+        "domains": [],
+        "hashes": [],
+        "urls": []
+      },
+      "vendors": [
+        {
+          "id": "microsoft",
+          "name": "Microsoft",
+          "sector": "cloud-platforms",
+          "matched": "Microsoft"
+        }
+      ],
+      "assets": [
+        "Microsoft"
+      ],
+      "newsCategories": [
+        "Vulnerabilities",
+        "Microsoft"
+      ],
+      "primaryCategory": "Vulnerabilities",
+      "extractionVersion": "feed-v4",
+      "expectedEvent": "exchange-96940",
+      "baselineStoryId": "128e6c412fb9"
+    },
+    {
+      "title": "Chrome for Android Update",
+      "link": "http://chromereleases.googleblog.com/2026/10/chrome-for-android-update_01286554645.html",
+      "source": "Chrome Releases",
+      "pubDate": "2026-10-07T22:30:00.000Z",
+      "score": 25,
+      "severity": "Low",
+      "cves": [],
+      "topicCves": [],
+      "actors": [],
+      "malware": [],
+      "campaigns": [],
+      "ttpIds": [],
+      "iocs": {
+        "ips": [],
+        "domains": [],
+        "hashes": [],
+        "urls": []
+      },
+      "vendors": [
+        {
+          "id": "google",
+          "name": "Google",
+          "sector": "cloud-platforms",
+          "matched": "Chrome"
+        }
+      ],
+      "assets": [
+        "Google"
+      ],
+      "newsCategories": [],
+      "primaryCategory": null,
+      "extractionVersion": "feed-v4",
+      "expectedEvent": "independent:http://chromereleases.googleblog.com/2026/10/chrome-for-android-update_01286554645.html",
+      "baselineStoryId": "5ed5b7b3af1c"
+    },
+    {
+      "title": "Long Term Support Channel Update for ChromeOS",
+      "link": "http://chromereleases.googleblog.com/2026/10/long-term-support-channel-update-for.html",
+      "source": "Chrome Releases",
+      "pubDate": "2026-10-07T18:30:32.914Z",
+      "score": 55,
+      "severity": "High",
+      "cves": [
+        "CVE-2026-85043",
+        "CVE-2026-102324",
+        "CVE-2026-87499",
+        "CVE-2026-85052",
+        "CVE-2026-84324",
+        "CVE-2026-103630",
+        "CVE-2026-95372",
+        "CVE-2026-95351",
+        "CVE-2026-17657",
+        "CVE-2026-91708",
+        "CVE-2026-95339",
+        "CVE-2026-79201",
+        "CVE-2026-95310",
+        "CVE-2026-95356",
+        "CVE-2026-19173",
+        "CVE-2026-91737",
+        "CVE-2026-79218",
+        "CVE-2026-84325",
+        "CVE-2026-91722",
+        "CVE-2026-91724",
+        "CVE-2026-91721",
+        "CVE-2026-79219",
+        "CVE-2026-19137",
+        "CVE-2026-19170",
+        "CVE-2026-87647",
+        "CVE-2026-91736",
+        "CVE-2026-87514",
+        "CVE-2026-91716",
+        "CVE-2026-95313",
+        "CVE-2026-91749",
+        "CVE-2026-84357",
+        "CVE-2026-85051",
+        "CVE-2026-85053",
+        "CVE-2026-87628",
+        "CVE-2026-17666",
+        "CVE-2026-79195",
+        "CVE-2026-84349",
+        "CVE-2026-78954",
+        "CVE-2026-79174",
+        "CVE-2026-79187",
+        "CVE-2026-79274",
+        "CVE-2026-78952",
+        "CVE-2026-79078"
+      ],
+      "topicCves": [
+        "CVE-2026-85043"
+      ],
+      "actors": [],
+      "malware": [
+        {
+          "id": "malpedia-10072fed",
+          "name": "Broomstick",
+          "matched": "CleanUp",
+          "via": "distinctive"
+        }
+      ],
+      "campaigns": [],
+      "ttpIds": [],
+      "iocs": {
+        "ips": [],
+        "domains": [],
+        "hashes": [],
+        "urls": []
+      },
+      "vendors": [
+        {
+          "id": "google",
+          "name": "Google",
+          "sector": "cloud-platforms",
+          "matched": "Google"
+        }
+      ],
+      "assets": [
+        "Google"
+      ],
+      "newsCategories": [
+        "Vulnerabilities"
+      ],
+      "primaryCategory": "Vulnerabilities",
+      "extractionVersion": "feed-v4",
+      "expectedEvent": "chromeos-150-lts-build-16700-66",
+      "baselineStoryId": "db322c97bdf8"
+    },
+    {
+      "title": "Chrome Beta for Android Update",
+      "link": "http://chromereleases.googleblog.com/2026/10/chrome-beta-for-android-update.html",
+      "source": "Chrome Releases",
+      "pubDate": "2026-10-07T17:28:32.223Z",
+      "score": 25,
+      "severity": "Low",
+      "cves": [],
+      "topicCves": [],
+      "actors": [],
+      "malware": [],
+      "campaigns": [],
+      "ttpIds": [],
+      "iocs": {
+        "ips": [],
+        "domains": [],
+        "hashes": [],
+        "urls": []
+      },
+      "vendors": [
+        {
+          "id": "google",
+          "name": "Google",
+          "sector": "cloud-platforms",
+          "matched": "Chrome"
+        }
+      ],
+      "assets": [
+        "Google"
+      ],
+      "newsCategories": [],
+      "primaryCategory": null,
+      "extractionVersion": "feed-v4",
+      "expectedEvent": "independent:http://chromereleases.googleblog.com/2026/10/chrome-beta-for-android-update.html",
+      "baselineStoryId": "5ed5b7b3af1c"
+    },
+    {
+      "title": "Long Term Support (LTS) channel for ChromeOS - Major update from 144-> 150",
+      "link": "http://chromereleases.googleblog.com/2026/10/long-term-support-lts-channel-for.html",
+      "source": "Chrome Releases",
+      "pubDate": "2026-10-07T01:03:41.934Z",
+      "score": 25,
+      "severity": "Low",
+      "cves": [],
+      "topicCves": [],
+      "actors": [],
+      "malware": [],
+      "campaigns": [],
+      "ttpIds": [],
+      "iocs": {
+        "ips": [],
+        "domains": [],
+        "hashes": [],
+        "urls": []
+      },
+      "vendors": [
+        {
+          "id": "google",
+          "name": "Google",
+          "sector": "cloud-platforms",
+          "matched": "Google"
+        }
+      ],
+      "assets": [
+        "Google"
+      ],
+      "newsCategories": [],
+      "primaryCategory": null,
+      "extractionVersion": "feed-v4",
+      "expectedEvent": "chromeos-150-lts-build-16700-66",
+      "baselineStoryId": "db322c97bdf8"
+    },
+    {
+      "title": "Chrome for Android Update",
+      "link": "http://chromereleases.googleblog.com/2026/10/chrome-for-android-update_01835271525.html",
+      "source": "Chrome Releases",
+      "pubDate": "2026-10-06T22:00:00.000Z",
+      "score": 25,
+      "severity": "Low",
+      "cves": [],
+      "topicCves": [],
+      "actors": [],
+      "malware": [],
+      "campaigns": [],
+      "ttpIds": [],
+      "iocs": {
+        "ips": [],
+        "domains": [],
+        "hashes": [],
+        "urls": []
+      },
+      "vendors": [
+        {
+          "id": "google",
+          "name": "Google",
+          "sector": "cloud-platforms",
+          "matched": "Chrome"
+        }
+      ],
+      "assets": [
+        "Google"
+      ],
+      "newsCategories": [],
+      "primaryCategory": null,
+      "extractionVersion": "feed-v4",
+      "expectedEvent": "independent:http://chromereleases.googleblog.com/2026/10/chrome-for-android-update_01835271525.html",
+      "baselineStoryId": "5ed5b7b3af1c"
+    },
+    {
+      "title": "Chrome Dev for Android Update",
+      "link": "http://chromereleases.googleblog.com/2026/10/chrome-dev-for-android-update.html",
+      "source": "Chrome Releases",
+      "pubDate": "2026-10-02T22:43:32.707Z",
+      "score": 25,
+      "severity": "Low",
+      "cves": [],
+      "topicCves": [],
+      "actors": [],
+      "malware": [],
+      "campaigns": [],
+      "ttpIds": [],
+      "iocs": {
+        "ips": [],
+        "domains": [],
+        "hashes": [],
+        "urls": []
+      },
+      "vendors": [
+        {
+          "id": "google",
+          "name": "Google",
+          "sector": "cloud-platforms",
+          "matched": "Chrome"
+        }
+      ],
+      "assets": [
+        "Google"
+      ],
+      "newsCategories": [],
+      "primaryCategory": null,
+      "extractionVersion": "feed-v4",
+      "expectedEvent": "independent:http://chromereleases.googleblog.com/2026/10/chrome-dev-for-android-update.html",
+      "baselineStoryId": "5ed5b7b3af1c"
+    },
+    {
+      "title": "Chrome for Android Update",
+      "link": "http://chromereleases.googleblog.com/2026/10/chrome-for-android-update.html",
+      "source": "Chrome Releases",
+      "pubDate": "2026-10-02T02:25:42.499Z",
+      "score": 25,
+      "severity": "Low",
+      "cves": [],
+      "topicCves": [],
+      "actors": [],
+      "malware": [],
+      "campaigns": [],
+      "ttpIds": [],
+      "iocs": {
+        "ips": [],
+        "domains": [],
+        "hashes": [],
+        "urls": []
+      },
+      "vendors": [
+        {
+          "id": "google",
+          "name": "Google",
+          "sector": "cloud-platforms",
+          "matched": "Chrome"
+        }
+      ],
+      "assets": [
+        "Google"
+      ],
+      "newsCategories": [],
+      "primaryCategory": null,
+      "extractionVersion": "feed-v4",
+      "expectedEvent": "independent:http://chromereleases.googleblog.com/2026/10/chrome-for-android-update.html",
+      "baselineStoryId": "5ed5b7b3af1c"
+    },
+    {
+      "title": "Chrome for Android Update",
+      "link": "http://chromereleases.googleblog.com/2026/09/chrome-for-android-update_01438056910.html",
+      "source": "Chrome Releases",
+      "pubDate": "2026-09-30T18:10:24.906Z",
+      "score": 25,
+      "severity": "Low",
+      "cves": [],
+      "topicCves": [],
+      "actors": [],
+      "malware": [],
+      "campaigns": [],
+      "ttpIds": [],
+      "iocs": {
+        "ips": [],
+        "domains": [],
+        "hashes": [],
+        "urls": []
+      },
+      "vendors": [
+        {
+          "id": "google",
+          "name": "Google",
+          "sector": "cloud-platforms",
+          "matched": "Chrome"
+        }
+      ],
+      "assets": [
+        "Google"
+      ],
+      "newsCategories": [],
+      "primaryCategory": null,
+      "extractionVersion": "feed-v4",
+      "expectedEvent": "independent:http://chromereleases.googleblog.com/2026/09/chrome-for-android-update_01438056910.html",
+      "baselineStoryId": "5ed5b7b3af1c"
+    },
+    {
+      "title": "Chrome Beta for Android Update",
+      "link": "http://chromereleases.googleblog.com/2026/09/chrome-beta-for-android-update_0961163892.html",
+      "source": "Chrome Releases",
+      "pubDate": "2026-09-30T17:13:32.409Z",
+      "score": 25,
+      "severity": "Low",
+      "cves": [],
+      "topicCves": [],
+      "actors": [],
+      "malware": [],
+      "campaigns": [],
+      "ttpIds": [],
+      "iocs": {
+        "ips": [],
+        "domains": [],
+        "hashes": [],
+        "urls": []
+      },
+      "vendors": [
+        {
+          "id": "google",
+          "name": "Google",
+          "sector": "cloud-platforms",
+          "matched": "Chrome"
+        }
+      ],
+      "assets": [
+        "Google"
+      ],
+      "newsCategories": [],
+      "primaryCategory": null,
+      "extractionVersion": "feed-v4",
+      "expectedEvent": "independent:http://chromereleases.googleblog.com/2026/09/chrome-beta-for-android-update_0961163892.html",
+      "baselineStoryId": "5ed5b7b3af1c"
+    },
+    {
+      "title": "Citrix NetScaler RCE zero-day Vulnerabilities",
+      "link": "https://fortiguard.fortinet.com/threat-signal-report/6533",
+      "source": "FortiGuard Threat Signal",
+      "pubDate": "2026-10-09T02:00:03.000Z",
+      "score": 100,
+      "severity": "Critical",
+      "cves": [
+        "CVE-2026-88771",
+        "CVE-2026-88772"
+      ],
+      "topicCves": [
+        "CVE-2026-88771",
+        "CVE-2026-88772"
+      ],
+      "actors": [],
+      "malware": [],
+      "campaigns": [],
+      "ttpIds": [
+        "T1190",
+        "T1071"
+      ],
+      "iocs": {
+        "ips": [],
+        "domains": [],
+        "hashes": [],
+        "urls": []
+      },
+      "vendors": [
+        {
+          "id": "citrix",
+          "name": "Citrix",
+          "sector": "enterprise-software",
+          "matched": "Citrix"
+        }
+      ],
+      "assets": [
+        "Citrix"
+      ],
+      "newsCategories": [
+        "Vulnerabilities"
+      ],
+      "primaryCategory": "Vulnerabilities",
+      "extractionVersion": "feed-v4",
+      "expectedEvent": "independent:https://fortiguard.fortinet.com/threat-signal-report/6533",
+      "baselineStoryId": "d87f12619f21"
+    },
+    {
+      "title": "Citrix NetScaler ADC and NetScaler Gateway RCE",
+      "link": "https://fortiguard.fortinet.com/threat-signal-report/6199",
+      "source": "FortiGuard Threat Signal",
+      "pubDate": "2026-09-29T05:51:34.000Z",
+      "score": 90,
+      "severity": "Critical",
+      "cves": [
+        "CVE-2025-7775",
+        "CVE-2025-7776",
+        "CVE-2025-8424"
+      ],
+      "topicCves": [
+        "CVE-2025-7775"
+      ],
+      "actors": [],
+      "malware": [],
+      "campaigns": [],
+      "ttpIds": [
+        "T1190",
+        "T1498"
+      ],
+      "iocs": {
+        "ips": [],
+        "domains": [],
+        "hashes": [],
+        "urls": []
+      },
+      "vendors": [
+        {
+          "id": "citrix",
+          "name": "Citrix",
+          "sector": "enterprise-software",
+          "matched": "Citrix"
+        }
+      ],
+      "assets": [
+        "Citrix"
+      ],
+      "newsCategories": [
+        "Vulnerabilities"
+      ],
+      "primaryCategory": "Vulnerabilities",
+      "extractionVersion": "feed-v4",
+      "expectedEvent": "independent:https://fortiguard.fortinet.com/threat-signal-report/6199",
+      "baselineStoryId": "d87f12619f21"
+    },
+    {
+      "title": "Germany arrests alleged core Qilin ransomware member after extradition",
+      "link": "https://www.bleepingcomputer.com/news/security/germany-arrests-alleged-core-qilin-ransomware-member-after-extradition/",
+      "source": "BleepingComputer",
+      "pubDate": "2026-10-09T15:38:56.000Z",
+      "score": 100,
+      "severity": "Critical",
+      "cves": [],
+      "topicCves": [],
+      "actors": [
+        {
+          "id": "rl-qilin",
+          "name": "Qilin",
+          "matched": "Qilin",
+          "via": "context"
+        },
+        {
+          "id": "rl-rhysida",
+          "name": "Rhysida",
+          "matched": "Rhysida",
+          "via": "context"
+        }
+      ],
+      "malware": [
+        {
+          "id": "malpedia-d430e861",
+          "name": "AgendaCrypt",
+          "matched": "Qilin",
+          "via": "distinctive"
+        }
+      ],
+      "campaigns": [],
+      "ttpIds": [
+        "T1486"
+      ],
+      "iocs": {
+        "ips": [],
+        "domains": [],
+        "hashes": [],
+        "urls": []
+      },
+      "vendors": [
+        {
+          "id": "palo-alto-networks",
+          "name": "Palo Alto Networks",
+          "sector": "security",
+          "matched": "Palo Alto"
+        },
+        {
+          "id": "check-point",
+          "name": "Check Point",
+          "sector": "security",
+          "matched": "Check Point"
+        },
+        {
+          "id": "atlassian",
+          "name": "Atlassian",
+          "sector": "enterprise-software",
+          "matched": "Atlassian"
+        }
+      ],
+      "assets": [
+        "Palo Alto Networks",
+        "Check Point",
+        "Atlassian"
+      ],
+      "newsCategories": [
+        "Ransomware"
+      ],
+      "primaryCategory": "Ransomware",
+      "extractionVersion": "feed-v4",
+      "expectedEvent": "independent:https://www.bleepingcomputer.com/news/security/germany-arrests-alleged-core-qilin-ransomware-member-after-extradition/",
+      "baselineStoryId": "4561eea13d9a"
+    },
+    {
+      "title": "Citrix warns admins to patch new NetScaler RCE flaw immediately",
+      "link": "https://www.bleepingcomputer.com/news/security/citrix-warns-admins-to-patch-new-netscaler-rce-flaw-immediately/",
+      "source": "BleepingComputer",
+      "pubDate": "2026-10-09T08:27:42.000Z",
+      "score": 100,
+      "severity": "Critical",
+      "cves": [
+        "CVE-2026-107406",
+        "CVE-2026-3055",
+        "CVE-2026-4368",
+        "CVE-2026-88771",
+        "CVE-2026-88772",
+        "CVE-2026-88779"
+      ],
+      "topicCves": [
+        "CVE-2026-107406"
+      ],
+      "actors": [],
+      "malware": [],
+      "campaigns": [],
+      "ttpIds": [
+        "T1190",
+        "T1486"
+      ],
+      "iocs": {
+        "ips": [],
+        "domains": [],
+        "hashes": [],
+        "urls": []
+      },
+      "vendors": [
+        {
+          "id": "atlassian",
+          "name": "Atlassian",
+          "sector": "enterprise-software",
+          "matched": "Atlassian"
+        },
+        {
+          "id": "citrix",
+          "name": "Citrix",
+          "sector": "enterprise-software",
+          "matched": "Citrix"
+        }
+      ],
+      "assets": [
+        "Atlassian",
+        "Citrix"
+      ],
+      "newsCategories": [
+        "Ransomware",
+        "Vulnerabilities"
+      ],
+      "primaryCategory": "Ransomware",
+      "extractionVersion": "feed-v4",
+      "expectedEvent": "netscaler-107406",
+      "baselineStoryId": "d87f12619f21"
+    },
+    {
+      "title": "FBI disrupts Chinese hacking tools used to breach critical infrastructure",
+      "link": "https://www.bleepingcomputer.com/news/security/fbi-disrupts-chinese-hacking-tools-used-to-breach-critical-infrastructure/",
+      "source": "BleepingComputer",
+      "pubDate": "2026-10-08T21:42:51.000Z",
+      "score": 100,
+      "severity": "Critical",
+      "cves": [
+        "CVE-2015-3306",
+        "CVE-2015-5477",
+        "CVE-2016-3081",
+        "CVE-2021-3199",
+        "CVE-2023-22894",
+        "CVE-2014-6278",
+        "CVE-2019-11510",
+        "CVE-2021-22205"
+      ],
+      "topicCves": [
+        "CVE-2015-3306"
+      ],
+      "actors": [
+        {
+          "id": "misp-50ee2b1b",
+          "name": "Flax Typhoon",
+          "matched": "Flax Typhoon",
+          "via": "multiword"
+        },
+        {
+          "id": "rl-medusa",
+          "name": "Medusa",
+          "matched": "Medusa",
+          "via": "context"
+        },
+        {
+          "id": "rl-warlock",
+          "name": "Warlock",
+          "matched": "Warlock",
+          "via": "context"
+        }
+      ],
+      "malware": [
+        {
+          "id": "S1244",
+          "name": "Medusa Ransomware",
+          "matched": "Medusa Ransomware",
+          "via": "multiword"
+        },
+        {
+          "id": "malpedia-37367873",
+          "name": "WarLock",
+          "matched": "WarLock",
+          "via": "distinctive"
+        }
+      ],
+      "campaigns": [],
+      "ttpIds": [
+        "T1566",
+        "T1566.001",
+        "T1190",
+        "T1486",
+        "T1041"
+      ],
+      "iocs": {
+        "ips": [],
+        "domains": [],
+        "hashes": [],
+        "urls": []
+      },
+      "vendors": [
+        {
+          "id": "microsoft",
+          "name": "Microsoft",
+          "sector": "cloud-platforms",
+          "matched": "Microsoft"
+        },
+        {
+          "id": "oracle",
+          "name": "Oracle",
+          "sector": "cloud-platforms",
+          "matched": "Oracle"
+        },
+        {
+          "id": "pulse-secure",
+          "name": "Pulse Secure",
+          "sector": "security",
+          "matched": "Pulse Secure"
+        },
+        {
+          "id": "mikrotik",
+          "name": "MikroTik",
+          "sector": "networking",
+          "matched": "MikroTik"
+        },
+        {
+          "id": "atlassian",
+          "name": "Atlassian",
+          "sector": "enterprise-software",
+          "matched": "Atlassian"
+        },
+        {
+          "id": "onlyoffice",
+          "name": "ONLYOFFICE",
+          "sector": "enterprise-software",
+          "matched": "ONLYOFFICE"
+        },
+        {
+          "id": "gitlab",
+          "name": "GitLab",
+          "sector": "development-data",
+          "matched": "GitLab"
+        },
+        {
+          "id": "apache-software-foundation",
+          "name": "Apache Software Foundation",
+          "sector": "development-data",
+          "matched": "Apache"
+        },
+        {
+          "id": "jenkins",
+          "name": "Jenkins",
+          "sector": "development-data",
+          "matched": "Jenkins"
+        },
+        {
+          "id": "isc",
+          "name": "ISC",
+          "sector": "development-data",
+          "matched": "ISC BIND"
+        },
+        {
+          "id": "wordpress",
+          "name": "WordPress",
+          "sector": "web-platforms",
+          "matched": "WordPress"
+        },
+        {
+          "id": "strapi",
+          "name": "Strapi",
+          "sector": "web-platforms",
+          "matched": "Strapi"
+        },
+        {
+          "id": "siemens",
+          "name": "Siemens",
+          "sector": "ot-ics",
+          "matched": "Siemens"
+        }
+      ],
+      "assets": [
+        "Microsoft",
+        "Oracle",
+        "Pulse Secure",
+        "MikroTik",
+        "Atlassian",
+        "ONLYOFFICE",
+        "GitLab",
+        "Apache Software Foundation",
+        "Jenkins",
+        "ISC",
+        "WordPress",
+        "Strapi",
+        "Siemens"
+      ],
+      "newsCategories": [
+        "Ransomware",
+        "APTs",
+        "Data Leaks",
+        "Vulnerabilities",
+        "Malware",
+        "Phishing"
+      ],
+      "primaryCategory": "Ransomware",
+      "extractionVersion": "feed-v4",
+      "expectedEvent": "flax-typhoon-tools-disruption",
+      "baselineStoryId": "290af517c244"
+    },
+    {
+      "title": "Low-cost Android phones ship with residential proxy malware",
+      "link": "https://www.bleepingcomputer.com/news/security/low-cost-android-phones-ship-with-residential-proxy-malware/",
+      "source": "BleepingComputer",
+      "pubDate": "2026-10-08T19:20:33.000Z",
+      "score": 100,
+      "severity": "Critical",
+      "cves": [],
+      "topicCves": [],
+      "actors": [],
+      "malware": [
+        {
+          "id": "S0103",
+          "name": "route",
+          "matched": "route",
+          "via": "distinctive"
+        },
+        {
+          "id": "malpedia-10072fed",
+          "name": "Broomstick",
+          "matched": "CleanUp",
+          "via": "distinctive"
+        },
+        {
+          "id": "malpedia-cf752563",
+          "name": "Sality",
+          "matched": "Sality",
+          "via": "distinctive"
+        }
+      ],
+      "campaigns": [
+        {
+          "id": "reported:midnight-mimosa",
+          "name": "Midnight Mimosa",
+          "matched": "Midnight Mimosa",
+          "via": "reported"
+        }
+      ],
+      "ttpIds": [
+        "T1071",
+        "T1195"
+      ],
+      "iocs": {
+        "ips": [],
+        "domains": [],
+        "hashes": [],
+        "urls": []
+      },
+      "vendors": [
+        {
+          "id": "google",
+          "name": "Google",
+          "sector": "cloud-platforms",
+          "matched": "Android"
+        },
+        {
+          "id": "bitdefender",
+          "name": "Bitdefender",
+          "sector": "security",
+          "matched": "Bitdefender"
+        },
+        {
+          "id": "atlassian",
+          "name": "Atlassian",
+          "sector": "enterprise-software",
+          "matched": "Atlassian"
+        },
+        {
+          "id": "docker",
+          "name": "Docker",
+          "sector": "development-data",
+          "matched": "Docker"
+        },
+        {
+          "id": "samsung",
+          "name": "Samsung",
+          "sector": "hardware-endpoints",
+          "matched": "Samsung"
+        },
+        {
+          "id": "mediatek",
+          "name": "MediaTek",
+          "sector": "hardware-endpoints",
+          "matched": "MediaTek"
+        }
+      ],
+      "assets": [
+        "Google",
+        "Bitdefender",
+        "Atlassian",
+        "Docker",
+        "Samsung",
+        "MediaTek"
+      ],
+      "newsCategories": [
+        "Malware"
+      ],
+      "primaryCategory": "Malware",
+      "extractionVersion": "feed-v4",
+      "expectedEvent": "midnight-mimosa",
+      "baselineStoryId": "e491a4b111be"
+    },
+    {
+      "title": "Researchers Publish Working Exploit for Pre-Auth AnyDesk Linux Flaw That Gives Root Access",
+      "link": "https://thehackernews.com/2026/10/researchers-publish-working-exploit-for.html",
+      "source": "The Hacker News",
+      "pubDate": "2026-10-09T12:59:22.000Z",
+      "score": 40,
+      "severity": "Medium",
+      "cves": [],
+      "topicCves": [],
+      "actors": [],
+      "malware": [],
+      "campaigns": [],
+      "ttpIds": [
+        "T1190"
+      ],
+      "iocs": {
+        "ips": [],
+        "domains": [],
+        "hashes": [],
+        "urls": []
+      },
+      "vendors": [
+        {
+          "id": "anydesk",
+          "name": "AnyDesk",
+          "sector": "enterprise-software",
+          "matched": "AnyDesk"
+        }
+      ],
+      "assets": [
+        "AnyDesk"
+      ],
+      "newsCategories": [
+        "Vulnerabilities"
+      ],
+      "primaryCategory": "Vulnerabilities",
+      "extractionVersion": "feed-v4",
+      "expectedEvent": "independent:https://thehackernews.com/2026/10/researchers-publish-working-exploit-for.html",
+      "baselineStoryId": "1e107ea18fdb"
+    },
+    {
+      "title": "Attackers Exploit AhsayCBS Flaws to Deploy XMRig Miners Disguised as Microsoft Edge",
+      "link": "https://thehackernews.com/2026/10/attackers-exploit-ahsaycbs-flaws-to.html",
+      "source": "The Hacker News",
+      "pubDate": "2026-10-09T12:47:26.000Z",
+      "score": 30,
+      "severity": "Medium",
+      "cves": [
+        "CVE-2026-105133"
+      ],
+      "topicCves": [
+        "CVE-2026-105133"
+      ],
+      "actors": [],
+      "malware": [
+        {
+          "id": "malpedia-88efd461",
+          "name": "xmrig",
+          "matched": "xmrig",
+          "via": "distinctive"
+        }
+      ],
+      "campaigns": [],
+      "ttpIds": [],
+      "iocs": {
+        "ips": [],
+        "domains": [],
+        "hashes": [],
+        "urls": []
+      },
+      "vendors": [
+        {
+          "id": "microsoft",
+          "name": "Microsoft",
+          "sector": "cloud-platforms",
+          "matched": "Microsoft"
+        }
+      ],
+      "assets": [
+        "Microsoft"
+      ],
+      "newsCategories": [
+        "Vulnerabilities",
+        "Microsoft"
+      ],
+      "primaryCategory": "Vulnerabilities",
+      "extractionVersion": "feed-v4",
+      "expectedEvent": "ahsaycbs-105133",
+      "baselineStoryId": "fb457f8b9aa4"
+    },
+    {
+      "title": "Flax Typhoon Exploits Five Flaws as CISA Sets October 11 Deadline for Federal Agencies",
+      "link": "https://thehackernews.com/2026/10/flax-typhoon-exploits-five-flaws-as.html",
+      "source": "The Hacker News",
+      "pubDate": "2026-10-09T12:21:51.000Z",
+      "score": 50,
+      "severity": "High",
+      "cves": [
+        "CVE-2015-3306"
+      ],
+      "topicCves": [
+        "CVE-2015-3306"
+      ],
+      "actors": [
+        {
+          "id": "misp-50ee2b1b",
+          "name": "Flax Typhoon",
+          "matched": "Flax Typhoon",
+          "via": "multiword"
+        }
+      ],
+      "malware": [],
+      "campaigns": [],
+      "ttpIds": [],
+      "iocs": {
+        "ips": [],
+        "domains": [],
+        "hashes": [],
+        "urls": []
+      },
+      "vendors": [],
+      "assets": [],
+      "newsCategories": [
+        "APTs",
+        "Vulnerabilities"
+      ],
+      "primaryCategory": "APTs",
+      "extractionVersion": "feed-v4",
+      "expectedEvent": "flax-typhoon-tools-disruption",
+      "baselineStoryId": "83f8612997a5"
+    },
+    {
+      "title": "Three Teams Demonstrate Remote Hacks of Fully Patched Google Pixel 10 at Pwn2Own",
+      "link": "https://thehackernews.com/2026/10/three-teams-demonstrate-remote-hacks-of.html",
+      "source": "The Hacker News",
+      "pubDate": "2026-10-09T08:26:17.000Z",
+      "score": 20,
+      "severity": "Low",
+      "cves": [],
+      "topicCves": [],
+      "actors": [],
+      "malware": [],
+      "campaigns": [],
+      "ttpIds": [],
+      "iocs": {
+        "ips": [],
+        "domains": [],
+        "hashes": [],
+        "urls": []
+      },
+      "vendors": [
+        {
+          "id": "google",
+          "name": "Google",
+          "sector": "cloud-platforms",
+          "matched": "Google"
+        },
+        {
+          "id": "trend-micro",
+          "name": "Trend Micro",
+          "sector": "security",
+          "matched": "Trend Micro"
+        }
+      ],
+      "assets": [
+        "Google",
+        "Trend Micro"
+      ],
+      "newsCategories": [],
+      "primaryCategory": null,
+      "extractionVersion": "feed-v4",
+      "expectedEvent": "pixel10-pwn2own",
+      "baselineStoryId": "0fcaed1bfbe1"
+    },
+    {
+      "title": "Citrix Patches Critical NetScaler Flaw That Could Enable RCE in SAML Deployments",
+      "link": "https://thehackernews.com/2026/10/citrix-patches-critical-netscaler-flaw.html",
+      "source": "The Hacker News",
+      "pubDate": "2026-10-09T08:11:33.000Z",
+      "score": 50,
+      "severity": "High",
+      "cves": [
+        "CVE-2026-107406"
+      ],
+      "topicCves": [
+        "CVE-2026-107406"
+      ],
+      "actors": [],
+      "malware": [],
+      "campaigns": [],
+      "ttpIds": [
+        "T1190"
+      ],
+      "iocs": {
+        "ips": [],
+        "domains": [],
+        "hashes": [],
+        "urls": []
+      },
+      "vendors": [
+        {
+          "id": "citrix",
+          "name": "Citrix",
+          "sector": "enterprise-software",
+          "matched": "Citrix"
+        }
+      ],
+      "assets": [
+        "Citrix"
+      ],
+      "newsCategories": [
+        "Vulnerabilities"
+      ],
+      "primaryCategory": "Vulnerabilities",
+      "extractionVersion": "feed-v4",
+      "expectedEvent": "netscaler-107406",
+      "baselineStoryId": "d87f12619f21"
+    },
+    {
+      "title": "FBI Seizes 7 Domains, Disrupts Flax Typhoon Tools Used in Critical Infrastructure Intrusions",
+      "link": "https://thehackernews.com/2026/10/fbi-seizes-7-domains-disrupts-flax.html",
+      "source": "The Hacker News",
+      "pubDate": "2026-10-09T06:39:29.000Z",
+      "score": 35,
+      "severity": "Medium",
+      "cves": [],
+      "topicCves": [],
+      "actors": [
+        {
+          "id": "misp-50ee2b1b",
+          "name": "Flax Typhoon",
+          "matched": "Flax Typhoon",
+          "via": "multiword"
+        }
+      ],
+      "malware": [],
+      "campaigns": [],
+      "ttpIds": [],
+      "iocs": {
+        "ips": [],
+        "domains": [],
+        "hashes": [],
+        "urls": []
+      },
+      "vendors": [],
+      "assets": [],
+      "newsCategories": [
+        "APTs"
+      ],
+      "primaryCategory": "APTs",
+      "extractionVersion": "feed-v4",
+      "expectedEvent": "flax-typhoon-tools-disruption",
+      "baselineStoryId": "290af517c244"
+    },
+    {
+      "title": "Wazza Phishkit Targets Banking, Government, and Manufacturing Across the US, EU, and Australia",
+      "link": "https://thehackernews.com/2026/10/wazza-phishkit-targets-banking.html",
+      "source": "The Hacker News",
+      "pubDate": "2026-10-08T10:30:00.000Z",
+      "score": 30,
+      "severity": "Medium",
+      "cves": [],
+      "topicCves": [],
+      "actors": [],
+      "malware": [],
+      "campaigns": [],
+      "ttpIds": [
+        "T1566"
+      ],
+      "iocs": {
+        "ips": [],
+        "domains": [],
+        "hashes": [],
+        "urls": []
+      },
+      "vendors": [],
+      "assets": [],
+      "newsCategories": [
+        "Phishing",
+        "Finance/Banking"
+      ],
+      "primaryCategory": "Phishing",
+      "extractionVersion": "feed-v4",
+      "expectedEvent": "independent:https://thehackernews.com/2026/10/wazza-phishkit-targets-banking.html",
+      "baselineStoryId": "11103d94604f"
+    },
+    {
+      "title": "Tensorlake npm Package Compromised to Deliver Shai-Hulud Credential-Stealing Worm",
+      "link": "https://thehackernews.com/2026/10/tensorlake-npm-package-compromised-to.html",
+      "source": "The Hacker News",
+      "pubDate": "2026-10-08T05:46:20.000Z",
+      "score": 100,
+      "severity": "Critical",
+      "cves": [],
+      "topicCves": [],
+      "actors": [],
+      "malware": [
+        {
+          "id": "S9008",
+          "name": "Shai-Hulud",
+          "matched": "Shai-Hulud",
+          "via": "distinctive"
+        }
+      ],
+      "campaigns": [],
+      "ttpIds": [
+        "T1195",
+        "T1027"
+      ],
+      "iocs": {
+        "ips": [],
+        "domains": [],
+        "hashes": [],
+        "urls": []
+      },
+      "vendors": [],
+      "assets": [],
+      "newsCategories": [],
+      "primaryCategory": null,
+      "extractionVersion": "feed-v4",
+      "expectedEvent": "independent:https://thehackernews.com/2026/10/tensorlake-npm-package-compromised-to.html",
+      "baselineStoryId": "9882c305bcdb"
+    },
+    {
+      "title": "Eight Malicious npm Packages Downloaded 40,767 Times Deliver Overlord RAT and Stealer",
+      "link": "https://thehackernews.com/2026/10/eight-malicious-npm-packages-downloaded.html",
+      "source": "The Hacker News",
+      "pubDate": "2026-10-07T17:43:20.000Z",
+      "score": 75,
+      "severity": "Critical",
+      "cves": [],
+      "topicCves": [],
+      "actors": [],
+      "malware": [],
+      "campaigns": [],
+      "ttpIds": [
+        "T1195"
+      ],
+      "iocs": {
+        "ips": [],
+        "domains": [],
+        "hashes": [],
+        "urls": []
+      },
+      "vendors": [
+        {
+          "id": "checkmarx",
+          "name": "Checkmarx",
+          "sector": "security",
+          "matched": "Checkmarx"
+        }
+      ],
+      "assets": [
+        "Checkmarx"
+      ],
+      "newsCategories": [
+        "Malware"
+      ],
+      "primaryCategory": "Malware",
+      "extractionVersion": "feed-v4",
+      "expectedEvent": "independent:https://thehackernews.com/2026/10/eight-malicious-npm-packages-downloaded.html",
+      "baselineStoryId": "9882c305bcdb"
+    },
+    {
+      "title": "Atlassian Data Center Flaw Draws Exploitation Attempts Within Two Hours of Public Details",
+      "link": "https://thehackernews.com/2026/10/atlassian-data-center-flaw-draws.html",
+      "source": "The Hacker News",
+      "pubDate": "2026-10-07T11:49:26.000Z",
+      "score": 60,
+      "severity": "High",
+      "cves": [
+        "CVE-2026-21589"
+      ],
+      "topicCves": [
+        "CVE-2026-21589"
+      ],
+      "actors": [],
+      "malware": [],
+      "campaigns": [],
+      "ttpIds": [],
+      "iocs": {
+        "ips": [],
+        "domains": [],
+        "hashes": [],
+        "urls": []
+      },
+      "vendors": [
+        {
+          "id": "atlassian",
+          "name": "Atlassian",
+          "sector": "enterprise-software",
+          "matched": "Atlassian"
+        }
+      ],
+      "assets": [
+        "Atlassian"
+      ],
+      "newsCategories": [
+        "Vulnerabilities"
+      ],
+      "primaryCategory": "Vulnerabilities",
+      "extractionVersion": "feed-v4",
+      "expectedEvent": "atlassian-21589",
+      "baselineStoryId": "f97880d75983"
+    },
+    {
+      "title": "Critical Atlassian Flaw Lets Unauthenticated Attackers Read Known Files Across 8 Products",
+      "link": "https://thehackernews.com/2026/10/critical-atlassian-flaw-lets.html",
+      "source": "The Hacker News",
+      "pubDate": "2026-10-06T06:58:56.000Z",
+      "score": 50,
+      "severity": "High",
+      "cves": [
+        "CVE-2026-21589"
+      ],
+      "topicCves": [
+        "CVE-2026-21589"
+      ],
+      "actors": [],
+      "malware": [],
+      "campaigns": [],
+      "ttpIds": [],
+      "iocs": {
+        "ips": [],
+        "domains": [],
+        "hashes": [],
+        "urls": []
+      },
+      "vendors": [
+        {
+          "id": "atlassian",
+          "name": "Atlassian",
+          "sector": "enterprise-software",
+          "matched": "Atlassian"
+        }
+      ],
+      "assets": [
+        "Atlassian"
+      ],
+      "newsCategories": [
+        "Vulnerabilities"
+      ],
+      "primaryCategory": "Vulnerabilities",
+      "extractionVersion": "feed-v4",
+      "expectedEvent": "atlassian-21589",
+      "baselineStoryId": "f97880d75983"
+    },
+    {
+      "title": "Microsoft Exchange Flaw Lets Authenticated Attackers Read Other Users' Mailboxes",
+      "link": "https://thehackernews.com/2026/10/microsoft-exchange-flaw-lets.html",
+      "source": "The Hacker News",
+      "pubDate": "2026-10-05T16:21:52.000Z",
+      "score": 30,
+      "severity": "Medium",
+      "cves": [
+        "CVE-2026-96940"
+      ],
+      "topicCves": [
+        "CVE-2026-96940"
+      ],
+      "actors": [],
+      "malware": [],
+      "campaigns": [],
+      "ttpIds": [],
+      "iocs": {
+        "ips": [],
+        "domains": [],
+        "hashes": [],
+        "urls": []
+      },
+      "vendors": [
+        {
+          "id": "microsoft",
+          "name": "Microsoft",
+          "sector": "cloud-platforms",
+          "matched": "Microsoft"
+        }
+      ],
+      "assets": [
+        "Microsoft"
+      ],
+      "newsCategories": [
+        "Vulnerabilities",
+        "Microsoft"
+      ],
+      "primaryCategory": "Vulnerabilities",
+      "extractionVersion": "feed-v4",
+      "expectedEvent": "exchange-96940",
+      "baselineStoryId": "128e6c412fb9"
+    },
+    {
+      "title": "⚡ Weekly Recap: NetScaler and FortiMail 0-Days, AI Coding Leaks, Spectre v2 and Ransomware Arrests",
+      "link": "https://thehackernews.com/2026/10/weekly-recap-netscaler-and-fortimail-0.html",
+      "source": "The Hacker News",
+      "pubDate": "2026-10-05T14:20:43.000Z",
+      "score": 85,
+      "severity": "Critical",
+      "cves": [],
+      "topicCves": [],
+      "actors": [],
+      "malware": [
+        {
+          "id": "malpedia-0d0935cc",
+          "name": "Spectre Rat",
+          "matched": "Spectre",
+          "via": "context"
+        }
+      ],
+      "campaigns": [],
+      "ttpIds": [
+        "T1486"
+      ],
+      "iocs": {
+        "ips": [],
+        "domains": [],
+        "hashes": [],
+        "urls": []
+      },
+      "vendors": [
+        {
+          "id": "fortinet",
+          "name": "Fortinet",
+          "sector": "security",
+          "matched": "FortiMail"
+        },
+        {
+          "id": "citrix",
+          "name": "Citrix",
+          "sector": "enterprise-software",
+          "matched": "NetScaler"
+        }
+      ],
+      "assets": [
+        "Fortinet",
+        "Citrix"
+      ],
+      "newsCategories": [
+        "Ransomware",
+        "Vulnerabilities"
+      ],
+      "primaryCategory": "Ransomware",
+      "extractionVersion": "feed-v4",
+      "expectedEvent": "independent:https://thehackernews.com/2026/10/weekly-recap-netscaler-and-fortimail-0.html",
+      "baselineStoryId": "d87f12619f21"
+    },
+    {
+      "title": "Attackers Target Rejetto HFS Flaw That Enables Admin Session Forgery and RCE",
+      "link": "https://thehackernews.com/2026/10/attackers-target-rejetto-hfs-flaw-that.html",
+      "source": "The Hacker News",
+      "pubDate": "2026-10-05T08:09:23.000Z",
+      "score": 70,
+      "severity": "Critical",
+      "cves": [
+        "CVE-2026-61500"
+      ],
+      "topicCves": [
+        "CVE-2026-61500"
+      ],
+      "actors": [],
+      "malware": [],
+      "campaigns": [],
+      "ttpIds": [
+        "T1190"
+      ],
+      "iocs": {
+        "ips": [],
+        "domains": [],
+        "hashes": [],
+        "urls": []
+      },
+      "vendors": [],
+      "assets": [],
+      "newsCategories": [
+        "Vulnerabilities"
+      ],
+      "primaryCategory": "Vulnerabilities",
+      "extractionVersion": "feed-v4",
+      "expectedEvent": "independent:https://thehackernews.com/2026/10/attackers-target-rejetto-hfs-flaw-that.html",
+      "baselineStoryId": "59130545c940"
+    },
+    {
+      "title": "New NetScaler Zero-Day Exploited in Targeted Attacks Can Knock SAML Deployments Offline",
+      "link": "https://thehackernews.com/2026/10/new-netscaler-zero-day-exploited-in.html",
+      "source": "The Hacker News",
+      "pubDate": "2026-10-05T06:40:19.000Z",
+      "score": 85,
+      "severity": "Critical",
+      "cves": [
+        "CVE-2026-88779"
+      ],
+      "topicCves": [
+        "CVE-2026-88779"
+      ],
+      "actors": [],
+      "malware": [],
+      "campaigns": [],
+      "ttpIds": [],
+      "iocs": {
+        "ips": [],
+        "domains": [],
+        "hashes": [],
+        "urls": []
+      },
+      "vendors": [
+        {
+          "id": "citrix",
+          "name": "Citrix",
+          "sector": "enterprise-software",
+          "matched": "NetScaler"
+        }
+      ],
+      "assets": [
+        "Citrix"
+      ],
+      "newsCategories": [
+        "Vulnerabilities"
+      ],
+      "primaryCategory": "Vulnerabilities",
+      "extractionVersion": "feed-v4",
+      "expectedEvent": "netscaler-88779",
+      "baselineStoryId": "d87f12619f21"
+    },
+    {
+      "title": "China-Aligned TA419 Targets U.S. AI Policy Experts With Microsoft AitM Phishing",
+      "link": "https://thehackernews.com/2026/10/china-aligned-ta419-targets-us-ai.html",
+      "source": "The Hacker News",
+      "pubDate": "2026-10-04T07:20:32.000Z",
+      "score": 40,
+      "severity": "Medium",
+      "cves": [],
+      "topicCves": [],
+      "actors": [
+        {
+          "id": "misp-d7140683",
+          "name": "TA419",
+          "matched": "TA419",
+          "via": "codename"
+        }
+      ],
+      "malware": [],
+      "campaigns": [],
+      "ttpIds": [
+        "T1566"
+      ],
+      "iocs": {
+        "ips": [],
+        "domains": [],
+        "hashes": [],
+        "urls": []
+      },
+      "vendors": [
+        {
+          "id": "microsoft",
+          "name": "Microsoft",
+          "sector": "cloud-platforms",
+          "matched": "Microsoft"
+        },
+        {
+          "id": "anthropic",
+          "name": "Anthropic",
+          "sector": "development-data",
+          "matched": "Anthropic"
+        }
+      ],
+      "assets": [
+        "Microsoft",
+        "Anthropic"
+      ],
+      "newsCategories": [
+        "APTs",
+        "Phishing",
+        "Microsoft"
+      ],
+      "primaryCategory": "APTs",
+      "extractionVersion": "feed-v4",
+      "expectedEvent": "independent:https://thehackernews.com/2026/10/china-aligned-ta419-targets-us-ai.html",
+      "baselineStoryId": "11103d94604f"
+    },
+    {
+      "title": "Unpatched AhsayCBS Vulnerabilities Exploited in the Wild",
+      "link": "https://www.securityweek.com/unpatched-ahsaycbs-vulnerabilities-exploited-in-the-wild/",
+      "source": "SecurityWeek",
+      "pubDate": "2026-10-09T10:23:42.000Z",
+      "score": 85,
+      "severity": "Critical",
+      "cves": [
+        "CVE-2026-105133",
+        "CVE-2026-105134"
+      ],
+      "topicCves": [
+        "CVE-2026-105133",
+        "CVE-2026-105134"
+      ],
+      "actors": [],
+      "malware": [
+        {
+          "id": "malpedia-88efd461",
+          "name": "xmrig",
+          "matched": "xmrig",
+          "via": "distinctive"
+        }
+      ],
+      "campaigns": [],
+      "ttpIds": [
+        "T1190",
+        "T1059.001",
+        "T1505.003",
+        "T1496"
+      ],
+      "iocs": {
+        "ips": [],
+        "domains": [],
+        "hashes": [],
+        "urls": []
+      },
+      "vendors": [
+        {
+          "id": "microsoft",
+          "name": "Microsoft",
+          "sector": "cloud-platforms",
+          "matched": "Microsoft"
+        },
+        {
+          "id": "huntress",
+          "name": "Huntress",
+          "sector": "security",
+          "matched": "Huntress"
+        }
+      ],
+      "assets": [
+        "Microsoft",
+        "Huntress"
+      ],
+      "newsCategories": [
+        "Vulnerabilities"
+      ],
+      "primaryCategory": "Vulnerabilities",
+      "extractionVersion": "feed-v4",
+      "expectedEvent": "ahsaycbs-105133",
+      "baselineStoryId": "fb457f8b9aa4"
+    },
+    {
+      "title": "Pre-Baked Firmware Malware Hits Budget Android Devices in 150+ Countries",
+      "link": "https://www.securityweek.com/pre-baked-firmware-malware-hits-budget-android-devices-in-150-countries/",
+      "source": "SecurityWeek",
+      "pubDate": "2026-10-09T09:55:35.000Z",
+      "score": 100,
+      "severity": "Critical",
+      "cves": [],
+      "topicCves": [],
+      "actors": [],
+      "malware": [],
+      "campaigns": [
+        {
+          "id": "reported:midnight-mimosa",
+          "name": "Midnight Mimosa",
+          "matched": "Midnight Mimosa",
+          "via": "reported"
+        }
+      ],
+      "ttpIds": [
+        "T1195"
+      ],
+      "iocs": {
+        "ips": [],
+        "domains": [],
+        "hashes": [],
+        "urls": []
+      },
+      "vendors": [
+        {
+          "id": "google",
+          "name": "Google",
+          "sector": "cloud-platforms",
+          "matched": "Android"
+        },
+        {
+          "id": "bitdefender",
+          "name": "Bitdefender",
+          "sector": "security",
+          "matched": "Bitdefender"
+        },
+        {
+          "id": "mediatek",
+          "name": "MediaTek",
+          "sector": "hardware-endpoints",
+          "matched": "MediaTek"
+        }
+      ],
+      "assets": [
+        "Google",
+        "Bitdefender",
+        "MediaTek"
+      ],
+      "newsCategories": [
+        "Malware"
+      ],
+      "primaryCategory": "Malware",
+      "extractionVersion": "feed-v4",
+      "expectedEvent": "midnight-mimosa",
+      "baselineStoryId": "83d9bbf4c954"
+    },
+    {
+      "title": "US Disrupts Chinese State-Sponsored Hacking Tools",
+      "link": "https://www.securityweek.com/us-disrupts-chinese-state-sponsored-hacking-tools/",
+      "source": "SecurityWeek",
+      "pubDate": "2026-10-09T08:36:37.000Z",
+      "score": 100,
+      "severity": "Critical",
+      "cves": [],
+      "topicCves": [],
+      "actors": [
+        {
+          "id": "misp-50ee2b1b",
+          "name": "Flax Typhoon",
+          "matched": "Flax Typhoon",
+          "via": "multiword"
+        }
+      ],
+      "malware": [],
+      "campaigns": [],
+      "ttpIds": [
+        "T1566",
+        "T1566.001",
+        "T1110",
+        "T1041"
+      ],
+      "iocs": {
+        "ips": [],
+        "domains": [
+          "c0cc.cc",
+          "98aicai.com",
+          "98aicode.com",
+          "outlook3650.com",
+          "youtubecard.com",
+          "linkedinns.net"
+        ],
+        "hashes": [],
+        "urls": []
+      },
+      "vendors": [
+        {
+          "id": "microsoft",
+          "name": "Microsoft",
+          "sector": "cloud-platforms",
+          "matched": "Microsoft"
+        },
+        {
+          "id": "oracle",
+          "name": "Oracle",
+          "sector": "cloud-platforms",
+          "matched": "Oracle"
+        },
+        {
+          "id": "juniper-networks",
+          "name": "Juniper Networks",
+          "sector": "networking",
+          "matched": "Juniper"
+        },
+        {
+          "id": "apache-software-foundation",
+          "name": "Apache Software Foundation",
+          "sector": "development-data",
+          "matched": "Apache"
+        },
+        {
+          "id": "jenkins",
+          "name": "Jenkins",
+          "sector": "development-data",
+          "matched": "Jenkins"
+        },
+        {
+          "id": "openssl",
+          "name": "OpenSSL",
+          "sector": "development-data",
+          "matched": "OpenSSL"
+        },
+        {
+          "id": "wordpress",
+          "name": "WordPress",
+          "sector": "web-platforms",
+          "matched": "WordPress"
+        }
+      ],
+      "assets": [
+        "Microsoft",
+        "Oracle",
+        "Juniper Networks",
+        "Apache Software Foundation",
+        "Jenkins",
+        "OpenSSL",
+        "WordPress"
+      ],
+      "newsCategories": [
+        "APTs",
+        "Malware",
+        "Phishing"
+      ],
+      "primaryCategory": "APTs",
+      "extractionVersion": "feed-v4",
+      "expectedEvent": "flax-typhoon-tools-disruption",
+      "baselineStoryId": "290af517c244"
+    },
+    {
+      "title": "Citrix Urges Immediate Patching of Critical NetScaler Vulnerability",
+      "link": "https://www.securityweek.com/citrix-urges-immediate-patching-of-critical-netscaler-vulnerability/",
+      "source": "SecurityWeek",
+      "pubDate": "2026-10-09T06:53:53.000Z",
+      "score": 100,
+      "severity": "Critical",
+      "cves": [
+        "CVE-2026-107406",
+        "CVE-2026-88779",
+        "CVE-2026-88771",
+        "CVE-2026-88772"
+      ],
+      "topicCves": [
+        "CVE-2026-107406"
+      ],
+      "actors": [],
+      "malware": [],
+      "campaigns": [],
+      "ttpIds": [
+        "T1190"
+      ],
+      "iocs": {
+        "ips": [],
+        "domains": [],
+        "hashes": [],
+        "urls": []
+      },
+      "vendors": [
+        {
+          "id": "citrix",
+          "name": "Citrix",
+          "sector": "enterprise-software",
+          "matched": "Citrix"
+        }
+      ],
+      "assets": [
+        "Citrix"
+      ],
+      "newsCategories": [
+        "Vulnerabilities"
+      ],
+      "primaryCategory": "Vulnerabilities",
+      "extractionVersion": "feed-v4",
+      "expectedEvent": "netscaler-107406",
+      "baselineStoryId": "d87f12619f21"
+    },
+    {
+      "title": "Google Pixel 10 Exploits Earned Hackers $560,000 at Pwn2Own",
+      "link": "https://www.securityweek.com/google-pixel-10-exploits-earned-hackers-560000-at-pwn2own/",
+      "source": "SecurityWeek",
+      "pubDate": "2026-10-09T06:39:55.000Z",
+      "score": 55,
+      "severity": "High",
+      "cves": [],
+      "topicCves": [],
+      "actors": [],
+      "malware": [],
+      "campaigns": [],
+      "ttpIds": [],
+      "iocs": {
+        "ips": [],
+        "domains": [],
+        "hashes": [],
+        "urls": []
+      },
+      "vendors": [
+        {
+          "id": "google",
+          "name": "Google",
+          "sector": "cloud-platforms",
+          "matched": "Google"
+        },
+        {
+          "id": "oracle",
+          "name": "Oracle",
+          "sector": "cloud-platforms",
+          "matched": "Oracle"
+        },
+        {
+          "id": "openai",
+          "name": "OpenAI",
+          "sector": "development-data",
+          "matched": "OpenAI"
+        },
+        {
+          "id": "litellm",
+          "name": "LiteLLM",
+          "sector": "development-data",
+          "matched": "LiteLLM"
+        },
+        {
+          "id": "apple",
+          "name": "Apple",
+          "sector": "hardware-endpoints",
+          "matched": "iPhone"
+        },
+        {
+          "id": "samsung",
+          "name": "Samsung",
+          "sector": "hardware-endpoints",
+          "matched": "Samsung"
+        },
+        {
+          "id": "nvidia",
+          "name": "NVIDIA",
+          "sector": "hardware-endpoints",
+          "matched": "Nvidia"
+        }
+      ],
+      "assets": [
+        "Google",
+        "Oracle",
+        "OpenAI",
+        "LiteLLM",
+        "Apple",
+        "Samsung",
+        "NVIDIA"
+      ],
+      "newsCategories": [],
+      "primaryCategory": null,
+      "extractionVersion": "feed-v4",
+      "expectedEvent": "pixel10-pwn2own",
+      "baselineStoryId": "0fcaed1bfbe1"
+    },
+    {
+      "title": "Cisco Patches a Dozen Critical Vulnerabilities",
+      "link": "https://www.securityweek.com/cisco-patches-a-dozen-critical-vulnerabilities/",
+      "source": "SecurityWeek",
+      "pubDate": "2026-10-08T15:28:06.000Z",
+      "score": 85,
+      "severity": "Critical",
+      "cves": [
+        "CVE-2026-76464",
+        "CVE-2026-20328",
+        "CVE-2026-76454",
+        "CVE-2026-76482",
+        "CVE-2026-76480",
+        "CVE-2026-76483",
+        "CVE-2026-76455",
+        "CVE-2026-76459",
+        "CVE-2026-76471",
+        "CVE-2026-76465",
+        "CVE-2026-76485",
+        "CVE-2026-76486",
+        "CVE-2026-76501",
+        "CVE-2026-76498",
+        "CVE-2026-76499",
+        "CVE-2026-76500",
+        "CVE-2026-20362"
+      ],
+      "topicCves": [
+        "CVE-2026-76498",
+        "CVE-2026-76499",
+        "CVE-2026-76500"
+      ],
+      "actors": [],
+      "malware": [],
+      "campaigns": [],
+      "ttpIds": [
+        "T1190",
+        "T1068"
+      ],
+      "iocs": {
+        "ips": [],
+        "domains": [],
+        "hashes": [],
+        "urls": []
+      },
+      "vendors": [
+        {
+          "id": "cisco",
+          "name": "Cisco",
+          "sector": "networking",
+          "matched": "Cisco"
+        }
+      ],
+      "assets": [
+        "Cisco"
+      ],
+      "newsCategories": [
+        "Vulnerabilities"
+      ],
+      "primaryCategory": "Vulnerabilities",
+      "extractionVersion": "feed-v4",
+      "expectedEvent": "independent:https://www.securityweek.com/cisco-patches-a-dozen-critical-vulnerabilities/",
+      "baselineStoryId": "98321fc18b35"
+    },
+    {
+      "title": "SWIFT Banking & Government Middleware Enables RCE",
+      "link": "https://www.darkreading.com/cybersecurity-operations/swift-banking-govt-middleware-rce",
+      "source": "Dark Reading",
+      "pubDate": "2026-10-02T16:27:54.000Z",
+      "score": 30,
+      "severity": "Medium",
+      "cves": [],
+      "topicCves": [],
+      "actors": [],
+      "malware": [],
+      "campaigns": [],
+      "ttpIds": [
+        "T1190"
+      ],
+      "iocs": {
+        "ips": [],
+        "domains": [],
+        "hashes": [],
+        "urls": []
+      },
+      "vendors": [],
+      "assets": [],
+      "newsCategories": [
+        "Vulnerabilities",
+        "Finance/Banking"
+      ],
+      "primaryCategory": "Vulnerabilities",
+      "extractionVersion": "feed-v4",
+      "expectedEvent": "independent:https://www.darkreading.com/cybersecurity-operations/swift-banking-govt-middleware-rce",
+      "baselineStoryId": "59130545c940"
+    },
+    {
+      "title": "Alleged KillSec Ransomware Mastermind a 16-Year-Old",
+      "link": "https://www.darkreading.com/cyberattacks-data-breaches/killsec-ransomware-mastermind-16-year-old",
+      "source": "Dark Reading",
+      "pubDate": "2026-10-01T21:37:50.000Z",
+      "score": 40,
+      "severity": "Medium",
+      "cves": [],
+      "topicCves": [],
+      "actors": [
+        {
+          "id": "rl-killsec",
+          "name": "KillSec",
+          "matched": "KillSec",
+          "via": "context"
+        }
+      ],
+      "malware": [],
+      "campaigns": [],
+      "ttpIds": [
+        "T1486"
+      ],
+      "iocs": {
+        "ips": [],
+        "domains": [],
+        "hashes": [],
+        "urls": []
+      },
+      "vendors": [],
+      "assets": [],
+      "newsCategories": [
+        "Ransomware"
+      ],
+      "primaryCategory": "Ransomware",
+      "extractionVersion": "feed-v4",
+      "expectedEvent": "independent:https://www.darkreading.com/cyberattacks-data-breaches/killsec-ransomware-mastermind-16-year-old",
+      "baselineStoryId": "4561eea13d9a"
+    },
+    {
+      "title": "Russia's Star Blizzard Ditches ClickFix to Widen Phishing Net",
+      "link": "https://www.darkreading.com/threat-intelligence/russia-star-blizzard-apt-ditches-clickfix-widen-phishing-net",
+      "source": "Dark Reading",
+      "pubDate": "2026-09-30T15:02:25.000Z",
+      "score": 60,
+      "severity": "High",
+      "cves": [],
+      "topicCves": [],
+      "actors": [
+        {
+          "id": "G1033",
+          "name": "Star Blizzard",
+          "matched": "Star Blizzard",
+          "via": "multiword"
+        }
+      ],
+      "malware": [],
+      "campaigns": [],
+      "ttpIds": [
+        "T1566"
+      ],
+      "iocs": {
+        "ips": [],
+        "domains": [],
+        "hashes": [],
+        "urls": []
+      },
+      "vendors": [],
+      "assets": [],
+      "newsCategories": [
+        "APTs",
+        "Malware",
+        "Phishing"
+      ],
+      "primaryCategory": "APTs",
+      "extractionVersion": "feed-v4",
+      "expectedEvent": "independent:https://www.darkreading.com/threat-intelligence/russia-star-blizzard-apt-ditches-clickfix-widen-phishing-net",
+      "baselineStoryId": "11103d94604f"
+    },
+    {
+      "title": "Carbonato Botnet Puts an AI Agent on Hacked Docker Hosts",
+      "link": "https://www.darkreading.com/identity-access-management-security/carbonato-botnet-ai-agent-hacked-docker-hosts",
+      "source": "Dark Reading",
+      "pubDate": "2026-09-28T20:23:58.000Z",
+      "score": 40,
+      "severity": "Medium",
+      "cves": [],
+      "topicCves": [],
+      "actors": [],
+      "malware": [],
+      "campaigns": [],
+      "ttpIds": [],
+      "iocs": {
+        "ips": [],
+        "domains": [],
+        "hashes": [],
+        "urls": []
+      },
+      "vendors": [
+        {
+          "id": "docker",
+          "name": "Docker",
+          "sector": "development-data",
+          "matched": "Docker"
+        }
+      ],
+      "assets": [
+        "Docker"
+      ],
+      "newsCategories": [
+        "Malware"
+      ],
+      "primaryCategory": "Malware",
+      "extractionVersion": "feed-v4",
+      "expectedEvent": "independent:https://www.darkreading.com/identity-access-management-security/carbonato-botnet-ai-agent-hacked-docker-hosts",
+      "baselineStoryId": "13e059bb849e"
+    },
+    {
+      "title": "Valley Oaks Health Data Breach Settlement Gets First Nod from Court",
+      "link": "https://www.hipaajournal.com/valley-oaks-health-data-breach-settlement/",
+      "source": "HIPAA Journal",
+      "pubDate": "2026-10-09T16:15:01.000Z",
+      "score": 31,
+      "severity": "Medium",
+      "cves": [],
+      "topicCves": [],
+      "actors": [],
+      "malware": [],
+      "campaigns": [],
+      "ttpIds": [],
+      "iocs": {
+        "ips": [],
+        "domains": [],
+        "hashes": [],
+        "urls": []
+      },
+      "vendors": [],
+      "assets": [],
+      "newsCategories": [
+        "Data Leaks"
+      ],
+      "primaryCategory": "Data Leaks",
+      "extractionVersion": "feed-v4",
+      "expectedEvent": "independent:https://www.hipaajournal.com/valley-oaks-health-data-breach-settlement/",
+      "baselineStoryId": "26bb4fd75540"
+    },
+    {
+      "title": "Bacon County Health Services Investigating Cyber Incident",
+      "link": "https://www.hipaajournal.com/bacon-county-health-services-investigating-cyber-incident/",
+      "source": "HIPAA Journal",
+      "pubDate": "2026-10-09T14:43:21.000Z",
+      "score": 81,
+      "severity": "Critical",
+      "cves": [],
+      "topicCves": [],
+      "actors": [
+        {
+          "id": "rl-crypto24",
+          "name": "Crypto24",
+          "matched": "Crypto24",
+          "via": "context"
+        }
+      ],
+      "malware": [],
+      "campaigns": [],
+      "ttpIds": [
+        "T1486",
+        "T1041"
+      ],
+      "iocs": {
+        "ips": [],
+        "domains": [],
+        "hashes": [],
+        "urls": []
+      },
+      "vendors": [],
+      "assets": [],
+      "newsCategories": [
+        "Ransomware"
+      ],
+      "primaryCategory": "Ransomware",
+      "extractionVersion": "feed-v4",
+      "expectedEvent": "independent:https://www.hipaajournal.com/bacon-county-health-services-investigating-cyber-incident/",
+      "baselineStoryId": "26bb4fd75540"
+    },
+    {
+      "title": "Shen Smiles Pays $140,000 to Resolve HIPAA Privacy Rule Violations",
+      "link": "https://www.hipaajournal.com/shen-smiles-pays-140000-to-resolve-hipaa-privacy-rule-violations/",
+      "source": "HIPAA Journal",
+      "pubDate": "2026-10-09T12:31:43.000Z",
+      "score": 31,
+      "severity": "Medium",
+      "cves": [],
+      "topicCves": [],
+      "actors": [],
+      "malware": [],
+      "campaigns": [],
+      "ttpIds": [],
+      "iocs": {
+        "ips": [],
+        "domains": [],
+        "hashes": [],
+        "urls": []
+      },
+      "vendors": [],
+      "assets": [],
+      "newsCategories": [
+        "Health/Pharma"
+      ],
+      "primaryCategory": "Health/Pharma",
+      "extractionVersion": "feed-v4",
+      "expectedEvent": "independent:https://www.hipaajournal.com/shen-smiles-pays-140000-to-resolve-hipaa-privacy-rule-violations/",
+      "baselineStoryId": "26bb4fd75540"
+    },
+    {
+      "title": "Laboratory Services Cooperative Agrees to Pay $6.1 Million to Settle Data Breach Litigation",
+      "link": "https://www.hipaajournal.com/laboratory-services-cooperative-data-breach-settlement/",
+      "source": "HIPAA Journal",
+      "pubDate": "2026-10-08T14:15:54.000Z",
+      "score": 31,
+      "severity": "Medium",
+      "cves": [],
+      "topicCves": [],
+      "actors": [],
+      "malware": [],
+      "campaigns": [],
+      "ttpIds": [],
+      "iocs": {
+        "ips": [],
+        "domains": [],
+        "hashes": [],
+        "urls": []
+      },
+      "vendors": [],
+      "assets": [],
+      "newsCategories": [
+        "Data Leaks"
+      ],
+      "primaryCategory": "Data Leaks",
+      "extractionVersion": "feed-v4",
+      "expectedEvent": "independent:https://www.hipaajournal.com/laboratory-services-cooperative-data-breach-settlement/",
+      "baselineStoryId": "26bb4fd75540"
+    },
+    {
+      "title": "Almost 20 Million Individuals Affected by 2025 Data Breach at Oracle Health/Cerner",
+      "link": "https://www.hipaajournal.com/oracle-health-data-breach/",
+      "source": "HIPAA Journal",
+      "pubDate": "2026-10-08T07:12:47.000Z",
+      "score": 100,
+      "severity": "Critical",
+      "cves": [],
+      "topicCves": [],
+      "actors": [],
+      "malware": [],
+      "campaigns": [],
+      "ttpIds": [
+        "T1566",
+        "T1486",
+        "T1555",
+        "T1041"
+      ],
+      "iocs": {
+        "ips": [],
+        "domains": [],
+        "hashes": [],
+        "urls": []
+      },
+      "vendors": [
+        {
+          "id": "oracle",
+          "name": "Oracle",
+          "sector": "cloud-platforms",
+          "matched": "Oracle"
+        }
+      ],
+      "assets": [
+        "Oracle"
+      ],
+      "newsCategories": [
+        "Ransomware",
+        "Data Leaks",
+        "Phishing"
+      ],
+      "primaryCategory": "Ransomware",
+      "extractionVersion": "feed-v4",
+      "expectedEvent": "independent:https://www.hipaajournal.com/oracle-health-data-breach/",
+      "baselineStoryId": "26bb4fd75540"
+    },
+    {
+      "title": "Jefferson-Blount-St. Clair Mental Health Authority Pays $700K to Settle Data Breach Lawsuit",
+      "link": "https://www.hipaajournal.com/jefferson-blount-st-clair-mental-health-authority-data-breach-settlement/",
+      "source": "HIPAA Journal",
+      "pubDate": "2026-10-07T15:44:18.000Z",
+      "score": 61,
+      "severity": "High",
+      "cves": [],
+      "topicCves": [],
+      "actors": [],
+      "malware": [],
+      "campaigns": [],
+      "ttpIds": [
+        "T1486"
+      ],
+      "iocs": {
+        "ips": [],
+        "domains": [],
+        "hashes": [],
+        "urls": []
+      },
+      "vendors": [],
+      "assets": [],
+      "newsCategories": [
+        "Ransomware",
+        "Data Leaks"
+      ],
+      "primaryCategory": "Ransomware",
+      "extractionVersion": "feed-v4",
+      "expectedEvent": "independent:https://www.hipaajournal.com/jefferson-blount-st-clair-mental-health-authority-data-breach-settlement/",
+      "baselineStoryId": "26bb4fd75540"
+    },
+    {
+      "title": "Citrix Patches Third Actively Exploited NetScaler Zero Day",
+      "link": "https://www.hipaajournal.com/citrix-patches-third-actively-exploited-netscaler-zero-day/",
+      "source": "HIPAA Journal",
+      "pubDate": "2026-10-06T10:26:38.000Z",
+      "score": 100,
+      "severity": "Critical",
+      "cves": [
+        "CVE-2026-8877",
+        "CVE-2026-88779"
+      ],
+      "topicCves": [
+        "CVE-2026-88779"
+      ],
+      "actors": [],
+      "malware": [],
+      "campaigns": [],
+      "ttpIds": [
+        "T1190",
+        "T1498"
+      ],
+      "iocs": {
+        "ips": [],
+        "domains": [],
+        "hashes": [],
+        "urls": []
+      },
+      "vendors": [
+        {
+          "id": "citrix",
+          "name": "Citrix",
+          "sector": "enterprise-software",
+          "matched": "Citrix"
+        }
+      ],
+      "assets": [
+        "Citrix"
+      ],
+      "newsCategories": [
+        "Vulnerabilities"
+      ],
+      "primaryCategory": "Vulnerabilities",
+      "extractionVersion": "feed-v4",
+      "expectedEvent": "netscaler-88779",
+      "baselineStoryId": "d87f12619f21"
+    },
+    {
+      "title": "Reconstructing AI Agent Activity: Two New Scripts for Forensic Review, (Thu, Oct 8th)",
+      "link": "https://isc.sans.edu/diary/rss/33410",
+      "source": "SANS ISC",
+      "pubDate": "2026-10-08T16:52:53.000Z",
+      "score": 20,
+      "severity": "Low",
+      "cves": [],
+      "topicCves": [],
+      "actors": [],
+      "malware": [],
+      "campaigns": [],
+      "ttpIds": [],
+      "iocs": {
+        "ips": [],
+        "domains": [],
+        "hashes": [],
+        "urls": []
+      },
+      "vendors": [
+        {
+          "id": "github",
+          "name": "GitHub",
+          "sector": "development-data",
+          "matched": "GitHub"
+        }
+      ],
+      "assets": [
+        "GitHub"
+      ],
+      "newsCategories": [],
+      "primaryCategory": null,
+      "extractionVersion": "feed-v4",
+      "expectedEvent": "independent:https://isc.sans.edu/diary/rss/33410",
+      "baselineStoryId": "13e059bb849e"
+    },
+    {
+      "title": "Scans for Atlassian vulnerablity (CVE-2026-21589), (Wed, Oct 7th)",
+      "link": "https://isc.sans.edu/diary/rss/33406",
+      "source": "SANS ISC",
+      "pubDate": "2026-10-07T14:59:33.000Z",
+      "score": 50,
+      "severity": "High",
+      "cves": [
+        "CVE-2026-21589"
+      ],
+      "topicCves": [
+        "CVE-2026-21589"
+      ],
+      "actors": [],
+      "malware": [],
+      "campaigns": [],
+      "ttpIds": [],
+      "iocs": {
+        "ips": [
+          "134.199.229.190",
+          "134.199.230.82",
+          "137.184.112.247",
+          "137.184.33.84",
+          "143.198.103.58",
+          "143.198.132.93",
+          "146.190.169.1",
+          "146.190.172.250",
+          "159.223.199.218",
+          "164.92.68.152",
+          "209.38.147.216",
+          "24.199.101.184",
+          "64.23.172.129"
+        ],
+        "domains": [],
+        "hashes": [],
+        "urls": []
+      },
+      "vendors": [
+        {
+          "id": "atlassian",
+          "name": "Atlassian",
+          "sector": "enterprise-software",
+          "matched": "Atlassian"
+        },
+        {
+          "id": "apache-software-foundation",
+          "name": "Apache Software Foundation",
+          "sector": "development-data",
+          "matched": "Tomcat"
+        }
+      ],
+      "assets": [
+        "Atlassian",
+        "Apache Software Foundation"
+      ],
+      "newsCategories": [
+        "Vulnerabilities"
+      ],
+      "primaryCategory": "Vulnerabilities",
+      "extractionVersion": "feed-v4",
+      "expectedEvent": "atlassian-21589",
+      "baselineStoryId": "f97880d75983"
+    },
+    {
+      "title": "Cisco corrige falhas críticas em switches Nexus",
+      "link": "https://www.cisoadvisor.com.br/cisco-corrige-falhas-criticas-em-switches-nexus/",
+      "source": "CISO Advisor BR",
+      "pubDate": "2026-10-09T00:37:58.000Z",
+      "score": 25,
+      "severity": "Low",
+      "cves": [],
+      "topicCves": [],
+      "actors": [],
+      "malware": [],
+      "campaigns": [],
+      "ttpIds": [
+        "T1190"
+      ],
+      "iocs": {
+        "ips": [],
+        "domains": [],
+        "hashes": [],
+        "urls": []
+      },
+      "vendors": [
+        {
+          "id": "cisco",
+          "name": "Cisco",
+          "sector": "networking",
+          "matched": "Cisco"
+        }
+      ],
+      "assets": [
+        "Cisco"
+      ],
+      "newsCategories": [],
+      "primaryCategory": null,
+      "extractionVersion": "feed-v4",
+      "expectedEvent": "independent:https://www.cisoadvisor.com.br/cisco-corrige-falhas-criticas-em-switches-nexus/",
+      "baselineStoryId": "98321fc18b35"
+    }
+  ]
+}

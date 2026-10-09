@@ -12,6 +12,7 @@
     "ci": "npm run lint && npm run typecheck && npm run build",
     "ci:server": "npm --prefix server ci && node --check server/index.js && node --check server/ctiIntel.js",
     "test:server": "node --test server/test/*.test.js",
+    "audit:correlations": "node server/auditCorrelations.mjs",
     "test:unit": "esbuild src/**/*.test.ts --bundle --platform=node --format=esm --outdir=/tmp/threatsumm4ry-unit-tests && node --test /tmp/threatsumm4ry-unit-tests/**/*.test.js",
     "test:brand": "esbuild src/brandAssets.test.ts --bundle --platform=node --format=esm --outfile=/tmp/threatsumm4ry-brand-test.js && node --test /tmp/threatsumm4ry-brand-test.js",
     "preview": "vite preview",

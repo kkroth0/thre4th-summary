@@ -753,7 +753,7 @@ export const CTI_FEEDS = [
 //      repository" — the word IOC appears nowhere in the anchor text).
 // So: read the tables too, and match candidate artifacts on the HREF.
 const ARTICLE_BOILERPLATE = /^(advertisement|scroll to continue|related\s*:|written by|subscribe|sign up|sponsored|©|cookie|share this|read more|tags:|follow us|newsletter|sign up to)/i;
-const ARTICLE_CHROME = 'script,style,noscript,nav,aside,footer,header,form,iframe,figure,figcaption,.ad,.ads,.advertisement,.related,.newsletter,.share,.social,[class*="promo"],[class*="sidebar"]';
+const ARTICLE_CHROME = 'script,style,noscript,nav,aside,footer,header,form,iframe,figure,figcaption,.ad,.ads,.advertisement,.related,.newsletter,.share,.social,[class*="related-article"],[class*="promo"],[class*="sidebar"]';
 
 const contentRoot = ($) => {
     for (const sel of ['article', 'main']) {
@@ -773,7 +773,11 @@ export function extractReadableText(html) {
         // Medido em 2026-08-27: 67% dos artigos de uma amostra de 18 (todos os
         // do Unit 42) voltavam vazios daqui — e isso também deixava o boletim
         // gerado a partir dessas URLs sem texto nenhum.
-        const root = contentRoot($);
+        const page = contentRoot($);
+        // Publisher templates often put related headlines and sidebar feeds
+        // INSIDE <article>. Prefer the actual body before extracting entities.
+        const body = page.find('[itemprop="articleBody"], .articleBody, .zox-post-body, .entry-content, .article-content, .post-content').first();
+        const root = body.length ? body : page;
         root.find(ARTICLE_CHROME).remove();
         const blocks = new Set();
         // Document order, so the narrative reaches the model in one piece. A <p>

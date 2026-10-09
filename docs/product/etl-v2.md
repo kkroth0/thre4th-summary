@@ -85,7 +85,14 @@ usando título, conteúdo do feed e texto coletado. Cada publicação recebe:
 - atores, famílias de malware e campanhas encontrados nos catálogos de aliases;
 - categorias de navegação e sinais usados no score;
 - fornecedores/projetos reconhecidos, com ID, nome canônico e alias mencionado;
-- `contentHash` SHA-256 do texto processado e `extractionVersion: feed-v3`.
+- `topicCves`, separado de todos os CVEs mencionados, para identificar o foco;
+- `contentHash` SHA-256 do texto processado e `extractionVersion: feed-v4`.
+
+A extração prefere o contêiner do corpo do artigo e remove blocos de notícias
+relacionadas. Aliases comuns como Action, Play, INC, Expand e Power exigem nome
+qualificado de malware; a presença de ransomware na mesma frase não basta.
+Campanhas novas explicitamente nomeadas em formato como “campaign dubbed
+Midnight Mimosa” recebem ID `reported:...`, distinto de um registro ATT&CK.
 
 O hash identifica o conteúdo processado, não os bytes originais da resposta HTTP.
 Depois da extração, CVEs recebem contexto CISA KEV e EPSS. Assim uma CVE
@@ -126,11 +133,14 @@ das histórias existentes. Usa distância de até quatorze dias entre as datas d
 publicações; não exige que sejam notícias dos últimos quatorze dias de hoje.
 O histórico de histórias retém sessenta dias.
 
-As heurísticas atuais aceitam CVE, campanha nomeada, hash, domínio ou URL de IOC
-compartilhados como sinais fortes. Ator, malware, IP ou técnica MITRE precisam
-de contexto adicional no título. Similaridade dos termos raros é um fallback;
-vocabulário genérico de CTI e classes de falha não contam como contexto raro.
-Apanhados, catálogos e edições recorrentes têm proteções específicas.
+As heurísticas atuais aceitam CVE principal, campanha nomeada, hash, domínio ou
+URL de IOC compartilhados como sinais fortes. Ator/malware exige contexto no
+título e presença da entidade em pelo menos uma manchete. IP exige dois termos
+de contexto. Técnica MITRE nunca identifica um evento nem reduz o limiar.
+Similaridade dos termos raros exige dois termos de contexto além dos nomes de
+fornecedores; vocabulário genérico de CTI e classes de falha não contam.
+Apanhados não unem eventos por entidades, IOCs ou título; uma republicação do
+mesmo boletim pelo mesmo veículo/dia pode unir somente a própria edição.
 Artigos com CVEs distintas não são unidos apenas por título, ator ou técnica
 semelhantes. Campanha nomeada ou IOC forte compartilhado ainda pode demonstrar
 um incidente que envolve várias vulnerabilidades.
@@ -190,12 +200,24 @@ NEWS_ARTICLE_MAX_FETCHES=40
 do texto fornecido pelo feed continua funcionando. O orçamento máximo é duzentos.
 O nome `NEWS_IOC_CONCURRENCY` foi mantido por compatibilidade de configuração.
 
-Histórias já gravadas não são automaticamente separadas por uma regra nova.
-Para revisar agrupamentos antigos, existe `node server/rebuildStories.mjs`
-(dry-run). A opção `--write` guarda `.bak` e substitui o histórico; o serviço
-precisa estar parado durante a escrita e reiniciado depois. O rebuild preserva
-evidência atribuída por fonte e aliases de histórias inteiras. Fontes legadas
-sem texto/atribuição não recuperam fatos do corpo só a partir do título.
+Histórias com versão de correlação antiga são reprocessadas automaticamente no
+próximo ciclo. A versão atual é `correlationVersion: 3`; a migração usa evidência
+por publicação e separa agrupamentos antigos sem copiar sua união de entidades
+para cada fonte. IDs/aliases passam a resolver a parte que contém a publicação
+de origem. Uma URL atualizada também pode sair de um evento quando muda a
+evidência; as fontes restantes são reavaliadas se perderem uma ponte.
+
+Para revisão offline, `node server/rebuildStories.mjs` usa a mesma migração em
+dry-run. `--write` guarda `.bak`; pare o serviço antes de escrever e reinicie
+depois. Fontes legadas sem texto/atribuição não recuperam fatos do corpo apenas
+pelo título; aliases ambíguos antigos são descartados até nova extração.
+
+Falha na correlação/persistência interrompe a publicação do ciclo e mantém o
+último feed disponível. O log do ciclo inclui versão, duração da correlação,
+eventos, eventos com várias fontes e publicações sem evento. O detalhe da
+história retorna `correlationDecisions` com pares, regras e evidências reais,
+separado de `correlationEvidence`, que também contém contexto compartilhado.
+Uma auditoria offline reproduzível está descrita em [Qualidade da correlação](./correlation-quality.md).
 
 ## Limites e próxima etapa
 
@@ -205,7 +227,8 @@ de merges. Uma CVE ou infraestrutura compartilhada pode aparecer em incidentes
 distintos; títulos em idiomas diferentes podem fragmentar o mesmo evento.
 Não há garantia de eliminar todos os cards duplicados.
 
-A próxima evolução deve usar eventos reais rotulados, medindo fragmentação,
-uniões incorretas, cobertura e estabilidade dos IDs. Esse conjunto permite
+O conjunto inicial usa eventos reais rotulados, medindo fragmentação,
+uniões incorretas, cobertura e estabilidade dos IDs. Ele deve crescer com
+amostragem aleatória e revisão humana independente. Esse conjunto permite
 avaliar contexto de vítima/produto/ação, similaridade semântica e regras de
 separação sem trocar duplicação por mistura de incidentes.

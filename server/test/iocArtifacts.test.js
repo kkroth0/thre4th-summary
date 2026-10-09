@@ -29,6 +29,15 @@ const ARTICLE_HTML = `
   </article>
 </body></html>`;
 
+test('corpo real exclui notícias relacionadas dentro de article, preservando a tabela de IOCs', () => {
+  for (const bodyClass of ['articleBody', 'zox-post-body', 'entry-content']) {
+    const text = extractReadableText(`<article><div class="${bodyClass}"><p>A technical report describes the current flaw CVE-2026-11111 and attacker infrastructure.</p><table><tr><td>evil[.]example</td></tr></table><div class="cz-related-article-wrapp"><p>Related Qilin ransomware attacks exploit the unrelated CVE-2026-22222 vulnerability.</p></div></div><div><p>Other news about malware and the unrelated CVE-2026-33333 vulnerability in the sidebar.</p></div></article>`);
+    assert.match(text, /CVE-2026-11111/);
+    assert.match(text, /evil\[\.\]example/);
+    assert.doesNotMatch(text, /CVE-2026-22222|CVE-2026-33333|Qilin/);
+  }
+});
+
 test('extractReadableText keeps the IOC table and code block, not just paragraphs', () => {
   const text = extractReadableText(ARTICLE_HTML);
 

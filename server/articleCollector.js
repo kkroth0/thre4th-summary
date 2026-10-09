@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import { mapConcurrent } from './feedCollector.js';
 
 export const contentHash = (text) => crypto.createHash('sha256').update(String(text || '')).digest('hex');
+const ARTICLE_TEXT_VERSION = 2;
 
 // Body cache is independent of IOC presence: a report with no IOCs may still
 // contain the CVEs, actors and techniques required to correlate coverage.
@@ -17,7 +18,7 @@ export async function collectArticleTexts(items, { fetchText, cache, now = new D
         if ((item.text || '').length >= 1500) { item.articleCollectionStatus = 'feed-body'; continue; }
         const fingerprint = contentHash(item.title + '\n' + (item.text || item.description || ''));
         const previous = cache.get(item.link);
-        const reusable = previous?.fingerprint === fingerprint;
+        const reusable = previous?.version === ARTICLE_TEXT_VERSION && previous?.fingerprint === fingerprint;
         const age = now.getTime() - new Date(previous?.attemptedAt).getTime();
         if (reusable && age >= 0 && age < (previous.error ? 3600000 : ttlMs)) {
             if (previous.text) texts.set(item.link, previous.text);
@@ -38,7 +39,7 @@ export async function collectArticleTexts(items, { fetchText, cache, now = new D
         try {
             const text = String(await fetchText(item.link) || '').trim().slice(0, 32000);
             if (!text) throw new Error('Article returned no readable text');
-            cache.set(item.link, { version: 1, link: item.link, fingerprint, text, contentHash: contentHash(text), attemptedAt: now.toISOString(), collectedAt: now.toISOString(), error: null });
+            cache.set(item.link, { version: ARTICLE_TEXT_VERSION, link: item.link, fingerprint, text, contentHash: contentHash(text), attemptedAt: now.toISOString(), collectedAt: now.toISOString(), error: null });
             texts.set(item.link, text);
             item.articleCollectionStatus = 'fresh';
         } catch (error) {
@@ -46,7 +47,7 @@ export async function collectArticleTexts(items, { fetchText, cache, now = new D
             if (previous?.text) texts.set(item.link, previous.text);
             item.articleCollectionStatus = previous?.text ? 'stale' : 'failed';
             // Cache failed attempts too, with a shorter retry window.
-            try { cache.set(item.link, { ...previous, version: 1, link: item.link, fingerprint, attemptedAt: now.toISOString(), error: error.message }); } catch { /* source failure still does not stop the cycle */ }
+            try { cache.set(item.link, { ...previous, version: ARTICLE_TEXT_VERSION, link: item.link, fingerprint, attemptedAt: now.toISOString(), error: error.message }); } catch { /* source failure still does not stop the cycle */ }
         }
     });
     return { texts, stats };

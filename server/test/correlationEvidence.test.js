@@ -1,6 +1,18 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { explainCorrelation } from '../correlationEvidence.js';
+import { explainCorrelation, explainCorrelationDecisions } from '../correlationEvidence.js';
+
+test('explicação da decisão não trata técnica incidental como prova de evento', () => {
+    const sources = [
+        { link: 'https://a.example/1', source: 'A', title: 'Windows remote access', pubDate: '2026-10-09T00:00:00Z', ttps: ['T1190'] },
+        { link: 'https://b.example/2', source: 'B', title: 'AnyDesk remote access', pubDate: '2026-10-09T00:00:00Z', ttps: ['T1190'] },
+    ];
+    assert.deepEqual(explainCorrelationDecisions({ sources }), []);
+    sources.forEach((source) => { source.cves = ['CVE-2026-11111']; });
+    const [decision] = explainCorrelationDecisions({ sources });
+    assert.equal(decision.rule, 'shared-cve');
+    assert.deepEqual(decision.evidence, ['CVE-2026-11111']);
+});
 
 test('atribuição compartilhada usa apenas os artigos que realmente citaram a entidade', () => {
     const actor = { id: 'a1', name: 'APT29' };

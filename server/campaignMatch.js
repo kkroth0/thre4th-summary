@@ -97,5 +97,16 @@ export function matchCampaigns(text, index) {
             }
         }
     }
+    // Newly reported campaigns need not wait for an ATT&CK catalog update.
+    // Only explicit naming language plus a proper multiword codename counts;
+    // ordinary co-occurring words never invent a campaign identity.
+    const naming = /\b(?:[Cc]ampaign|[Oo]peration),?\s+(?:dubbed|named|called|known as)\s+['"\u201c\u2018]?([A-Z][A-Za-z0-9_-]+(?:\s+[A-Z][A-Za-z0-9_-]+){1,4})\b/g;
+    for (const match of String(text || '').matchAll(naming)) {
+        const name = match[1].trim();
+        const key = normalize(name);
+        const known = index.distinctive.get(key) || index.common.get(key);
+        const id = known?.id || `reported:${key.replace(/\s+/g, '-')}`;
+        if (!found.has(id)) found.set(id, known || { id, name, matched: name, via: 'reported' });
+    }
     return [...found.values()];
 }

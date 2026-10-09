@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import { canonicalArticleUrl } from './feedCollector.js';
 import { NEWS_CATEGORIES } from './newsCategories.js';
+import { sanitizeStoredMalware } from './malwareMatch.js';
 
 // The same story reaches us from Reuters, BleepingComputer and CISA within
 // hours, worded three different ways. De-duplicating by URL — which is all the
@@ -13,6 +14,7 @@ import { NEWS_CATEGORIES } from './newsCategories.js';
 
 export const STORY_RETENTION_DAYS = 60;
 export const STORY_ACTIVE_DAYS = 14;
+export const CORRELATION_VERSION = 3;
 
 const DAY = 86400000;
 const MIN_RARE_FOR_JACCARD = 2;
@@ -48,7 +50,7 @@ const MAX_TOPIC_CAMPAIGNS = 3;
 // Known Exploited Vulnerabilities to Catalog" tem exatamente três e virava eixo
 // de um card com seis matérias sem relação: Cisco ASA, Patch Tuesday da
 // Microsoft, Lazarus e KEV, todas de assunto diferente.
-const ROUNDUP = /\b(?:adds?\b[^.]{0,40}\bto\b[^.]{0,12}\bcatalog|known exploited vulnerabilit|patch tuesday|security update guide|weekly (?:recap|roundup)|roundup|resumo da semana|vulnerability summary|advance notification|security holes|(?:fixes|fixed|patches|patched|plugs|corrige|corrigem)\s+(?:nearly\s+|almost\s+|more than\s+|over\s+|mais de\s+|quase\s+)?\d+\s+(?:security\s+)?(?:flaws|bugs|vulnerabilit|holes|issues|falhas|vulnerabilidades|brechas))/i;
+const ROUNDUP = /\b(?:adds?\b[^.]{0,40}\bto\b[^.]{0,12}\bcatalog|known exploited vulnerabilit|patch tuesday|security update guide|weekly (?:recap|roundup)|roundup|resumo da semana|vulnerability summary|advance notification|security holes|security hardening|(?:fixes|fixed|patches|patched|plugs|corrige|corrigem)\s+(?:a\s+)?(?:nearly\s+|almost\s+|more than\s+|over\s+|mais de\s+|quase\s+)?(?:\d+|dozen|two|three|four|five|six|seven|eight|nine|ten|twelve|duas|tres|quatro|cinco|doze)\s+(?:critical\s+|security\s+|criticas\s+)?(?:flaws|bugs|vulnerabilit|holes|issues|falhas|vulnerabilidades|brechas))/i;
 
 // Static, not derived from the day's feed: a frequency-based stoplist would make
 // the same pair of headlines group differently tomorrow.
@@ -100,6 +102,12 @@ const COMMON_CTI = new Set([
     'server-side', 'client-side', 'cross-site', 'scripting', 'request', 'forgery', 'ssrf', 'csrf', 'xss',
     'race', 'condition', 'dereference', 'pointer', 'uninitialized', 'integer', 'path', 'null',
     'out-of-bounds', 'use-after', 'after-free', 'hardcoded', 'insecure', 'weak', 'missing', 'exposure',
+    // Method, generic outcome and editorial verbs are relations, not events.
+    'phishing', 'breach', 'breaches', 'incident', 'incidents', 'access', 'enables', 'enable',
+    'deliver', 'delivers', 'delivery', 'targets', 'target', 'alleged', 'health', 'healthcare',
+    'hardening', 'advisory', 'advisories', 'october', 'september', 'august',
+    'malware', 'botnet', 'trojan', 'stealer', 'infostealer', 'campaign', 'campaigns',
+    'emergency', 'immediate', 'immediately', 'urgent', 'urgently', 'urges', 'patching', 'admins', 'could', 'lets',
 ]);
 
 const normalize = (value) =>
@@ -109,6 +117,7 @@ export function rareTerms(title) {
     const seen = new Set();
     for (const token of normalize(title).split(/[^a-z0-9-]+/)) {
         if (token.length < 4) continue;
+        if (/^\d+$/.test(token)) continue;
         if (STOPWORDS.has(token) || COMMON_CTI.has(token)) continue;
         seen.add(token);
     }
@@ -168,6 +177,7 @@ const iocsOf = (source) => {
 
 const signals = (story) => {
     const rare = new Set(story.sources.flatMap((source) => rareTerms(source.title)));
+    const vendorTokens = new Set(story.sources.flatMap((source) => (source.vendors || []).flatMap((vendor) => rareTerms(`${vendor.name} ${vendor.matched || ''}`))));
     // The actor's/malware's/campaign's own name is in both headlines by
     // definition — two unrelated Cl0p stories both say "Cl0p", and that is not
     // evidence they are one story. The corroboration-gated rules below need
@@ -179,9 +189,10 @@ const signals = (story) => {
     // gravada antes de as fontes carregarem `cves` cai no conjunto da story —
     // volta ao comportamento antigo em vez de perder o sinal.
     const scoped = story.sources.filter((source) => Array.isArray(source.cves));
+    const topicCves = (source) => source.topicCves || source.cves;
     const mergeCves = scoped.length
         ? new Set(scoped.flatMap((source) => (
-            source.cves.length <= MAX_TOPIC_CVES && !ROUNDUP.test(source.title) ? source.cves : []
+            topicCves(source).length <= MAX_TOPIC_CVES && !ROUNDUP.test(source.title) ? topicCves(source) : []
         )))
         : new Set(story.cves);
 
@@ -197,9 +208,13 @@ const signals = (story) => {
 
     return {
         cves: mergeCves,
+        observedCves: new Set(story.sources.flatMap((source) => topicCves(source) || [])),
+        roundup: story.sources.some((source) => ROUNDUP.test(source.title) || (source.campaigns || []).length > MAX_TOPIC_CAMPAIGNS),
         campaigns: mergeCampaigns,
         actors: new Set(story.actors.map((actor) => actor.id)),
         malware: new Set(story.malware.map((m) => m.id)),
+        headlineActors: new Set(story.actors.filter((entity) => rareTerms(`${entity.name} ${entity.matched || ''}`).some((term) => rare.has(term))).map((entity) => entity.id)),
+        headlineMalware: new Set(story.malware.filter((entity) => rareTerms(`${entity.name} ${entity.matched || ''}`).some((term) => rare.has(term))).map((entity) => entity.id)),
         // TTPs are corroboration-gated (see isSameStory), the same light tier
         // as a bare IP — so only the ROUNDUP title guard applies, no count cap:
         // one deep-dive article legitimately touching several techniques of
@@ -210,6 +225,7 @@ const signals = (story) => {
         strongIocs: new Set(story.sources.flatMap((source) => iocsOf(source).strong)),
         weakIocs: new Set(story.sources.flatMap((source) => iocsOf(source).weak)),
         rare,
+        headlineContext: new Set([...rare].filter((term) => !vendorTokens.has(term))),
         // Excludes actor-, malware- AND campaign-name tokens: without this,
         // two unrelated "LummaC2" stories would have the entity's own name
         // survive as a shared rare term, satisfying their own corroboration
@@ -221,6 +237,7 @@ const signals = (story) => {
         series: new Set(story.sources.map(seriesKey)),
         outlets: new Set(story.sources.map((source) => source.source)),
         days: new Set(story.sources.map((source) => dayOf(source.pubDate))),
+        titles: new Set(story.sources.map((source) => normalize(source.title).trim())),
         recurring: story.sources.some((source) => ROUNDUP.test(source.title) || /\b(?:stable|beta|canary|dev)\b.*\b(?:channel|update)\b/i.test(source.title)),
     };
 };
@@ -231,49 +248,78 @@ const signals = (story) => {
 // variação — sem ele, onze releases do Chrome viravam um card só.
 const sameOutletOtherDay = (a, b) => overlaps(a.outlets, b.outlets) && !overlaps(a.days, b.days);
 
-const isSameStory = (a, b) => {
+const shared = (a, b) => [...a].filter((value) => b.has(value));
+const decision = (a, b) => {
+    const reject = (rule) => ({ sameEvent: false, rule, evidence: [] });
+    const accept = (rule, evidence) => ({ sameEvent: true, rule, evidence });
     // Mesma manchete do mesmo veículo em outro dia: é a próxima edição de uma
     // série, não a mesma notícia. Veta antes das três regras — um merge errado
     // custa mais que um agrupamento perdido, e o boletim do dia seguinte
     // apareceria enterrado dentro do card do dia anterior.
-    if ((a.recurring || b.recurring) && overlaps(a.series, b.series) && !overlaps(a.days, b.days)) return false;
-
-    if (overlaps(a.cves, b.cves)) return true;
+    if ((a.recurring || b.recurring) && overlaps(a.series, b.series) && !overlaps(a.days, b.days)) return reject('recurring-edition');
+    // Digests retain their extracted facts for research, but cannot join events
+    // through ANY signal, including a malware mention or a similar headline.
+    if (a.roundup || b.roundup) {
+        if (overlaps(a.outlets, b.outlets) && overlaps(a.days, b.days) && overlaps(a.titles, b.titles)
+            && a.observedCves.size === b.observedCves.size && shared(a.observedCves, b.observedCves).length === a.observedCves.size) {
+            return accept('same-edition', [...a.titles]);
+        }
+        return reject('multi-topic');
+    }
+    if (overlaps(a.cves, b.cves)) return accept('shared-cve', shared(a.cves, b.cves));
     // A named campaign ("Operation Dream Job") identifies one specific bounded
     // operation, unlike an actor or malware family — those are persistent
     // brands that recur across many unrelated incidents, which is exactly why
     // they need corroboration below. Two articles naming the same campaign are
     // near-certainly covering the same thing, so this is sufficient alone —
     // scoped against roundup digests the same way CVEs are (see MAX_TOPIC_CAMPAIGNS).
-    if (overlaps(a.campaigns, b.campaigns)) return true;
+    if (overlaps(a.campaigns, b.campaigns)) return accept('shared-campaign', shared(a.campaigns, b.campaigns));
     // Hash/domain/URL: sufficient alone, same tier as CVE (see iocsOf above).
-    if (overlaps(a.strongIocs, b.strongIocs)) return true;
+    if (overlaps(a.strongIocs, b.strongIocs)) return accept('shared-ioc', shared(a.strongIocs, b.strongIocs));
     // Two scoped articles identifying different vulnerabilities need stronger
     // evidence than a similar product headline, actor or technique. A campaign
     // or attacker infrastructure can still prove a shared multi-CVE incident.
-    if (a.cves.size && b.cves.size) return false;
+    if (a.observedCves.size && b.observedCves.size) return reject('different-cves');
+    if ((a.recurring || b.recurring) && overlaps(a.outlets, b.outlets) && !overlaps(a.titles, b.titles)) return reject('different-release-channel');
+    if ((a.recurring || b.recurring) && sameOutletOtherDay(a, b)) return reject('recurring-edition');
+    if (a.headlineActors.size && b.headlineActors.size && !overlaps(a.headlineActors, b.headlineActors)) return reject('different-headline-actors');
+    if (a.headlineMalware.size && b.headlineMalware.size && !overlaps(a.headlineMalware, b.headlineMalware)) return reject('different-headline-malware');
     // Malware never sufficient alone, even for a nonce-word family name: a
     // popular commodity family (LummaC2/AsyncRAT/RedLine) gets an unrelated
     // headline most weeks (new technique, takedown, new victim) — treating
     // "same family" as proof of "same story" would be a worse false-merge axis
     // than the "Cl0p twice, different victims" case the actor rule already
     // guards against below.
-    if (overlaps(a.malware, b.malware) && overlaps(a.rareBeyondEntities, b.rareBeyondEntities)) return true;
-    if (overlaps(a.actors, b.actors) && overlaps(a.rareBeyondEntities, b.rareBeyondEntities)) return true;
+    const context = shared(a.rareBeyondEntities, b.rareBeyondEntities);
+    const focused = (field, headline) => shared(a[field], b[field]).filter((id) => a[headline].has(id) || b[headline].has(id));
+    const malware = focused('malware', 'headlineMalware');
+    const actors = focused('actors', 'headlineActors');
+    if (context.length && malware.length) return accept('malware-and-context', [...malware, ...context]);
+    if (context.length && actors.length) return accept('actor-and-context', [...actors, ...context]);
     // Bare IP: same corroboration requirement as actor/malware, never alone.
-    if (overlaps(a.weakIocs, b.weakIocs) && overlaps(a.rareBeyondEntities, b.rareBeyondEntities)) return true;
-    // Weakest tier: a single shared MITRE technique (T1566 phishing, T1486
-    // ransomware encryption...) is common to a huge share of unrelated
-    // articles, so it only ever corroborates, exactly like a bare IP.
-    if (overlaps(a.ttps, b.ttps) && overlaps(a.rareBeyondEntities, b.rareBeyondEntities)) return true;
-    if (sameOutletOtherDay(a, b)) return false;
-    return jaccard(a.rare, b.rare) >= JACCARD_THRESHOLD;
+    if (overlaps(a.weakIocs, b.weakIocs) && context.length >= 2) return accept('ip-and-context', [...shared(a.weakIocs, b.weakIocs), ...context]);
+    // TTPs describe behavior shared by thousands of incidents. They never
+    // lower the title threshold or independently establish event identity.
+    if (sameOutletOtherDay(a, b)) return reject('different-edition-without-identifier');
+    if (shared(a.headlineContext, b.headlineContext).length >= 2 && jaccard(a.rare, b.rare) >= JACCARD_THRESHOLD) return accept('headline-context', shared(a.rare, b.rare));
+    return reject('insufficient-evidence');
 };
+
+/** Auditable pair decision using only evidence attributed to each publication. */
+export function compareNewsSources(left, right, campaigns = []) {
+    const asSignals = (source) => signals({ sources: [source], cves: source.cves || [],
+        actors: source.actors || [], malware: source.malware || [],
+        campaigns: campaigns.filter((campaign) => (source.campaigns || []).includes(campaign.id)),
+    });
+    const gap = Math.abs(Date.parse(left.pubDate) - Date.parse(right.pubDate));
+    if (!Number.isFinite(gap) || gap > STORY_ACTIVE_DAYS * DAY) return { sameEvent: false, rule: 'outside-window', evidence: [] };
+    return decision(asSignals(left), asSignals(right));
+}
 
 const newStory = (item) => ({
     id: storyId(canonicalArticleUrl(item.link) || item.link),
     aliases: [],
-    correlationVersion: 2,
+    correlationVersion: CORRELATION_VERSION,
     title: item.title,
     firstSeen: item.pubDate,
     lastSeen: item.pubDate,
@@ -299,6 +345,7 @@ const newStory = (item) => ({
         // motivo (ids só, como os CVEs — os objetos completos ficam na union
         // no nível da story, abaixo).
         cves: [...(item.cves || [])],
+        topicCves: [...(item.topicCves || item.cves || [])],
         campaigns: (item.campaigns || []).map((c) => c.id),
         // TTPs (ids T####) também por fonte: é o que faz um artigo-resumo de
         // uma técnica só não contar como corroboração de outro sobre uma
@@ -326,7 +373,7 @@ const absorb = (target, extra) => {
         ...target,
         id: older.id,
         aliases: [...new Set([...(target.aliases || []), ...(extra.aliases || []), target.id, extra.id])].filter((id) => id !== older.id),
-        correlationVersion: 2,
+        correlationVersion: CORRELATION_VERSION,
         firstSeen: older.firstSeen,
         lastSeen: target.lastSeen >= extra.lastSeen ? target.lastSeen : extra.lastSeen,
         cves: [...new Set([...target.cves, ...extra.cves])],
@@ -363,6 +410,9 @@ const absorb = (target, extra) => {
 export function mergeIntoStories(stories, items, now) {
     const cutoff = now.getTime() - STORY_RETENTION_DAYS * DAY;
     let result = (Array.isArray(stories) ? stories : []).filter((story) => new Date(story.lastSeen).getTime() >= cutoff);
+    if (result.some((story) => story.correlationVersion !== CORRELATION_VERSION)) {
+        return rebuildStoryCorrelations(result, items, now);
+    }
     const knownSources = new Map(result.flatMap((story) => story.sources.map((source) => [canonicalArticleUrl(source.link) || source.link, source])));
     const signalCache = new WeakMap();
     const sourceSignals = (story, source) => {
@@ -378,7 +428,7 @@ export function mergeIntoStories(stories, items, now) {
     const directMatch = (story, candidate) => story.sources.some((source) => {
         const article = candidate.sources[0];
         const gap = Math.abs(new Date(source.pubDate).getTime() - new Date(article.pubDate).getTime());
-        return gap <= STORY_ACTIVE_DAYS * DAY && isSameStory(sourceSignals(story, source), sourceSignals(candidate, article));
+        return gap <= STORY_ACTIVE_DAYS * DAY && decision(sourceSignals(story, source), sourceSignals(candidate, article)).sameEvent;
     });
     const summarize = (story) => {
         const sources = story.sources;
@@ -386,7 +436,7 @@ export function mergeIntoStories(stories, items, now) {
         const categories = [...new Set(sources.flatMap((source) => source.newsCategories || []))];
         const ordered = NEWS_CATEGORIES.filter((category) => categories.includes(category));
         const loudest = sources.reduce((best, source) => source.score > best.score ? source : best, sources[0]);
-        return { ...story, correlationVersion: 2, title: loudest.title,
+        return { ...story, correlationVersion: CORRELATION_VERSION, title: loudest.title,
             firstSeen: sources.map((source) => source.pubDate).sort()[0],
             lastSeen: sources.map((source) => source.pubDate).sort().at(-1),
             score: Math.max(...sources.map((source) => source.score || 0)),
@@ -408,19 +458,89 @@ export function mergeIntoStories(stories, items, now) {
         let candidate = direct;
         if (ownerIndex >= 0) {
             const owner = result[ownerIndex];
-            candidate = summarize({ ...owner,
-                campaigns: [...new Map([...(owner.campaigns || []), ...(item.campaigns || [])].map((campaign) => [campaign.id, campaign])).values()],
-                sources: owner.sources.map((source) => (canonicalArticleUrl(source.link) || source.link) === link ? direct.sources[0] : source),
-            });
             result = result.filter((_, index) => index !== ownerIndex);
+            const remaining = owner.sources.filter((source) => (canonicalArticleUrl(source.link) || source.link) !== link);
+            if (remaining.length) {
+                const anchor = remaining.find((source) => storyId(canonicalArticleUrl(source.link) || source.link) === owner.id);
+                const id = anchor ? owner.id : storyId(remaining[0].link);
+                const memberIds = new Set(remaining.map((source) => storyId(canonicalArticleUrl(source.link) || source.link)));
+                const residual = summarize({ ...owner, id,
+                    aliases: (owner.aliases || []).filter((alias) => alias !== direct.id && alias !== id && (owner.id !== direct.id || memberIds.has(alias))), sources: remaining });
+                // Removing an updated bridge may disconnect the publications
+                // it formerly joined. Re-evaluate the residual group too.
+                result.push(...(remaining.length > 1 ? rebuildStoryCorrelations([residual], [], now) : [residual]));
+                if (owner.id === direct.id) {
+                    candidate.aliases = (owner.aliases || []).filter((alias) => !memberIds.has(alias));
+                }
+            }
+            else candidate = { ...direct, id: owner.id, aliases: owner.aliases || [] };
         }
         // Every match must be supported by the incoming article itself.
         // Signals inherited from one merge cannot manufacture the next merge.
-        const matches = result.filter((story) => directMatch(story, direct)).sort((a, b) => a.firstSeen.localeCompare(b.firstSeen) || a.id.localeCompare(b.id));
+        let matches = result.filter((story) => directMatch(story, direct)).sort((a, b) => a.firstSeen.localeCompare(b.firstSeen) || a.id.localeCompare(b.id));
+        // A CVE-less headline may resemble two different advisories. Preserve
+        // it independently until stronger evidence arrives instead of using
+        // it as a bridge between incompatible CVE clusters.
+        const incompatible = (left, right) => {
+            const a = signals(left), b = signals(right);
+            return a.observedCves.size && b.observedCves.size && !overlaps(a.observedCves, b.observedCves)
+                && !overlaps(a.campaigns, b.campaigns) && !overlaps(a.strongIocs, b.strongIocs);
+        };
+        if (!signals(direct).observedCves.size && matches.some((left, index) => matches.slice(index + 1).some((right) => incompatible(left, right)))) matches = [];
+        matches = matches.filter((story) => !incompatible(story, candidate));
         const ids = new Set(matches.map((story) => story.id));
         for (const story of matches) candidate = absorb(story, candidate);
         result = [...result.filter((story) => !ids.has(story.id)), candidate];
         for (const source of candidate.sources) knownSources.set(canonicalArticleUrl(source.link) || source.link, source);
     }
     return result.sort((a, b) => String(b.lastSeen).localeCompare(String(a.lastSeen)) || a.id.localeCompare(b.id));
+}
+
+/** Re-evaluate retained publications after a rule change, without copying a
+ * story's union onto its individual sources. Incoming extraction overrides
+ * stored evidence. Split stories keep old links pointing to their anchor;
+ * aliases of the former aggregate are never assigned to multiple stories. */
+export function rebuildStoryCorrelations(stories, items = [], now = new Date()) {
+    const byLink = new Map();
+    for (const story of stories) for (const source of story.sources || []) {
+        const link = canonicalArticleUrl(source.link) || source.link;
+        if (!link) continue;
+        byLink.set(link, { ...source, link,
+            cves: source.cves || [], actors: source.actors || [],
+            malware: sanitizeStoredMalware(source.malware, source.title),
+            campaigns: (story.campaigns || []).filter((campaign) => (source.campaigns || []).includes(campaign.id)),
+            ttpIds: source.ttps || [], newsCategories: source.newsCategories || [],
+            primaryCategory: NEWS_CATEGORIES.find((category) => (source.newsCategories || []).includes(category)) || null,
+        });
+    }
+    for (const item of items) if (item?.link) byLink.set(canonicalArticleUrl(item.link) || item.link, item);
+    const rebuilt = mergeIntoStories([], [...byLink.values()], now);
+    const targets = new Map(rebuilt.flatMap((story) => story.sources.map((source) => [canonicalArticleUrl(source.link) || source.link, story])));
+    const addAliases = (target, aliases) => {
+        target.aliases = [...new Set([...(target.aliases || []), ...aliases])].filter((id) => id && id !== target.id);
+    };
+    for (const old of stories) {
+        const members = (old.sources || []).map((source) => targets.get(canonicalArticleUrl(source.link) || source.link)).filter(Boolean);
+        if (!members.length) continue;
+        const anchor = (old.sources || []).find((source) => storyId(canonicalArticleUrl(source.link) || source.link) === old.id);
+        const target = anchor ? targets.get(canonicalArticleUrl(anchor.link) || anchor.link) : members[0];
+        if (target) addAliases(target, [old.id, ...(old.aliases || [])]);
+        // Legacy aggregate metadata is safe to retain only when ALL of its
+        // publications still belong to one event. Never spread it across a
+        // split, and never let it stand in for source-attributed merge evidence.
+        if (target && new Set(members).size === 1 && members.length === (old.sources || []).length) {
+            target.categories = NEWS_CATEGORIES.filter((category) => [...target.categories, ...(old.categories || [])].includes(category));
+            target.primaryCategory = target.categories[0] || null;
+            for (const field of ['actors', 'malware', 'campaigns']) {
+                const legacy = field === 'malware' ? sanitizeStoredMalware(old[field], old.title) : old[field] || [];
+                target[field] = [...new Map([...target[field], ...legacy].map((entity) => [entity.id, entity])).values()];
+            }
+        }
+    }
+    // Each URL hash belongs to the new cluster containing that publication.
+    // Remove stale aggregate aliases from other clusters after a split.
+    const owners = new Map(rebuilt.map((story) => [story.id, story]));
+    for (const story of rebuilt) for (const source of story.sources) owners.set(storyId(canonicalArticleUrl(source.link) || source.link), story);
+    for (const story of rebuilt) story.aliases = story.aliases.filter((id) => !owners.has(id) || owners.get(id) === story);
+    return rebuilt;
 }

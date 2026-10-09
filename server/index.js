@@ -55,10 +55,10 @@ import {
 import { buildActorIndex, matchActors } from './actorMatch.js';
 import { buildMalwareIndex, matchMalware } from './malwareMatch.js';
 import { buildCampaignIndex, matchCampaigns } from './campaignMatch.js';
-import { explainCorrelation } from './correlationEvidence.js';
+import { explainCorrelation, explainCorrelationDecisions } from './correlationEvidence.js';
 import { extractSellerHandle, findRelatedBySeller, storySellerHandle } from './darkWebHandle.js';
 import { categorize } from './newsCategories.js';
-import { mergeIntoStories } from './newsStories.js';
+import { correlateNewsFeed } from './newsCorrelation.js';
 import { parseFeed } from './feedParse.js';
 import { createFeedCache, createFeedCollector, canonicalArticleUrl, singleFlightRefresh } from './feedCollector.js';
 import { collectArticleTexts } from './articleCollector.js';
@@ -1612,7 +1612,7 @@ const refreshNewsletterFeed = singleFlightRefresh(async () => {
             concurrency: Number(process.env.NEWS_IOC_CONCURRENCY) || 3,
             fetchText: async (url) => (await fetchArticleText(url, 32000)).text,
         });
-        const unifiedFeed = enrichFeedItems(rawItems, {
+        let unifiedFeed = enrichFeedItems(rawItems, {
             texts: bodies.texts, actors: (text) => matchActors(text, actorIndex),
             malware: (text) => matchMalware(text, malwareIndex), campaigns: (text) => matchCampaigns(text, campaignIndex),
             seller: extractSellerHandle, categorize,
@@ -1621,13 +1621,11 @@ const refreshNewsletterFeed = singleFlightRefresh(async () => {
         const [kevMap, epssMap] = await Promise.all([getKevMap(), getEpssMap(allCves)]);
         applyVulnerabilityContext(unifiedFeed, kevMap, epssMap);
         unifiedFeed.sort((a, b) => b.pubDate.localeCompare(a.pubDate) || a.link.localeCompare(b.link));
+        const correlation = correlateNewsFeed(unifiedFeed, newsStoryStore);
+        unifiedFeed = correlation.items;
         try {
-            const stories = mergeIntoStories(newsStoryStore.all(), unifiedFeed, new Date());
-            newsStoryStore.save(stories);
-            const byLink = new Map(stories.flatMap((story) => story.sources.map((source) => [canonicalArticleUrl(source.link), story.id])));
-            for (const item of unifiedFeed) item.storyId = byLink.get(item.link) || null;
             newsArchiveStore.add(unifiedFeed.map((item) => ({ ...item, categories: item.newsCategories })));
-        } catch (error) { console.error('news story grouping failed:', error.message); }
+        } catch (error) { console.error('news archive update failed:', error.message); }
 
         // Raw RSS and collected article text remain in the disk caches. The
         // public feed only carries metadata, hashes and extracted evidence.
@@ -1636,7 +1634,7 @@ const refreshNewsletterFeed = singleFlightRefresh(async () => {
         memoryCache.newsletter.data = unifiedFeed;
         memoryCache.newsletter.expiresAt = Date.now() + memoryCache.newsletter.ttl;
         try { rssCollectionCache.prune({ maxEntries: 200 }); articleCollectionCache.prune({ maxEntries: 1500 }); } catch (error) { console.warn('feed cache pruning failed:', error.message); }
-        console.log('[feed] cycle', JSON.stringify({ elapsedMs: Date.now() - startedAt, sources: collected.health.size, failedSources: [...collected.health.values()].filter((health) => !health.ok).length, articles: unifiedFeed.length, bodies: bodies.stats }));
+        console.log('[feed] cycle', JSON.stringify({ elapsedMs: Date.now() - startedAt, sources: collected.health.size, failedSources: [...collected.health.values()].filter((health) => !health.ok).length, articles: unifiedFeed.length, bodies: bodies.stats, correlation: correlation.stats }));
     } catch (error) { console.error('Failed to background refresh newsletter feeds:', error.message); }
 });
 
@@ -1664,6 +1662,7 @@ app.get('/api/newsletter', requirePremium, async (req, res) => {
             // Cold start fallback
             await refreshNewsletterFeed();
         }
+        if (!memoryCache.newsletter.data) return res.status(503).set('Retry-After', '60').json({ error: 'News feed is not available yet' });
         let data = filterMonitoredNews(memoryCache.newsletter.data || [], newsMonitoringStore.get(req.user.sub), newsStoryStore.all());
 
         const minScore = parseInt(req.query.minScore, 10);
@@ -1757,6 +1756,7 @@ app.get('/api/news/stories/:id', requirePremium, (req, res) => {
     res.json({
         ...story,
         correlationEvidence: explainCorrelation(story),
+        correlationDecisions: explainCorrelationDecisions(story),
         // Relacionado, não fundido: outra história do mesmo vendedor de dark
         // web é informação real, mas vítimas diferentes não são a mesma
         // notícia (ver darkWebHandle.js).
