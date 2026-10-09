@@ -136,16 +136,16 @@ export function OrgProfileEditor() {
   };
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-base"><Building2 className="text-primary" /> {pt ? "Contexto da organização" : "Organization context"}</CardTitle>
+    <Card className="rounded-xl shadow-none">
+      <CardHeader className="p-5 pb-4 sm:p-6 sm:pb-4">
+        <CardTitle className="flex items-center gap-2 text-sm"><Building2 className="h-4 w-4 text-muted-foreground" /> {pt ? "Perfis da organização" : "Organization profiles"}</CardTitle>
         <CardDescription>
           {pt
-            ? "O que a organização é: setor, região, ativos de software e presença de OT. As Notícias usam isso para subir e explicar o que interessa — nada é escondido por padrão."
-            : "What the organization is: sector, region, software assets, and OT presence. News uses it to rank and explain what matters — nothing is hidden by default."}
+            ? "Defina setor, região e tecnologias para priorizar notícias relevantes para sua organização."
+            : "Set industry, region and technologies to prioritize news relevant to your organization."}
         </CardDescription>
       </CardHeader>
-      <CardContent className="flex flex-col gap-4">
+      <CardContent className="flex flex-col gap-4 px-5 pb-5 sm:px-6 sm:pb-6">
         {profiles.map((profile) => (
           <div key={profile.id} className="flex items-center gap-3 rounded-md border px-3 py-2">
             <input

@@ -1,11 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import {
   ArrowLeft,
   BookOpen,
   CalendarCheck,
-  ChevronLeft,
-  ChevronRight,
   Database,
   FileSearch,
   Github,
@@ -19,7 +16,6 @@ import {
   Search,
   Settings as SettingsIcon,
   Shield,
-  ShieldAlert,
   ShieldCheck,
   Users,
 } from "lucide-react";
@@ -66,8 +62,7 @@ const isRouteActive = (path: string, pathname: string) => {
   return cleanPath === "/" ? pathname === "/" : pathname === cleanPath || pathname.startsWith(`${cleanPath}/`);
 };
 
-// Um único catálogo de navegação alimenta o launcher, as abas de irmãs e o
-// título da barra. Hook em vez de const porque os rótulos são traduzidos.
+// Catálogo compartilhado pelo menu e pelo título da página.
 export function useNavCatalog() {
   const { language, tr } = useLanguage();
   const pt = language === "pt";
@@ -83,12 +78,6 @@ export function useNavCatalog() {
     {
       label: pt ? "Ferramentas" : "Tools",
       items: [
-        {
-          path: "/dnsbl",
-          label: tr({ pt: "Listas de Bloqueio", en: "Blocklists", es: "Listas de Bloqueo", fr: "Listes de Blocage" }),
-          description: pt ? "IPs e domínios em listas de bloqueio (DNSBL)." : "IPs and domains on blocklists (DNSBL).",
-          icon: ShieldAlert,
-        },
         {
           path: "/phishing-analyzer",
           label: tr({ pt: "Análise de Phishing", en: "Phishing Analysis", es: "Análisis de Phishing", fr: "Analyse de Phishing" }),
@@ -173,117 +162,6 @@ export function useNavCatalog() {
   ];
 
   return { homeItem, navGroups };
-}
-
-// FLX-05: a barra mostrava só o grupo da página atual, então em /cves sumiam
-// as sete abas de Inteligência, em /analyzer não havia barra nenhuma, e metade
-// dos módulos só existia atrás do ícone de grade. Quem está no produto não
-// deveria precisar reabrir um menu para saber o que existe.
-//
-// Agora a barra é a mesma em toda página: os catorze módulos, na ordem dos três
-// grupos, com separador entre eles. A Consulta de Indicadores vem sempre
-// primeiro e fixa, por ser a ferramenta principal — era justamente a que nunca
-// aparecia. O menu de grade continua, como busca e atalho.
-//
-// Uma coluna à esquerda caberia melhor os catorze itens, como a auditoria
-// sugere, mas mudaria o gabarito de todas as telas de uma vez; a barra rolável
-// entrega a persistência sem esse risco.
-//
-// Rolar sem pista, porém, é o mesmo que esconder: em 1440px os últimos módulos
-// ficavam fora da vista e nada dizia que existiam — inclusive o módulo aberto,
-// que podia estar cortado na borda. Duas correções, as duas baratas: o item
-// ativo se traz para dentro da vista ao entrar na página, e a borda que tem
-// conteúdo além ganha um esmaecido com seta. Sem biblioteca de carrossel.
-export function NavTabs() {
-  const { pathname } = useLocation();
-  const { homeItem, navGroups } = useNavCatalog();
-  const grupoAtivo = navGroups.find((g) => g.items.some((i) => isRouteActive(i.path, pathname)));
-  const trilho = useRef<HTMLDivElement>(null);
-  const [sobra, setSobra] = useState({ esquerda: false, direita: false });
-
-  const medir = useCallback(() => {
-    const el = trilho.current;
-    if (!el) return;
-    // 1px de folga: zoom e fração de pixel deixam scrollWidth 0,5 acima.
-    const fim = el.scrollWidth - el.clientWidth - el.scrollLeft;
-    setSobra({ esquerda: el.scrollLeft > 1, direita: fim > 1 });
-  }, []);
-
-  useEffect(() => {
-    const el = trilho.current;
-    if (!el) return;
-    el.querySelector('[aria-current="page"]')?.scrollIntoView({ block: "nearest", inline: "center" });
-    medir();
-    const observador = new ResizeObserver(medir);
-    observador.observe(el);
-    return () => observador.disconnect();
-  }, [pathname, medir]);
-
-  const item = (nav: NavItem, dentroDoGrupoAtivo: boolean) => {
-    const active = isRouteActive(nav.path, pathname);
-    return (
-      <Link
-        key={nav.path}
-        to={nav.path}
-        title={nav.description}
-        aria-current={active ? "page" : undefined}
-        className={cn(
-          "whitespace-nowrap border-b-2 px-3 py-2.5 text-[13px] transition-colors",
-          active
-            ? "border-primary font-semibold text-foreground"
-            // O grupo da página atual fica em tom cheio; os outros recuam, para
-            // a barra continuar dizendo onde você está mesmo mostrando tudo.
-            : dentroDoGrupoAtivo
-              ? "border-transparent font-medium text-foreground/80 hover:text-foreground"
-              : "border-transparent font-medium text-muted-foreground/70 hover:text-foreground",
-        )}
-      >
-        {nav.label}
-      </Link>
-    );
-  };
-
-  // O esmaecido cobre a borda e some junto com a sobra; a seta é o que se
-  // reconhece como "tem mais para esse lado". Decorativo: quem navega por
-  // teclado ou leitor de tela alcança os itens sem depender dele.
-  const borda = (lado: "left" | "right") => (
-    <div
-      aria-hidden
-      className={cn(
-        // O trecho sólido do gradiente tem que caber a seta inteira, senão ela
-        // fica por cima do rótulo cortado e as duas viram borrão.
-        "pointer-events-none absolute inset-y-0 z-10 flex w-14 items-center transition-opacity",
-        lado === "left"
-          ? "left-0 justify-start bg-gradient-to-r from-background from-[45%] to-transparent pl-1"
-          : "right-0 justify-end bg-gradient-to-l from-background from-[45%] to-transparent pr-1",
-        (lado === "left" ? sobra.esquerda : sobra.direita) ? "opacity-100" : "opacity-0",
-      )}
-    >
-      {lado === "left"
-        ? <ChevronLeft className="h-4 w-4 text-muted-foreground" />
-        : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
-    </div>
-  );
-
-  return (
-    <div className="relative border-b border-border bg-background/60">
-      {borda("left")}
-      {borda("right")}
-      <div
-        ref={trilho}
-        onScroll={medir}
-        className="scrollbar-none flex items-center gap-1 overflow-x-auto px-4 lg:px-6"
-      >
-        {item(homeItem, true)}
-        {navGroups.map((group) => (
-          <div key={group.label} className="flex items-center gap-1">
-            <span aria-hidden className="mx-1 h-4 w-px shrink-0 bg-border" />
-            {group.items.map((nav) => item(nav, group === grupoAtivo))}
-          </div>
-        ))}
-      </div>
-    </div>
-  );
 }
 
 export function Header({ actions, logoAddon, onLogoClick, showBackButton = false }: HeaderProps) {

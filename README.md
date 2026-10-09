@@ -1,7 +1,7 @@
 # ThreatSumm4ry
 
 Threat intelligence workspace for IOC enrichment, CVE tracking, ransomware
-tracking, advisory feeds, DNSBL checks, phishing analysis and exposure
+tracking, advisory feeds, phishing analysis and exposure
 monitoring.
 
 The primary analyzer accepts public IPv4/IPv6 addresses, domains, HTTP/HTTPS

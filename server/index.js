@@ -320,15 +320,7 @@ const skipRateLimit = (req) => {
     // queimam a chave do servidor.
     if (verifySession(getCookie(req, 'ts_session'))) return true;
 
-    // Always skip DNSBL checks (a single page issues many concurrent lookups).
-    // Match on req.path ONLY — it never contains the query string, so appending
-    // "?x=/dnsbl" to another endpoint can no longer bypass the limiter. The path
-    // is relative under the '/api/' mount ('/dnsbl') and absolute on the
-    // per-route scanLimiter ('/api/dnsbl'); accept both exact forms.
     const p = req.path || '';
-    if (p === '/dnsbl' || p === '/dnsbl/batch' || p === '/api/dnsbl' || p === '/api/dnsbl/batch') {
-        return true;
-    }
     // Rotas worker<->site: o worker na VPS faz poll a cada 10s, o que sozinho
     // consome 90 das 150 requisições da janela de 15 min e derruba o próprio
     // pipeline de geração. Não são superfície pública — requireFeedSecret já
@@ -356,33 +348,6 @@ const scanLimiter = rateLimit({
     legacyHeaders: false,
     skip: skipRateLimit
 });
-
-// Dynamic DNSBL whitelist parser
-let allowedDnsblProviders = new Set();
-const loadDnsblProviders = () => {
-    try {
-        const filePath = path.join(__dirname, '../src/config/dnsblProviders.json');
-        if (fs.existsSync(filePath)) {
-            const providers = JSON.parse(fs.readFileSync(filePath, 'utf8'));
-            if (Array.isArray(providers)) {
-                providers.forEach(p => allowedDnsblProviders.add(p));
-            }
-        }
-        console.log(`Loaded ${allowedDnsblProviders.size} DNSBL providers from dnsblProviders.json`);
-    } catch (err) {
-        console.error('Failed to load DNSBL providers:', err.message);
-    }
-    // Ensure we have standard fallbacks if parsing failed or was empty
-    if (allowedDnsblProviders.size === 0) {
-        [
-            'zen.spamhaus.org', 'dbl.spamhaus.org', 'xbl.spamhaus.org', 'sbl.spamhaus.org',
-            'pbl.spamhaus.org', 'bl.spamcop.net', 'b.barracudacentral.org', 'dnsbl.sorbs.net',
-            'spam.dnsbl.sorbs.net', 'dul.dnsbl.sorbs.net', 'dnsbl-1.uceprotect.net',
-            'dnsbl-2.uceprotect.net', 'dnsbl-3.uceprotect.net'
-        ].forEach(p => allowedDnsblProviders.add(p));
-    }
-};
-loadDnsblProviders();
 
 // Error Sanitization Utility
 const sanitizeError = (error) => {
@@ -1135,157 +1100,6 @@ app.post('/api/ipgeo', scanLimiter, async (req, res) => {
         };
 
         res.json(mappedData);
-    } catch (error) {
-        const { status, message } = sanitizeError(error);
-        res.status(status).json({ error: message });
-    }
-});
-
-// Generic DNSBL Endpoint (Whitelist check added)
-app.post('/api/dnsbl', scanLimiter, async (req, res) => {
-    const { query, provider } = req.body;
-    try {
-        const queryType = detectQueryType(query);
-        if (queryType !== "ip") {
-            return res.json({ listed: false, status: "IP only" });
-        }
-        const sanitized = sanitizeQuery(query, 'ip');
-
-        if (!provider) {
-            return res.status(400).json({ error: "Provider required" });
-        }
-
-        // VULN-02: DNSBL provider whitelist check
-        if (!allowedDnsblProviders.has(provider)) {
-            return res.status(400).json({ error: "Invalid/unauthorized DNSBL provider" });
-        }
-
-        const reversed = sanitized.split('.').reverse().join('.');
-        const dnsQuery = `${reversed}.${provider}`;
-        
-        const timeoutPromise = new Promise((_, reject) => 
-            setTimeout(() => reject(new Error('DNS Timeout')), 3000)
-        );
-
-        Promise.race([
-            dns.promises.resolve4(dnsQuery),
-            timeoutPromise
-        ])
-        .then(addresses => {
-            // Check for loopback error codes (e.g. Spamhaus public DNS block: 127.255.255.254)
-            const hasErrorAddress = addresses.some(addr => 
-                addr === '127.255.255.252' || 
-                addr === '127.255.255.254' || 
-                addr === '127.255.255.255'
-            );
-
-            if (hasErrorAddress) {
-                let errMsg = "Query blocked/errored";
-                if (addresses.includes('127.255.255.254')) {
-                    errMsg = "Blocked: Public DNS resolver";
-                } else if (addresses.includes('127.255.255.255')) {
-                    errMsg = "Blocked: Quota exceeded";
-                } else if (addresses.includes('127.255.255.252')) {
-                    errMsg = "Blocked: Invalid zone name";
-                }
-                return res.json({ 
-                    listed: false, 
-                    addresses, 
-                    status: "Blocked", 
-                    error: errMsg 
-                });
-            }
-
-            res.json({ listed: true, addresses, status: `Listed on ${provider}` });
-        })
-        .catch(error => {
-            if (error.message === 'DNS Timeout') {
-                res.json({ listed: false, status: "Timeout", error: "Query timed out" });
-            } else {
-                res.json({ listed: false, status: "Not listed" });
-            }
-        });
-    } catch (error) {
-        const { status, message } = sanitizeError(error);
-        res.status(status).json({ error: message });
-    }
-});
-
-// Generic DNSBL Batch Endpoint
-app.post('/api/dnsbl/batch', scanLimiter, async (req, res) => {
-    const { query, providers } = req.body;
-    try {
-        const queryType = detectQueryType(query);
-        if (queryType !== "ip") {
-            return res.json({});
-        }
-        const sanitized = sanitizeQuery(query, 'ip');
-
-        if (!Array.isArray(providers)) {
-            return res.status(400).json({ error: "Providers must be an array" });
-        }
-
-        // De-duplicate first: this collapses amplification attempts (the same
-        // allowed provider repeated thousands of times) and naturally bounds the
-        // number of DNS lookups to at most the size of the allowlist.
-        const uniqueProviders = [...new Set(providers)];
-
-        // Validate all providers against the allowed set
-        const invalid = uniqueProviders.filter(p => !allowedDnsblProviders.has(p));
-        if (invalid.length > 0) {
-            return res.status(400).json({ error: `Invalid/unauthorized DNSBL providers: ${invalid.join(', ')}` });
-        }
-
-        const reversed = sanitized.split('.').reverse().join('.');
-
-        // Resolve all in parallel
-        const resolvePromises = uniqueProviders.map(async (provider) => {
-            const dnsQuery = `${reversed}.${provider}`;
-            const timeoutPromise = new Promise((_, reject) => 
-                setTimeout(() => reject(new Error('DNS Timeout')), 3000)
-            );
-
-            try {
-                const addresses = await Promise.race([
-                    dns.promises.resolve4(dnsQuery),
-                    timeoutPromise
-                ]);
-
-                const hasErrorAddress = addresses.some(addr => 
-                    addr === '127.255.255.252' || 
-                    addr === '127.255.255.254' || 
-                    addr === '127.255.255.255'
-                );
-
-                if (hasErrorAddress) {
-                    let errMsg = "Query blocked/errored";
-                    if (addresses.includes('127.255.255.254')) {
-                        errMsg = "Blocked: Public DNS resolver";
-                    } else if (addresses.includes('127.255.255.255')) {
-                        errMsg = "Blocked: Quota exceeded";
-                    } else if (addresses.includes('127.255.255.252')) {
-                        errMsg = "Blocked: Invalid zone name";
-                    }
-                    return { provider, result: { listed: false, addresses, status: "Blocked", error: errMsg } };
-                }
-
-                return { provider, result: { listed: true, addresses, status: `Listed on ${provider}` } };
-            } catch (error) {
-                if (error.message === 'DNS Timeout') {
-                    return { provider, result: { listed: false, status: "Timeout", error: "Query timed out" } };
-                } else {
-                    return { provider, result: { listed: false, status: "Not listed" } };
-                }
-            }
-        });
-
-        const results = await Promise.all(resolvePromises);
-        const responseData = {};
-        results.forEach(r => {
-            responseData[r.provider] = r.result;
-        });
-
-        res.json(responseData);
     } catch (error) {
         const { status, message } = sanitizeError(error);
         res.status(status).json({ error: message });
@@ -2312,7 +2126,7 @@ app.get('/api/admin/integrations', requireAdmin, (req, res) => {
         { name: 'urlscan.io', env: 'URLSCAN_API_KEY', configured: set('URLSCAN_API_KEY'), required: false, note: 'sem chave a vigilância de marca de phishing não roda' },
     ];
     // Provedores que não precisam de chave nenhuma.
-    const keyless = ['PhishStats', 'OpenPhish', 'Team Cymru', 'CIRCL hashlookup', 'IP Geolocation', 'Ransomware.live', 'DNSBL'];
+    const keyless = ['PhishStats', 'OpenPhish', 'Team Cymru', 'CIRCL hashlookup', 'IP Geolocation', 'Ransomware.live'];
     res.json({ integrations, keyless });
 });
 

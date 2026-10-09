@@ -13,7 +13,6 @@ const Login = lazy(() => import("./pages/Login"));
 const Profile = lazy(() => import("./pages/Profile"));
 const Settings = lazy(() => import("./pages/Settings"));
 const VendorDirectory = lazy(() => import("./pages/VendorDirectory"));
-const DnsblCheck = lazy(() => import("./pages/DnsblCheck"));
 const AttackSurface = lazy(() => import("./pages/AttackSurface"));
 const ExposureWatchlist = lazy(() => import("./pages/ExposureWatchlist"));
 const Newsletter = lazy(() => import("./pages/Newsletter"));
@@ -58,7 +57,6 @@ const App = () => (
 
                 {/* Tool Routes */}
                 <Route path="/vendors" element={<VendorDirectory />} />
-                <Route path="/dnsbl" element={<DnsblCheck />} />
                 <Route path="/attack-surface" element={<AttackSurface />} />
                 <Route path="/exposure-watchlist" element={<ExposureWatchlist />} />
                 <Route path="/phishing-analyzer" element={<PhishingAnalyzer />} />

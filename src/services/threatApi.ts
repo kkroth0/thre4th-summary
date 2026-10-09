@@ -787,38 +787,6 @@ export const fetchOpenPhishData = (query: string) => fetchFromBackend('openphish
 export const fetchTeamCymruData = (query: string) => fetchFromBackend('teamcymru', query, "Team Cymru");
 export const fetchCensysData = (query: string) => fetchFromBackend('censys', query, "Censys");
 
-export const checkDNSBL = async (ip: string, provider: string): Promise<{ listed: boolean; addresses?: string[]; status: string; error?: string }> => {
-    try {
-        const response = await fetch('/api/dnsbl', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ query: ip, provider })
-        });
-        if (!response.ok) throw new Error("API Error");
-        return await response.json();
-    } catch (error) {
-        return { listed: false, status: "Error", error: (error as Error).message };
-    }
-};
-
-export const checkDNSBLBatch = async (ip: string, providers: string[]): Promise<Record<string, { listed: boolean; addresses?: string[]; status: string; error?: string }>> => {
-    try {
-        const response = await fetch('/api/dnsbl/batch', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ query: ip, providers })
-        });
-        if (!response.ok) throw new Error("API Error");
-        return await response.json();
-    } catch (error) {
-        const fallback: Record<string, { listed: boolean; addresses?: string[]; status: string; error?: string }> = {};
-        providers.forEach(p => {
-            fallback[p] = { listed: false, status: "Error", error: (error as Error).message };
-        });
-        return fallback;
-    }
-};
-
 // AV engines whose verdict alone is enough to mark an IOC malicious.
 const IMPORTANT_AV_VENDORS = [
     'Microsoft', 'Kaspersky', 'Bitdefender', 'ESET-NOD32', 'Avira',

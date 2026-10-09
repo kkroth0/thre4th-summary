@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { Radar, Rss, Target } from "lucide-react";
+import { ArrowUpRight, Rss, Target } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import FeedSourcesManager from "@/components/FeedSourcesManager";
@@ -34,27 +34,27 @@ export function MonitoringSettings() {
   return (
     <div className="flex flex-col gap-5">
       <div>
-        <h2 className="flex items-center gap-2 text-xl font-semibold"><Radar className="text-primary" /> {pt ? "Monitoramento" : "Monitoring"}</h2>
+        <h2 className="text-xl font-semibold tracking-tight">{pt ? "Monitoramento" : "Monitoring"}</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          {pt ? "O contexto que filtra, as fontes que coletam e os ativos que são varridos." : "The context that filters, the sources that collect, and the assets that get scanned."}
+          {pt ? "Defina o que acompanhar e de onde vem sua inteligência." : "Choose what to monitor and where your intelligence comes from."}
         </p>
       </div>
 
       <OrgProfileEditor />
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base"><Rss className="text-primary" /> {pt ? "Fontes de coleta" : "Collection sources"}</CardTitle>
+      <Card className="rounded-xl shadow-none">
+        <CardHeader className="p-5 pb-4 sm:p-6 sm:pb-4">
+          <CardTitle className="flex items-center gap-2 text-sm"><Rss className="h-4 w-4 text-muted-foreground" /> {pt ? "Fontes de notícias" : "News sources"}</CardTitle>
           <CardDescription>
-            {pt ? "Os feeds que alimentam as Notícias. Qualquer conta vê o catálogo; só admin edita." : "The feeds behind the news. Any account sees the catalog; only admins edit it."}
+            {pt ? "Consulte os feeds acompanhados pela plataforma. Administradores podem editar as fontes." : "Browse the feeds followed by the platform. Administrators can edit sources."}
           </CardDescription>
         </CardHeader>
-        <CardContent><FeedSourcesManager /></CardContent>
+        <CardContent className="px-5 pb-5 sm:px-6 sm:pb-6"><FeedSourcesManager /></CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base"><Target className="text-primary" /> {pt ? "Ativos monitorados" : "Monitored assets"}</CardTitle>
+      <Card className="rounded-xl shadow-none">
+        <CardHeader className="p-5 pb-4 sm:p-6 sm:pb-4">
+          <CardTitle className="flex items-center gap-2 text-sm"><Target className="h-4 w-4 text-muted-foreground" /> {pt ? "Ativos monitorados" : "Monitored assets"}</CardTitle>
           <CardDescription>
             {assetState === "loading"
               ? (pt ? "Carregando watchlist…" : "Loading watchlist…")
@@ -64,20 +64,20 @@ export function MonitoringSettings() {
                   // EST-04: "0 ativo(s) na watchlist." não convidava a nada.
                   // Estado vazio precisa dizer o que entra ali e para que serve.
                   ? (pt
-                    ? "Nenhum ativo monitorado. Adicione domínios e IPs da organização para que a varredura acuse exposição nova sem você pedir."
-                    : "No assets monitored yet. Add your organization's domains and IPs so scans flag new exposure without you asking.")
+                    ? "Adicione domínios e IPs para acompanhar mudanças na exposição da sua organização."
+                    : "Add domains and IPs to track changes in your organization’s exposure.")
                   : pt
                     ? `${assetState} ativo(s) na watchlist${lastRun ? ` · última varredura em ${new Date(lastRun).toLocaleString("pt-BR")}` : ""}.`
                     : `${assetState} asset(s) on the watchlist${lastRun ? ` · last scan ${new Date(lastRun).toLocaleString("en-US")}` : ""}.`}
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="px-5 pb-5 sm:px-6 sm:pb-6">
           {/* Resumo e link, não um segundo CRUD: a tela de resultados continua dona do assunto. */}
-          <Button asChild variant={assetState === 0 ? "default" : "outline"}>
+          <Button asChild size="sm" variant={assetState === 0 ? "default" : "outline"}>
             <Link to="/attack-surface?mode=monitor">
               {assetState === 0
                 ? (pt ? "Adicionar o primeiro ativo" : "Add the first asset")
-                : (pt ? "Abrir a watchlist" : "Open the watchlist")}
+                : (pt ? "Gerenciar ativos" : "Manage assets")}<ArrowUpRight className="h-4 w-4" />
             </Link>
           </Button>
         </CardContent>

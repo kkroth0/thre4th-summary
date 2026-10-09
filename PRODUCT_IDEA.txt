@@ -99,7 +99,7 @@ Integrar o ponto forte de cada fonte para formar o veredito consolidado:
                  comercial em SaaS.)
   + outros já integrados no backend atual: Pulsedive, Hybrid Analysis,
     CriminalIP, MetaDefender, PhishTank, GreyNoise, Censys, WHOIS, IPGeo,
-    DNSBL, Ransomware.live, CIRCL, PhishStats. (Total ~20-23 fontes.)
+    Ransomware.live, CIRCL, PhishStats. (Total ~20-23 fontes.)
 
 --------------------------------------------------------------------------
 6. ARQUITETURA / ESTRATÉGIA TÉCNICA (contornando ToS e rate limits)
@@ -210,7 +210,7 @@ enriquecimento) conforme necessário. Design inspirado no Hunt.io.
 --------------------------------------------------------------------------
 - Backend Node/Express com ~20-23 integrações de vendors funcionando.
 - Frontend React/Vite/shadcn com páginas: CVE Dashboard, Daily Bulletin/
-  Newsletter, DNS Visualizer, DNSBL Check, Patch Tuesday, Phishing Analyzer,
+  Newsletter, DNS Visualizer, Patch Tuesday, Phishing Analyzer,
   Threat Hunting, Vendor Directory.
 - i18n PT/EN. Exportação PDF/PPTX/Excel. OAuth GitHub (scaffolding).
 - HEARTH (open-source MIT) como fonte de 130+ hunts + coverage heatmap.

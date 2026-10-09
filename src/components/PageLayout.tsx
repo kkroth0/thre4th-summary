@@ -1,5 +1,5 @@
 import { ReactNode } from "react";
-import { Header, NavTabs } from "@/components/Header";
+import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 
 interface PageLayoutProps {
@@ -39,7 +39,6 @@ export function PageLayout({
     <div className="soc-shell relative min-h-screen bg-background flex flex-col">
       <div className="soc-grid pointer-events-none absolute inset-0 z-0" />
       <Header showBackButton={showBackButton} actions={headerActions} />
-      <NavTabs />
       {bare ? (
         <div className="relative z-10 flex-1">{children}</div>
       ) : (

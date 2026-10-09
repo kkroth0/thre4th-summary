@@ -22,7 +22,7 @@ const content = {
     silosTitle: "CVE & patch intelligence",
     silosDesc: "Track CVEs, Patch Tuesday and actively-exploited vulnerabilities, enriched with NVD severity, CWE and real exploitation status.",
     changeTitle: "Indicator verification",
-    changeDesc: "Check IPs, domains and hashes against a weighted consensus of reputation sources, with passive DNS, DNSBL history and registrar data.",
+    changeDesc: "Check IPs, domains and hashes against a weighted consensus of reputation sources, with passive DNS and registrar data.",
 
     // Key features
     keyFeaturesTitle: "Key",
@@ -84,7 +84,7 @@ const content = {
     silosTitle: "Inteligência de CVE e patches",
     silosDesc: "Acompanhe CVEs, Patch Tuesday e vulnerabilidades ativamente exploradas, enriquecidas com severidade NVD, CWE e status real de exploração.",
     changeTitle: "Verificação de indicadores",
-    changeDesc: "Verifique IPs, domínios e hashes contra um consenso ponderado de fontes de reputação, com DNS passivo, histórico DNSBL e dados de registro.",
+    changeDesc: "Verifique IPs, domínios e hashes contra um consenso ponderado de fontes de reputação, com DNS passivo e dados de registro.",
 
     // Key features
     keyFeaturesTitle: "Principais",

@@ -172,23 +172,6 @@ export const PUBLIC_SEO_ROUTES: SeoRoute[] = [
     },
   },
   {
-    path: "/dnsbl",
-    priority: "0.8",
-    changefreq: "weekly",
-    metadata: {
-      pt: {
-        title: "Consulta DNSBL para IPs e Dominios | ThreatSumm4ry",
-        description:
-          "Consulte reputacao de IPs, dominios e ranges em blocklists DNSBL paralelas com resultados exportaveis para analise SOC.",
-      },
-      en: {
-        title: "DNSBL Lookup for IPs and Domains | ThreatSumm4ry",
-        description:
-          "Check reputation for IPs, domains, and ranges across parallel DNSBL blocklists with exportable results for SOC analysis.",
-      },
-    },
-  },
-  {
     path: "/attack-surface",
     priority: "0.8",
     changefreq: "weekly",

@@ -20,7 +20,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { VendorQuotas } from "@/components/VendorQuotas";
 import { EnrichmentTab } from "@/components/EnrichmentTab";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { Header, NavTabs, useNavCatalog } from "@/components/Header";
+import { Header, useNavCatalog } from "@/components/Header";
 import { BrandMark } from "@/components/BrandMark";
 
 import { IocTimeline } from "@/components/IocTimeline";
@@ -1517,7 +1517,6 @@ const Index = () => {
       {/* FLX-05: esta tela era a única sem barra de navegação — e é a
           ferramenta principal do produto. As outras recebem pelo PageLayout,
           que esta página não usa por ter gabarito próprio. */}
-      <NavTabs />
       {/* Barra de busca persistente: some no estado vazio, onde o formulario ja
           e o heroi. Fica sticky logo abaixo do header (h-14) em vez de fixed —
           assim ela ocupa o proprio espaco, o conteudo nao precisa de padding

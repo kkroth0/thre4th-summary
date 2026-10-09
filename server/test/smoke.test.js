@@ -7,12 +7,13 @@ import { spawn } from 'node:child_process';
 import crypto from 'node:crypto';
 import { rmSync } from 'node:fs';
 import path from 'node:path';
+import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = 3900 + Math.floor(Math.random() * 100);
 const BASE = `http://127.0.0.1:${PORT}`;
-const PREMIUM_OPEN_PATH = `/tmp/threatsumm4ry-smoke-premium-${PORT}.json`;
+const PREMIUM_OPEN_PATH = path.join(tmpdir(), `threatsumm4ry-smoke-premium-${PORT}.json`);
 const SESSION_SECRET = 'test-secret';
 const sessionBody = Buffer.from(JSON.stringify({ sub: 'smoke-user', login: 'tester', exp: Math.floor(Date.now() / 1000) + 3600 })).toString('base64url');
 const sessionSig = crypto.createHmac('sha256', SESSION_SECRET).update(sessionBody).digest('base64url');
@@ -89,6 +90,17 @@ test('GET /api/cves/recent returns CVE list (static fallback offline)', async ()
 test('unknown API route yields 404, not a crash', async () => {
     const r = await fetch(`${BASE}/api/definitely-not-a-route`);
     assert.equal(r.status, 404);
+});
+
+test('removed DNSBL endpoints return 404', async () => {
+    for (const route of ['/api/dnsbl', '/api/dnsbl/batch']) {
+        const response = await fetch(`${BASE}${route}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ query: '8.8.8.8', provider: 'zen.spamhaus.org', providers: ['zen.spamhaus.org'] }),
+        });
+        assert.equal(response.status, 404, route);
+    }
 });
 
 test('removed hunt-pack endpoint yields 404', async () => {

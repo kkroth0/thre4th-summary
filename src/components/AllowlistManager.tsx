@@ -71,21 +71,21 @@ export default function AllowlistManager() {
     };
 
     return (
-        <Card className="mb-5">
-            <CardContent className="p-5 space-y-4">
+        <Card className="overflow-hidden rounded-xl shadow-none">
+            <CardContent className="space-y-4 p-5 sm:p-6">
                 <div className="flex items-start gap-3">
-                    <span className="h-11 w-11 rounded-lg bg-primary/10 ring-1 ring-inset ring-primary/20 flex items-center justify-center shrink-0">
-                        <ShieldCheck className="h-5 w-5 text-primary" />
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-secondary">
+                        <ShieldCheck className="h-4 w-4 text-muted-foreground" />
                     </span>
                     <div className="min-w-0 flex-1">
-                        <div className="font-medium flex items-center gap-2">
-                            {pt ? "Allow-list (admin)" : "Allow-list (admin)"}
+                        <div className="flex items-center gap-2 text-sm font-semibold">
+                            {pt ? "Acesso premium" : "Premium access"}
                             <Badge variant="secondary" className="text-[10px]">{entries.length}</Badge>
                         </div>
                         <div className="text-sm text-muted-foreground">
                             {pt
-                                ? "Quem pode acessar recursos premium. Logins adicionados aqui persistem até você remover."
-                                : "Who can access premium features. Logins added here persist until you remove them."}
+                                ? "Gerencie as contas autorizadas a usar os recursos premium."
+                                : "Manage accounts authorized to use premium features."}
                             {org && (
                                 <> {pt ? "Membros de" : "Members of"} <span className="font-medium">@{org}</span> {pt ? "também têm premium." : "also get premium."}</>
                             )}
@@ -96,6 +96,7 @@ export default function AllowlistManager() {
                 <div className="flex items-center gap-2">
                     <Input
                         placeholder={pt ? "login do GitHub (ex.: fulano)" : "GitHub login (e.g. someone)"}
+                        aria-label={pt ? "Login do GitHub" : "GitHub login"}
                         value={newLogin}
                         onChange={(e) => setNewLogin(e.target.value)}
                         onKeyDown={(e) => { if (e.key === "Enter") onAdd(); }}
@@ -106,7 +107,7 @@ export default function AllowlistManager() {
                     </Button>
                 </div>
 
-                <div className="space-y-1.5">
+                <div className="divide-y divide-border rounded-lg border border-border">
                     {loading ? (
                         <LoadingRows rows={3} />
                     ) : !entries.length ? (
@@ -115,7 +116,7 @@ export default function AllowlistManager() {
                         </div>
                     ) : (
                         entries.map((e) => (
-                            <div key={e.login} className="flex items-center gap-3 rounded-md border px-3 py-2">
+                            <div key={e.login} className="flex items-center gap-2 px-3 py-2.5">
                                 <a
                                     href={`https://github.com/${e.login}`} target="_blank" rel="noreferrer"
                                     className="min-w-0 flex-1 flex items-center gap-2 text-sm hover:text-foreground text-muted-foreground"
@@ -125,12 +126,12 @@ export default function AllowlistManager() {
                                 </a>
                                 {e.admin && <Badge variant="secondary" className="text-[10px] shrink-0">admin</Badge>}
                                 {e.source === "env" && (
-                                    <Badge variant="outline" className="text-[10px] shrink-0" title={pt ? "Definido por variável de ambiente" : "Set via environment variable"}>env</Badge>
+                                    <Badge variant="outline" className="shrink-0 text-[10px]" title={pt ? "Definido pelo servidor" : "Set by server"}>{pt ? "Servidor" : "Server"}</Badge>
                                 )}
                                 {busyLogin === e.login ? (
                                     <Loader2 className="h-4 w-4 animate-spin text-muted-foreground shrink-0" />
                                 ) : e.removable ? (
-                                    <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => onRemove(e.login)}>
+                                    <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => onRemove(e.login)} aria-label={pt ? `Remover acesso de ${e.login}` : `Remove access for ${e.login}`}>
                                         <Trash2 className="h-4 w-4 text-destructive" />
                                     </Button>
                                 ) : (

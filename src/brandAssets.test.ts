@@ -70,7 +70,6 @@ test("publishes the approved static sitemap", async () => {
     "/threat-map",
     "/patch-tuesday",
     "/vendors",
-    "/dnsbl",
     "/attack-surface",
     "/phishing-analyzer",
   ];
@@ -84,6 +83,7 @@ test("publishes the approved static sitemap", async () => {
   assert.doesNotMatch(sitemap, /\/login<\/loc>/);
   assert.doesNotMatch(sitemap, /\/settings<\/loc>/);
   assert.doesNotMatch(sitemap, /\/newsletter<\/loc>/);
+  assert.doesNotMatch(sitemap, /\/dnsbl<\/loc>/);
 });
 
 test("uses the official mark in shared and public navigation", async () => {

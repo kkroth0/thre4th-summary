@@ -17,7 +17,6 @@ const expectedRoutes = [
   "/patch-tuesday",
   "/sap-patch",
   "/vendors",
-  "/dnsbl",
   "/attack-surface",
   "/phishing-analyzer",
 ];
@@ -36,8 +35,8 @@ test("lists the approved public SEO routes only", () => {
 test("builds stable absolute canonical URLs", () => {
   assert.equal(getCanonicalUrl("/"), "https://threatsumm4ry.app/");
   assert.equal(getCanonicalUrl("/cves"), "https://threatsumm4ry.app/cves");
-  assert.equal(getCanonicalUrl("dnsbl"), "https://threatsumm4ry.app/dnsbl");
-  assert.equal(getCanonicalUrl("/dnsbl/"), "https://threatsumm4ry.app/dnsbl");
+  assert.equal(getCanonicalUrl("vendors"), "https://threatsumm4ry.app/vendors");
+  assert.equal(getCanonicalUrl("/vendors/"), "https://threatsumm4ry.app/vendors");
 });
 
 test("returns localized metadata and falls back to English for unsupported app languages", () => {

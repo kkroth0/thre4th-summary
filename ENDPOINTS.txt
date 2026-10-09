@@ -55,11 +55,9 @@ CVEs & PATCH TUESDAY
   GET     /api/patch-tuesday/:id
 
 ====================================================================
-DNS / DNSBL
+DNS
 ====================================================================
   POST    /api/dns/lookup                      [rl]
-  POST    /api/dnsbl                           [rl]
-  POST    /api/dnsbl/batch                     [rl]
 
 ====================================================================
 VENDOR / THREAT-INTEL LOOKUPS  (all POST, all [rl])
@@ -110,7 +108,6 @@ FRONTEND APP ROUTES (SPA, not HTTP endpoints)   * = premium/sign-in gated
   /patch-tuesday        Patch Tuesday
   /features             Features
   /vendors              Vendor Directory
-  /dnsbl                DNSBL Check
   /phishing-analyzer    Phishing Analyzer
   /attack-surface       Attack Surface scan
   /attack-surface?mode=monitor * Attack Surface monitoring (legacy /exposure-watchlist redirects here)
