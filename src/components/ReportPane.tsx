@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useState } from "react";
-import { ChevronDown, Crosshair, ExternalLink, FileText, Loader2 } from "lucide-react";
+import React, { useEffect, useState } from "react";
+import { ChevronDown, ExternalLink, FileText, Loader2 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
@@ -11,8 +11,7 @@ import { BrandMark } from "@/components/BrandMark";
 import { BoletimView } from "@/components/BoletimView";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { downloadBoletimDeck, fetchJobRelated, type BoletimJob, type BoletimReport, type PrivateHunt } from "@/services/threatApi";
-import { buildHuntLink } from "@/pages/dailyBulletinView";
+import { downloadBoletimDeck, fetchJobRelated, type BoletimJob, type BoletimReport } from "@/services/threatApi";
 import { exportBoletimJSON, exportBoletimIocsExcel, canExportBoletimIocs } from "@/utils/boletimExport";
 
 // Host da URL pra exibição compacta ("fortiguard.com" em vez do link inteiro).
@@ -56,44 +55,25 @@ const usageTag = (c: BoletimReport["consumo"], pt: boolean): React.ReactNode => 
 };
 
 function ReportRelations({ job, pt }: { job: BoletimJob; pt: boolean }) {
-  const [related, setRelated] = useState<{ hunts: PrivateHunt[]; reports: BoletimJob[] } | null>(null);
+  const [related, setRelated] = useState<{ reports: BoletimJob[] } | null>(null);
   useEffect(() => {
     let live = true;
     fetchJobRelated(job.id).then((value) => { if (live) setRelated(value); }).catch(() => {});
     return () => { live = false; };
   }, [job.id]);
 
-  const huntLink = useMemo(() => {
-    const report = job.json;
-    const techniques = job.techniques?.length
-      ? job.techniques
-      : (report?.mitre_ttps || []).map((item) => item.id || "").filter(Boolean);
-    const cves = job.cves?.length
-      ? job.cves
-      : [report?.cve_id, ...(report?.tecnologias_afetadas || []).map((item) => item.cve)].filter(Boolean) as string[];
-    return buildHuntLink({ id: job.id, title: report?.titulo || job.title, techniques, cves });
-  }, [job]);
+  if (!related?.reports.length) return null;
 
   return (
     <section className="mt-8 border-t pt-5">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div><h3 className="text-sm font-semibold">{pt ? "Desdobramentos" : "Follow-ups"}</h3><p className="text-xs text-muted-foreground">{pt ? "Hunts e relatórios ligados por técnica ou CVE." : "Hunts and reports linked by technique or CVE."}</p></div>
-        <Button asChild size="sm"><Link to={huntLink}><Crosshair className="mr-2 h-4 w-4" /> {pt ? "Criar hunt" : "Create hunt"}</Link></Button>
+      <div><h3 className="text-sm font-semibold">{pt ? "Desdobramentos" : "Follow-ups"}</h3><p className="text-xs text-muted-foreground">{pt ? "Relatórios ligados por técnica ou CVE." : "Reports linked by technique or CVE."}</p></div>
+      <div className="mt-4 grid gap-2 sm:grid-cols-2">
+        {related.reports.slice(0, 4).map((report) => (
+          <Link key={report.id} to={`/relatorios?job=${encodeURIComponent(report.id)}`} className="rounded-md border p-3 text-sm hover:border-primary/40 hover:bg-muted/40">
+            <FileText className="mb-2 h-4 w-4 text-primary" /><span className="line-clamp-2 font-medium">{report.title || report.url}</span>
+          </Link>
+        ))}
       </div>
-      {!!(related?.hunts.length || related?.reports.length) && (
-        <div className="mt-4 grid gap-2 sm:grid-cols-2">
-          {related?.hunts.slice(0, 4).map((hunt) => (
-            <Link key={hunt.id} to={`/hunting?query=${encodeURIComponent(hunt.title)}`} className="rounded-md border p-3 text-sm hover:border-primary/40 hover:bg-muted/40">
-              <Crosshair className="mb-2 h-4 w-4 text-primary" /><span className="line-clamp-2 font-medium">{hunt.title}</span>
-            </Link>
-          ))}
-          {related?.reports.slice(0, 4).map((report) => (
-            <Link key={report.id} to={`/relatorios?job=${encodeURIComponent(report.id)}`} className="rounded-md border p-3 text-sm hover:border-primary/40 hover:bg-muted/40">
-              <FileText className="mb-2 h-4 w-4 text-primary" /><span className="line-clamp-2 font-medium">{report.title || report.url}</span>
-            </Link>
-          ))}
-        </div>
-      )}
     </section>
   );
 }

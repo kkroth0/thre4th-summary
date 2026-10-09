@@ -8,7 +8,7 @@ import { Footer } from "@/components/Footer";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useAuth } from "@/contexts/AuthContext";
 
-type Feature = "threat-brief" | "advisory-feed" | "exposure-watchlist" | "knowledge" | "hunting";
+type Feature = "threat-brief" | "advisory-feed" | "exposure-watchlist" | "knowledge";
 
 const COPY: Record<Feature, { pt: [string, string]; en: [string, string] }> = {
   "threat-brief": {
@@ -26,10 +26,6 @@ const COPY: Record<Feature, { pt: [string, string]; en: [string, string] }> = {
   knowledge: {
     pt: ["Biblioteca de Fontes", "Notícias e relatórios salvos."],
     en: ["Source Library", "Saved news and reports."],
-  },
-  hunting: {
-    pt: ["Threat Hunting", "Buscas prontas para os seus logs."],
-    en: ["Threat Hunting", "Ready-made searches for your logs."],
   },
 };
 

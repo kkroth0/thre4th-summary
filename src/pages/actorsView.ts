@@ -10,28 +10,7 @@ type Actor = {
   targets?: string[];
 };
 
-type Hunt = { id: string; techniques?: string[] };
-
-export function actorHuntCoverage<A extends Actor, H extends Hunt>(actors: A[], hunts: H[]): Record<string, number> {
-  const huntIdsByTechnique = new Map<string, Set<string>>();
-  for (const hunt of hunts) {
-    for (const technique of hunt.techniques || []) {
-      const ids = huntIdsByTechnique.get(technique) || new Set<string>();
-      ids.add(hunt.id);
-      huntIdsByTechnique.set(technique, ids);
-    }
-  }
-
-  return Object.fromEntries(actors.map((actor) => {
-    const huntIds = new Set<string>();
-    for (const technique of actor.techniques || []) {
-      huntIdsByTechnique.get(technique)?.forEach((id) => huntIds.add(id));
-    }
-    return [actor.id, huntIds.size];
-  }));
-}
-
-export function sortActors<A extends Actor>(actors: A[], mode: "techniques" | "name" | "country" | "hunts", coverage: Record<string, number>): A[] {
+export function sortActors<A extends Actor>(actors: A[], mode: "techniques" | "name" | "country"): A[] {
   return [...actors].sort((a, b) => {
     if (mode === "name") return a.name.localeCompare(b.name);
     if (mode === "country") {
@@ -39,7 +18,6 @@ export function sortActors<A extends Actor>(actors: A[], mode: "techniques" | "n
         || b.technique_count - a.technique_count
         || a.name.localeCompare(b.name);
     }
-    if (mode === "hunts") return (coverage[b.id] || 0) - (coverage[a.id] || 0) || a.name.localeCompare(b.name);
     return b.technique_count - a.technique_count || a.name.localeCompare(b.name);
   });
 }
@@ -47,7 +25,7 @@ export function sortActors<A extends Actor>(actors: A[], mode: "techniques" | "n
 // ─── Modelagem de ameaças ──────────────────────────────────────────────────
 // Um perfil descreve UMA organização: em que setores ela está e em que
 // países/regiões ela opera. O casamento com o catálogo responde "quem ataca
-// gente como eu" — e, junto com as hunts, "o que disso eu já cubro".
+// gente como eu".
 
 export type OrgProfile = {
   id: string;
@@ -79,12 +57,11 @@ export function matchActors<A extends Actor>(actors: A[], profile: OrgProfile): 
       || a.actor.name.localeCompare(b.actor.name));
 }
 
-/** TTPs mais usados pelos atores casados, marcando o que as suas hunts já cobrem. */
+/** TTPs mais usados pelos atores casados, do mais recorrente pro menos. */
 export function topTechniques<A extends Actor>(
   matches: ActorMatch<A>[],
-  huntTechniques: Set<string>,
   limit = 12,
-): Array<{ id: string; actors: number; covered: boolean }> {
+): Array<{ id: string; actors: number }> {
   const counts = new Map<string, number>();
   for (const { actor } of matches) {
     for (const technique of new Set(actor.techniques || [])) {
@@ -92,13 +69,7 @@ export function topTechniques<A extends Actor>(
     }
   }
   return [...counts.entries()]
-    .map(([id, actors]) => ({
-      id,
-      actors,
-      // Sub-técnica da hunt cobre a técnica-pai, e vice-versa: T1059 e
-      // T1059.001 são o mesmo buraco pro analista.
-      covered: [...huntTechniques].some((value) => value === id || value.startsWith(`${id}.`) || id.startsWith(`${value}.`)),
-    }))
+    .map(([id, actors]) => ({ id, actors }))
     .sort((a, b) => b.actors - a.actors || a.id.localeCompare(b.id))
     .slice(0, limit);
 }

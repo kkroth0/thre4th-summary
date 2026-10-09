@@ -5,24 +5,18 @@ import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import crypto from 'node:crypto';
-import { huntIdSeq } from '../hunts.js';
-import { mkdirSync, rmSync } from 'node:fs';
+import { rmSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = 3900 + Math.floor(Math.random() * 100);
 const BASE = `http://127.0.0.1:${PORT}`;
-const HUNTS_STORE_PATH = `/tmp/threatsumm4ry-smoke-hunts-${PORT}.json`;
 const PREMIUM_OPEN_PATH = `/tmp/threatsumm4ry-smoke-premium-${PORT}.json`;
-const HUNT_SEQ_PATH = `/tmp/threatsumm4ry-smoke-seq-${PORT}.json`;
 const SESSION_SECRET = 'test-secret';
 const sessionBody = Buffer.from(JSON.stringify({ sub: 'smoke-user', login: 'tester', exp: Math.floor(Date.now() / 1000) + 3600 })).toString('base64url');
 const sessionSig = crypto.createHmac('sha256', SESSION_SECRET).update(sessionBody).digest('base64url');
 const AUTH_HEADERS = { Cookie: `ts_session=${sessionBody}.${sessionSig}` };
-const otherSessionBody = Buffer.from(JSON.stringify({ sub: 'other-user', login: 'tester', exp: Math.floor(Date.now() / 1000) + 3600 })).toString('base64url');
-const otherSessionSig = crypto.createHmac('sha256', SESSION_SECRET).update(otherSessionBody).digest('base64url');
-const OTHER_AUTH_HEADERS = { Cookie: `ts_session=${otherSessionBody}.${otherSessionSig}` };
 const outsiderBody = Buffer.from(JSON.stringify({ sub: 'outsider', login: 'outsider', exp: Math.floor(Date.now() / 1000) + 3600 })).toString('base64url');
 const outsiderSig = crypto.createHmac('sha256', SESSION_SECRET).update(outsiderBody).digest('base64url');
 const OUTSIDER_HEADERS = { Cookie: `ts_session=${outsiderBody}.${outsiderSig}` };
@@ -46,7 +40,7 @@ before(async () => {
         env: {
             ...process.env,
             PORT: String(PORT), NODE_ENV: 'test', SESSION_SECRET,
-            GITHUB_ALLOWED_LOGINS: 'tester', HUNTS_STORE_PATH, PREMIUM_OPEN_PATH, HUNT_SEQ_PATH,
+            GITHUB_ALLOWED_LOGINS: 'tester', PREMIUM_OPEN_PATH,
         },
         stdio: 'ignore',
     });
@@ -55,12 +49,8 @@ before(async () => {
 
 after(() => {
     proc?.kill('SIGKILL');
-    rmSync(HUNTS_STORE_PATH, { force: true, recursive: true });
-    rmSync(`${HUNTS_STORE_PATH}.tmp`, { force: true });
     rmSync(PREMIUM_OPEN_PATH, { force: true });
     rmSync(`${PREMIUM_OPEN_PATH}.tmp`, { force: true });
-    rmSync(HUNT_SEQ_PATH, { force: true });
-    rmSync(`${HUNT_SEQ_PATH}.tmp`, { force: true });
 });
 
 test('GET /api/vendors/status returns vendor map', async () => {
@@ -144,84 +134,6 @@ test('knowledge routes exist and require authentication', async () => {
     assert.deepEqual([get.status, post.status, del.status], [401, 401, 401]);
 });
 
-test('hunting routes exist and require authentication', async () => {
-    const requests = await Promise.all([
-        fetch(`${BASE}/api/hearth`),
-        fetch(`${BASE}/api/hunts`),
-        fetch(`${BASE}/api/hunts/coverage?axis=technique`),
-        fetch(`${BASE}/api/hunts`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ title: 'x', hypothesis: 'y' }),
-        }),
-        fetch(`${BASE}/api/hunts/abc`, { method: 'PATCH' }),
-        fetch(`${BASE}/api/hunts/abc`, { method: 'DELETE' }),
-        fetch(`${BASE}/api/feed/job/abc/related`),
-    ]);
-    assert.deepEqual(requests.map((response) => response.status), [401, 401, 401, 401, 401, 401, 401]);
-});
-
-test('private hunt changes its own ATT&CK and field coverage', async () => {
-    const createdResponse = await fetch(`${BASE}/api/hunts`, {
-        method: 'POST',
-        headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            title: 'Logon de alto risco', hypothesis: 'Conta comprometida', status: 'ready',
-            techniques: ['T1078'], technologies: ['Microsoft Sentinel'], dataSources: ['SigninLogs'],
-            query: 'SigninLogs\n| where RiskLevelDuringSignIn == "high"',
-        }),
-    });
-    assert.equal(createdResponse.status, 201);
-    const created = await createdResponse.json();
-
-    const [technique, technology, dataSource] = await Promise.all([
-        fetch(`${BASE}/api/hunts/coverage?axis=technique`, { headers: AUTH_HEADERS }).then((r) => r.json()),
-        fetch(`${BASE}/api/hunts/coverage?axis=technology`, { headers: AUTH_HEADERS }).then((r) => r.json()),
-        fetch(`${BASE}/api/hunts/coverage?axis=dataSource`, { headers: AUTH_HEADERS }).then((r) => r.json()),
-    ]);
-    assert.equal(technique.covered, 1);
-    assert.equal(technique.total, 697);
-    assert.deepEqual(technology.values, [{ value: 'Microsoft Sentinel', count: 1 }]);
-    assert.deepEqual(dataSource.values, [{ value: 'SigninLogs', count: 1 }]);
-
-    const otherList = await fetch(`${BASE}/api/hunts`, { headers: OTHER_AUTH_HEADERS }).then((r) => r.json());
-    assert.deepEqual(otherList.items, []);
-    const [otherPatch, otherDelete] = await Promise.all([
-        fetch(`${BASE}/api/hunts/${created.hunt.id}`, { method: 'PATCH', headers: OTHER_AUTH_HEADERS }),
-        fetch(`${BASE}/api/hunts/${created.hunt.id}`, { method: 'DELETE', headers: OTHER_AUTH_HEADERS }),
-    ]);
-    assert.deepEqual([otherPatch.status, otherDelete.status], [404, 404]);
-
-    const patched = await fetch(`${BASE}/api/hunts/${created.hunt.id}`, {
-        method: 'PATCH', headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: 'Logon de alto risco atualizado' }),
-    });
-    assert.equal(patched.status, 200);
-    assert.equal((await patched.json()).hunt.title, 'Logon de alto risco atualizado');
-
-    const deleted = await fetch(`${BASE}/api/hunts/${created.hunt.id}`, { method: 'DELETE', headers: AUTH_HEADERS });
-    assert.equal(deleted.status, 200);
-    assert.deepEqual((await deleted.json()).items, []);
-});
-
-test('persistence failure does not report a hunt as saved', async () => {
-    rmSync(HUNTS_STORE_PATH, { force: true });
-    mkdirSync(HUNTS_STORE_PATH);
-    try {
-        const response = await fetch(`${BASE}/api/hunts`, {
-            method: 'POST',
-            headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ title: 'Não pode sumir', hypothesis: 'Falha de disco' }),
-        });
-        assert.equal(response.status, 500);
-        const own = await fetch(`${BASE}/api/hunts`, { headers: AUTH_HEADERS }).then((r) => r.json());
-        assert.deepEqual(own.items, []);
-    } finally {
-        rmSync(HUNTS_STORE_PATH, { force: true, recursive: true });
-        rmSync(`${HUNTS_STORE_PATH}.tmp`, { force: true });
-    }
-});
-
 test('daily edition route rejects malformed and unavailable historical dates', async () => {
     const malformed = await fetch(`${BASE}/api/intel/daily-brief?date=not-a-date`);
     assert.equal(malformed.status, 400);
@@ -279,192 +191,3 @@ test('gate premium não aceita sessão anônima', async () => {
     assert.equal(r.status, 401);
 });
 
-test('execucao de hunt: abre, fecha com achado e entra no resumo do mes', async () => {
-    const criada = await fetch(`${BASE}/api/hunts`, {
-        method: 'POST',
-        headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: 'Egress incomum', hypothesis: 'saida para dominio novo', techniques: ['T1071'] }),
-    });
-    assert.equal(criada.status, 201);
-    const { hunt } = await criada.json();
-
-    const aberta = await fetch(`${BASE}/api/hunts/${hunt.id}/runs`, {
-        method: 'POST',
-        headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ state: 'running' }),
-    });
-    assert.equal(aberta.status, 201);
-    const { run } = await aberta.json();
-    assert.equal(run.finishedAt, null);
-
-    const fechada = await fetch(`${BASE}/api/hunts/${hunt.id}/runs/${run.id}`, {
-        method: 'PATCH',
-        headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ state: 'done', outcome: 'suspicious', events: 7, findings: 'sete conexoes para dominio de 2 dias' }),
-    });
-    assert.equal(fechada.status, 200);
-    const fechadaBody = await fechada.json();
-    assert.equal(fechadaBody.run.outcome, 'suspicious');
-    assert.ok(fechadaBody.run.finishedAt, 'execucao fechada carimba o fim');
-
-    const mes = new Date().toISOString().slice(0, 7);
-    const resumo = await fetch(`${BASE}/api/hunts/runs/summary?month=${mes}`, { headers: AUTH_HEADERS });
-    assert.equal(resumo.status, 200);
-    const corpo = await resumo.json();
-    assert.equal(corpo.byState.done >= 1, true);
-    assert.equal(corpo.byOutcome.suspicious >= 1, true);
-
-    const porTecnica = await fetch(`${BASE}/api/hunts/by-technique/T1071`, { headers: AUTH_HEADERS });
-    assert.equal(porTecnica.status, 200);
-    const indice = await porTecnica.json();
-    assert.equal(indice.hunts.some((item) => item.id === hunt.id), true);
-    assert.equal(indice.hunts.find((item) => item.id === hunt.id).lastRun.outcome, 'suspicious');
-
-    const invalida = await fetch(`${BASE}/api/hunts/by-technique/T99`, { headers: AUTH_HEADERS });
-    assert.equal(invalida.status, 400);
-});
-
-test('execucao de outro dono nao existe pra quem consulta', async () => {
-    const criada = await fetch(`${BASE}/api/hunts`, {
-        method: 'POST',
-        headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: 'Privada', hypothesis: 'so do dono' }),
-    });
-    const { hunt } = await criada.json();
-
-    const invasao = await fetch(`${BASE}/api/hunts/${hunt.id}/runs`, {
-        method: 'POST',
-        headers: { ...OTHER_AUTH_HEADERS, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ state: 'running' }),
-    });
-    assert.equal(invasao.status, 404);
-});
-
-test('adotar hunt do catalogo e idempotente e valida a origem', async () => {
-    const invalida = await fetch(`${BASE}/api/hunts/adopt`, {
-        method: 'POST',
-        headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ origin: 'inventada', id: 'x' }),
-    });
-    assert.equal(invalida.status, 400);
-
-    const semId = await fetch(`${BASE}/api/hunts/adopt`, {
-        method: 'POST',
-        headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ origin: 'ptbr' }),
-    });
-    assert.equal(semId.status, 400);
-
-    const anonima = await fetch(`${BASE}/api/hunts/adopt`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ origin: 'ptbr', id: 'weekly/x' }),
-    });
-    assert.equal(anonima.status, 401);
-});
-
-test('gerador de hunt valida entrada antes de chamar modelo', async () => {
-    const semHipotese = await fetch(`${BASE}/api/hunts/generate`, {
-        method: 'POST',
-        headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sources: ['Cloudflare'] }),
-    });
-    // Sem OPENROUTER_API_KEY no ambiente de teste a rota devolve 503 antes de
-    // qualquer validacao — o que importa e nunca chamar o modelo sem chave.
-    assert.ok([400, 503].includes(semHipotese.status), `status inesperado: ${semHipotese.status}`);
-
-    const anonima = await fetch(`${BASE}/api/hunts/generate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ hypothesis: 'x' }),
-    });
-    assert.equal(anonima.status, 401);
-});
-
-test('execucao volta atras: reabrir limpa o veredito e preserva o trabalho', async () => {
-    const criada = await fetch(`${BASE}/api/hunts`, {
-        method: 'POST',
-        headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: 'Voltar atras', hypothesis: 'testar fluxo reverso' }),
-    });
-    const { hunt } = await criada.json();
-
-    const aberta = await fetch(`${BASE}/api/hunts/${hunt.id}/runs`, {
-        method: 'POST',
-        headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ state: 'running' }),
-    });
-    const { run } = await aberta.json();
-
-    const patch = (body) => fetch(`${BASE}/api/hunts/${hunt.id}/runs/${run.id}`, {
-        method: 'PATCH',
-        headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-    }).then((r) => r.json());
-
-    const fechada = await patch({ state: 'done', outcome: 'incident', events: 9, findings: 'nove eventos suspeitos' });
-    assert.equal(fechada.run.outcome, 'incident');
-
-    // Reabrir: veredito sai, contagem e texto ficam.
-    const reaberta = await patch({ state: 'running' });
-    assert.equal(reaberta.run.state, 'running');
-    assert.equal(reaberta.run.outcome, 'none', 'incidente nao sobrevive a reabertura');
-    assert.equal(reaberta.run.finishedAt, null);
-    assert.equal(reaberta.run.events, 9, 'contagem e trabalho feito, nao veredito');
-    assert.match(reaberta.run.findings, /nove eventos suspeitos/);
-
-    // E volta pra fila.
-    const naFila = await patch({ state: 'pending' });
-    assert.equal(naFila.run.state, 'pending');
-
-    // Contradicao explicita continua barrada.
-    const contradicao = await fetch(`${BASE}/api/hunts/${hunt.id}/runs/${run.id}`, {
-        method: 'PATCH',
-        headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ state: 'running', outcome: 'incident' }),
-    });
-    assert.equal(contradicao.status, 400);
-});
-
-test('hunt criada recebe id legivel e sequencial', async () => {
-    const criar = (title) => fetch(`${BASE}/api/hunts`, {
-        method: 'POST',
-        headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title, hypothesis: 'testar numeracao' }),
-    }).then((r) => r.json());
-
-    // A contagem parte do que a conta ja tem; o teste checa o passo, nao o
-    // numero inicial.
-    const ano = new Date().getUTCFullYear();
-    const primeira = await criar('Numeracao 1');
-    assert.match(primeira.hunt.id, new RegExp(`^TH-${ano}-\\d{3}$`));
-
-    const segunda = await criar('Numeracao 2');
-    const n1 = Number(primeira.hunt.id.split('-')[2]);
-    const n2 = Number(segunda.hunt.id.split('-')[2]);
-    assert.equal(n2, n1 + 1, 'a segunda hunt e a proxima da sequencia');
-
-    // O id novo funciona como chave em todo o resto.
-    const execucao = await fetch(`${BASE}/api/hunts/${segunda.hunt.id}/runs`, {
-        method: 'POST',
-        headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ state: 'running' }),
-    });
-    assert.equal(execucao.status, 201);
-});
-
-test('numero nao volta depois de apagar a ultima hunt do ano', async () => {
-    const criar = () => fetch(`${BASE}/api/hunts`, {
-        method: 'POST',
-        headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: 'Efemera', hypothesis: 'criar e apagar' }),
-    }).then((r) => r.json());
-
-    const primeira = await criar();
-    const apagar = await fetch(`${BASE}/api/hunts/${primeira.hunt.id}`, { method: 'DELETE', headers: AUTH_HEADERS });
-    assert.equal(apagar.status, 200);
-
-    const segunda = await criar();
-    assert.notEqual(segunda.hunt.id, primeira.hunt.id, 'id apagado nao pode ser reemitido');
-    assert.equal(huntIdSeq(segunda.hunt.id), huntIdSeq(primeira.hunt.id) + 1);
-});

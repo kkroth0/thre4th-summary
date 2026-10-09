@@ -6,7 +6,6 @@ import {
   CalendarCheck,
   ChevronLeft,
   ChevronRight,
-  Crosshair,
   Database,
   FileSearch,
   Github,
@@ -105,7 +104,7 @@ export function useNavCatalog() {
       ],
     },
     {
-      label: pt ? "Inteligência & Hunting" : "Intel & Hunting",
+      label: pt ? "Inteligência" : "Intel",
       items: [
         {
           path: "/knowledge",
@@ -119,13 +118,6 @@ export function useNavCatalog() {
           label: tr({ pt: "Geração de Relatórios", en: "Report Generation", es: "Generación de Informes", fr: "Génération de Rapports" }),
           description: pt ? "Resumo pronto a partir de um link." : "Ready-made summary from a link.",
           icon: FileSearch,
-          premium: true,
-        },
-        {
-          path: "/hunting",
-          label: "Threat Hunting",
-          description: pt ? "Buscas prontas para os seus logs." : "Ready-made searches for your logs.",
-          icon: Crosshair,
           premium: true,
         },
         {

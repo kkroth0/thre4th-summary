@@ -10,7 +10,7 @@ const Tabs = TabsPrimitive.Root;
 // className. Ficam dois, com papel definido:
 //
 //   segmented  troca a VISÃO do mesmo dado (Biblioteca / Queries / Cobertura)
-//   underline  troca de SEÇÃO, como navegação (Relatórios / Hunting / Notícias)
+//   underline  troca de SEÇÃO, como navegação (Relatórios / Atores / Notícias)
 //
 // O papel decide a forma; quem usa não escolhe por gosto. A variante viaja por
 // contexto porque o gatilho é irmão da lista, não filho.

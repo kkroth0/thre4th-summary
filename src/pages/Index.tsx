@@ -1359,8 +1359,8 @@ const Index = () => {
             </h1>
             <p className="mt-4 max-w-2xl text-base leading-7 text-muted-foreground">
               {language === "pt"
-                ? "Consulta de indicadores, análise de phishing, vulnerabilidades, grupos de ataque, hunting e relatórios. Nada para instalar."
-                : "Indicator lookup, phishing analysis, vulnerabilities, threat actors, hunting and reports. Nothing to install."}
+                ? "Consulta de indicadores, análise de phishing, vulnerabilidades, grupos de ataque e relatórios. Nada para instalar."
+                : "Indicator lookup, phishing analysis, vulnerabilities, threat actors and reports. Nothing to install."}
             </p>
 
             <div className="mt-10 rounded-lg border border-border bg-card p-4">
@@ -1476,8 +1476,8 @@ const Index = () => {
                 <h3 className="text-sm font-semibold">{language === "pt" ? "Áreas restritas" : "Restricted areas"}</h3>
                 <p className="mt-2 text-[13px] leading-6 text-muted-foreground">
                   {language === "pt"
-                    ? "Hunting, geração de relatórios, biblioteca de fontes e notícias são liberados na mão, um login por vez. Não há plano nem preço: é convite."
-                    : "Hunting, report generation, the source library and news are granted by hand, one login at a time. There is no plan and no price: it is an invite."}
+                    ? "Geração de relatórios, biblioteca de fontes e notícias são liberados na mão, um login por vez. Não há plano nem preço: é convite."
+                    : "Report generation, the source library and news are granted by hand, one login at a time. There is no plan and no price: it is an invite."}
                 </p>
               </div>
             </div>

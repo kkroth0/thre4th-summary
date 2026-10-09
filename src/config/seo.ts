@@ -38,14 +38,14 @@ export const PUBLIC_SEO_ROUTES: SeoRoute[] = [
     changefreq: "weekly",
     metadata: {
       pt: {
-        title: "ThreatSumm4ry | Plataforma CTI para SOC e Threat Hunting",
+        title: "ThreatSumm4ry | Plataforma CTI para SOC",
         description:
-          "ThreatSumm4ry centraliza enriquecimento de IOCs, CVEs, advisories, ransomware e hunting para analistas SOC e times de inteligencia de ameacas.",
+          "ThreatSumm4ry centraliza enriquecimento de IOCs, CVEs, advisories e ransomware para analistas SOC e times de inteligencia de ameacas.",
       },
       en: {
-        title: "ThreatSumm4ry | CTI Platform for SOC and Threat Hunting",
+        title: "ThreatSumm4ry | CTI Platform for SOC Teams",
         description:
-          "ThreatSumm4ry centralizes IOC enrichment, CVE tracking, advisories, ransomware intelligence, and hunting workflows for SOC and CTI teams.",
+          "ThreatSumm4ry centralizes IOC enrichment, CVE tracking, advisories, and ransomware intelligence for SOC and CTI teams.",
       },
     },
   },

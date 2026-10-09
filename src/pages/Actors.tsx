@@ -18,7 +18,6 @@ import {
   Trash2,
   UsersRound,
 } from "lucide-react";
-import { Link } from "react-router-dom";
 import { PageLayout } from "@/components/PageLayout";
 import { EmptyState } from "@/components/EmptyState";
 import { LoadingRows } from "@/components/LoadingState";
@@ -45,9 +44,8 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { cn } from "@/lib/utils";
-import { fetchHunts, type PrivateHunt } from "@/services/threatApi";
 import {
-  actorHuntCoverage, actorPageCopy, matchActors, sortActors, topTechniques, type OrgProfile,
+  actorPageCopy, matchActors, sortActors, topTechniques, type OrgProfile,
 } from "./actorsView";
 
 interface ActorListItem {
@@ -99,7 +97,7 @@ interface ActorStory {
 }
 
 type SourceFilter = "all" | "attack" | "misp" | "ransomware";
-type SortMode = "techniques" | "name" | "country" | "hunts";
+type SortMode = "techniques" | "name" | "country";
 
 const ALL_COUNTRIES = "__all__";
 const ALL_SECTORS = "__all_sectors__";
@@ -197,13 +195,11 @@ function SourceBadge({ source }: { source?: string }) {
 
 function ActorRow({
   actor,
-  huntCount,
   selected,
   onOpen,
   pt,
 }: {
   actor: ActorListItem;
-  huntCount: number | null;
   selected: boolean;
   onOpen: (id: string) => void;
   pt: boolean;
@@ -249,9 +245,6 @@ function ActorRow({
       </TableCell>
       <TableCell className="px-2 py-2 text-right font-mono text-xs font-semibold">
         {actor.technique_count || 0}
-      </TableCell>
-      <TableCell className="hidden px-2 py-2 text-right font-mono text-xs font-semibold sm:table-cell">
-        {huntCount === null ? "—" : huntCount}
       </TableCell>
       <TableCell className="hidden px-2 py-2 lg:table-cell">
         <div className="whitespace-nowrap">
@@ -587,8 +580,8 @@ function Fact({
 
 // ─── Modelagem de ameaças ──────────────────────────────────────────────────
 // Uma organização = setores em que ela atua + regiões em que ela opera. O
-// catálogo responde quem ataca gente assim; as suas hunts dizem o que disso
-// você já cobre. Vários perfis convivem: consultoria atende mais de um cliente.
+// catálogo responde quem ataca gente assim. Vários perfis convivem:
+// consultoria atende mais de um cliente.
 const loadProfiles = (): OrgProfile[] => {
   try {
     const raw = JSON.parse(localStorage.getItem(PROFILES_KEY) || "[]");
@@ -627,11 +620,10 @@ function ChipPicker({ options, chosen, onToggle }: {
   );
 }
 
-function ThreatModelTab({ actors, sectors, targets, huntTechniques, pt, onOpen }: {
+function ThreatModelTab({ actors, sectors, targets, pt, onOpen }: {
   actors: ActorListItem[];
   sectors: string[];
   targets: string[];
-  huntTechniques: Set<string>;
   pt: boolean;
   onOpen: (id: string) => void;
 }) {
@@ -662,8 +654,7 @@ function ThreatModelTab({ actors, sectors, targets, huntTechniques, pt, onOpen }
   };
 
   const matches = useMemo(() => (active ? matchActors(actors, active) : []), [actors, active]);
-  const ttps = useMemo(() => topTechniques(matches, huntTechniques), [matches, huntTechniques]);
-  const gaps = ttps.filter((item) => !item.covered).length;
+  const ttps = useMemo(() => topTechniques(matches), [matches]);
 
   return (
     <div className="grid gap-6 xl:grid-cols-[280px_minmax(0,1fr)]">
@@ -741,7 +732,7 @@ function ThreatModelTab({ actors, sectors, targets, huntTechniques, pt, onOpen }
             </div>
           ) : (
             <>
-              <div className="grid gap-3 sm:grid-cols-3">
+              <div className="grid gap-3 sm:grid-cols-2">
                 <StatTile
                   icon={UsersRound}
                   label={pt ? "Grupos relevantes" : "Relevant groups"}
@@ -755,13 +746,6 @@ function ThreatModelTab({ actors, sectors, targets, huntTechniques, pt, onOpen }
                   detail={pt ? "Técnicas mais repetidas entre eles." : "Techniques most repeated among them."}
                   tone="text-sky-500"
                 />
-                <StatTile
-                  icon={Shield}
-                  label={pt ? "Sem hunt" : "Uncovered"}
-                  value={formatNumber(gaps)}
-                  detail={pt ? "Desses TTPs, nenhuma hunt sua cobre." : "Of those TTPs, none of your hunts covers."}
-                  tone={gaps ? "text-amber-500" : "text-emerald-500"}
-                />
               </div>
 
               {ttps.length > 0 && (
@@ -771,21 +755,13 @@ function ThreatModelTab({ actors, sectors, targets, huntTechniques, pt, onOpen }
                   </h3>
                   <div className="flex flex-wrap gap-1.5">
                     {ttps.map((item) => (
-                      <Link
+                      <span
                         key={item.id}
-                        to={`/hunting?query=${encodeURIComponent(item.id)}`}
-                        title={pt
-                          ? `${item.actors} grupo(s) · ${item.covered ? "coberto por hunt sua" : "sem hunt sua"}`
-                          : `${item.actors} group(s) · ${item.covered ? "covered by your hunts" : "no hunt of yours"}`}
-                        className={cn(
-                          "rounded-md border px-2 py-1 font-mono text-xs transition-colors hover:border-primary/40",
-                          item.covered
-                            ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
-                            : "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300",
-                        )}
+                        title={pt ? `${item.actors} grupo(s)` : `${item.actors} group(s)`}
+                        className="rounded-md border border-border/70 bg-muted/30 px-2 py-1 font-mono text-xs text-foreground"
                       >
                         {item.id} <span className="opacity-70">· {item.actors}</span>
-                      </Link>
+                      </span>
                     ))}
                   </div>
                 </div>
@@ -843,7 +819,6 @@ const Actors = () => {
   const [countries, setCountries] = useState<string[]>([]);
   const [sectorFacet, setSectorFacet] = useState<string[]>([]);
   const [targetFacet, setTargetFacet] = useState<string[]>([]);
-  const [privateHunts, setPrivateHunts] = useState<PrivateHunt[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
 
@@ -881,24 +856,17 @@ const Actors = () => {
 
     (async () => {
       try {
-        const [actorsResult, huntsResult] = await Promise.allSettled([
-          fetch("/api/actors").then(async (response) => {
-            if (!response.ok) throw new Error(String(response.status));
-            return response.json();
-          }),
-          fetchHunts(),
-        ]);
+        const response = await fetch("/api/actors");
+        if (!response.ok) throw new Error(String(response.status));
+        const data = await response.json();
         if (!alive) return;
-        setPrivateHunts(huntsResult.status === "fulfilled" ? huntsResult.value : null);
-        if (actorsResult.status === "rejected") {
-          setError(true);
-          return;
-        }
-        setList(actorsResult.value.actors || []);
-        setCountries(actorsResult.value.countries || []);
-        setSectorFacet(actorsResult.value.sectors || []);
-        setTargetFacet(actorsResult.value.targets || []);
+        setList(data.actors || []);
+        setCountries(data.countries || []);
+        setSectorFacet(data.sectors || []);
+        setTargetFacet(data.targets || []);
         setError(false);
+      } catch {
+        if (alive) setError(true);
       } finally {
         if (alive) setLoading(false);
       }
@@ -908,11 +876,6 @@ const Actors = () => {
       alive = false;
     };
   }, []);
-
-  const coverage = useMemo(
-    () => privateHunts === null ? {} : actorHuntCoverage(list, privateHunts),
-    [list, privateHunts],
-  );
 
   const openActor = useCallback(async (id: string) => {
     setSelectedId(id);
@@ -959,15 +922,8 @@ const Actors = () => {
         .includes(needle);
     });
 
-    return sortActors(matches, sortMode, coverage);
-  }, [country, coverage, list, query, sector, sortMode, sourceFilter, target]);
-
-  // Técnicas cobertas pelas suas hunts — a modelagem usa isso pra marcar o que
-  // já tem caça montada.
-  const huntTechniques = useMemo(
-    () => new Set((privateHunts || []).flatMap((hunt) => hunt.techniques)),
-    [privateHunts],
-  );
+    return sortActors(matches, sortMode);
+  }, [country, list, query, sector, sortMode, sourceFilter, target]);
 
   const shown = filtered.slice(0, MAX_RESULTS);
   const selectedSummary = useMemo(() => list.find((actor) => actor.id === selectedId), [list, selectedId]);
@@ -1084,7 +1040,6 @@ const Actors = () => {
             actors={list}
             sectors={sectorFacet}
             targets={targetFacet}
-            huntTechniques={huntTechniques}
             pt={pt}
             onOpen={openActor}
           />
@@ -1127,9 +1082,6 @@ const Actors = () => {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="techniques">{pt ? "Mais TTPs primeiro" : "Most TTPs first"}</SelectItem>
-                    <SelectItem value="hunts" disabled={privateHunts === null}>
-                      {pt ? "Mais hunts primeiro" : "Most hunts first"}
-                    </SelectItem>
                     <SelectItem value="name">{pt ? "Nome A-Z" : "Name A-Z"}</SelectItem>
                     <SelectItem value="country">{pt ? "Origem A-Z" : "Origin A-Z"}</SelectItem>
                   </SelectContent>
@@ -1214,7 +1166,7 @@ const Actors = () => {
                       <TableHead className="hidden h-9 w-[17%] px-2 text-[10px] font-semibold uppercase tracking-wide lg:table-cell">
                         {pt ? "Motivação" : "Motivation"}
                       </TableHead>
-                      <TableHead className="h-9 w-[9%] px-0 text-right">
+                      <TableHead className="h-9 w-[12%] px-0 text-right">
                         <Button
                           type="button"
                           variant="ghost"
@@ -1226,23 +1178,10 @@ const Actors = () => {
                           TTPs
                         </Button>
                       </TableHead>
-                      <TableHead className="hidden h-9 w-[9%] px-0 text-right sm:table-cell">
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          className="h-8 px-2 text-[10px] font-semibold uppercase tracking-wide"
-                          aria-pressed={sortMode === "hunts"}
-                          disabled={privateHunts === null}
-                          onClick={() => setSortMode("hunts")}
-                        >
-                          Hunts
-                        </Button>
-                      </TableHead>
-                      <TableHead className="hidden h-9 w-[14%] px-2 text-[10px] font-semibold uppercase tracking-wide lg:table-cell">
+                      <TableHead className="hidden h-9 w-[17%] px-2 text-[10px] font-semibold uppercase tracking-wide lg:table-cell">
                         {pt ? "Fonte" : "Source"}
                       </TableHead>
-                      <TableHead className="h-9 w-[11%] px-2 text-right text-[10px] font-semibold uppercase tracking-wide">
+                      <TableHead className="h-9 w-[15%] px-2 text-right text-[10px] font-semibold uppercase tracking-wide">
                         {pt ? "Ação" : "Action"}
                       </TableHead>
                     </TableRow>
@@ -1252,7 +1191,6 @@ const Actors = () => {
                       <ActorRow
                         key={actor.id}
                         actor={actor}
-                        huntCount={privateHunts === null ? null : coverage[actor.id] || 0}
                         selected={actor.id === selectedId}
                         onOpen={openActor}
                         pt={pt}

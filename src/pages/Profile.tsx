@@ -95,8 +95,8 @@ const Profile = () => {
               <div className="font-medium">{pt ? "Ferramentas gratuitas liberadas" : "Free tools enabled"}</div>
               <div className="text-sm text-muted-foreground">
                 {pt
-                  ? "Relatórios, newsletter e threat hunting precisam de acesso premium."
-                  : "Reports, newsletter and threat hunting require premium access."}
+                  ? "Relatórios e newsletter precisam de acesso premium."
+                  : "Reports and newsletter require premium access."}
               </div>
             </div>
           </CardContent>

@@ -62,9 +62,9 @@ export function OrgProfileEditor() {
     setDraftSnapshot(JSON.stringify(next));
   };
 
-  // window.confirm trava a aba inteira e ignora tema/fonte/idioma da página
-  // (ver Hunting.tsx) — por isso a confirmação usa AlertDialog controlado,
-  // como as outras confirmações destrutivas do projeto.
+  // window.confirm trava a aba inteira e ignora tema/fonte/idioma da página —
+  // por isso a confirmação usa AlertDialog controlado, como as outras
+  // confirmações destrutivas do projeto.
   const requestDiscard = (action: () => void) => {
     if (draft && JSON.stringify(draft) !== draftSnapshot) {
       setPendingDiscard(() => action);

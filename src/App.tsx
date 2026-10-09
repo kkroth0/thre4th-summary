@@ -22,7 +22,6 @@ const Actors = lazy(() => import("./pages/Actors"));
 const PhishingAnalyzer = lazy(() => import("./pages/PhishingAnalyzer"));
 const DailyBulletin = lazy(() => import("./pages/DailyBulletin"));
 const Knowledge = lazy(() => import("./pages/Knowledge"));
-const Hunting = lazy(() => import("./pages/Hunting"));
 const PatchTuesday = lazy(() => import("./pages/PatchTuesday"));
 const SapPatch = lazy(() => import("./pages/SapPatch"));
 const Admin = lazy(() => import("./pages/Admin"));
@@ -67,7 +66,6 @@ const App = () => (
                 {/* Premium Routes (require premium allow-list) */}
                 <Route path="/knowledge" element={<PremiumRoute feature="knowledge"><Knowledge /></PremiumRoute>} />
                 <Route path="/relatorios" element={<PremiumRoute feature="threat-brief"><DailyBulletin /></PremiumRoute>} />
-                <Route path="/hunting" element={<PremiumRoute feature="hunting"><Hunting /></PremiumRoute>} />
                 <Route path="/reports" element={<Navigate to="/relatorios" replace />} />
                 <Route path="/threat-brief" element={<Navigate to="/relatorios" replace />} />
                 <Route path="/newsletter" element={<PremiumRoute feature="advisory-feed"><Newsletter /></PremiumRoute>} />

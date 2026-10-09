@@ -1150,7 +1150,7 @@ export interface BoletimJob {
     // Só na listagem (GET /api/feed/jobs), que não carrega o boletim: diz se
     // vale a pena buscar o JSON completo ao abrir.
     hasReport?: boolean;
-    // Indexados na entrega do worker — ligam o boletim a hunts e outros reports.
+    // Indexados na entrega do worker — ligam o boletim a outros reports.
     techniques?: string[];
     cves?: string[];
     // Anexos prontos: o deck no template SRR e o PDF dele convertido, ambos
@@ -1747,7 +1747,7 @@ export const deleteApiKey = async (provider: string): Promise<void> => {
 
 // ─── Knowledge: fontes curadas ─────────────────────────────────────────────
 // O feed é fluxo e some; aqui fica só o que o usuário marcou pra guardar. Cada
-// item nasce indexado por técnica/CVE, o que liga a fonte a hunts e reports.
+// item nasce indexado por técnica/CVE, o que liga a fonte a outros reports.
 export interface KnowledgeItem {
     id: string;
     title: string;
@@ -1808,216 +1808,8 @@ export const deleteKnowledge = async (id: string): Promise<KnowledgeItem[]> => {
     return (await r.json()).items || [];
 };
 
-// ─── Hunting ───────────────────────────────────────────────────────────────
-export interface HearthHunt {
-    id: string;
-    origin: 'hearth';
-    category: string;
-    title: string;
-    tactics: string[];
-    techniques: string[];
-    tags: string[];
-    submitter: { name: string; link: string };
-    notes: string;
-    why: string;
-    references: string;
-    status: string;
-    created: string;
-    sourceUrl: string;
-}
-
-export type HuntStatus = 'draft' | 'ready' | 'archived';
-
-export interface PrivateHunt {
-    id: string;
-    ownerSub: string;
-    title: string;
-    hypothesis: string;
-    tactics: string[];
-    techniques: string[];
-    cves: string[];
-    technologies: string[];
-    dataSources: string[];
-    query: string;
-    queryLang: 'kql';
-    notes: string;
-    falsePositives: string;
-    status: HuntStatus;
-    sourceReportId: string;
-    hearthId: string;
-    /** Ritmo esperado: '', 'daily', 'weekly', 'monthly' ou 'intel'. */
-    cadence: string;
-    /** De qual catálogo veio; vazio quando o analista escreveu a hunt. */
-    adoptedFrom: '' | 'hearth' | 'ptbr';
-    sourceId: string;
-    runs: HuntRun[];
-    createdAt: string;
-    updatedAt: string;
-}
-
-export type RunState = 'pending' | 'running' | 'done';
-export type RunOutcome = 'none' | 'suspicious' | 'incident';
-
-export interface HuntRun {
-    id: string;
-    state: RunState;
-    outcome: RunOutcome;
-    events: number;
-    hosts: number;
-    findings: string;
-    startedAt: string;
-    finishedAt: string | null;
-    updatedAt: string;
-}
-
-export interface ScheduledHunt {
-    id: string;
-    title: string;
-    cadence: string;
-    lastRunAt: string | null;
-    nextDueAt: string | null;
-    daysLate: number | null;
-    late: boolean;
-}
-
-/** O painel do mês devolve só as vencidas; a agenda devolve todas. */
-export type OverdueHunt = ScheduledHunt;
-
-export interface MonthlySummary {
-    month: string;
-    total: number;
-    byState: Record<RunState, number>;
-    byOutcome: Record<RunOutcome, number>;
-    runs: (HuntRun & { huntId: string; title: string })[];
-    /** Hunts com cadência definida que já deveriam ter rodado. */
-    overdue: OverdueHunt[];
-}
-
-export interface KqlEntry {
-    path: string;
-    folder: string;
-    name: string;
-}
-
-export interface PtbrHunt {
-    id: string;
-    origin: 'ptbr';
-    title: string;
-    hypothesis: string;
-    cadence: string;
-    dataSources: string[];
-    technologies: string[];
-    queryPath: string;
-    notes: string;
-    expected: string;
-    sourcePath: string;
-}
-
-export type HuntingItem = HearthHunt | PrivateHunt;
-export type HuntInput = Omit<PrivateHunt, 'id' | 'ownerSub' | 'queryLang' | 'createdAt' | 'updatedAt' | 'adoptedFrom' | 'sourceId' | 'runs'>;
-
-export interface TechniqueCoverageNode {
-    id: string;
-    name: string;
-    count: number;
-    state: 'covered' | 'partial' | 'none';
-    subs: Omit<TechniqueCoverageNode, 'subs'>[];
-}
-
-export interface TechniqueCoverage {
-    axis: 'technique';
-    covered: number;
-    total: number;
-    tactics: { id: string; name: string; shortname: string; covered: number; total: number; techniques: TechniqueCoverageNode[] }[];
-}
-
-export interface FieldCoverage {
-    axis: 'technology' | 'dataSource';
-    values: { value: string; count: number }[];
-}
-
-export const fetchHearth = async (): Promise<{ hunts: HearthHunt[]; total: number; source: string; license: string }> =>
-    handleResponse(await fetch('/api/hearth'), 'Hunting');
-
-export const fetchHunts = async (): Promise<PrivateHunt[]> =>
-    ((await handleResponse(await fetch('/api/hunts'), 'Hunting')).items || []);
-
-export const createHunt = async (input: HuntInput): Promise<{ hunt: PrivateHunt; items: PrivateHunt[] }> =>
-    handleResponse(await fetch('/api/hunts', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input),
-    }), 'Hunting');
-
-export const updateHunt = async (id: string, input: HuntInput): Promise<{ hunt: PrivateHunt; items: PrivateHunt[] }> =>
-    handleResponse(await fetch(`/api/hunts/${encodeURIComponent(id)}`, {
-        method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input),
-    }), 'Hunting');
-
-export const deleteHunt = async (id: string): Promise<PrivateHunt[]> =>
-    ((await handleResponse(await fetch(`/api/hunts/${encodeURIComponent(id)}`, { method: 'DELETE' }), 'Hunting')).items || []);
-
-export const fetchHuntCoverage = async (axis: 'technique'): Promise<TechniqueCoverage> =>
-    handleResponse(await fetch(`/api/hunts/coverage?axis=${axis}`), 'Hunting');
-export const fetchHuntFieldCoverage = async (axis: 'technology' | 'dataSource'): Promise<FieldCoverage> =>
-    handleResponse(await fetch(`/api/hunts/coverage?axis=${axis}`), 'Hunting');
-
-export interface GeneratedHunt {
-    title: string;
-    hypothesis: string;
-    query: string;
-    dataSources: string[];
-    falsePositives: string;
-    notes: string;
-    /** Tabelas que a consulta cita e o workspace não tem — alucinação do modelo. */
-    unknownTables: string[];
-    model: string;
-    sources: string[];
-}
-
-export const fetchSentinelTables = async (): Promise<{ sources: string[]; tables: { table: string; source: string; columnCount: number }[]; total: number }> =>
-    handleResponse(await fetch('/api/sentinel/tables'), 'Hunting');
-
-export const generateHunt = async (input: { hypothesis: string; sources?: string[]; techniques?: string[] }): Promise<GeneratedHunt> =>
-    handleResponse(await fetch('/api/hunts/generate', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input),
-    }), 'Hunting');
-
-// ─── Execução de hunt (quadro do analista) ─────────────────────────────────
-export const fetchPtbrHunts = async (): Promise<{ hunts: PtbrHunt[]; total: number; source: string }> =>
-    handleResponse(await fetch('/api/hunts/ptbr'), 'Hunting');
-
-export const adoptHunt = async (
-    origin: 'hearth' | 'ptbr',
-    id: string,
-    options: { generate?: boolean; sources?: string[] } = {},
-): Promise<{ hunt: PrivateHunt; items: PrivateHunt[]; adopted: boolean }> =>
-    handleResponse(await fetch('/api/hunts/adopt', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ origin, id, ...options }),
-    }), 'Hunting');
-
-export const fetchKqlLibrary = async (): Promise<{ queries: KqlEntry[]; total: number; folders: string[] }> =>
-    handleResponse(await fetch('/api/hunts/kql'), 'Hunting');
-
-export const fetchKqlContent = async (path: string): Promise<{ path: string; query: string }> =>
-    handleResponse(await fetch(`/api/hunts/kql/content?path=${encodeURIComponent(path)}`), 'Hunting');
-
-export const startHuntRun = async (huntId: string, input: Partial<HuntRun> = {}): Promise<{ hunt: PrivateHunt; run: HuntRun; items: PrivateHunt[] }> =>
-    handleResponse(await fetch(`/api/hunts/${encodeURIComponent(huntId)}/runs`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input),
-    }), 'Hunting');
-
-export const updateHuntRun = async (huntId: string, runId: string, input: Partial<HuntRun>): Promise<{ hunt: PrivateHunt; run: HuntRun; items: PrivateHunt[] }> =>
-    handleResponse(await fetch(`/api/hunts/${encodeURIComponent(huntId)}/runs/${encodeURIComponent(runId)}`, {
-        method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input),
-    }), 'Hunting');
-
-export const fetchHuntSchedule = async (): Promise<{ schedule: ScheduledHunt[]; total: number; late: number }> =>
-    handleResponse(await fetch('/api/hunts/schedule'), 'Hunting');
-
-export const fetchMonthlyRuns = async (month: string): Promise<MonthlySummary> =>
-    handleResponse(await fetch(`/api/hunts/runs/summary?month=${encodeURIComponent(month)}`), 'Hunting');
-
-export const fetchJobRelated = async (id: string): Promise<{ hunts: PrivateHunt[]; reports: BoletimJob[] }> =>
-    handleResponse(await fetch(`/api/feed/job/${encodeURIComponent(id)}/related`), 'Hunting');
+export const fetchJobRelated = async (id: string): Promise<{ reports: BoletimJob[] }> =>
+    handleResponse(await fetch(`/api/feed/job/${encodeURIComponent(id)}/related`), 'Related');
 
 // ─── Contexto da organização ───────────────────────────────────────────────
 export interface OrgAsset { vendor: string; product: string; }
