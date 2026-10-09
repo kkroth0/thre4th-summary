@@ -6,12 +6,12 @@ export function Footer() {
             <div className="container mx-auto px-4 py-6">
                 <div className="flex flex-col md:flex-row items-center justify-between gap-4">
                     <div className="text-sm text-muted-foreground">
-                        © {new Date().getFullYear()} ThreatSumm4ry - kkroth0.
+                        © {new Date().getFullYear()} ThreatSumm4ry · Open source CTI · AGPL-3.0.
                     </div>
 
                     <div className="flex items-center gap-4">
                         <a
-                            href="https://github.com/kkroth0"
+                            href="https://github.com/kkroth0/thre4th-summary"
                             target="_blank"
                             rel="noopener noreferrer"
                             className="text-muted-foreground hover:text-foreground transition-colors"

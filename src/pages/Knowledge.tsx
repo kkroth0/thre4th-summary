@@ -63,7 +63,7 @@ const Knowledge = () => {
     return (
         <PageLayout width="max-w-6xl">
             <PageHeader
-                title={pt ? "Biblioteca de Fontes" : "Source Library"}
+                title={pt ? "Coleções" : "Collections"}
                 subtitle={pt
                     ? "As fontes que você guardou para gerar inteligência. Só entra o que você marcar — o feed continua sendo fluxo."
                     : "The sources you saved to build intel from. Only what you mark lands here — the feed stays a stream."}
@@ -97,8 +97,8 @@ const Knowledge = () => {
                 <EmptyState
                     title={pt ? "Nada guardado ainda" : "Nothing saved yet"}
                     description={pt
-                        ? "Use o botão de salvar em Notícias de Segurança para trazer uma fonte para cá."
-                        : "Use the save button on Security News to bring a source here."}
+                        ? "Salve uma publicação no Feed de inteligência para começar sua coleção."
+                        : "Save a publication in the Intelligence feed to start your collection."}
                 />
             ) : (
                 <div className="overflow-x-auto rounded-lg border border-border">

@@ -15,7 +15,7 @@ import * as cheerio from 'cheerio';
 import {
     scoreArticle, localizeEnrichment, severityFromScore, extractIOCs, CTI_FEEDS,
     extractReadableText, collectArtifactLinks, githubArtifact, ARTIFACT_TEXT_FILE,
-    protectTerms, restoreTerms, collapseKernelNotices, isTransientFeedError, isPureNoise,
+    protectTerms, restoreTerms, isTransientFeedError, isPureNoise,
     ttpIdsFrom,
 } from './ctiIntel.js';
 import { actorTargeting } from './actorProfile.js';
@@ -24,7 +24,7 @@ import { filterExactIocs } from './threatfoxMatch.js';
 import { getShodanCreditStatus, runAttackSurfaceScan } from './attackSurface.js';
 import { shodanAxios } from './shodanGate.js';
 import { otxThrottled, OTX_TIMEOUT_MS } from './otxGate.js';
-import { harvestResearchIocs, findMentions } from './newsIocs.js';
+import { findMentions } from './newsIocs.js';
 import { refsOfReport, relatedTo } from './attackIndex.js';
 import { isJobId, jobSummary, normalizeDeckRequestType, normalizeDeckSubtype, normalizeDeckTemplate, orphanDeckFiles, pruneJobsMap } from './feedJobs.js';
 import { addKnowledgeItem, normalizeKnowledgeInput } from './knowledge.js';
@@ -60,8 +60,13 @@ import { extractSellerHandle, findRelatedBySeller, storySellerHandle } from './d
 import { categorize } from './newsCategories.js';
 import { mergeIntoStories } from './newsStories.js';
 import { parseFeed } from './feedParse.js';
+import { createFeedCache, createFeedCollector, canonicalArticleUrl, singleFlightRefresh } from './feedCollector.js';
+import { collectArticleTexts } from './articleCollector.js';
+import { enrichFeedItems, applyVulnerabilityContext, EXTRACTION_VERSION } from './feedEnrichment.js';
 import { createStoryStore } from './newsStoryStore.js';
 import { createNewsArchiveStore } from './newsArchiveStore.js';
+import { VENDOR_CATALOG } from './vendorCatalog.js';
+import { createNewsMonitoringStore, filterMonitoredNews, filterMonitoredStories } from './newsMonitoring.js';
 import {
     PHISH_LIMITS, createPhishWatchStore, createUrlscanSearch, runDuePhishWatch, runProfileWatch,
     createDnsResolver, recheckHitsDns,
@@ -144,6 +149,10 @@ const NEWS_STORIES_PATH = path.join(__dirname, '.news-stories.json');
 const newsStoryStore = createStoryStore({ filePath: NEWS_STORIES_PATH, readFileSync: fs.readFileSync, writeJsonAtomic });
 const NEWS_ARCHIVE_PATH = path.join(__dirname, '.news-archive.json');
 const newsArchiveStore = createNewsArchiveStore({ filePath: NEWS_ARCHIVE_PATH, readFileSync: fs.readFileSync, writeJsonAtomic });
+const newsMonitoringStore = createNewsMonitoringStore({
+    filePath: process.env.NEWS_MONITORING_PATH || path.join(__dirname, '.news-monitoring.json'),
+    readFileSync: fs.readFileSync, writeJsonAtomic,
+});
 
 const PHISH_WATCH_PATH = path.join(__dirname, '.phish-watch.json');
 const phishWatchStore = createPhishWatchStore({ filePath: PHISH_WATCH_PATH, readFileSync: fs.readFileSync, writeJsonAtomic });
@@ -1538,205 +1547,115 @@ async function fetchFeedWithRetry(url, options) {
 }
 
 // Background newsletter feed refresher
-async function refreshNewsletterFeed() {
+const rssCollectionCache = createFeedCache({ directory: path.join(__dirname, '.feed-cache', 'rss'), fs, writeJsonAtomic });
+const articleCollectionCache = createFeedCache({ directory: path.join(__dirname, '.feed-cache', 'articles'), fs, writeJsonAtomic });
+const previousFeedSnapshot = rssCollectionCache.get('newsletter:snapshot');
+if (previousFeedSnapshot?.extractionVersion === EXTRACTION_VERSION && Array.isArray(previousFeedSnapshot.items)) {
+    const enabled = new Set([...effectiveFeeds().map((feed) => feed.url), ...SCRAPE_SOURCES.filter((source) => !feedOverrides.disabled.includes(source.url)).map((source) => source.url)]);
+    memoryCache.newsletter.data = previousFeedSnapshot.items.filter((item) => enabled.has(item.feedUrl) && new Date(item.pubDate).getTime() >= Date.now() - 30 * 86400000)
+        .map((item) => ({ ...item, collectionStatus: 'stale' }));
+}
+const feedCollector = createFeedCollector({
+    cache: rssCollectionCache, parse: parseFeed,
+    concurrency: Number(process.env.FEED_FETCH_CONCURRENCY) || 6,
+    request: (url, { headers }) => fetchFeedWithRetry(url, {
+        headers: { 'User-Agent': 'ThreatSumm4ry/1.0 RSS collector', Accept: 'application/rss+xml,application/atom+xml,application/xml,text/xml', ...headers },
+        timeout: 8000, responseType: 'text', maxContentLength: 8000000, maxRedirects: 3,
+        validateStatus: (status) => (status >= 200 && status < 300) || status === 304,
+    }),
+});
+
+const refreshNewsletterFeed = singleFlightRefresh(async () => {
+    const startedAt = Date.now();
     try {
-        // Catálogo efetivo (built-ins ligados + custom do dono). weight_boost é a
-        // confiança por fonte, herdada do bot CTI soc-sentinela.
-        const feeds = effectiveFeeds();
-
-        const feedPromises = feeds.map(async (f) => {
-            try {
-                const response = await fetchFeedWithRetry(f.url, {
-                    headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36' },
-                    timeout: 8000
-                });
-                // Enrich each item with the CTI relevance score + categorization.
-                // `reasons` is kept so the UI can explain WHY an item scored.
-                // Ruído puro (agenda de evento, vaga, "webinar") não entra no
-                // feed — a tela ordena por data por padrão, então só rebaixar
-                // o score não bastava para tirá-lo de vista.
-                const enriched = parseFeed(response.data, f.source, f.layer)
-                    .map((item) => {
-                        const intel = scoreArticle(`${item.title} ${item.text || item.description}`, f.weight_boost);
-                        return { ...item, weight_boost: f.weight_boost, ...intel };
-                    })
-                    .filter((item) => !isPureNoise(item.categories));
-                feedHealth.set(f.url, { ok: true, count: enriched.length, error: null, at: new Date().toISOString() });
-                return enriched;
-            } catch (err) {
-                feedHealth.set(f.url, { ok: false, count: 0, error: err.message, at: new Date().toISOString() });
-                console.error(`Error fetching feed ${f.source}:`, err.message);
-                return [];
-            }
-        });
-
-        const results = await Promise.allSettled(feedPromises);
-        const successfulFeeds = results
-            .filter(r => r.status === 'fulfilled')
-            .map(r => r.value)
-            .flat();
-
-        // Fontes sem RSS. Falha aqui não pode levar o feed junto: no pior caso
-        // as notícias do dia saem sem a pesquisa OT.
+        const collected = await feedCollector.collect(effectiveFeeds());
+        for (const [url, health] of collected.health) feedHealth.set(url, health);
         let scraped = [];
+        const sources = SCRAPE_SOURCES.filter((source) => !feedOverrides.disabled.includes(source.url));
         try {
             const result = await collectScraped({
-                // Respeita o mesmo interruptor dos feeds RSS: se a fonte aparece
-                // desligável na tela, desligar precisa desligar de verdade.
-                sources: SCRAPE_SOURCES.filter((source) => !feedOverrides.disabled.includes(source.url)),
-                fetchText: async (url) => (await fetchFeedWithRetry(url, {
-                    headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36' },
-                    timeout: 8000,
-                })).data,
-                seen: scrapeSeen,
-                now: new Date(),
-                maxNew: 10,
+                sources, seen: scrapeSeen, now: new Date(), maxNew: 10,
+                fetchText: async (url) => (await fetchFeedWithRetry(url, { headers: { 'User-Agent': BROWSER_UA }, timeout: 8000, maxContentLength: 2000000 })).data,
             });
-            scraped = result.items
-                .map((item) => ({
-                    ...item,
-                    ...scoreArticle(`${item.title} ${item.description}`, item.weight_boost),
-                }))
-                .filter((item) => !isPureNoise(item.categories));
-            // Poda pelo fim mais antigo: o mapa não pode crescer sem limite.
-            const entries = Object.entries(result.seen).sort((a, b) => String(b[1]).localeCompare(String(a[1]))).slice(0, 2000);
-            scrapeSeen = Object.fromEntries(entries);
-            writeJsonAtomic(SCRAPE_SEEN_PATH, scrapeSeen);
-            for (const source of SCRAPE_SOURCES) {
+            // Keep each scraper's last successful publications if it is offline.
+            for (const source of sources) {
                 const failure = result.errors.find((error) => error.source === source.source);
-                feedHealth.set(source.url, {
-                    ok: !failure,
-                    count: result.items.filter((item) => item.source === source.source).length,
-                    error: failure ? failure.message : null,
-                    at: new Date().toISOString(),
-                });
+                const cached = rssCollectionCache.get(source.url);
+                const current = result.items.filter((item) => item.source === source.source);
+                const cutoff = Date.now() - 30 * 86400000;
+                const old = (cached?.items || []).filter((item) => new Date(item.pubDate).getTime() >= cutoff);
+                const byLink = new Map(old.map((item) => [item.link, item]));
+                for (const item of current) byLink.set(item.link, item);
+                const items = [...byLink.values()].sort((a, b) => String(b.pubDate).localeCompare(String(a.pubDate))).slice(0, 100);
+                const lastSuccessfulAt = failure ? cached?.lastSuccessfulAt || null : new Date().toISOString();
+                if (!failure) rssCollectionCache.set(source.url, { version: 1, items, lastSuccessfulAt });
+                scraped.push(...items.map((item) => ({ ...item, feedUrl: source.url, collectionStatus: failure ? 'stale' : 'fresh' })));
+                feedHealth.set(source.url, { ok: !failure, count: items.length, fetchedCount: current.length, status: failure ? 'stale' : 'fresh', error: failure?.message || null, lastSuccessfulAt, at: new Date().toISOString() });
             }
-        } catch (error) {
-            console.error('scraped sources failed:', error.message);
-        }
+            scrapeSeen = Object.fromEntries(Object.entries(result.seen).sort((a, b) => String(b[1]).localeCompare(String(a[1]))).slice(0, 2000));
+            writeJsonAtomic(SCRAPE_SEEN_PATH, scrapeSeen);
+        } catch (error) { console.error('scraped sources failed:', error.message); }
 
-        // De-duplicate by normalized URL (strip tracking params) — the same story
-        // is often syndicated across multiple feeds; keep the highest-scoring copy.
         const byUrl = new Map();
-        for (const item of [...successfulFeeds, ...scraped]) {
-            const key = (item.link || '').replace(/[?&](utm_[^&]+|fbclid=[^&]+|feature=[^&]+)/gi, '').replace(/[?&]$/, '').toLowerCase();
-            const existing = byUrl.get(key);
-            if (!existing || (item.score || 0) > (existing.score || 0)) byUrl.set(key, item);
+        for (const item of [...collected.items, ...scraped]) {
+            const link = canonicalArticleUrl(item.link);
+            if (!link) continue;
+            const old = byUrl.get(link);
+            if (!old || (old.collectionStatus === 'stale' && item.collectionStatus !== 'stale') || (old.collectionStatus === item.collectionStatus && (item.text || '').length > (old.text || '').length)) byUrl.set(link, { ...item, link });
         }
-        // Ubuntu publica uma USN por flavor de kernel (linux, linux-aws,
-        // linux-gcp, linux-oem-6.8...) na mesma rodada de CVE — sem isto o
-        // feed enchia de cinco cards quase idênticos por dia. Roda antes do
-        // KEV/EPSS de propósito: o card colapsado herda a união dos CVEs dos
-        // originais, e cada um precisa passar por aquele cruzamento.
-        const items = collapseKernelNotices([...byUrl.values()]);
-
-        // Cross-reference CVEs with CISA KEV (actively exploited) + FIRST EPSS
-        // (exploit probability). KEV is the strongest actionable signal, so it
-        // boosts the relevance score and re-derives severity. Also attach
-        // lightweight IOCs extracted from the title+summary.
-        const allCves = [...new Set(items.flatMap((i) => i.cves || []))];
+        // Do not collapse publications by vendor/date before correlation: every
+        // advisory and its own CVEs/evidence must survive into the event store.
+        const rawItems = [...byUrl.values()];
+        const bodies = await collectArticleTexts(rawItems, {
+            cache: articleCollectionCache,
+            maxFetches: process.env.NEWS_ARTICLE_MAX_FETCHES === undefined ? 40 : Number(process.env.NEWS_ARTICLE_MAX_FETCHES),
+            concurrency: Number(process.env.NEWS_IOC_CONCURRENCY) || 3,
+            fetchText: async (url) => (await fetchArticleText(url, 32000)).text,
+        });
+        const unifiedFeed = enrichFeedItems(rawItems, {
+            texts: bodies.texts, actors: (text) => matchActors(text, actorIndex),
+            malware: (text) => matchMalware(text, malwareIndex), campaigns: (text) => matchCampaigns(text, campaignIndex),
+            seller: extractSellerHandle, categorize,
+        });
+        const allCves = [...new Set(unifiedFeed.flatMap((item) => item.cves))];
         const [kevMap, epssMap] = await Promise.all([getKevMap(), getEpssMap(allCves)]);
-        for (const item of items) {
-            const cves = item.cves || [];
-            const kevHit = cves.find((c) => kevMap.has(c));
-            if (kevHit) {
-                const d = kevMap.get(kevHit);
-                item.kev = true;
-                item.kevDetails = { cve: kevHit, dateAdded: d.dateAdded, dueDate: d.dueDate, ransomware: d.ransomware };
-                item.score = Math.min(100, (item.score || 0) + 25);
-                item.severity = severityFromScore(item.score);
-                (item.reasons = item.reasons || []).push(`CISA KEV — Actively Exploited (${kevHit})`);
-            }
-            const epssVals = cves.map((c) => epssMap.get(c)).filter((n) => typeof n === 'number');
-            if (epssVals.length) item.epss = Math.max(...epssVals);
-            const ic = extractIOCs(`${item.title} ${item.text || item.description || ''}`);
-            if (ic.ips.length || ic.domains.length || ic.hashes.length || ic.urls.length) item.iocs = ic;
-        }
-
-        // O RSS não traz IOC — medido, 895 itens renderam zero indicador real.
-        // Quem traz é o corpo do artigo de laboratório de pesquisa, então só a
-        // layer 3 paga o fetch. Nunca derruba o refresh: no pior caso o feed
-        // sai sem a colheita, como saía antes.
-        let corpos = new Map();
+        applyVulnerabilityContext(unifiedFeed, kevMap, epssMap);
+        unifiedFeed.sort((a, b) => b.pubDate.localeCompare(a.pubDate) || a.link.localeCompare(b.link));
         try {
-            const colheita = await harvestResearchIocs(items, {
-                fetchText: async (url) => (await fetchArticleText(url)).text,
-                // Modo artigo, NÃO plaintext: o modo permissivo é dos apêndices
-                // (CSV/gist), onde todo domínio é indicador. Em prosa ele indexa
-                // microsoft.com como IOC — medido, inflava de 15 para 24 artigos
-                // "com indicador", e o índice de menções vira ruído.
-                extract: (text) => extractIOCs(text),
-                onError: (item, error) => console.warn(`IOC harvest failed for ${item.link}: ${error.message}`),
-            });
-            corpos = colheita.textos;
-            if (colheita.colhidos) console.log(`[feed] IOCs colhidos de ${colheita.colhidos}/${colheita.buscados} artigos de pesquisa`);
-        } catch (error) {
-            console.warn(`IOC harvest skipped: ${error.message}`);
-        }
-
-        // Default order: most recent first (the route can re-sort by relevance).
-        const unifiedFeed = items.sort((a, b) => new Date(b.pubDate) - new Date(a.pubDate));
-
-        // Actor attribution, navigation categories, then grouping — all one unit
-        // of enrichment. It must never take the news down with it: on failure the
-        // feed still ships, just without storyId/actors/newsCategories. item.categories
-        // is scoreArticle's CTI scoring labels (set above via `...intel`) —
-        // navigation categories go on their own field, newsCategories, so they
-        // don't clobber it.
-        try {
-            for (const item of unifiedFeed) {
-                // O corpo, quando foi colhido, é o que nomeia o grupo: o resumo
-                // do RSS raramente cita ator, e o artigo do laboratório cita no
-                // meio da análise. Medido: os posts do Unit 42 só devolvem
-                // FunkSec, APT29 e Contagious Interview quando se lê o corpo.
-                const paraAtor = corpos.get(item.link) || item.text || item.description || '';
-                item.actors = matchActors(`${item.title} ${paraAtor}`, actorIndex);
-                item.malware = matchMalware(`${item.title} ${paraAtor}`, malwareIndex);
-                item.campaigns = matchCampaigns(`${item.title} ${paraAtor}`, campaignIndex);
-                // item.ttps already exists (scoreArticle's display labels, set
-                // via the `...intel` spread above) — this just derives the
-                // stable T#### ids newsStories.js compares across articles.
-                item.ttpIds = ttpIdsFrom(item.ttps);
-                item.sellerHandle = extractSellerHandle(`${item.title} ${paraAtor}`);
-                const { categories, primary } = categorize(item);
-                item.newsCategories = categories;
-                item.primaryCategory = primary;
-            }
-
             const stories = mergeIntoStories(newsStoryStore.all(), unifiedFeed, new Date());
             newsStoryStore.save(stories);
-            const storyByLink = new Map(stories.flatMap((story) => story.sources.map((source) => [source.link, story.id])));
-            for (const item of unifiedFeed) item.storyId = storyByLink.get(item.link) || null;
+            const byLink = new Map(stories.flatMap((story) => story.sources.map((source) => [canonicalArticleUrl(source.link), story.id])));
+            for (const item of unifiedFeed) item.storyId = byLink.get(item.link) || null;
+            newsArchiveStore.add(unifiedFeed.map((item) => ({ ...item, categories: item.newsCategories })));
+        } catch (error) { console.error('news story grouping failed:', error.message); }
 
-            // Arquivo permanente: todo item que passou pelo boletim entra aqui
-            // pra sempre (newsStoryStore acima só guarda 60 dias) — link,
-            // título, fonte, data e categorias, consultável via
-            // /api/news/archive e exportável.
-            newsArchiveStore.add(unifiedFeed.map((item) => ({
-                link: item.link,
-                title: item.title,
-                source: item.source,
-                pubDate: item.pubDate,
-                categories: item.newsCategories,
-                primaryCategory: item.primaryCategory,
-                phishingTechniques: item.phishingTechniques,
-            })));
-        } catch (error) {
-            console.error('news story grouping failed:', error.message);
-        }
-
-        // O corpo inteiro já rendeu CVEs, atores e IOCs acima; mandá-lo pro browser
-        // multiplicaria o /api/newsletter por ~50x sem nenhum leitor.
+        // Raw RSS and collected article text remain in the disk caches. The
+        // public feed only carries metadata, hashes and extracted evidence.
         for (const item of unifiedFeed) delete item.text;
-
+        rssCollectionCache.set('newsletter:snapshot', { extractionVersion: EXTRACTION_VERSION, at: new Date().toISOString(), items: unifiedFeed });
         memoryCache.newsletter.data = unifiedFeed;
         memoryCache.newsletter.expiresAt = Date.now() + memoryCache.newsletter.ttl;
-    } catch (error) {
-        console.error("Failed to background refresh newsletter feeds:", error.message);
-    }
-}
+        try { rssCollectionCache.prune({ maxEntries: 200 }); articleCollectionCache.prune({ maxEntries: 1500 }); } catch (error) { console.warn('feed cache pruning failed:', error.message); }
+        console.log('[feed] cycle', JSON.stringify({ elapsedMs: Date.now() - startedAt, sources: collected.health.size, failedSources: [...collected.health.values()].filter((health) => !health.ok).length, articles: unifiedFeed.length, bodies: bodies.stats }));
+    } catch (error) { console.error('Failed to background refresh newsletter feeds:', error.message); }
+});
 
 // CTI News feed endpoint.
+app.get('/api/news/monitoring', requireAuth, (req, res) => {
+    res.set('Cache-Control', 'private, no-store');
+    res.json({ vendors: VENDOR_CATALOG, preferences: newsMonitoringStore.get(req.user.sub) });
+});
+
+app.put('/api/news/monitoring', requireAuth, (req, res) => {
+    try {
+        const preferences = newsMonitoringStore.set(req.user.sub, req.body);
+        res.set('Cache-Control', 'private, no-store');
+        res.json({ preferences });
+    } catch (error) {
+        res.status(error.status || 500).json({ error: error.status === 400 ? error.message : 'Não foi possível salvar o monitoramento.' });
+    }
+});
+
 // Optional query params: minScore (0-100), severity (Critical|High|Medium|Low),
 // category (substring of a category label), layer (1-4), sort (relevance|date).
 app.get('/api/newsletter', requirePremium, async (req, res) => {
@@ -1745,7 +1664,7 @@ app.get('/api/newsletter', requirePremium, async (req, res) => {
             // Cold start fallback
             await refreshNewsletterFeed();
         }
-        let data = memoryCache.newsletter.data || [];
+        let data = filterMonitoredNews(memoryCache.newsletter.data || [], newsMonitoringStore.get(req.user.sub), newsStoryStore.all());
 
         const minScore = parseInt(req.query.minScore, 10);
         const severity = (req.query.severity || '').toString();
@@ -1762,7 +1681,7 @@ app.get('/api/newsletter', requirePremium, async (req, res) => {
             data = [...data].sort((a, b) => (b.score || 0) - (a.score || 0) || new Date(b.pubDate) - new Date(a.pubDate));
         }
 
-        res.set('Cache-Control', 'public, max-age=300');
+        res.set('Cache-Control', 'private, no-store');
         res.json(data);
     } catch (error) {
         const { status, message } = sanitizeError(error);
@@ -1775,13 +1694,14 @@ app.get('/api/newsletter', requirePremium, async (req, res) => {
 app.get('/api/news/stories', requirePremium, async (req, res) => {
     try {
         if (!memoryCache.newsletter.data) await refreshNewsletterFeed();
-        res.set('Cache-Control', 'public, max-age=300');
-        res.json(newsStoryStore.list({
+        res.set('Cache-Control', 'private, no-store');
+        const stories = newsStoryStore.list({
             category: (req.query.category || '').toString() || undefined,
             actor: (req.query.actor || '').toString() || undefined,
             days: parseInt(req.query.days, 10) || undefined,
-            limit: Math.min(parseInt(req.query.limit, 10) || 200, 500),
-        }));
+        });
+        res.json(filterMonitoredStories(stories, newsMonitoringStore.get(req.user.sub))
+            .slice(0, Math.max(1, Math.min(parseInt(req.query.limit, 10) || 200, 500))));
     } catch (error) {
         const { status, message } = sanitizeError(error);
         res.status(status).json({ error: message });
@@ -1852,7 +1772,7 @@ app.get('/api/news/stories/:id', requirePremium, (req, res) => {
 app.get('/api/feed/daily-suggestions', requirePremium, async (req, res) => {
     try {
         if (!memoryCache.newsletter.data) await refreshNewsletterFeed();
-        const all = memoryCache.newsletter.data || [];
+        const all = filterMonitoredNews(memoryCache.newsletter.data || [], newsMonitoringStore.get(req.user.sub), newsStoryStore.all());
 
         const hours = Math.min(Math.max(parseInt(req.query.hours, 10) || 36, 1), 168);
         const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 10, 1), 50);
@@ -1882,7 +1802,7 @@ app.get('/api/feed/daily-suggestions', requirePremium, async (req, res) => {
             suggestedType: (i.cves && i.cves.length) ? 'vuln' : 'campaign',
         }));
 
-        res.set('Cache-Control', 'public, max-age=300');
+        res.set('Cache-Control', 'private, no-store');
         res.json({
             generatedAt: new Date().toISOString(),
             windowHours: hours,
@@ -1976,7 +1896,7 @@ function feedListForClient() {
         return {
             url: feed.url, source: feed.source, layer: feed.layer, weight_boost: feed.weight_boost,
             builtin: feed.builtin, enabled: feed.enabled,
-            health: h ? { ok: h.ok, count: h.count, error: h.error, at: h.at } : null,
+            health: h ? { ...h } : null,
         };
     };
     // As raspadas entram só na costura de exibição: catalogFeeds()/effectiveFeeds()
@@ -2007,7 +1927,7 @@ app.post('/api/feeds', requireAdmin, (req, res) => {
     // adicionar já implica ligado: garante que não fique num disabled antigo.
     feedOverrides.disabled = feedOverrides.disabled.filter((d) => d !== clean);
     saveFeedOverrides();
-    refreshNewsletterFeed().catch(() => {});
+    refreshNewsletterFeed({ force: true }).catch(() => {});
     res.status(201).json({ feeds: feedListForClient() });
 });
 
@@ -2021,7 +1941,7 @@ app.patch('/api/feeds', requireAdmin, (req, res) => {
     if (enabled) set.delete(url); else set.add(url);
     feedOverrides.disabled = [...set];
     saveFeedOverrides();
-    refreshNewsletterFeed().catch(() => {});
+    refreshNewsletterFeed({ force: true }).catch(() => {});
     res.json({ feeds: feedListForClient() });
 });
 
@@ -2037,7 +1957,7 @@ app.delete('/api/feeds', requireAdmin, (req, res) => {
     feedOverrides.disabled = feedOverrides.disabled.filter((d) => d !== url);
     feedHealth.delete(url);
     saveFeedOverrides();
-    refreshNewsletterFeed().catch(() => {});
+    refreshNewsletterFeed({ force: true }).catch(() => {});
     res.json({ feeds: feedListForClient() });
 });
 
@@ -2927,16 +2847,17 @@ async function googleTranslate(text, targetLang) {
 // and the caller falls back to the RSS summary.
 const BROWSER_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 
-async function fetchArticleText(url) {
+async function fetchArticleText(url, textCap = 8000) {
     try {
         const resp = await axios.get(url, {
             headers: { 'User-Agent': BROWSER_UA, Accept: 'text/html,application/xhtml+xml' },
             timeout: 10000,
             maxRedirects: 3,
+            maxContentLength: 2000000,
             responseType: 'text',
         });
         return {
-            text: extractReadableText(resp.data).slice(0, 8000),
+            text: extractReadableText(resp.data).slice(0, textCap),
             artifactLinks: collectArtifactLinks(resp.data, url),
         };
     } catch (err) {
@@ -4114,6 +4035,9 @@ function scheduleDailyEdition() {
 }
 
 app.listen(PORT, () => {
+    // Unit/API tests invoke collectors explicitly with controlled inputs.
+    // Booting a test server must not launch real scheduled collections.
+    if (process.env.NODE_ENV === 'test') return;
     console.log(`Server running on port ${PORT}`);
     // Prime the newsletter RSS feed cache and schedule background updates
     refreshNewsletterFeed();

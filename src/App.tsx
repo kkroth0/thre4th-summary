@@ -8,6 +8,7 @@ import { AuthProvider } from "./contexts/AuthContext";
 import { PremiumRoute } from "./components/PremiumRoute";
 import { Seo } from "./components/Seo";
 
+const Home = lazy(() => import("./pages/Home"));
 const Index = lazy(() => import("./pages/Index"));
 const Login = lazy(() => import("./pages/Login"));
 const Profile = lazy(() => import("./pages/Profile"));
@@ -45,7 +46,7 @@ const App = () => (
             }>
               <Routes>
                 {/* Public Routes (CTI & CVE Dashboard) */}
-                <Route path="/" element={<Index />} />
+                <Route path="/" element={<Home />} />
                 <Route path="/analyzer" element={<Index />} />
                 <Route path="/cves" element={<CveDashboard />} />
                 <Route path="/atores" element={<Actors />} />

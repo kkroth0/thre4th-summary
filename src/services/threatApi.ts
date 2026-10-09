@@ -1358,7 +1358,11 @@ export const loginUrl = '/api/auth/github/login';
 export const signupUrl = '/api/auth/github/login?signup=1';
 
 // ─── Catálogo de feeds RSS monitorados pelo coletor ────────────────────────
-export interface FeedHealth { ok: boolean; count: number; error: string | null; at: string; }
+export interface FeedHealth {
+    ok: boolean; count: number; error: string | null; at: string;
+    status?: "fresh" | "unchanged" | "stale" | "failed";
+    fetchedCount?: number; lastSuccessfulAt?: string | null;
+}
 export interface FeedSource {
     url: string;
     source: string;
@@ -1810,6 +1814,30 @@ const orgJson = async <T>(url: string, init?: RequestInit): Promise<T> => {
     if (!response.ok) return orgError(response);
     return response.json();
 };
+
+export interface NewsVendor {
+    id: string;
+    name: string;
+    sector: string;
+    aliases: string[];
+}
+
+export interface NewsMonitoringPreferences {
+    mode: 'all' | 'selected';
+    vendorIds: string[];
+    updatedAt: string | null;
+}
+
+export interface NewsMonitoring {
+    vendors: NewsVendor[];
+    preferences: NewsMonitoringPreferences;
+}
+
+export const fetchNewsMonitoring = (): Promise<NewsMonitoring> => orgJson('/api/news/monitoring');
+export const saveNewsMonitoring = (preferences: Pick<NewsMonitoringPreferences, 'mode' | 'vendorIds'>): Promise<{ preferences: NewsMonitoringPreferences }> =>
+    orgJson('/api/news/monitoring', {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(preferences),
+    });
 
 export const fetchOrgVocab = (): Promise<OrgVocab> => orgJson('/api/org/vocab');
 

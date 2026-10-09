@@ -4,8 +4,8 @@ import { readFileSync } from "node:fs";
 
 test("primary analyzer copy names IPv4/IPv6, domain, URL, and hash in PT and EN", () => {
   const sources = [
-    readFileSync(new URL("src/pages/Index.tsx", `file://${process.cwd()}/`), "utf8"),
-    readFileSync(new URL("src/components/SearchForm.tsx", `file://${process.cwd()}/`), "utf8"),
+    readFileSync("src/pages/Index.tsx", "utf8"),
+    readFileSync("src/components/SearchForm.tsx", "utf8"),
   ].join("\n");
 
   assert.match(sources, /IPv4\/IPv6, domínio, URL ou hash/);

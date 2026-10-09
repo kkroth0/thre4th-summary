@@ -64,13 +64,20 @@ for (const story of stories) {
             // signals()), então basta copiar — nenhum rebuild precisa
             // re-extrair da fonte, que de qualquer forma não é guardada.
             sellerHandle: source.sellerHandle || null,
+            contentHash: source.contentHash || null,
+            extractionVersion: source.extractionVersion || null,
+            vendors: source.vendors || [], assets: source.assets || [],
         };
-        item.actors = matchActors(item.title, index);
-        item.malware = matchMalware(item.title, malwareIndex);
-        item.campaigns = matchCampaigns(item.title, campaignIndex);
+        // Prefer evidence attributed to this publication by the collector.
+        // Legacy sources without attribution still use title-only extraction.
+        item.actors = source.actors || matchActors(item.title, index);
+        item.malware = source.malware || matchMalware(item.title, malwareIndex);
+        item.campaigns = Array.isArray(source.campaigns)
+            ? (story.campaigns || []).filter((campaign) => source.campaigns.includes(campaign.id))
+            : matchCampaigns(item.title, campaignIndex);
         const { categories, primary } = categorize(item);
-        item.newsCategories = categories;
-        item.primaryCategory = primary;
+        item.newsCategories = source.newsCategories || categories;
+        item.primaryCategory = source.newsCategories ? NEWS_CATEGORIES.find((category) => source.newsCategories.includes(category)) || null : primary;
         byLink.set(source.link, item);
     }
 }
@@ -89,9 +96,10 @@ for (const old of stories) {
     const targets = new Set((old.sources || [])
         .map((source) => source && storyOfLink.get(source.link))
         .filter(Boolean));
-    if (targets.size !== 1) continue;
+    if (targets.size !== 1 || !(old.sources || []).every((source) => source && storyOfLink.has(source.link))) continue;
 
     const [target] = targets;
+    target.aliases = [...new Set([...(target.aliases || []), ...(old.aliases || []), old.id])].filter((id) => id && id !== target.id);
     for (const category of old.categories || []) {
         if (!target.categories.includes(category)) target.categories.push(category);
     }

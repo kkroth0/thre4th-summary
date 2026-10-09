@@ -50,3 +50,6 @@ other-sites-examples/
 
 # Insumo dos mapeamentos de hunting: o artefato versionado é server/data/*.json
 hunting-docs/
+
+# Persistent collector snapshots and article bodies
+server/.feed-cache/

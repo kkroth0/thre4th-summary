@@ -108,7 +108,7 @@ export function findMentions(stories, indicator) {
                 source: source.source,
                 link: source.link,
                 pubDate: source.pubDate,
-                actors: (story.actors || []).map((actor) => actor.name).filter(Boolean),
+                actors: (source.actors || []).map((actor) => actor.name).filter(Boolean),
                 categories: story.categories || [],
             });
         }

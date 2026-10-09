@@ -14,6 +14,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = 3900 + Math.floor(Math.random() * 100);
 const BASE = `http://127.0.0.1:${PORT}`;
 const PREMIUM_OPEN_PATH = path.join(tmpdir(), `threatsumm4ry-smoke-premium-${PORT}.json`);
+const NEWS_MONITORING_PATH = path.join(tmpdir(), `threatsumm4ry-smoke-monitoring-${PORT}.json`);
 const SESSION_SECRET = 'test-secret';
 const sessionBody = Buffer.from(JSON.stringify({ sub: 'smoke-user', login: 'tester', exp: Math.floor(Date.now() / 1000) + 3600 })).toString('base64url');
 const sessionSig = crypto.createHmac('sha256', SESSION_SECRET).update(sessionBody).digest('base64url');
@@ -41,7 +42,7 @@ before(async () => {
         env: {
             ...process.env,
             PORT: String(PORT), NODE_ENV: 'test', SESSION_SECRET,
-            GITHUB_ALLOWED_LOGINS: 'tester', PREMIUM_OPEN_PATH,
+            GITHUB_ALLOWED_LOGINS: 'tester', PREMIUM_OPEN_PATH, NEWS_MONITORING_PATH,
         },
         stdio: 'ignore',
     });
@@ -52,6 +53,8 @@ after(() => {
     proc?.kill('SIGKILL');
     rmSync(PREMIUM_OPEN_PATH, { force: true });
     rmSync(`${PREMIUM_OPEN_PATH}.tmp`, { force: true });
+    rmSync(NEWS_MONITORING_PATH, { force: true });
+    rmSync(`${NEWS_MONITORING_PATH}.tmp`, { force: true });
 });
 
 test('GET /api/vendors/status returns vendor map', async () => {
@@ -90,6 +93,27 @@ test('GET /api/cves/recent returns CVE list (static fallback offline)', async ()
 test('unknown API route yields 404, not a crash', async () => {
     const r = await fetch(`${BASE}/api/definitely-not-a-route`);
     assert.equal(r.status, 404);
+});
+
+test('monitoramento exige sessão, aceita usuário comum e isola preferências por conta', async () => {
+    const anon = await fetch(`${BASE}/api/news/monitoring`);
+    assert.equal(anon.status, 401);
+    const denied = await fetch(`${BASE}/api/news/monitoring`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: 'selected', vendorIds: ['cisco'] }) });
+    assert.equal(denied.status, 401);
+    const catalog = await fetch(`${BASE}/api/news/monitoring`, { headers: OUTSIDER_HEADERS });
+    assert.equal(catalog.status, 200);
+    assert.match(catalog.headers.get('cache-control'), /private.*no-store/);
+    const data = await catalog.json();
+    assert.ok(data.vendors.some((vendor) => vendor.id === 'fortinet' && vendor.aliases.includes('FortiGate')));
+    const saved = await fetch(`${BASE}/api/news/monitoring`, { method: 'PUT', headers: { ...OUTSIDER_HEADERS, 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: 'selected', vendorIds: ['fortinet'], ownerId: 'smoke-user' }) });
+    assert.equal(saved.status, 200);
+    assert.deepEqual((await saved.json()).preferences.vendorIds, ['fortinet']);
+    const own = await fetch(`${BASE}/api/news/monitoring`, { headers: OUTSIDER_HEADERS });
+    assert.deepEqual((await own.json()).preferences.vendorIds, ['fortinet']);
+    const other = await fetch(`${BASE}/api/news/monitoring`, { headers: AUTH_HEADERS });
+    assert.equal((await other.json()).preferences.mode, 'all');
+    const invalid = await fetch(`${BASE}/api/news/monitoring`, { method: 'PUT', headers: { ...OUTSIDER_HEADERS, 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: 'selected', vendorIds: ['not-a-vendor'] }) });
+    assert.equal(invalid.status, 400);
 });
 
 test('removed DNSBL endpoints return 404', async () => {

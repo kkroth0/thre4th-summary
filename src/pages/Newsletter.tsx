@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from "react";
+import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { Link } from "react-router-dom";
 import { ArrowLeft, Globe, BookOpen, AlertTriangle, Search, Mail, Eye, Filter, ChevronDown, RefreshCw, Share2, Loader2, Bookmark, X, PencilLine, ExternalLink, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -23,6 +23,9 @@ import type { TimeRange } from "./newsletterView";
 import type { StoryCard } from "./newsletterView";
 import { generateBoletim, saveKnowledge, fetchStoryDetail, type StoryDetail, type CorrelationEvidenceType } from "@/services/threatApi";
 import { useOrgProfile } from "@/hooks/useOrgProfile";
+import { useNewsMonitoring } from "@/hooks/useNewsMonitoring";
+import { useAuth } from "@/contexts/AuthContext";
+import { newsMonitoringCacheKey } from "@/utils/newsVendorSelection";
 import { annotateOrg, type OrgMatch } from "@/utils/orgRelevance";
 
 interface IocSet {
@@ -69,6 +72,7 @@ interface Advisory {
   // Agrupamento e atribuição, vindos do servidor
   storyId?: string | null;
   actors?: { id: string; name: string; matched?: string; via?: string }[];
+  vendors?: { id: string; name: string; sector: string; matched: string }[];
   newsCategories?: string[]; // navigation buckets from categorize(), distinct from `categories` above
   primaryCategory?: string | null;
 }
@@ -187,6 +191,10 @@ const buildShareText = (item: Advisory, e: EnrichData | undefined, lang: string)
 
 const Newsletter = () => {
   const { language } = useLanguage();
+  const { auth } = useAuth();
+  const monitoring = useNewsMonitoring();
+  const newsCacheKey = monitoring.data ? newsMonitoringCacheKey(auth.login ?? "", monitoring.data.preferences) : null;
+  const newsRequest = useRef<AbortController | null>(null);
   
   // Newsletter States
   const [advisories, setAdvisories] = useState<Advisory[]>([]);
@@ -210,19 +218,13 @@ const Newsletter = () => {
   const [isRefreshingNews, setIsRefreshingNews] = useState(false);
   const [secondsRemaining, setSecondsRemaining] = useState(300);
 
-  // Load from Cache on mount
-  //
-  // O merge abaixo só soma/atualiza (loadNews nunca remove um item ausente da
-  // resposta do servidor — de propósito, pra manter no ar o que já rolou pra
-  // fora da janela do feed ao vivo). Isso significa que um item reclassificado
-  // como ruído puro (isPureNoise no backend) depois de já cacheado no
-  // navegador fica preso aqui pra sempre: passou a ser excluído de toda
-  // resposta nova, mas nada nunca reavalia o que já está salvo. Foi assim que
-  // os "[Virtual Event]" do Dark Reading sobreviveram ao fix do servidor —
-  // mudar a chave é o jeito de invalidar o cache de todo mundo de uma vez.
-  // Bump esta chave de novo (_v3, _v4...) se o mesmo tipo de bug se repetir.
+  // Cached news is scoped to account and selection. Changing either clears the
+  // view before loading another snapshot, including an offline visit.
   useEffect(() => {
-    const cached = localStorage.getItem("cached_cti_advisories_v2");
+    setAdvisories([]);
+    if (!newsCacheKey) return;
+    let cached: string | null = null;
+    try { cached = localStorage.getItem(newsCacheKey); } catch { /* storage may be disabled */ }
     if (cached) {
       try {
         const parsed = JSON.parse(cached);
@@ -263,6 +265,7 @@ const Newsletter = () => {
             iocs: item.iocs as IocSet | undefined,
             storyId: typeof item.storyId === "string" || item.storyId === null ? (item.storyId as string | null) : undefined,
             actors: Array.isArray(item.actors) ? (item.actors as Advisory["actors"]) : undefined,
+            vendors: Array.isArray(item.vendors) ? (item.vendors as Advisory["vendors"]) : undefined,
             primaryCategory: typeof item.primaryCategory === "string" || item.primaryCategory === null ? (item.primaryCategory as string | null) : undefined,
           }));
           setAdvisories(validated);
@@ -271,10 +274,14 @@ const Newsletter = () => {
         console.error("Failed to parse cached advisories", e);
       }
     }
-  }, []);
+  }, [newsCacheKey]);
 
   // Fetch CTI News / Advisories
-  const loadNews = async (isBackground = false) => {
+  const loadNews = useCallback(async (isBackground = false) => {
+    if (!newsCacheKey) return;
+    newsRequest.current?.abort();
+    const controller = new AbortController();
+    newsRequest.current = controller;
     setSecondsRemaining(300);
     if (!isBackground) {
       setLoadingNews(true);
@@ -283,41 +290,24 @@ const Newsletter = () => {
     }
     setNewsError(null);
     try {
-      const res = await fetch("/api/newsletter");
+      const res = await fetch("/api/newsletter", { signal: controller.signal, cache: "no-store" });
       if (!res.ok) throw new Error("Failed to load threat advisories");
       const data = await res.json();
+      if (controller.signal.aborted) return;
       
-      setAdvisories(prev => {
-        const merged = [...prev];
-        const seenKeys = new Set(merged.map(item => `${item.link}_${item.title}_${item.source}`));
-        
-        data.forEach((item: Advisory) => {
-          const key = `${item.link}_${item.title}_${item.source}`;
-          if (!seenKeys.has(key)) {
-            merged.push(item);
-            seenKeys.add(key);
-          } else {
-            const index = merged.findIndex(m => `${m.link}_${m.title}_${m.source}` === key);
-            if (index !== -1) {
-              merged[index] = { ...merged[index], ...item };
-            }
-          }
-        });
-        
-        // Sort newest first, then cap the persisted set so localStorage can't
-        // grow past its quota as advisories accumulate across fetches/months.
-        merged.sort((a, b) => new Date(b.pubDate).getTime() - new Date(a.pubDate).getTime());
-        const capped = merged.slice(0, 400);
-        try {
-          localStorage.setItem("cached_cti_advisories_v2", JSON.stringify(capped));
-        } catch {
-          /* quota exceeded — keep the in-memory list, skip persistence */
-        }
-        return capped;
-      });
-
+      if (!Array.isArray(data)) throw new Error("Invalid feed response");
+      // The backend snapshot owns story identity. Combining it with older
+      // snapshots resurrects retired IDs after an event merge.
+      const snapshot = data as Advisory[];
+      setAdvisories(snapshot);
+      try {
+        localStorage.removeItem("cached_cti_advisories_v2");
+        localStorage.removeItem("cached_cti_advisories_v3");
+        localStorage.setItem(newsCacheKey, JSON.stringify(snapshot.slice(0, 400)));
+      } catch { /* keep the complete in-memory snapshot if storage is full */ }
       setLastUpdatedNews(new Date());
     } catch (err) {
+      if (controller.signal.aborted) return;
       console.error(err);
       if (!isBackground) {
         setNewsError(err instanceof Error ? err.message : "Failed to load threat advisories");
@@ -325,12 +315,15 @@ const Newsletter = () => {
         toast.error(language === "pt" ? "Erro ao atualizar notícias em segundo plano" : "Failed to background refresh news");
       }
     } finally {
-      setLoadingNews(false);
-      setIsRefreshingNews(false);
+      if (newsRequest.current === controller) {
+        setLoadingNews(false);
+        setIsRefreshingNews(false);
+      }
     }
-  };
+  }, [newsCacheKey, language]);
 
   useEffect(() => {
+    if (!newsCacheKey) return;
     loadNews();
 
     // 1-second interval to update countdown
@@ -346,10 +339,9 @@ const Newsletter = () => {
 
     return () => {
       clearInterval(countdownInterval);
+      newsRequest.current?.abort();
     };
-    // loadNews is stable for the component lifetime; run once on mount.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [loadNews, newsCacheKey]);
 
   // Atalho "/" foca a busca — só quando o foco não está já num campo de
   // digitação, senão "/" vira caractere normal em vez de atalho.
@@ -638,12 +630,12 @@ const Newsletter = () => {
             <div>
               <h1 className="page-title flex items-center gap-2">
                 <Mail className="h-6 w-6 text-primary" />
-                {language === "pt" ? "Notícias de Segurança" : "Security News"}
+                {language === "pt" ? "Feed de inteligência" : "Intelligence feed"}
               </h1>
               <p className="page-lede">
                 {language === "pt"
-                  ? "Agregador de notícias e avisos de segurança de múltiplas fontes de inteligência contra ameaças"
-                  : "Threat intelligence news and security advisories aggregated from multiple sources"}
+                  ? "Notícias, advisories e pesquisas para acompanhar ameaças e reunir suas fontes."
+                  : "News, advisories and research to follow threats and bring your sources together."}
               </p>
             </div>
 
@@ -675,6 +667,16 @@ const Newsletter = () => {
                 </div>
               </div>
             </div>
+          </div>
+
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-card px-4 py-3 text-sm">
+            <span className="text-muted-foreground">{monitoring.error
+              ? (language === "pt" ? "Monitoramento indisponível" : "Monitoring unavailable")
+              : !monitoring.data ? (language === "pt" ? "Carregando monitoramento…" : "Loading monitoring…")
+              : monitoring.data.preferences.mode === "selected"
+              ? (language === "pt" ? `Fornecedores monitorados: ${monitoring.data.preferences.vendorIds.length}` : `Monitored vendors: ${monitoring.data.preferences.vendorIds.length}`)
+              : (language === "pt" ? "Monitoramento: todas as notícias" : "Monitoring: all news")}</span>
+            <Link to="/settings?section=monitoring&from=/newsletter#news-vendors" className="font-medium text-primary hover:underline">{language === "pt" ? "Escolher fornecedores" : "Choose vendors"}</Link>
           </div>
 
           {/* Busca + filtros — uma barra só, um botão de filtro só: eram 4
@@ -928,7 +930,12 @@ const Newsletter = () => {
                 </div>
               )}
 
-              {loadingNews ? (
+              {monitoring.error ? (
+                <div role="alert" className="rounded-lg border border-destructive/20 bg-destructive/5 p-6 text-center">
+                  <p>{language === "pt" ? "Não foi possível carregar seu monitoramento de notícias." : "Unable to load your news monitoring."}</p>
+                  <Button size="sm" variant="outline" className="mt-3" onClick={() => monitoring.refetch()}>{language === "pt" ? "Tentar novamente" : "Retry"}</Button>
+                </div>
+              ) : loadingNews ? (
                 <div className="grid grid-cols-1 gap-2.5 lg:grid-cols-2">
                   {[1, 2, 3].map((n) => (
                     <div key={n} className="p-4 rounded-lg border bg-card animate-pulse space-y-3">
@@ -947,16 +954,20 @@ const Newsletter = () => {
               ) : storyCards.length === 0 ? (
                 <EmptyState
                   icon={BookOpen}
-                  title={language === "pt" ? "Nenhuma notícia no histórico" : "No advisories in the stored history"}
+                  title={monitoring.data?.preferences.mode === "selected"
+                    ? (language === "pt" ? "Nenhuma notícia para sua seleção" : "No news for your selection")
+                    : (language === "pt" ? "Nenhuma notícia no histórico" : "No advisories in the stored history")}
                   description={language === "pt"
-                    ? "Ajuste a busca ou os filtros, ou traga o que saiu desde a última coleta."
-                    : "Adjust the search or filters, or fetch what came out since the last collection."}
-                  action={
+                    ? "Ajuste a busca, os filtros ou os fornecedores monitorados nas configurações."
+                    : "Adjust your search, filters or monitored vendors in settings."}
+                  action={monitoring.data?.preferences.mode === "selected" && !advisories.length ? (
+                    <Button asChild size="sm"><Link to="/settings?section=monitoring&from=/newsletter#news-vendors">{language === "pt" ? "Selecionar fornecedores" : "Select vendors"}</Link></Button>
+                  ) : (
                     <Button onClick={() => loadNews()} size="sm" className="gap-2">
                       <RefreshCw className="h-3.5 w-3.5" />
                       {language === "pt" ? "Buscar notícias recentes" : "Fetch recent advisories"}
                     </Button>
-                  }
+                  )}
                 />
               ) : (
                 // Sem items-start: a grade estica os dois cards da mesma linha pra

@@ -245,13 +245,13 @@ function FeedStatus({ feed }: { feed: FeedSource }) {
     if (feed.health.ok) {
         return (
             <span className="flex items-center gap-1 text-[10px] text-emerald-600 dark:text-emerald-400">
-                <CheckCircle2 className="h-3 w-3" /> {feed.health.count}
+                <CheckCircle2 className="h-3 w-3" /> {feed.health.count}{feed.health.status === "unchanged" ? " · sem alterações" : ""}
             </span>
         );
     }
     return (
         <span className="flex items-center gap-1 text-[10px] text-destructive" title={feed.health.error || ""}>
-            <XCircle className="h-3 w-3" /> erro
+            <XCircle className="h-3 w-3" /> {feed.health.status === "stale" ? `erro · ${feed.health.count} em cache` : "erro"}
         </span>
     );
 }

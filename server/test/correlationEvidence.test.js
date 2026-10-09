@@ -2,6 +2,20 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { explainCorrelation } from '../correlationEvidence.js';
 
+test('atribuição compartilhada usa apenas os artigos que realmente citaram a entidade', () => {
+    const actor = { id: 'a1', name: 'APT29' };
+    const evidence = explainCorrelation({
+        actors: [actor], malware: [], campaigns: [],
+        sources: [
+            { link: 'https://a.example/1', title: 'A', actors: [actor] },
+            { link: 'https://a.example/2', title: 'B', actors: [actor] },
+            { link: 'https://a.example/3', title: 'C', actors: [] },
+        ],
+    });
+    const hit = evidence.find((entry) => entry.type === 'actor');
+    assert.deepEqual(hit.sourceLinks, ['https://a.example/1', 'https://a.example/2']);
+});
+
 const src = (over = {}) => ({
     link: `https://x.example/${Math.random()}`, source: 'Feed', title: 'Untitled',
     pubDate: '2026-08-11T12:00:00Z', score: 50, severity: 'High', cves: [], iocs: null, ...over,
@@ -45,15 +59,15 @@ test('IOC compartilhado aparece com o tipo certo, e só quando >=2 fontes', () =
     assert.ok(!evidence.some((e) => e.type === 'ioc-ip'), 'IP de uma fonte só não é evidência');
 });
 
-test('ator e malware da história aparecem com todos os links da história', () => {
+test('entidades sem atribuição por fonte não são tratadas como compartilhadas', () => {
     const s = story({
         actors: [{ id: 'a1', name: 'Cl0p', matched: 'Cl0p' }],
         malware: [{ id: 'm1', name: 'LummaC2', matched: 'LummaC2' }],
         sources: [src({ link: 'https://a.example/1' }), src({ link: 'https://b.example/2' })],
     });
     const evidence = explainCorrelation(s);
-    assert.ok(evidence.some((e) => e.type === 'actor' && e.value === 'Cl0p' && e.sourceLinks.length === 2));
-    assert.ok(evidence.some((e) => e.type === 'malware' && e.value === 'LummaC2' && e.sourceLinks.length === 2));
+    assert.ok(!evidence.some((e) => e.type === 'actor'));
+    assert.ok(!evidence.some((e) => e.type === 'malware'));
 });
 
 test('campanha compartilhada aparece com o nome legível e a contagem real de fontes', () => {

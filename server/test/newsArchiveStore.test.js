@@ -13,6 +13,17 @@ const row = (over = {}) => ({
     categories: ['Ransomware'], primaryCategory: 'Ransomware', ...over,
 });
 
+test('reenriquecimento atualiza evidências e classificação preservando archivedAt', () => {
+    const store = createNewsArchiveStore({ filePath: tempFile(), readFileSync: fs.readFileSync, writeJsonAtomic });
+    store.add([row({ contentHash: 'before', storyId: 'old' })]);
+    const archivedAt = store.all()[0].archivedAt;
+    store.add([row({ contentHash: 'after', storyId: 'event', cves: ['CVE-2026-12345'], categories: ['Vulnerabilities'] })]);
+    assert.equal(store.size(), 1);
+    assert.equal(store.all()[0].contentHash, 'after');
+    assert.equal(store.all()[0].archivedAt, archivedAt);
+    assert.deepEqual(store.list({ category: 'Vulnerabilities' })[0].cves, ['CVE-2026-12345']);
+});
+
 test('arquivo ausente vira store vazio', () => {
     const store = createNewsArchiveStore({ filePath: tempFile(), readFileSync: fs.readFileSync, writeJsonAtomic });
     assert.deepEqual(store.all(), []);
@@ -39,7 +50,7 @@ test('add não duplica por link, e devolve quantos de fato entraram', () => {
     assert.equal(store.add([row({ link: 'https://a.example/1' })]), 1);
     assert.equal(store.add([row({ link: 'https://a.example/1', title: 'Outro título, mesmo link' })]), 0, 'link repetido não entra de novo');
     assert.equal(store.size(), 1);
-    assert.equal(store.all()[0].title, 'T', 'mantém o título da primeira vez que entrou');
+    assert.equal(store.all()[0].title, 'Outro título, mesmo link', 'atualiza a publicação existente');
 });
 
 test('add ignora item sem link, sem quebrar os outros', () => {

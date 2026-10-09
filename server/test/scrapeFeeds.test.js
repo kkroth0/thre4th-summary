@@ -95,6 +95,27 @@ test('maxNew limita quantos novos entram por rodada', async () => {
         maxNew: 2,
     });
     assert.equal(second.items.length, 2);
+    assert.equal(second.seen['https://www.nozominetworks.com/blog/d'], undefined);
+    const third = await collectScraped({ sources: [nozomi()], fetchText: async () => listingHtml(['a', 'b', 'c', 'd']), seen: second.seen, now, maxNew: 2 });
+    assert.deepEqual(third.items.map((item) => item.link), ['https://www.nozominetworks.com/blog/d']);
+});
+
+test('fonte datada mantém backlog na partida a frio e escoa no ciclo seguinte', async () => {
+    const source = nozomi();
+    source.datedItems = true;
+    const fetchText = async (url) => url === source.url ? listingHtml(['a', 'b', 'c']) : '<meta property="article:published_time" content="2026-08-16T12:00:00Z">';
+    const first = await collectScraped({ sources: [source], fetchText, now, maxNew: 1 });
+    assert.equal(first.items.length, 1);
+    assert.equal(Object.keys(first.seen).length, 1);
+    const next = await collectScraped({ sources: [source], fetchText, seen: first.seen, now, maxNew: 2 });
+    assert.equal(next.items.length, 2);
+    assert.ok(next.items.every((item) => !item.dateInferred));
+});
+
+test('HTML de bloqueio não é registrado como coleta vazia bem-sucedida', async () => {
+    const result = await collectScraped({ sources: [nozomi()], fetchText: async () => '<html>Access denied</html>', now });
+    assert.equal(result.errors.length, 1);
+    assert.deepEqual(result.seen, {});
 });
 
 // Fonte datada emite já na primeira rodada, porque a data é real e não first-seen.

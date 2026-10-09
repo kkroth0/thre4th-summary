@@ -1,3 +1,8 @@
+NOTA DE DIREÇÃO — 2026-10-09
+Este documento preserva o rascunho anterior. A direção vigente está em
+docs/product/direction.md: plataforma CTI open source, com o fluxo
+feed → coleções → relatórios e correlação por evento como prioridade.
+
 ==========================================================================
 THREAT SUMM4RY — DOCUMENTO DE IDEIA DE PRODUTO (RASCUNHO PARA FORMATAÇÃO)
 ==========================================================================

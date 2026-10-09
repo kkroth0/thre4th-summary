@@ -136,16 +136,16 @@ export function OrgProfileEditor() {
   };
 
   return (
-    <Card className="rounded-xl shadow-none">
-      <CardHeader className="p-5 pb-4 sm:p-6 sm:pb-4">
+    <Card className="rounded-sm shadow-none">
+      <CardHeader className="p-4 pb-3">
         <CardTitle className="flex items-center gap-2 text-sm"><Building2 className="h-4 w-4 text-muted-foreground" /> {pt ? "Perfis da organização" : "Organization profiles"}</CardTitle>
         <CardDescription>
           {pt
-            ? "Defina setor, região e tecnologias para priorizar notícias relevantes para sua organização."
-            : "Set industry, region and technologies to prioritize news relevant to your organization."}
+            ? "Contexto de priorização: setores, regiões e tecnologias. Não restringe a coleta."
+            : "Prioritization context: sectors, regions and technologies. Does not restrict collection."}
         </CardDescription>
       </CardHeader>
-      <CardContent className="flex flex-col gap-4 px-5 pb-5 sm:px-6 sm:pb-6">
+      <CardContent className="flex flex-col gap-3 px-4 pb-4">
         {profiles.map((profile) => (
           <div key={profile.id} className="flex items-center gap-3 rounded-md border px-3 py-2">
             <input
@@ -184,7 +184,7 @@ export function OrgProfileEditor() {
                     type="button"
                     onClick={() => setDraft({ ...draft, sectors: toggle(draft.sectors ?? [], sector) })}
                     aria-pressed={(draft.sectors ?? []).includes(sector)}
-                    className={`rounded-full border px-3 py-1 text-xs transition ${(draft.sectors ?? []).includes(sector) ? "border-primary bg-primary/10 text-primary" : "text-muted-foreground hover:border-primary/40"}`}
+                    className={`rounded-sm border px-3 py-1 text-xs transition ${(draft.sectors ?? []).includes(sector) ? "border-primary bg-primary/10 text-primary" : "text-muted-foreground hover:border-primary/40"}`}
                   >
                     {sector}
                   </button>
@@ -201,7 +201,7 @@ export function OrgProfileEditor() {
                     type="button"
                     onClick={() => setDraft({ ...draft, regions: toggle(draft.regions ?? [], region) })}
                     aria-pressed={(draft.regions ?? []).includes(region)}
-                    className={`rounded-full border px-3 py-1 text-xs transition ${(draft.regions ?? []).includes(region) ? "border-primary bg-primary/10 text-primary" : "text-muted-foreground hover:border-primary/40"}`}
+                    className={`rounded-sm border px-3 py-1 text-xs transition ${(draft.regions ?? []).includes(region) ? "border-primary bg-primary/10 text-primary" : "text-muted-foreground hover:border-primary/40"}`}
                   >
                     {region}
                   </button>

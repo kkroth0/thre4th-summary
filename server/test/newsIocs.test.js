@@ -67,7 +67,7 @@ const stories = [{
     id: 'st1', title: 'Kimwolf botnet', actors: [{ id: 'G1', name: 'FunkSec' }], categories: ['Malware'],
     sources: [{
         source: 'Palo Alto Unit 42', link: 'https://unit42.paloaltonetworks.com/kimwolf/',
-        title: 'Kimwolf v7', pubDate: '2026-08-26T00:00:00Z',
+        title: 'Kimwolf v7', pubDate: '2026-08-26T00:00:00Z', actors: [{ id: 'G1', name: 'FunkSec' }],
         iocs: { ips: ['212.193.31.119'], domains: ['evil.example.com'], hashes: [], urls: ['http://evil.example.com/a'] },
     }],
 }];

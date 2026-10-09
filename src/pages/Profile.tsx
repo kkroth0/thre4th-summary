@@ -104,7 +104,7 @@ const Profile = () => {
       )}
 
       {/* Chaves de API -> Settings */}
-      <Link to="/settings" className="block mb-5 group">
+      <Link to="/settings?section=api-keys" className="block mb-5 group">
         <Card className="transition-colors group-hover:border-border/50">
           <CardContent className="p-5 flex items-center gap-4">
             <span className="h-11 w-11 rounded-lg bg-primary/10 ring-1 ring-inset ring-primary/20 flex items-center justify-center shrink-0">

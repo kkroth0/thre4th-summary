@@ -11,6 +11,43 @@ const item = (over = {}) => ({
     cves: [], actors: [], malware: [], campaigns: [], ttpIds: [], newsCategories: [], primaryCategory: null, ...over,
 });
 
+test('CVEs distintas vetam a semelhança do título e a técnica comum, mas uma campanha pode unir incidente multi-CVE', () => {
+    const pair = [
+        item({ title: 'Citrix NetScaler emergency patch', link: 'https://a.example/citrix', cves: ['CVE-2026-107406'], ttpIds: ['T1190'] }),
+        item({ title: 'Citrix NetScaler emergency patch', link: 'https://b.example/citrix', cves: ['CVE-2026-88771'], ttpIds: ['T1190'] }),
+    ];
+    assert.equal(mergeIntoStories([], pair, NOW).length, 2);
+    const campaign = { id: 'operation-net', name: 'Operation Net', matched: 'Operation Net' };
+    assert.equal(mergeIntoStories([], pair.map((article) => ({ ...article, campaigns: [campaign] })), NOW).length, 1);
+});
+
+test('coberturas históricas do mesmo evento agrupam também no primeiro lote', () => {
+    const stories = mergeIntoStories([], [
+        item({ link: 'https://a.example/old', pubDate: daysBefore(25), cves: ['CVE-2026-12345'] }),
+        item({ link: 'https://b.example/old', pubDate: daysBefore(24), cves: ['CVE-2026-12345'] }),
+    ], NOW);
+    assert.equal(stories.length, 1, 'a janela compara publicações entre si, não apenas com hoje');
+});
+
+test('atualização da mesma URL mantém o ID e atualiza evidências sem duplicar a publicação', () => {
+    const original = item({ link: 'https://a.example/Post?utm_source=rss', cves: [], score: 20 });
+    const first = mergeIntoStories([], [original], NOW);
+    const updated = mergeIntoStories(first, [item({ ...original, link: 'https://a.example/Post', cves: ['CVE-2026-12345'], score: 80, actors: [{ id: 'a1', name: 'APT29' }] })], NOW);
+    assert.equal(updated[0].id, first[0].id);
+    assert.equal(updated[0].sources.length, 1);
+    assert.deepEqual(updated[0].cves, ['CVE-2026-12345']);
+    assert.equal(updated[0].score, 80);
+    assert.equal(updated[0].sources[0].actors[0].name, 'APT29');
+});
+
+test('follow-up real do mesmo veículo em outro dia agrupa quando tem evidência forte', () => {
+    const stories = mergeIntoStories([], [
+        item({ title: 'Gateway exploitation', link: 'https://a.example/1', cves: ['CVE-2026-12345'], pubDate: daysBefore(2) }),
+        item({ title: 'Gateway exploitation', link: 'https://a.example/2', cves: ['CVE-2026-12345'] }),
+    ], NOW);
+    assert.equal(stories.length, 1);
+});
+
 // Pins the /api/newsletter compatibility promise at the one seam a pure module
 // can see: item.categories is scoreArticle's CTI scoring labels and must never
 // feed story-building — only item.newsCategories (the navigation buckets) may.
@@ -160,30 +197,19 @@ test('primaryCategory segue a precedência, não a ordem de chegada', () => {
     assert.deepEqual(stories[0].categories, ['Ransomware', 'Microsoft'], 'categories deve estar em ordem de precedência');
 });
 
-test('recompute de signals a cada iteração: candidate herda raridade de A e casa com B', () => {
-    // Story A: CVE-1, title "Oracle database" → {database, oracle}
-    // Story B: title "Oracle scandal" → {oracle, scandal}
-    // A vs B: Jaccard({database,oracle}, {oracle,scandal}) = 1/3 ≈ 0.33 < 0.5, separate
-    // Candidate: CVE-1, title "Scandal" → {scandal} only (1 rare term)
-    // Candidate vs B (before absorb): size < MIN_RARE_FOR_JACCARD, returns 0, no match
-    // Candidate matches A via CVE-1, merges
-    // After absorbing A: Candidate has both titles' rare terms: {database, oracle, scandal}
-    // Candidate vs B: Jaccard({database,oracle,scandal}, {oracle,scandal}) = 2/3 ≈ 0.67 >= 0.5
+test('uma união não empresta sinais para fabricar a próxima união', () => {
     const seed = mergeIntoStories([], [
         item({ title: 'Oracle database', link: 'https://a.example/1', cves: ['CVE-1'], pubDate: daysBefore(1) }),
         item({ title: 'Oracle scandal', link: 'https://b.example/2', pubDate: daysBefore(1) }),
     ], NOW);
     assert.equal(seed.length, 2, 'A and B remain separate: Jaccard = 0.33');
 
-    // Candidate: CVE-1, single rare term {scandal}
-    // Matches A via CVE-1, inherits A's {database, oracle}
-    // After absorbing A, recomputed signals allow match with B
     const bridged = mergeIntoStories(seed, [item({
         title: 'Scandal', link: 'https://c.example/3',
         cves: ['CVE-1'],
     })], NOW);
-    assert.equal(bridged.length, 1, 'recompute enables candidate to match B after inheriting A rareness');
-    assert.equal(bridged[0].sources.length, 3, 'merged story has all three sources');
+    assert.equal(bridged.length, 2, 'a ponte não tem evidência direta para a segunda história');
+    assert.equal(bridged.find((story) => story.cves.includes('CVE-1')).sources.length, 2);
 });
 
 // ─── Séries recorrentes e apanhados ────────────────────────────────────────

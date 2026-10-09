@@ -38,14 +38,14 @@ export const PUBLIC_SEO_ROUTES: SeoRoute[] = [
     changefreq: "weekly",
     metadata: {
       pt: {
-        title: "ThreatSumm4ry | Plataforma CTI para SOC",
+        title: "ThreatSumm4ry | Plataforma CTI open source",
         description:
-          "ThreatSumm4ry centraliza enriquecimento de IOCs, CVEs, advisories e ransomware para analistas SOC e times de inteligencia de ameacas.",
+          "Colete feeds de segurança, organize publicações em coleções e produza relatórios. ThreatSumm4ry é uma plataforma CTI open source para pesquisa de ameaças.",
       },
       en: {
-        title: "ThreatSumm4ry | CTI Platform for SOC Teams",
+        title: "ThreatSumm4ry | Open Source CTI Platform",
         description:
-          "ThreatSumm4ry centralizes IOC enrichment, CVE tracking, advisories, and ransomware intelligence for SOC and CTI teams.",
+          "Collect security feeds, organize publications in collections and produce reports. ThreatSumm4ry is an open source CTI platform for threat research.",
       },
     },
   },
@@ -55,15 +55,12 @@ export const PUBLIC_SEO_ROUTES: SeoRoute[] = [
     changefreq: "weekly",
     metadata: {
       pt: {
-        // Estático de propósito: título de SEO não pode variar a cada deploy, senão
-        // o buscador reindexa por nada. Conferir contra IOC_SOURCE_COUNT ao mexer
-        // na lista de vendors.
-        title: "Busca de IOCs em 18 fontes | ThreatSumm4ry",
+        title: "Consulta de indicadores | ThreatSumm4ry",
         description:
           "Analise IPv4, IPv6, dominios, URLs e hashes em fontes CTI como VirusTotal, AbuseIPDB, Shodan, OTX e abuse.ch em uma unica busca.",
       },
       en: {
-        title: "IOC Search Across 21 Sources | ThreatSumm4ry",
+        title: "Indicator Lookup | ThreatSumm4ry",
         description:
           "Analyze IPv4, IPv6, domains, URLs, and hashes across CTI sources such as VirusTotal, AbuseIPDB, Shodan, OTX, and abuse.ch in one search.",
       },

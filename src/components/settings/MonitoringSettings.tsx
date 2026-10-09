@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import FeedSourcesManager from "@/components/FeedSourcesManager";
 import { OrgProfileEditor } from "@/components/settings/OrgProfileEditor";
+import { NewsVendorMonitoring } from "@/components/settings/NewsVendorMonitoring";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { fetchExposureAssets } from "@/services/threatApi";
 
@@ -32,28 +33,24 @@ export function MonitoringSettings() {
   }, []);
 
   return (
-    <div className="flex flex-col gap-5">
-      <div>
-        <h2 className="text-xl font-semibold tracking-tight">{pt ? "Monitoramento" : "Monitoring"}</h2>
-        <p className="mt-1 text-sm text-muted-foreground">
-          {pt ? "Defina o que acompanhar e de onde vem sua inteligência." : "Choose what to monitor and where your intelligence comes from."}
-        </p>
-      </div>
+    <div className="flex flex-col gap-4">
+
+      <NewsVendorMonitoring />
 
       <OrgProfileEditor />
 
-      <Card className="rounded-xl shadow-none">
-        <CardHeader className="p-5 pb-4 sm:p-6 sm:pb-4">
+      <Card className="rounded-sm shadow-none">
+        <CardHeader className="p-4 pb-3">
           <CardTitle className="flex items-center gap-2 text-sm"><Rss className="h-4 w-4 text-muted-foreground" /> {pt ? "Fontes de notícias" : "News sources"}</CardTitle>
           <CardDescription>
-            {pt ? "Consulte os feeds acompanhados pela plataforma. Administradores podem editar as fontes." : "Browse the feeds followed by the platform. Administrators can edit sources."}
+            {pt ? "Feeds RSS/Atom da coleta. Edição restrita a administradores." : "RSS/Atom collection feeds. Editing is restricted to administrators."}
           </CardDescription>
         </CardHeader>
-        <CardContent className="px-5 pb-5 sm:px-6 sm:pb-6"><FeedSourcesManager /></CardContent>
+        <CardContent className="px-4 pb-4"><FeedSourcesManager /></CardContent>
       </Card>
 
-      <Card className="rounded-xl shadow-none">
-        <CardHeader className="p-5 pb-4 sm:p-6 sm:pb-4">
+      <Card className="rounded-sm shadow-none">
+        <CardHeader className="p-4 pb-3">
           <CardTitle className="flex items-center gap-2 text-sm"><Target className="h-4 w-4 text-muted-foreground" /> {pt ? "Ativos monitorados" : "Monitored assets"}</CardTitle>
           <CardDescription>
             {assetState === "loading"
@@ -64,20 +61,18 @@ export function MonitoringSettings() {
                   // EST-04: "0 ativo(s) na watchlist." não convidava a nada.
                   // Estado vazio precisa dizer o que entra ali e para que serve.
                   ? (pt
-                    ? "Adicione domínios e IPs para acompanhar mudanças na exposição da sua organização."
-                    : "Add domains and IPs to track changes in your organization’s exposure.")
+                    ? "Nenhum domínio ou IP na watchlist de exposição."
+                    : "No domains or IPs in the exposure watchlist.")
                   : pt
                     ? `${assetState} ativo(s) na watchlist${lastRun ? ` · última varredura em ${new Date(lastRun).toLocaleString("pt-BR")}` : ""}.`
                     : `${assetState} asset(s) on the watchlist${lastRun ? ` · last scan ${new Date(lastRun).toLocaleString("en-US")}` : ""}.`}
           </CardDescription>
         </CardHeader>
-        <CardContent className="px-5 pb-5 sm:px-6 sm:pb-6">
+        <CardContent className="px-4 pb-4">
           {/* Resumo e link, não um segundo CRUD: a tela de resultados continua dona do assunto. */}
-          <Button asChild size="sm" variant={assetState === 0 ? "default" : "outline"}>
+          <Button asChild size="sm" variant="outline">
             <Link to="/attack-surface?mode=monitor">
-              {assetState === 0
-                ? (pt ? "Adicionar o primeiro ativo" : "Add the first asset")
-                : (pt ? "Gerenciar ativos" : "Manage assets")}<ArrowUpRight className="h-4 w-4" />
+              {pt ? "Gerenciar ativos" : "Manage assets"}<ArrowUpRight className="h-4 w-4" />
             </Link>
           </Button>
         </CardContent>

@@ -93,6 +93,7 @@ export async function collectScraped({ sources, fetchText, seen = {}, now = new 
     for (const source of sources) {
         try {
             const listing = parseListing(await fetchText(source.url), source);
+            if (!listing.length) throw new Error('Listing returned no recognizable publications');
             // Uma fonte sem nenhum link conhecido é partida a frio: sem data real
             // não dá para publicar o histórico sem inventar quando aconteceu.
             const coldStart = !listing.some((item) => nextSeen[item.link]);
@@ -100,22 +101,28 @@ export async function collectScraped({ sources, fetchText, seen = {}, now = new 
 
             for (const item of listing) {
                 if (nextSeen[item.link]) continue;
-                if (taken >= maxNew) {
-                    // Além do teto, registra sem emitir: na próxima rodada estes
-                    // deixam de ser "novos" e o feed não leva uma enxurrada.
+                if (coldStart && !source.datedItems) {
+                    // Seed only undated historical listings. New publications
+                    // after this baseline must never be discarded by the budget.
                     nextSeen[item.link] = now.toISOString();
                     continue;
                 }
+                if (taken >= maxNew) continue;
                 taken += 1;
 
                 let pubDate = now.toISOString();
+                let dateInferred = true;
                 if (source.datedItems) {
                     try {
-                        pubDate = publishedTime(await fetchText(item.link)) || pubDate;
+                        const declared = publishedTime(await fetchText(item.link));
+                        if (declared && new Date(declared).getTime() <= now.getTime() + 86400000) {
+                            pubDate = declared;
+                            dateInferred = false;
+                        }
                     } catch { /* sem a data real, vale a primeira aparição */ }
                 }
                 nextSeen[item.link] = pubDate;
-                if (!coldStart || source.datedItems) items.push({ ...item, pubDate });
+                items.push({ ...item, pubDate, dateInferred, firstCollectedAt: now.toISOString(), collectedAt: now.toISOString() });
             }
         } catch (error) {
             errors.push({ source: source.source, message: error.message });

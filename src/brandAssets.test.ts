@@ -87,13 +87,15 @@ test("publishes the approved static sitemap", async () => {
 });
 
 test("uses the official mark in shared and public navigation", async () => {
-  const [header, home] = await Promise.all([
+  const [header, home, analyzer] = await Promise.all([
     read("src/components/Header.tsx"),
+    read("src/pages/Home.tsx"),
     read("src/pages/Index.tsx"),
   ]);
 
   assert.match(header, /<BrandMark/);
-  assert.match(home, /<BrandMark/);
+  assert.match(home, /<Header/);
+  assert.match(analyzer, /<Header/);
   assert.doesNotMatch(header, />\s*t4\s*</);
   assert.doesNotMatch(home, />\s*t4\s*</);
 });

@@ -306,16 +306,16 @@ test("fonte vira chip removível quando diferente de 'all', e não aparece quand
 
 // ─── EST-05: avisos de distribuição repetidos no mesmo dia ──────────────────
 
-test("avisos do mesmo fornecedor no mesmo dia viram um card só", () => {
+test("identidade do evento prevalece sobre fornecedor e data", () => {
   const cards = groupAdvisoriesIntoStories([
     advisory({ title: "USN-8666-3: Linux kernel (GCP FIPS) vulnerabilities", link: "https://u.example/1", storyId: "s1", cves: ["CVE-2020-24588"], pubDate: "2026-08-28T09:00:00.000Z" }),
     advisory({ title: "USN-8661-3: Linux kernel vulnerabilities", link: "https://u.example/2", storyId: "s2", cves: ["CVE-2025-27558"], pubDate: "2026-08-28T11:00:00.000Z" }),
   ], { pt: true });
 
-  assert.equal(cards.length, 1, "storyId diferente não impede o agrupamento por fornecedor e dia");
-  assert.equal(cards[0].title, "Ubuntu · 2 avisos de segurança");
-  assert.deepEqual(cards[0].cves, ["CVE-2020-24588", "CVE-2025-27558"], "as CVEs dos dois avisos ficam no card");
-  assert.equal(cards[0].sources.length, 2, "cada aviso continua acessível na linha do tempo");
+  assert.equal(cards.length, 2, "eventos distintos não podem ser colapsados pelo frontend");
+  assert.ok(cards.every((card) => card.storyId === "s1" || card.storyId === "s2"));
+  assert.equal(cards.flatMap((card) => card.cves).length, 2);
+  assert.ok(cards.every((card) => card.sources.length === 1));
 });
 
 test("aviso de fornecedor sozinho mantém o próprio título", () => {
@@ -326,13 +326,27 @@ test("aviso de fornecedor sozinho mantém o próprio título", () => {
   assert.equal(cards[0].title, "USN-8688-1: PAM vulnerability");
 });
 
-test("avisos do mesmo fornecedor em dias diferentes continuam separados", () => {
+test("sem ID do servidor, avisos do mesmo fornecedor em dias diferentes continuam separados", () => {
   const cards = groupAdvisoriesIntoStories([
-    advisory({ title: "USN-8666-3: Linux kernel vulnerabilities", link: "https://u.example/1", pubDate: "2026-08-28T09:00:00.000Z" }),
-    advisory({ title: "USN-8600-1: OpenSSL vulnerability", link: "https://u.example/2", pubDate: "2026-08-27T09:00:00.000Z" }),
+    advisory({ storyId: null, title: "USN-8666-3: Linux kernel vulnerabilities", link: "https://u.example/1", pubDate: "2026-08-28T09:00:00.000Z" }),
+    advisory({ storyId: null, title: "USN-8600-1: OpenSSL vulnerability", link: "https://u.example/2", pubDate: "2026-08-27T09:00:00.000Z" }),
   ], { pt: true });
 
   assert.equal(cards.length, 2);
+});
+
+test("aviso e notícia de outro veículo sobre o mesmo evento ficam no mesmo card", () => {
+  const cards = groupAdvisoriesIntoStories([
+    advisory({ title: "USN-8666-3: Linux kernel vulnerabilities", link: "https://u.example/1", storyId: "event", source: "Ubuntu" }),
+    advisory({ title: "Kernel exploitation affects Ubuntu", link: "https://n.example/1", storyId: "event", source: "News" }),
+  ]);
+  assert.equal(cards.length, 1);
+  assert.equal(cards[0].storyId, "event");
+  assert.equal(cards[0].sources.length, 2);
+});
+
+test("uma publicação repetida não duplica a contagem de fontes do card", () => {
+  assert.equal(groupAdvisoriesIntoStories([advisory(), advisory()])[0].sources.length, 1);
 });
 
 test("notícia comum não é confundida com aviso de fornecedor", () => {

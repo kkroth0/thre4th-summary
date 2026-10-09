@@ -71,12 +71,10 @@ export default function AllowlistManager() {
     };
 
     return (
-        <Card className="overflow-hidden rounded-xl shadow-none">
-            <CardContent className="space-y-4 p-5 sm:p-6">
+        <Card className="overflow-hidden rounded-sm shadow-none">
+            <CardContent className="space-y-3 p-4">
                 <div className="flex items-start gap-3">
-                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-secondary">
-                        <ShieldCheck className="h-4 w-4 text-muted-foreground" />
-                    </span>
+                    <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
                     <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2 text-sm font-semibold">
                             {pt ? "Acesso premium" : "Premium access"}
@@ -107,7 +105,7 @@ export default function AllowlistManager() {
                     </Button>
                 </div>
 
-                <div className="divide-y divide-border rounded-lg border border-border">
+                <div className="divide-y divide-border rounded-sm border border-border">
                     {loading ? (
                         <LoadingRows rows={3} />
                     ) : !entries.length ? (

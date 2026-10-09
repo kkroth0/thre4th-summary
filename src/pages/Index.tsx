@@ -20,8 +20,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { VendorQuotas } from "@/components/VendorQuotas";
 import { EnrichmentTab } from "@/components/EnrichmentTab";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { Header, useNavCatalog } from "@/components/Header";
-import { BrandMark } from "@/components/BrandMark";
+import { Header } from "@/components/Header";
 
 import { IocTimeline } from "@/components/IocTimeline";
 import { GeographicNetworkOverview } from "@/components/GeographicNetworkOverview";
@@ -45,151 +44,10 @@ import { cn } from "@/lib/utils";
 // jsPDF + autoTable are loaded lazily inside exportGlobalPDF (see below) so the
 // ~400KB PDF toolchain is only fetched when a user actually exports a report.
 
-const TypingTitle = ({ language }: { language: string }) => {
-  const line1 = language === "pt" ? "Uma consulta." : "One query.";
-  const line2Prefix = language === "pt" ? "Vinte e um " : "Twenty-one ";
-  
-  const words = language === "pt" 
-    ? ["vereditos.", "insights.", "análises.", "resultados.", "relatórios."]
-    : ["verdicts.", "insights.", "analyses.", "results.", "reports."];
-
-  const [text1, setText1] = useState("");
-  const [text2Prefix, setText2Prefix] = useState("");
-  const [dynamicWord, setDynamicWord] = useState("");
-  const [wordIndex, setWordIndex] = useState(0);
-  const [isDeleting, setIsDeleting] = useState(false);
-
-  useEffect(() => {
-    // Reset everything on language change
-    setText1("");
-    setText2Prefix("");
-    setDynamicWord("");
-    setWordIndex(0);
-    setIsDeleting(false);
-  }, [language]);
-
-  useEffect(() => {
-    let timer: NodeJS.Timeout;
-    
-    // Phase 1: Type line 1
-    if (text1.length < line1.length) {
-      timer = setTimeout(() => {
-        setText1(line1.substring(0, text1.length + 1));
-      }, 50); // Typing speed for line 1
-      return () => clearTimeout(timer);
-    }
-    
-    // Phase 2: Type line 2 prefix after line 1 is fully typed
-    if (text2Prefix.length < line2Prefix.length) {
-      timer = setTimeout(() => {
-        setText2Prefix(line2Prefix.substring(0, text2Prefix.length + 1));
-      }, 50); // Typing speed for line 2 prefix
-      return () => clearTimeout(timer);
-    }
-
-    // Phase 3: Cycle words
-    const currentFullWord = words[wordIndex];
-    if (!isDeleting) {
-      // Type character
-      if (dynamicWord.length < currentFullWord.length) {
-        timer = setTimeout(() => {
-          setDynamicWord(currentFullWord.substring(0, dynamicWord.length + 1));
-        }, 60); // Typing speed for dynamic words
-      } else {
-        // Fully typed, wait then start deleting
-        timer = setTimeout(() => {
-          setIsDeleting(true);
-        }, 1500); // Hold time
-      }
-    } else {
-      // Delete character
-      if (dynamicWord.length > 0) {
-        timer = setTimeout(() => {
-          setDynamicWord(dynamicWord.substring(0, dynamicWord.length - 1));
-        }, 40); // Deleting speed
-      } else {
-        // Fully deleted, move to next word
-        setIsDeleting(false);
-        setWordIndex((prev) => (prev + 1) % words.length);
-      }
-    }
-
-    return () => clearTimeout(timer);
-  }, [text1, text2Prefix, dynamicWord, isDeleting, wordIndex, language, line1, line2Prefix, words]);
-
-  return (
-    <>
-      {text1}
-      {text1 === line1 && <br />}
-      {text2Prefix}
-      {dynamicWord}
-      <span className="animate-pulse inline-block w-[4px] h-[0.9em] bg-primary ml-1.5 translate-y-[2px]" />
-    </>
-  );
-};
-
-
 const ALL_VENDORS = [...SUPPORTED_VENDORS];
 
-const HeroOpsPanel = ({ language }: { language: string }) => {
-  const rows = [
-    ["input", "14.103.115.208"],
-    ["vendors", "VirusTotal, AbuseIPDB, Shodan"],
-    ["verdict", language === "pt" ? "malicioso / score 82" : "malicious / score 82"],
-    ["export", "PDF, JSON, STIX"],
-  ];
-
-  return (
-    <div className="soc-panel relative overflow-hidden rounded-lg text-left">
-      <div className="flex items-center justify-between border-b border-border px-4 py-3">
-        <div className="flex items-center gap-2">
-          <span className="h-2.5 w-2.5 rounded-full bg-red-500" />
-          <span className="h-2.5 w-2.5 rounded-full bg-yellow-500" />
-          <span className="h-2.5 w-2.5 rounded-full bg-green-500" />
-        </div>
-        <span className="font-mono text-[11px] text-muted-foreground">threatsumm4ry/tools</span>
-      </div>
-
-      <div className="space-y-6 p-5">
-        <div>
-          <p className="text-sm font-semibold text-foreground">
-            {language === "pt" ? "Preview da análise" : "Analysis preview"}
-          </p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            {language === "pt"
-              ? "Uma interface única para consultar, correlacionar e exportar."
-              : "One interface to query, correlate and export."}
-          </p>
-        </div>
-
-        <div className="rounded-lg border border-border bg-background/70 font-mono text-xs">
-          {rows.map(([key, value]) => (
-            <div key={key} className="grid grid-cols-[86px_1fr] gap-3 border-b border-border px-3 py-3 last:border-b-0">
-              <span className="text-muted-foreground">{key}</span>
-              <span className="truncate text-foreground">{value}</span>
-            </div>
-          ))}
-        </div>
-
-        <div className="grid grid-cols-3 gap-3">
-          {[
-            ["21", language === "pt" ? "fontes" : "sources"],
-            ["4", "IOC types"],
-            ["5", language === "pt" ? "exports" : "exports"],
-          ].map(([value, label]) => (
-            <div key={label} className="rounded-lg border border-border bg-secondary/30 p-3">
-              <div className="font-mono text-xl font-semibold text-foreground">{value}</div>
-              <div className="mt-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">{label}</div>
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-};
-
 const Index = () => {
-  const { auth, loading: authLoading } = useAuth();
+  const { auth } = useAuth();
   const [searchRun, setSearchRun] = useState(0);
   const [savingScans, setSavingScans] = useState(false);
   const [query, setQuery] = useState("");
@@ -208,9 +66,6 @@ const Index = () => {
   const { toast } = useToast();
   const { t, language } = useLanguage();
   const location = useLocation();
-  const isAnalyzerRoute = location.pathname === "/analyzer";
-  const contactUrl = "https://www.linkedin.com/in/matheuslima-andrade/";
-  const { navGroups } = useNavCatalog();
 
   // Sem overflow-hidden: qualquer ancestral com overflow recortado desliga o
   // position: sticky da barra de busca.
@@ -1309,214 +1164,12 @@ const Index = () => {
   };
 
   // A landing e so pra quem nao entrou: com sessao, "/" ja e a busca.
-  if (results.length === 0 && !isAnalyzing && !isAnalyzerRoute && !(authLoading || auth.authenticated)) {
-    const navLinks = [
-      { href: "#ferramentas", label: language === "pt" ? "Ferramentas" : "Tools" },
-      { href: "#acesso", label: language === "pt" ? "Acesso" : "Access" },
-      { href: contactUrl, label: language === "pt" ? "Contato" : "Contact", external: true },
-    ];
-
-    return (
-      <div className="min-h-screen bg-background text-foreground">
-        <header className="sticky top-0 z-50 border-b border-border bg-background/95 backdrop-blur">
-          <div className="mx-auto flex h-14 max-w-5xl items-center gap-4 px-4 md:px-6">
-            <Link to="/" onClick={handleReset} className="flex shrink-0 items-center gap-2">
-              <BrandMark className="h-7 w-7 rounded-md" />
-              <span className="text-sm font-bold tracking-tight">threatsumm4ry</span>
-            </Link>
-
-            <nav className="hidden items-center gap-1 sm:flex">
-              {navLinks.map((item) => (
-                <a
-                  key={item.href}
-                  href={item.href}
-                  {...(item.external ? { target: "_blank", rel: "noopener noreferrer" } : {})}
-                  className="rounded-md px-2.5 py-1.5 text-[13px] text-muted-foreground transition-colors hover:text-foreground"
-                >
-                  {item.label}
-                </a>
-              ))}
-            </nav>
-
-            <div className="ml-auto flex shrink-0 items-center gap-1.5">
-              <Button variant="ghost" size="sm" asChild className="h-8 px-2.5 text-xs">
-                <Link to="/login">{language === "pt" ? "Entrar" : "Sign in"}</Link>
-              </Button>
-              <Button size="sm" asChild className="h-8 px-2.5 text-xs">
-                <Link to="/cadastro">{language === "pt" ? "Criar conta" : "Create account"}</Link>
-              </Button>
-            </div>
-          </div>
-        </header>
-
-        <main className="mx-auto max-w-5xl px-4 md:px-6">
-          {/* Hero: a busca e a propria demonstracao, entao ela abre a pagina */}
-          <section className="border-b border-border py-16 md:py-24">
-            <h1 className="max-w-3xl text-3xl font-bold leading-tight tracking-tight md:text-5xl">
-              {language === "pt"
-                ? "As ferramentas de SOC e CTI do dia a dia, em um lugar só."
-                : "The SOC and CTI tools you use daily, in one place."}
-            </h1>
-            <p className="mt-4 max-w-2xl text-base leading-7 text-muted-foreground">
-              {language === "pt"
-                ? "Consulta de indicadores, análise de phishing, vulnerabilidades, grupos de ataque e relatórios. Nada para instalar."
-                : "Indicator lookup, phishing analysis, vulnerabilities, threat actors and reports. Nothing to install."}
-            </p>
-
-            <div className="mt-10 rounded-lg border border-border bg-card p-4">
-              <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2 px-1">
-                <h2 className="text-sm font-semibold">
-                  {language === "pt" ? "Consulta de Indicadores" : "Indicator Lookup"}
-                </h2>
-                <p className="text-xs text-muted-foreground">
-                  {language === "pt"
-                    ? `IP, domínio, URL ou hash · ${IOC_SOURCE_COUNT} fontes`
-                    : `IP, domain, URL or hash · ${IOC_SOURCE_COUNT} sources`}
-                </p>
-              </div>
-              <SearchForm
-                query={query}
-                setQuery={setQuery}
-                onSubmit={handleSearch}
-                isLoading={isAnalyzing}
-                selectedVendors={selectedVendors}
-                onVendorsChange={setSelectedVendors}
-              />
-              <VendorQuotas refreshKey={searchRun} />
-              <div className="mt-3 flex flex-wrap items-center gap-2 px-1">
-                <span className="text-xs text-muted-foreground">{language === "pt" ? "exemplos:" : "examples:"}</span>
-                {["14.103.115.208", "51.210.208.8", "1.1.1.1"].map((ip) => (
-                  <button
-                    key={ip}
-                    onClick={() => setQuery((prev) => (prev ? `${prev}\n${ip}` : ip))}
-                    className="rounded border border-border px-2 py-0.5 font-mono text-xs text-muted-foreground transition-colors hover:text-foreground"
-                  >
-                    {ip}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {searchHistory.length > 0 && (
-              <div className="mt-4 flex flex-wrap items-center gap-2">
-                <span className="text-xs text-muted-foreground">{language === "pt" ? "recentes:" : "recent:"}</span>
-                {searchHistory.slice(0, 4).map((entry) => {
-                  const label = entry.replace(/\s+/g, " ").trim();
-                  return (
-                    <button
-                      key={entry}
-                      onClick={() => setQuery(entry)}
-                      title={label}
-                      className="inline-flex items-center gap-1.5 rounded border border-border px-2 py-0.5 font-mono text-xs text-muted-foreground transition-colors hover:text-foreground"
-                    >
-                      <Clock className="h-3 w-3" />
-                      {label.length > 28 ? `${label.slice(0, 28)}…` : label}
-                    </button>
-                  );
-                })}
-                <button onClick={clearSearchHistory} className="text-xs text-muted-foreground underline-offset-2 hover:underline">
-                  {language === "pt" ? "limpar" : "clear"}
-                </button>
-              </div>
-            )}
-          </section>
-
-          {/* Ferramentas: mesma lista do menu do app, sem catalogo paralelo */}
-          <section id="ferramentas" className="scroll-mt-20 border-b border-border py-14">
-            <h2 className="text-xl font-bold tracking-tight">{language === "pt" ? "Todas as ferramentas" : "All tools"}</h2>
-            <div className="mt-8 space-y-8">
-              {navGroups.map((group) => (
-                <div key={group.label}>
-                  <h3 className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{group.label}</h3>
-                  <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                    {group.items.map((item) => {
-                      const Icon = item.icon;
-                      return (
-                        <Link
-                          key={item.path}
-                          to={item.path}
-                          className="group flex items-start gap-3 rounded-lg border border-border bg-card p-4 transition-colors hover:border-foreground/25"
-                        >
-                          <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border bg-background">
-                            <Icon className="h-4 w-4 text-muted-foreground group-hover:text-foreground" />
-                          </span>
-                          <span className="min-w-0">
-                            <span className="flex items-center gap-2 text-sm font-semibold">
-                              {item.label}
-                              {item.premium && (
-                                <span className="rounded border border-border px-1 py-0.5 text-[9px] font-bold uppercase leading-none text-muted-foreground">
-                                  {language === "pt" ? "restrito" : "restricted"}
-                                </span>
-                              )}
-                            </span>
-                            <span className="mt-1 block text-[13px] leading-5 text-muted-foreground">{item.description}</span>
-                          </span>
-                        </Link>
-                      );
-                    })}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </section>
-
-          {/* Acesso: o modelo e allow-list, entao a pagina diz isso sem rodeio */}
-          <section id="acesso" className="scroll-mt-20 py-14">
-            <h2 className="text-xl font-bold tracking-tight">{language === "pt" ? "Acesso" : "Access"}</h2>
-            <div className="mt-6 grid gap-4 sm:grid-cols-2">
-              <div className="rounded-lg border border-border bg-card p-5">
-                <h3 className="text-sm font-semibold">{language === "pt" ? "Ferramentas abertas" : "Open tools"}</h3>
-                <p className="mt-2 text-[13px] leading-6 text-muted-foreground">
-                  {language === "pt"
-                    ? "Consulta de indicadores, phishing, listas de bloqueio, vulnerabilidades, grupos de ataque e mapa de ransomware funcionam com a conta gratuita — ou sem conta nenhuma."
-                    : "Indicator lookup, phishing, blocklists, vulnerabilities, threat actors and the ransomware map work with a free account — or with no account at all."}
-                </p>
-              </div>
-              <div className="rounded-lg border border-border bg-card p-5">
-                <h3 className="text-sm font-semibold">{language === "pt" ? "Áreas restritas" : "Restricted areas"}</h3>
-                <p className="mt-2 text-[13px] leading-6 text-muted-foreground">
-                  {language === "pt"
-                    ? "Geração de relatórios, biblioteca de fontes e notícias são liberados na mão, um login por vez. Não há plano nem preço: é convite."
-                    : "Report generation, the source library and news are granted by hand, one login at a time. There is no plan and no price: it is an invite."}
-                </p>
-              </div>
-            </div>
-            <div className="mt-6 flex flex-wrap items-center gap-2">
-              <Button asChild>
-                <Link to="/cadastro"><Github className="h-4 w-4" /> {language === "pt" ? "Criar conta com GitHub" : "Create account with GitHub"}</Link>
-              </Button>
-              <Button variant="outline" asChild>
-                <a href={contactUrl} target="_blank" rel="noopener noreferrer">
-                  {language === "pt" ? "Pedir acesso" : "Request access"}
-                </a>
-              </Button>
-            </div>
-          </section>
-        </main>
-
-        <footer className="border-t border-border">
-          <div className="mx-auto flex max-w-5xl flex-col gap-3 px-4 py-6 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between md:px-6">
-            <div className="flex items-center gap-2">
-              <BrandMark className="h-6 w-6 rounded" />
-              <span>threatsumm4ry · {new Date().getFullYear()}</span>
-            </div>
-            <a href={contactUrl} target="_blank" rel="noopener noreferrer" className="hover:text-foreground">
-              {language === "pt" ? "Contato" : "Contact"}
-            </a>
-          </div>
-        </footer>
-      </div>
-    );
-  }
-
   const hasResults = results.length > 0 || isAnalyzing;
 
   return (
     <div className={shellClassName}>
       <Header onLogoClick={handleReset} showBackButton={false} />
-      {/* FLX-05: esta tela era a única sem barra de navegação — e é a
-          ferramenta principal do produto. As outras recebem pelo PageLayout,
-          que esta página não usa por ter gabarito próprio. */}
+
       {/* Barra de busca persistente: some no estado vazio, onde o formulario ja
           e o heroi. Fica sticky logo abaixo do header (h-14) em vez de fixed —
           assim ela ocupa o proprio espaco, o conteudo nao precisa de padding
@@ -1560,10 +1213,10 @@ const Index = () => {
                 <div className="flex flex-col gap-8 md:flex-row md:items-start md:justify-between">
                   <div className="max-w-2xl">
                     <span className="inline-flex items-center rounded-full border border-primary/25 bg-primary/10 px-3 py-1 text-[11px] font-black uppercase tracking-wide text-primary">
-                      {language === "pt" ? "Ferramenta principal" : "Main tool"}
+                      {language === "pt" ? "Apoio à pesquisa CTI" : "Supporting CTI research"}
                     </span>
                     <h1 className="mt-4 text-3xl font-black tracking-tight text-foreground md:text-5xl">
-                      ThreatSumm4ry Search
+                      {language === "pt" ? "Consulta de indicadores" : "Indicator lookup"}
                     </h1>
                     <p className="mt-4 text-base font-semibold leading-8 text-muted-foreground md:text-lg">
                       {language === "pt"

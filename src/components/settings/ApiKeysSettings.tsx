@@ -166,7 +166,7 @@ export function ApiKeysSettings() {
     <div className="flex flex-col gap-5">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h2 className="text-xl font-semibold tracking-tight">{pt ? "Chaves de API" : "API keys"}</h2>
+          <h2 className="text-sm font-semibold">{pt ? "Chaves de API" : "API keys"}</h2>
           {/* FLX-07: as chaves apareciam em dois lugares — aqui e em Admin >
               Integrações — sem dizer qual vence quando as duas existem. A regra
               está no código (getUserApiKey(...) || process.env), então ela pode
@@ -185,11 +185,11 @@ export function ApiKeysSettings() {
       ) : (
         <div className="flex flex-col gap-5">
           {CATALOG.map((group) => (
-            <Card key={group.title.en} className="overflow-hidden rounded-xl shadow-none">
-              <CardHeader className="border-b border-border bg-secondary/30 px-5 py-4 sm:px-6">
+            <Card key={group.title.en} className="overflow-hidden rounded-sm shadow-none">
+              <CardHeader className="border-b border-border px-4 py-3">
                 <CardTitle className="flex items-center gap-2 text-sm"><KeyRound className="h-4 w-4 text-muted-foreground" /> {pt ? group.title.pt : group.title.en}</CardTitle>
               </CardHeader>
-              <CardContent className="divide-y divide-border/50 px-5 pb-2 pt-0 sm:px-6">
+              <CardContent className="divide-y divide-border/50 px-4 pb-2 pt-0">
                 {group.items.map((provider) => <KeyRow key={provider.id} provider={provider} configured={!!keys[provider.id]} onChanged={onChanged} />)}
               </CardContent>
             </Card>

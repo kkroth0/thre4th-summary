@@ -173,7 +173,7 @@ export const groupAdvisoriesIntoStories = <T extends StorySource>(
     const day = (item.pubDate || "").slice(0, 10);
     const rollup = vendor && day ? `${ROLLUP}${vendor}:${day}` : null;
     if (rollup) vendorOfKey.set(rollup, vendor as string);
-    const key = rollup || item.storyId || `link:${item.link}`;
+    const key = item.storyId || rollup || `link:${item.link}`;
     const card = byStory.get(key);
     if (!card) {
       byStory.set(key, {
@@ -193,6 +193,7 @@ export const groupAdvisoriesIntoStories = <T extends StorySource>(
       });
       continue;
     }
+    if (card.sources.some((source) => source.link === item.link)) continue;
     card.sources.push(item);
     if (item.pubDate > card.lastSeen) card.lastSeen = item.pubDate;
     if ((item.score ?? 0) > card.score) card.score = item.score ?? 0;

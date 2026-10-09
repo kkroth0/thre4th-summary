@@ -6,49 +6,42 @@
 // sem tela nova. Mesmo padrão de fs-por-injeção do createStoryStore.
 export function createNewsArchiveStore({ filePath, readFileSync, writeJsonAtomic }) {
     let rows = [];
-    let seen = new Set();
     try {
         const parsed = JSON.parse(readFileSync(filePath, 'utf8'));
         rows = Array.isArray(parsed) ? parsed.filter((r) => r && r.link) : [];
-        seen = new Set(rows.map((r) => r.link));
     } catch { /* arquivo ausente ou corrompido: arquivo vazio, não derruba o servidor */ }
 
     return {
         all: () => rows,
         size: () => rows.length,
-        /**
-         * Adiciona só links ainda não vistos — um link já arquivado mantém a
-         * categoria da primeira vez que entrou, mesmo que o motor de
-         * categorização mude depois. Devolve quantos de fato entraram.
-         */
+        /** Upsert extracted metadata without duplicating the publication. */
         add(items) {
-            const additions = [];
+            const next = [...rows];
+            const indices = new Map(next.map((row, index) => [row.link, index]));
+            let additions = 0, changed = false;
             for (const item of Array.isArray(items) ? items : []) {
-                if (!item || !item.link || seen.has(item.link)) continue;
-                additions.push({
-                    link: item.link,
-                    title: item.title || '',
-                    source: item.source || '',
-                    pubDate: item.pubDate || '',
-                    categories: Array.isArray(item.categories) ? item.categories : [],
-                    primaryCategory: item.primaryCategory || null,
-                    // Vazio pra item fora da categoria Phishing — é o que o
-                    // dashboard de tendências (/phishing-analyzer) quebra por
-                    // sub-técnica (ClickFix, AiTM, Vishing...).
+                if (!item?.link) continue;
+                const index = indices.get(item.link);
+                const old = index === undefined ? null : next[index];
+                const row = {
+                    link: item.link, title: item.title || "", source: item.source || "", pubDate: item.pubDate || "",
+                    categories: Array.isArray(item.categories) ? item.categories : [], primaryCategory: item.primaryCategory || null,
                     phishingTechniques: Array.isArray(item.phishingTechniques) ? item.phishingTechniques : [],
-                    archivedAt: new Date().toISOString(),
-                });
+                    archivedAt: old?.archivedAt || new Date().toISOString(),
+                };
+                for (const field of ["description", "storyId", "contentHash", "extractionVersion", "cves", "actors", "malware", "campaigns", "ttpIds", "iocs", "vendors", "assets"]) {
+                    if (item[field] !== undefined) row[field] = item[field];
+                    else if (old?.[field] !== undefined) row[field] = old[field];
+                }
+                if (old && JSON.stringify(row) === JSON.stringify(old)) continue;
+                changed = true;
+                if (index === undefined) { indices.set(item.link, next.length); next.push(row); additions++; }
+                else next[index] = row;
             }
-            if (!additions.length) return 0;
-            // Escreve primeiro: se writeJsonAtomic estourar, a memória não pode
-            // avançar além do que está em disco, senão um restart reprocessa o
-            // mesmo lote e ele passa a faltar pra sempre (seen já teria essas
-            // chaves se a memória tivesse avançado sem o disco acompanhar).
-            const next = [...rows, ...additions];
+            if (!changed) return 0;
             writeJsonAtomic(filePath, next);
             rows = next;
-            for (const row of additions) seen.add(row.link);
-            return additions.length;
+            return additions;
         },
         list({ category, source, from, to, limit } = {}) {
             let result = rows;

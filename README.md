@@ -1,12 +1,23 @@
 # ThreatSumm4ry
 
-Threat intelligence workspace for IOC enrichment, CVE tracking, ransomware
-tracking, advisory feeds, phishing analysis and exposure
-monitoring.
+Open source CTI platform for collecting security feeds, curating publications
+and producing intelligence reports. Licensed under [AGPL-3.0-only](./LICENSE).
 
-The primary analyzer accepts public IPv4/IPv6 addresses, domains, HTTP/HTTPS
-URLs, and MD5, SHA-1, or SHA-256 hashes. CVE tracking remains available through
-its dedicated pages and APIs.
+The product centers on an analyst workflow: **feed → collections → reports**.
+CVE tracking, actor context, ransomware data and indicator lookup support that
+research. The hosted instance currently restricts feed, collections and reports
+to authorized accounts; running your own instance requires configuring its
+integrations and access settings.
+
+The ETL preserves source evidence, caches collection results across restarts and
+groups coverage under stable story IDs. Current correlation uses deterministic
+heuristics; semantic event clustering and a persistent threat graph are roadmap
+items. See [ETL architecture and operations](./docs/product/etl-v2.md),
+[product direction](./docs/product/direction.md) and the
+[CTINexus evaluation](./docs/product/ctinexus-evaluation.md).
+
+The indicator analyzer accepts public IPv4/IPv6 addresses, domains, HTTP/HTTPS
+URLs, and MD5, SHA-1, or SHA-256 hashes.
 
 ## Stack
 

@@ -1,7 +1,7 @@
 {
   "name": "threatsumm4ry",
   "short_name": "t4",
-  "description": "CTI, SOC and threat hunting operations platform",
+  "description": "Open source CTI platform for security feeds, research and intelligence reports",
   "icons": [
     {
       "src": "/android-chrome-192x192.png",

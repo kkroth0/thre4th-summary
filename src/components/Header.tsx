@@ -1,9 +1,9 @@
 import { Link, useLocation } from "react-router-dom";
 import {
   ArrowLeft,
+  Rss,
   BookOpen,
   CalendarCheck,
-  Database,
   FileSearch,
   Github,
   LayoutGrid,
@@ -32,7 +32,6 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { BrandMark } from "@/components/BrandMark";
 import { actorPageCopy } from "@/pages/actorsView";
-import { IOC_SOURCE_COUNT } from "@/services/threatApi";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { cn } from "@/lib/utils";
@@ -68,52 +67,29 @@ export function useNavCatalog() {
   const pt = language === "pt";
 
   const homeItem: NavItem = {
-    path: "/analyzer",
-    label: tr({ pt: "Consulta de Indicadores", en: "Indicator Lookup", es: "Consulta de Indicadores", fr: "Recherche d'Indicateurs" }),
-    description: pt ? `IP, domínio, link ou hash em ${IOC_SOURCE_COUNT} fontes.` : `IP, domain, link or hash across ${IOC_SOURCE_COUNT} sources.`,
-    icon: Search,
+    path: "/newsletter",
+    label: tr({ pt: "Feed de inteligência", en: "Intelligence feed", es: "Feed de inteligencia", fr: "Flux de renseignement" }),
+    description: pt ? "Notícias, advisories e pesquisas de segurança." : "Security news, advisories and research.",
+    icon: Rss,
+    premium: true,
   };
 
   const navGroups: NavGroup[] = [
     {
-      label: pt ? "Ferramentas" : "Tools",
-      items: [
-        {
-          path: "/phishing-analyzer",
-          label: tr({ pt: "Análise de Phishing", en: "Phishing Analysis", es: "Análisis de Phishing", fr: "Analyse de Phishing" }),
-          description: pt ? "E-mails suspeitos, links e anexos." : "Suspicious emails, links and attachments.",
-          icon: Mail,
-        },
-        {
-          path: "/attack-surface",
-          label: tr({ pt: "Superfície de Ataque", en: "Attack Surface", es: "Superficie de Ataque", fr: "Surface d'Attaque" }),
-          description: pt ? "Ativos expostos na internet." : "Assets exposed to the internet.",
-          icon: Radar,
-        },
-      ],
-    },
-    {
-      label: pt ? "Inteligência" : "Intel",
+      label: pt ? "Pesquisa e contexto" : "Research and context",
       items: [
         {
           path: "/knowledge",
-          label: tr({ pt: "Biblioteca de Fontes", en: "Source Library", es: "Biblioteca de Fuentes", fr: "Bibliothèque de Sources" }),
+          label: tr({ pt: "Coleções", en: "Collections", es: "Colecciones", fr: "Collections" }),
           description: pt ? "Notícias e relatórios salvos." : "Saved news and reports.",
           icon: Lightbulb,
           premium: true,
         },
         {
           path: "/relatorios",
-          label: tr({ pt: "Geração de Relatórios", en: "Report Generation", es: "Generación de Informes", fr: "Génération de Rapports" }),
+          label: tr({ pt: "Relatórios", en: "Reports", es: "Informes", fr: "Rapports" }),
           description: pt ? "Resumo pronto a partir de um link." : "Ready-made summary from a link.",
           icon: FileSearch,
-          premium: true,
-        },
-        {
-          path: "/newsletter",
-          label: tr({ pt: "Notícias de Segurança", en: "Security News", es: "Noticias de Seguridad", fr: "Actualités Sécurité" }),
-          description: pt ? "Notícias de segurança da semana." : "This week's security news.",
-          icon: Database,
           premium: true,
         },
         {
@@ -137,7 +113,7 @@ export function useNavCatalog() {
       ],
     },
     {
-      label: pt ? "Gestão de Vulnerabilidades" : "Vulnerability Management",
+      label: pt ? "Vulnerabilidades e correções" : "Vulnerabilities and patches",
       items: [
         {
           path: "/cves",
@@ -159,6 +135,24 @@ export function useNavCatalog() {
         },
       ],
     },
+    {
+      label: pt ? "Ferramentas de apoio" : "Supporting tools",
+      items: [
+        { path: "/analyzer", label: pt ? "Consulta de indicadores" : "Indicator lookup", description: pt ? "IPs, domínios, URLs e hashes." : "IPs, domains, URLs and hashes.", icon: Search },
+        {
+          path: "/phishing-analyzer",
+          label: tr({ pt: "Análise de Phishing", en: "Phishing Analysis", es: "Análisis de Phishing", fr: "Analyse de Phishing" }),
+          description: pt ? "E-mails suspeitos, links e anexos." : "Suspicious emails, links and attachments.",
+          icon: Mail,
+        },
+        {
+          path: "/attack-surface",
+          label: tr({ pt: "Superfície de Ataque", en: "Attack Surface", es: "Superficie de Ataque", fr: "Surface d'Attaque" }),
+          description: pt ? "Ativos expostos na internet." : "Assets exposed to the internet.",
+          icon: Radar,
+        },
+      ],
+    },
   ];
 
   return { homeItem, navGroups };
@@ -172,8 +166,7 @@ export function Header({ actions, logoAddon, onLogoClick, showBackButton = false
 
   const pt = language === "pt";
   const current = [homeItem, ...navGroups.flatMap((g) => g.items)].find((i) => isRouteActive(i.path, pathname));
-  // Logado, a casa e a busca; deslogado, e a landing. A logo nunca joga quem
-  // ja entrou de volta pra pagina de venda.
+  // Autenticado, a entrada principal é o feed de inteligência.
   const homePath = auth.authenticated ? homeItem.path : "/";
 
   const launcherCard = (item: NavItem) => {
@@ -235,59 +228,49 @@ export function Header({ actions, logoAddon, onLogoClick, showBackButton = false
         {logoAddon}
 
         <div className="ml-auto flex shrink-0 items-center gap-1.5">
+          <nav aria-label={pt ? "Fluxo de inteligência" : "Intelligence workflow"} className="mr-2 hidden items-center gap-4 text-xs font-semibold lg:flex">
+            {[
+              ["/newsletter", pt ? "Feed" : "Feed"],
+              ["/knowledge", pt ? "Coleções" : "Collections"],
+              ["/relatorios", pt ? "Relatórios" : "Reports"],
+            ].map(([path, label]) => (
+              <Link key={path} to={path} className={cn("transition-colors hover:text-primary", isRouteActive(path, pathname) ? "text-primary" : "text-muted-foreground")}>{label}</Link>
+            ))}
+          </nav>
           {actions}
 
-          {/* Engrenagem: administracao em cima, conta embaixo, sair por ultimo */}
+          {/* Configurações tem uma única entrada; as seções ficam na própria página. */}
           {!authLoading && auth.authenticated && (
-            <DropdownMenu>
-              <Tooltip delayDuration={100}>
-                <TooltipTrigger asChild>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="icon" className="h-8 w-8 rounded-md text-muted-foreground">
-                      <SettingsIcon className="h-4 w-4" />
-                      <span className="sr-only">{pt ? "Configurações" : "Settings"}</span>
-                    </Button>
-                  </DropdownMenuTrigger>
-                </TooltipTrigger>
-                <TooltipContent>{pt ? "Configurações" : "Settings"}</TooltipContent>
-              </Tooltip>
-              <DropdownMenuContent align="end" className="w-60">
-                {auth.isAdmin && (
-                  <>
-                    <DropdownMenuItem asChild>
-                      <Link to="/settings?section=admin">{pt ? "Acesso premium" : "Premium access"}</Link>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem asChild>
-                      <Link to="/vendors">{pt ? "Fontes e integrações" : "Sources and integrations"}</Link>
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                  </>
-                )}
-                <DropdownMenuItem asChild>
-                  <Link to="/settings?section=api-keys">{pt ? "Chaves de API" : "API keys"}</Link>
-                </DropdownMenuItem>
-                <DropdownMenuItem asChild>
-                  <Link to="/settings">{pt ? "Minhas preferencias" : "My preferences"}</Link>
-                </DropdownMenuItem>
-                <DropdownMenuItem asChild>
-                  <Link to="/profile">{pt ? "Perfil" : "Profile"}</Link>
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onSelect={() => signOut()}>
-                  <LogOut className="h-4 w-4" /> {pt ? "Sair" : "Sign out"}
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <Tooltip delayDuration={100}>
+              <TooltipTrigger asChild>
+                <Button asChild variant="ghost" size="icon" className="h-8 w-8 rounded-md text-muted-foreground">
+                  <Link to="/settings">
+                    <SettingsIcon className="h-4 w-4" />
+                    <span className="sr-only">{pt ? "Configurações" : "Settings"}</span>
+                  </Link>
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>{pt ? "Configurações" : "Settings"}</TooltipContent>
+            </Tooltip>
           )}
 
           {!authLoading &&
             (auth.authenticated ? (
-              <Link to="/profile" className="flex items-center rounded-md px-1 py-1 hover:bg-secondary">
-                <Avatar className="h-7 w-7 border border-border">
-                  <AvatarImage src={`https://github.com/${auth.login}.png?size=64`} alt={auth.login} />
-                  <AvatarFallback className="text-[10px] font-semibold">{auth.login?.[0]?.toUpperCase() ?? "?"}</AvatarFallback>
-                </Avatar>
-              </Link>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button type="button" aria-label={pt ? "Conta" : "Account"} className="flex items-center rounded-md p-1 hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                    <Avatar className="h-7 w-7 border border-border">
+                      <AvatarImage src={`https://github.com/${auth.login}.png?size=64`} alt={auth.login} />
+                      <AvatarFallback className="text-[10px] font-semibold">{auth.login?.[0]?.toUpperCase() ?? "?"}</AvatarFallback>
+                    </Avatar>
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-40 rounded-sm">
+                  <DropdownMenuItem asChild><Link to="/profile">{pt ? "Conta" : "Account"}</Link></DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onSelect={() => signOut()}><LogOut className="h-4 w-4" />{pt ? "Sair" : "Sign out"}</DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             ) : (
               <>
                 <Button variant="ghost" size="sm" asChild className="h-8 px-2 text-xs">

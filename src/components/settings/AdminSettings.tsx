@@ -60,17 +60,15 @@ export function AdminSettings() {
   return (
     <div className="flex flex-col gap-5">
       <div>
-        <h2 className="text-xl font-semibold tracking-tight">{pt ? "Administração" : "Administration"}</h2>
+        <h2 className="text-sm font-semibold">{pt ? "Administração" : "Administration"}</h2>
         <p className="mt-1.5 text-sm text-muted-foreground">{pt ? "Controle o acesso e acompanhe os serviços da plataforma." : "Control access and monitor platform services."}</p>
       </div>
 
       <AllowlistManager />
 
-      <Card className="rounded-xl shadow-none">
-        <CardContent className="flex items-start gap-3 p-5 sm:p-6">
-          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-secondary">
-            <Unlock className="h-4 w-4 text-muted-foreground" />
-          </span>
+      <Card className="rounded-sm shadow-none">
+        <CardContent className="flex items-start gap-3 p-4">
+          <Unlock className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 text-sm font-semibold" id="premium-access-heading">
               {pt ? "Premium para todas as contas" : "Premium for every account"}
@@ -90,12 +88,10 @@ export function AdminSettings() {
         </CardContent>
       </Card>
 
-      <Card className="overflow-hidden rounded-xl shadow-none">
+      <Card className="overflow-hidden rounded-sm shadow-none">
         <CardContent className="p-0">
-          <div className="flex items-start gap-3 border-b border-border p-5 sm:p-6">
-            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-secondary">
-              <Plug className="h-4 w-4 text-muted-foreground" />
-            </span>
+          <div className="flex items-start gap-3 border-b border-border p-4">
+            <Plug className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2 text-sm font-semibold">
                 {pt ? "Serviços de inteligência" : "Intelligence services"}

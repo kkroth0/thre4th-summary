@@ -57,15 +57,14 @@ export function explainCorrelation(story) {
         for (const hit of sharedValues(pairs)) evidence.push({ type, ...hit });
     }
 
-    // Actor/malware are only unioned at story level (see newStory() in
-    // newsStories.js — deliberately not tracked per source), so the practical
-    // claim here is coarser: "this entity is on a story with N sources", not a
-    // per-source count. Still real evidence, just not the >=2-of-N kind above.
-    const allLinks = story.sources.map((s) => s.link).filter(Boolean);
+    // Legacy stories without per-source attribution are not evidence that
+    // every publication mentioned an entity. Only actual shared mentions count.
     const entities = [...(story.actors || []), ...(story.malware || []), ...(story.campaigns || [])];
-    for (const actor of story.actors || []) evidence.push({ type: 'actor', value: actor.name, sourceLinks: allLinks });
-    for (const m of story.malware || []) evidence.push({ type: 'malware', value: m.name, sourceLinks: allLinks });
-
+    for (const [field, type] of [["actors", "actor"], ["malware", "malware"]]) {
+        const names = new Map((story[field] || []).map((entity) => [entity.id, entity.name]));
+        const pairs = story.sources.flatMap((source) => (source[field] || []).map((entity) => ({ value: entity.id, link: source.link })));
+        for (const hit of sharedValues(pairs)) evidence.push({ type, ...hit, value: names.get(hit.value) || hit.value });
+    }
     // TTP ids are per-source too (story.sources[].ttps) — real >=2-of-N count,
     // same precision as CVE/campaign/IOC.
     const ttpPairs = story.sources.flatMap((s) => (s.ttps || []).map((id) => ({ value: id, link: s.link })));

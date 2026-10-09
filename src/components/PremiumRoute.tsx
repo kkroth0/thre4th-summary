@@ -12,20 +12,20 @@ type Feature = "threat-brief" | "advisory-feed" | "exposure-watchlist" | "knowle
 
 const COPY: Record<Feature, { pt: [string, string]; en: [string, string] }> = {
   "threat-brief": {
-    pt: ["Geração de Relatórios", "Resumo pronto a partir de um link."],
-    en: ["Report Generation", "Ready-made summary from a link."],
+    pt: ["Relatórios", "Produza resumos a partir das suas fontes."],
+    en: ["Reports", "Produce summaries from your sources."],
   },
   "advisory-feed": {
-    pt: ["Notícias de Segurança", "Notícias de segurança da semana."],
-    en: ["Security News", "This week's security news."],
+    pt: ["Feed de inteligência", "Notícias, advisories e pesquisas de segurança."],
+    en: ["Intelligence feed", "Security news, advisories and research."],
   },
   "exposure-watchlist": {
     pt: ["Superfície de Ataque", "Ativos expostos na internet."],
     en: ["Attack Surface", "Assets exposed to the internet."],
   },
   knowledge: {
-    pt: ["Biblioteca de Fontes", "Notícias e relatórios salvos."],
-    en: ["Source Library", "Saved news and reports."],
+    pt: ["Coleções", "Publicações salvas para sua pesquisa CTI."],
+    en: ["Collections", "Saved publications for your CTI research."],
   },
 };
 

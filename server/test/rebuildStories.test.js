@@ -31,17 +31,19 @@ test('o dry-run não toca no arquivo', () => {
 // As duas metades do conserto, no mesmo arquivo: o card errado se desfaz, e o
 // card que estava certo não perde o rótulo que veio da descrição do artigo.
 test('reagrupa, guarda .bak e devolve a categoria de quem continuou inteiro', () => {
+    const date = (days) => new Date(Date.now() - days * 86400000).toISOString();
+    const earlier = date(6), later = date(1), incident = date(2);
     const { file, result } = run([
         {
             // Duas edições de release do mesmo veículo em dias diferentes: as
             // regras atuais separam. A categoria aqui é do card errado e não
             // pode seguir nenhuma das metades.
             id: 'chrome', title: 'Chrome for Android Update',
-            firstSeen: '2026-08-06T12:00:00Z', lastSeen: '2026-08-11T12:00:00Z',
+            firstSeen: earlier, lastSeen: later,
             cves: [], actors: [], categories: ['Microsoft'], primaryCategory: 'Microsoft',
             sources: [
-                source({ source: 'Chrome Releases', link: 'https://chrome.example/1', title: 'Chrome Beta for Android Update', pubDate: '2026-08-06T12:00:00Z' }),
-                source({ source: 'Chrome Releases', link: 'https://chrome.example/2', title: 'Chrome for Android Update', pubDate: '2026-08-11T12:00:00Z' }),
+                source({ source: 'Chrome Releases', link: 'https://chrome.example/1', title: 'Chrome Beta for Android Update', pubDate: earlier }),
+                source({ source: 'Chrome Releases', link: 'https://chrome.example/2', title: 'Chrome for Android Update', pubDate: later }),
             ],
         },
         {
@@ -49,9 +51,9 @@ test('reagrupa, guarda .bak e devolve a categoria de quem continuou inteiro', ()
             // que a fonte gravada não guarda. Sem a devolução, o card perderia
             // a categoria no reagrupamento.
             id: 'op', title: 'Ataque derruba operadora regional',
-            firstSeen: '2026-08-10T12:00:00Z', lastSeen: '2026-08-10T12:00:00Z',
+            firstSeen: incident, lastSeen: incident,
             cves: [], actors: [], categories: ['Ransomware'], primaryCategory: 'Ransomware',
-            sources: [source({ source: 'CISO Advisor BR', link: 'https://ciso.example/op', title: 'Ataque derruba operadora regional', pubDate: '2026-08-10T12:00:00Z' })],
+            sources: [source({ source: 'CISO Advisor BR', link: 'https://ciso.example/op', title: 'Ataque derruba operadora regional', pubDate: incident })],
         },
     ], ['--write']);
 
@@ -71,10 +73,7 @@ test('reagrupa, guarda .bak e devolve a categoria de quem continuou inteiro', ()
 // reconstruir esse campo aqui, um rebuild depois de mudar a regra de merge por
 // IOC perderia essa evidência em silêncio — real lacuna achada lendo o arquivo.
 test('IOC da fonte gravada é reconstruído e permite remesclar por ele', () => {
-    // rebuildStories.mjs chama mergeIntoStories com `new Date()` real, sem
-    // receber `now` por parâmetro — datas fixas no passado cairiam fora da
-    // janela de 14 dias (STORY_ACTIVE_DAYS) e nunca chegariam a comparar entre
-    // si, mascarando o próprio sinal que este teste quer verificar.
+    // Keep fixture dates inside retention regardless of when this test runs.
     const hash = 'c'.repeat(64);
     const pubA = new Date(Date.now() - 2 * 86400000).toISOString();
     const pubB = new Date(Date.now() - 1 * 86400000).toISOString();
@@ -101,4 +100,26 @@ test('IOC da fonte gravada é reconstruído e permite remesclar por ele', () => 
 
     assert.equal(result.length, 1, 'o hash compartilhado devia remesclar as duas em uma história só');
     assert.equal(result[0].sources.length, 2);
+});
+
+test('rebuild preserva atribuição da publicação e aliases de histórias inteiras', () => {
+    const pubDate = new Date(Date.now() - 86400000).toISOString();
+    const actor = { id: 'actor-body', name: 'Ator identificado no corpo' };
+    const campaign = { id: 'campaign-body', name: 'Operação identificada no corpo' };
+    const { result } = run([{
+        id: 'legacy-event', aliases: ['previous-event'], title: 'Investigação em andamento',
+        firstSeen: pubDate, lastSeen: pubDate, cves: [], actors: [actor],
+        malware: [], campaigns: [campaign], categories: ['Ransomware'],
+        sources: [source({
+            link: 'https://x.example/body', title: 'Investigação em andamento', pubDate,
+            actors: [actor], malware: [], campaigns: [campaign.id],
+            newsCategories: ['Ransomware'], contentHash: 'a'.repeat(64), extractionVersion: 'feed-v2',
+        })],
+    }], ['--write']);
+    assert.deepEqual(result[0].sources[0].actors, [actor]);
+    assert.deepEqual(result[0].sources[0].campaigns, [campaign.id]);
+    assert.equal(result[0].sources[0].contentHash, 'a'.repeat(64));
+    assert.equal(result[0].sources[0].extractionVersion, 'feed-v2');
+    assert.ok(result[0].aliases.includes('legacy-event'));
+    assert.ok(result[0].aliases.includes('previous-event'));
 });

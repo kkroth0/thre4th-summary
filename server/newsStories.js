@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { canonicalArticleUrl } from './feedCollector.js';
 import { NEWS_CATEGORIES } from './newsCategories.js';
 
 // The same story reaches us from Reuters, BleepingComputer and CISA within
@@ -220,6 +221,7 @@ const signals = (story) => {
         series: new Set(story.sources.map(seriesKey)),
         outlets: new Set(story.sources.map((source) => source.source)),
         days: new Set(story.sources.map((source) => dayOf(source.pubDate))),
+        recurring: story.sources.some((source) => ROUNDUP.test(source.title) || /\b(?:stable|beta|canary|dev)\b.*\b(?:channel|update)\b/i.test(source.title)),
     };
 };
 
@@ -234,7 +236,7 @@ const isSameStory = (a, b) => {
     // série, não a mesma notícia. Veta antes das três regras — um merge errado
     // custa mais que um agrupamento perdido, e o boletim do dia seguinte
     // apareceria enterrado dentro do card do dia anterior.
-    if (overlaps(a.series, b.series) && !overlaps(a.days, b.days)) return false;
+    if ((a.recurring || b.recurring) && overlaps(a.series, b.series) && !overlaps(a.days, b.days)) return false;
 
     if (overlaps(a.cves, b.cves)) return true;
     // A named campaign ("Operation Dream Job") identifies one specific bounded
@@ -246,6 +248,10 @@ const isSameStory = (a, b) => {
     if (overlaps(a.campaigns, b.campaigns)) return true;
     // Hash/domain/URL: sufficient alone, same tier as CVE (see iocsOf above).
     if (overlaps(a.strongIocs, b.strongIocs)) return true;
+    // Two scoped articles identifying different vulnerabilities need stronger
+    // evidence than a similar product headline, actor or technique. A campaign
+    // or attacker infrastructure can still prove a shared multi-CVE incident.
+    if (a.cves.size && b.cves.size) return false;
     // Malware never sufficient alone, even for a nonce-word family name: a
     // popular commodity family (LummaC2/AsyncRAT/RedLine) gets an unrelated
     // headline most weeks (new technique, takedown, new victim) — treating
@@ -265,7 +271,9 @@ const isSameStory = (a, b) => {
 };
 
 const newStory = (item) => ({
-    id: storyId(item.link),
+    id: storyId(canonicalArticleUrl(item.link) || item.link),
+    aliases: [],
+    correlationVersion: 2,
     title: item.title,
     firstSeen: item.pubDate,
     lastSeen: item.pubDate,
@@ -282,6 +290,10 @@ const newStory = (item) => ({
     sources: [{
         source: item.source, link: item.link, title: item.title,
         pubDate: item.pubDate, score: item.score || 0, severity: item.severity || null,
+        actors: [...(item.actors || [])], malware: [...(item.malware || [])],
+        newsCategories: [...(item.newsCategories || [])],
+        vendors: [...(item.vendors || [])], assets: [...(item.assets || [])],
+        contentHash: item.contentHash || null, extractionVersion: item.extractionVersion || null,
         // Por fonte, não só somados na story: é o que permite separar a matéria
         // sobre uma falha do apanhado que lista dez. Campanha segue o mesmo
         // motivo (ids só, como os CVEs — os objetos completos ficam na union
@@ -313,6 +325,8 @@ const absorb = (target, extra) => {
     const merged = {
         ...target,
         id: older.id,
+        aliases: [...new Set([...(target.aliases || []), ...(extra.aliases || []), target.id, extra.id])].filter((id) => id !== older.id),
+        correlationVersion: 2,
         firstSeen: older.firstSeen,
         lastSeen: target.lastSeen >= extra.lastSeen ? target.lastSeen : extra.lastSeen,
         cves: [...new Set([...target.cves, ...extra.cves])],
@@ -348,36 +362,65 @@ const absorb = (target, extra) => {
 
 export function mergeIntoStories(stories, items, now) {
     const cutoff = now.getTime() - STORY_RETENTION_DAYS * DAY;
-    const activeSince = now.getTime() - STORY_ACTIVE_DAYS * DAY;
     let result = (Array.isArray(stories) ? stories : []).filter((story) => new Date(story.lastSeen).getTime() >= cutoff);
-
-    const known = new Set(result.flatMap((story) => story.sources.map((source) => source.link)));
-
-    // Sorted by date so the merge order — and therefore the surviving id — does
-    // not depend on the order the feeds happened to answer in.
-    const incoming = (Array.isArray(items) ? items : [])
-        .filter((item) => item && item.link && !known.has(item.link))
+    const knownSources = new Map(result.flatMap((story) => story.sources.map((source) => [canonicalArticleUrl(source.link) || source.link, source])));
+    const signalCache = new WeakMap();
+    const sourceSignals = (story, source) => {
+        if (signalCache.has(source)) return signalCache.get(source);
+        const value = signals({
+            ...story, sources: [source], cves: source.cves || [],
+            actors: source.actors || [], malware: source.malware || [],
+            campaigns: (story.campaigns || []).filter((campaign) => (source.campaigns || []).includes(campaign.id)),
+        });
+        signalCache.set(source, value);
+        return value;
+    };
+    const directMatch = (story, candidate) => story.sources.some((source) => {
+        const article = candidate.sources[0];
+        const gap = Math.abs(new Date(source.pubDate).getTime() - new Date(article.pubDate).getTime());
+        return gap <= STORY_ACTIVE_DAYS * DAY && isSameStory(sourceSignals(story, source), sourceSignals(candidate, article));
+    });
+    const summarize = (story) => {
+        const sources = story.sources;
+        const byId = (field) => [...new Map(sources.flatMap((source) => source[field] || []).map((entity) => [entity.id, entity])).values()];
+        const categories = [...new Set(sources.flatMap((source) => source.newsCategories || []))];
+        const ordered = NEWS_CATEGORIES.filter((category) => categories.includes(category));
+        const loudest = sources.reduce((best, source) => source.score > best.score ? source : best, sources[0]);
+        return { ...story, correlationVersion: 2, title: loudest.title,
+            firstSeen: sources.map((source) => source.pubDate).sort()[0],
+            lastSeen: sources.map((source) => source.pubDate).sort().at(-1),
+            score: Math.max(...sources.map((source) => source.score || 0)),
+            cves: [...new Set(sources.flatMap((source) => source.cves || []))],
+            actors: sources.every((source) => Array.isArray(source.actors)) ? byId("actors") : story.actors,
+            malware: sources.every((source) => Array.isArray(source.malware)) ? byId("malware") : story.malware,
+            campaigns: (story.campaigns || []).filter((campaign) => sources.some((source) => (source.campaigns || []).includes(campaign.id))),
+            categories: sources.every((source) => Array.isArray(source.newsCategories)) ? ordered : story.categories,
+            primaryCategory: sources.every((source) => Array.isArray(source.newsCategories)) ? ordered[0] || null : story.primaryCategory,
+        };
+    };
+    const incoming = (Array.isArray(items) ? items : []).filter((item) => item?.link && new Date(item.pubDate).getTime() >= cutoff)
         .sort((a, b) => String(a.pubDate).localeCompare(String(b.pubDate)) || String(a.link).localeCompare(String(b.link)));
-
     for (const item of incoming) {
-        if (known.has(item.link)) continue;
-        known.add(item.link);
-
-        let candidate = newStory(item);
-        const rest = [];
-        for (const story of result) {
-            const active = new Date(story.lastSeen).getTime() >= activeSince;
-            // Recomputed each round: absorbing one story hands the candidate a CVE
-            // or an actor that can make the next story match too.
-            if (active && isSameStory(signals(story), signals(candidate))) {
-                candidate = absorb(story, candidate);
-            } else {
-                rest.push(story);
-            }
+        const link = canonicalArticleUrl(item.link) || item.link;
+        const direct = newStory({ ...item, link });
+        if (JSON.stringify(knownSources.get(link)) === JSON.stringify(direct.sources[0])) continue;
+        const ownerIndex = result.findIndex((story) => story.sources.some((source) => (canonicalArticleUrl(source.link) || source.link) === link));
+        let candidate = direct;
+        if (ownerIndex >= 0) {
+            const owner = result[ownerIndex];
+            candidate = summarize({ ...owner,
+                campaigns: [...new Map([...(owner.campaigns || []), ...(item.campaigns || [])].map((campaign) => [campaign.id, campaign])).values()],
+                sources: owner.sources.map((source) => (canonicalArticleUrl(source.link) || source.link) === link ? direct.sources[0] : source),
+            });
+            result = result.filter((_, index) => index !== ownerIndex);
         }
-        rest.push(candidate);
-        result = rest;
+        // Every match must be supported by the incoming article itself.
+        // Signals inherited from one merge cannot manufacture the next merge.
+        const matches = result.filter((story) => directMatch(story, direct)).sort((a, b) => a.firstSeen.localeCompare(b.firstSeen) || a.id.localeCompare(b.id));
+        const ids = new Set(matches.map((story) => story.id));
+        for (const story of matches) candidate = absorb(story, candidate);
+        result = [...result.filter((story) => !ids.has(story.id)), candidate];
+        for (const source of candidate.sources) knownSources.set(canonicalArticleUrl(source.link) || source.link, source);
     }
-
     return result.sort((a, b) => String(b.lastSeen).localeCompare(String(a.lastSeen)) || a.id.localeCompare(b.id));
 }

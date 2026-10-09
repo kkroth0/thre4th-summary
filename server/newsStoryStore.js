@@ -20,7 +20,7 @@ export function createStoryStore({ filePath, readFileSync, writeJsonAtomic }) {
             stories = value;
             return stories;
         },
-        get: (id) => stories.find((story) => story.id === id) || null,
+        get: (id) => stories.find((story) => story.id === id || (story.aliases || []).includes(id)) || null,
         list({ category, actor, days, limit, now = new Date() } = {}) {
             let result = stories;
             if (category) result = result.filter((story) => (story.categories || []).includes(category));

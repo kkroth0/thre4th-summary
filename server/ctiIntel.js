@@ -8,6 +8,8 @@
  * CVE IDs) outweigh fuzzy keyword matches.
  */
 import * as cheerio from 'cheerio';
+import { VENDOR_TERMS } from './vendorCatalog.js';
+import { matchVendors } from './vendorMatch.js';
 
 // ─── Category taxonomy (ported from data/cti_categories.json) ──────────────
 export const CTI_CATEGORIES = {
@@ -46,7 +48,7 @@ export const CTI_CATEGORIES = {
     },
     CAT7_CRITICAL_VENDORS: {
         score: 10, label: 'Critical Vendor', exact_match: true,
-        terms: ['microsoft', 'aws', 'azure', 'google cloud', 'gcp', 'vmware', 'fortinet', 'cisco', 'palo alto'],
+        terms: VENDOR_TERMS,
     },
     CAT8_SECTORS: {
         score: 20, label: 'Strategic Sector',
@@ -120,8 +122,13 @@ for (const [id, data] of Object.entries(CTI_CATEGORIES)) {
         if (data.substring_terms?.length) REGIONAL_SUB = buildRe(data.substring_terms, false);
         continue;
     }
-    if (!data.terms?.length) continue;
-    const entry = { id, label: data.label, score: data.score, re: buildRe(data.terms, !!data.exact_match) };
+    // Vendor names have punctuation and per-supplier attribution. Their matcher
+    // applies the same catalog to both score and all returned assets.
+    if (!data.terms?.length || id === 'CAT7_CRITICAL_VENDORS') continue;
+    const re = id === 'CAT5_GROUPS'
+        ? new RegExp('\\b(?:' + data.terms.filter((term) => !['unc', 'storm-'].includes(term)).map(escapeRe).join('|') + ')\\b|\\b(?:unc\\d{2,6}|storm-\\d{2,6})\\b', 'i')
+        : buildRe(data.terms, !!data.exact_match);
+    const entry = { id, label: data.label, score: data.score, re };
     (id === 'NOISE_PENALTY' ? NOISE_COMPILED : COMPILED).push(entry);
 }
 
@@ -450,7 +457,8 @@ export function scoreArticle(text, weightBoost = 0) {
     let raw = 0;
     const reasons = [];
     const categories = [];
-    const assets = [];
+    const vendors = matchVendors(text);
+    const assets = vendors.map((vendor) => vendor.name);
 
     // Keyword categories
     for (const c of COMPILED) {
@@ -459,8 +467,13 @@ export function scoreArticle(text, weightBoost = 0) {
         raw += c.score;
         categories.push(c.label);
         reasons.push(`${c.label} (${m[0]})`);
-        // Surface the matched critical vendor as a "monitored asset"
-        if (c.id === 'CAT7_CRITICAL_VENDORS') assets.push(m[0]);
+    }
+
+    if (vendors.length) {
+        const { score, label } = CTI_CATEGORIES.CAT7_CRITICAL_VENDORS;
+        raw += score;
+        categories.push(label);
+        reasons.push(`${label} (${assets.join(', ')})`);
     }
 
     // Regional relevance (BR/LATAM)
@@ -498,7 +511,7 @@ export function scoreArticle(text, weightBoost = 0) {
     // nothing above found a concrete threat-intel signal — a genuine advisory
     // that happens to mention "webinar" or "curso" in passing shouldn't be
     // tanked by the same rule meant to filter a pure career/marketing post.
-    const hasConcreteSignal = categories.length > 0 || cves.length > 0 || (cvss !== null && cvss >= 7.0);
+    const hasConcreteSignal = categories.some((category) => !['Regional Radar', 'Critical Vendor', 'Low Interest'].includes(category)) || cves.length > 0 || (cvss !== null && cvss >= 7.0);
     if (!hasConcreteSignal) {
         for (const c of NOISE_COMPILED) {
             const m = c.re.exec(lower);
@@ -532,6 +545,7 @@ export function scoreArticle(text, weightBoost = 0) {
         ttps: matchLabels(lower, TTP_RULES),
         phishingTechniques: matchLabels(lower, PHISHING_TECHNIQUE_RULES),
         assets: [...new Set(assets)],
+        vendors,
     };
 }
 

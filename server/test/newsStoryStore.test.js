@@ -5,6 +5,14 @@ import os from 'node:os';
 import path from 'node:path';
 import { createStoryStore } from '../newsStoryStore.js';
 
+test('IDs absorvidos continuam resolvendo depois de salvar e recarregar o evento', () => {
+    let saved = [];
+    const options = { filePath: 'unused', readFileSync: () => JSON.stringify(saved), writeJsonAtomic: (_, value) => { saved = value; } };
+    const store = createStoryStore(options);
+    store.save([{ id: 'current', aliases: ['previous'], sources: [] }]);
+    assert.equal(createStoryStore(options).get('previous').id, 'current');
+});
+
 const writeJsonAtomic = (filePath, value) => fs.writeFileSync(filePath, JSON.stringify(value));
 const tempFile = () => path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'news-stories-')), '.news-stories.json');
 
