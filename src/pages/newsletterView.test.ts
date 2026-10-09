@@ -25,6 +25,28 @@ test("keeps matching advisories from different months", () => {
   assert.deepEqual(result.map((item) => item.title), ["July item", "June item"]);
 });
 
+test("source filtra por fonte exata; 'all' não filtra nada", () => {
+  const advisories = [
+    { title: "A", description: "", source: "BleepingComputer", pubDate: "2026-07-01", severity: "High" },
+    { title: "B", description: "", source: "The Hacker News", pubDate: "2026-07-01", severity: "High" },
+  ];
+  const base = { search: "", severity: "all", kevOnly: false, sortByRelevance: false };
+
+  assert.deepEqual(
+    filterNewsletterAdvisories(advisories, { ...base, source: "BleepingComputer" }).map((i) => i.title),
+    ["A"],
+  );
+  assert.deepEqual(
+    filterNewsletterAdvisories(advisories, { ...base, source: "all" }).map((i) => i.title),
+    ["A", "B"],
+  );
+  assert.deepEqual(
+    filterNewsletterAdvisories(advisories, base).map((i) => i.title),
+    ["A", "B"],
+    "source omitido não filtra",
+  );
+});
+
 test("timeRange corta pelo relógio informado, não pelo do sistema", () => {
   const now = new Date("2026-08-10T12:00:00.000Z");
   const advisories = [
@@ -266,6 +288,20 @@ test("período vira chip removível quando diferente de 'all', em pt e en", () =
   assert.deepEqual(activeFilterChips(state, true), [{ key: "timeRange", label: "Últimas 24h" }]);
   assert.deepEqual(activeFilterChips(state, false), [{ key: "timeRange", label: "Last 24h" }]);
   assert.deepEqual(activeFilterChips({ ...state, timeRange: "all" }, true), []);
+});
+
+test("fonte vira chip removível quando diferente de 'all', e não aparece quando ausente/'all'", () => {
+  const base = { severity: "all", kevOnly: false, orgOnly: false, sortByRelevance: false, search: "" };
+  assert.deepEqual(
+    activeFilterChips({ ...base, source: "BleepingComputer" }, true),
+    [{ key: "source", label: "Fonte: BleepingComputer" }],
+  );
+  assert.deepEqual(
+    activeFilterChips({ ...base, source: "BleepingComputer" }, false),
+    [{ key: "source", label: "Source: BleepingComputer" }],
+  );
+  assert.deepEqual(activeFilterChips({ ...base, source: "all" }, true), []);
+  assert.deepEqual(activeFilterChips(base, true), []);
 });
 
 // ─── EST-05: avisos de distribuição repetidos no mesmo dia ──────────────────

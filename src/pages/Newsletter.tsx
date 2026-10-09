@@ -194,6 +194,7 @@ const Newsletter = () => {
   const [loadingNews, setLoadingNews] = useState(true);
   const [newsError, setNewsError] = useState<string | null>(null);
   const [selectedSeverity, setSelectedSeverity] = useState<string>("all");
+  const [selectedSource, setSelectedSource] = useState<string>("all");
   const [sortByRelevance, setSortByRelevance] = useState<boolean>(false);
   const [kevOnly, setKevOnly] = useState<boolean>(false);
   const [timeRange, setTimeRange] = useState<TimeRange>("all");
@@ -553,10 +554,18 @@ const Newsletter = () => {
   const filteredAdvisories = useMemo(() => annotateOrg(filterNewsletterAdvisories(advisories, {
     search: searchNews,
     severity: selectedSeverity,
+    source: selectedSource,
     kevOnly,
     sortByRelevance,
     timeRange,
-  }), orgModel), [advisories, searchNews, selectedSeverity, sortByRelevance, kevOnly, timeRange, orgModel]);
+  }), orgModel), [advisories, searchNews, selectedSeverity, selectedSource, sortByRelevance, kevOnly, timeRange, orgModel]);
+
+  // Fontes disponíveis no feed atual (não no filtrado — senão escolher uma
+  // fonte faria as outras desaparecerem da própria lista de opções).
+  const availableSources = useMemo(
+    () => [...new Set(advisories.map((item) => item.source).filter(Boolean))].sort((a, b) => a.localeCompare(b)),
+    [advisories],
+  );
 
   const [categoryFilter, setCategoryFilter] = useState("");
   // A lista de categorias cresce (9 hoje); só as com maior volume ficam à vista,
@@ -588,6 +597,7 @@ const Newsletter = () => {
   // How many filters are narrowing the feed — drives the badge on the Filters button.
   const activeFilterCount = [
     selectedSeverity !== "all",
+    selectedSource !== "all",
     sortByRelevance,
     kevOnly,
     orgOnly,
@@ -597,11 +607,12 @@ const Newsletter = () => {
   // ativo vira chip removível, para o leitor ver e desfazer sem reabrir o
   // popover — e para não achar que o feed está curto quando ele está filtrado.
   const filterChips = activeFilterChips(
-    { severity: selectedSeverity, kevOnly, orgOnly, sortByRelevance, search: searchNews, timeRange },
+    { severity: selectedSeverity, source: selectedSource, kevOnly, orgOnly, sortByRelevance, search: searchNews, timeRange },
     language === "pt",
   );
   const removeFilter = (key: string) => {
     if (key === "severity") setSelectedSeverity("all");
+    if (key === "source") setSelectedSource("all");
     if (key === "kevOnly") setKevOnly(false);
     if (key === "orgOnly") setOrgOnly(false);
     if (key === "sortByRelevance") setSortByRelevance(false);
@@ -610,6 +621,7 @@ const Newsletter = () => {
   };
   const clearFilters = () => {
     setSelectedSeverity("all");
+    setSelectedSource("all");
     setSortByRelevance(false);
     setKevOnly(false);
     setOrgOnly(false);
@@ -741,15 +753,15 @@ const Newsletter = () => {
               <Popover>
                 <PopoverTrigger asChild>
                   <Button
-                    variant={kevOnly || orgOnly ? "default" : "outline"}
+                    variant={kevOnly || orgOnly || selectedSource !== "all" ? "default" : "outline"}
                     size="sm"
                     className="h-9 gap-1.5 px-3 text-xs font-semibold"
                   >
                     <Filter className="h-3.5 w-3.5" />
                     {language === "pt" ? "Mais filtros" : "More filters"}
-                    {(kevOnly || orgOnly) && (
+                    {(kevOnly || orgOnly || selectedSource !== "all") && (
                       <Badge variant="secondary" className="ml-0.5 h-4 min-w-[16px] px-1 text-[10px] tabular-nums">
-                        {[kevOnly, orgOnly].filter(Boolean).length}
+                        {[kevOnly, orgOnly, selectedSource !== "all"].filter(Boolean).length}
                       </Badge>
                     )}
                   </Button>
@@ -768,6 +780,24 @@ const Newsletter = () => {
                     <AlertTriangle className="h-3.5 w-3.5" />
                     {language === "pt" ? "Só explorada ativamente (KEV)" : "Actively exploited only (KEV)"}
                   </Button>
+
+                  {availableSources.length > 0 && (
+                    <div className="space-y-1.5 border-t pt-3">
+                      <label className="text-xs font-medium text-muted-foreground">
+                        {language === "pt" ? "Fonte" : "Source"}
+                      </label>
+                      <select
+                        value={selectedSource}
+                        onChange={(event) => setSelectedSource(event.target.value)}
+                        className="w-full rounded-md border bg-background px-2 py-1.5 text-xs"
+                      >
+                        <option value="all">{language === "pt" ? "Todas as fontes" : "All sources"}</option>
+                        {availableSources.map((source) => (
+                          <option key={source} value={source}>{source}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
 
                   {orgProfiles.length > 0 && (
                     <div className="space-y-2 border-t pt-3">
@@ -1073,6 +1103,16 @@ const Newsletter = () => {
                             {enr?.title || card.title}
                           </a>
                         </h3>
+
+                        {/* Prévia do resumo que o próprio feed RSS já manda — só
+                            quando existe (bastante fonte não traz nenhum) e só
+                            fechado: expandido, o painel abaixo já mostra o texto
+                            inteiro (ou o resumo da análise, quando houver). */}
+                        {!isExpanded(card, featured) && item.description?.trim() && (
+                          <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">
+                            {item.description}
+                          </p>
+                        )}
 
                         {/* Faixa de identificadores: rótulo apagado, valor legível, um
                             filete entre os pares. Pílula para cada um enchia a linha de

@@ -21,6 +21,8 @@ export interface NewsletterFilterOptions {
   severity: string;
   kevOnly: boolean;
   sortByRelevance: boolean;
+  // "all" nunca filtra, igual a severity — mesma convenção, mesmo motivo.
+  source?: string;
   // Opcional: telas antigas que ainda não passam período continuam sem filtrar
   // por data, exatamente como hoje.
   timeRange?: TimeRange;
@@ -65,6 +67,7 @@ export const filterNewsletterAdvisories = <T extends NewsletterFilterItem>(
 
     if (!matchesSearch) return false;
     if (options.severity !== "all" && item.severity !== options.severity) return false;
+    if (options.source && options.source !== "all" && item.source !== options.source) return false;
     if (options.kevOnly && !item.kev) return false;
     // Item sem data parseável não é descartado pelo período — silenciar uma
     // notícia por falta de metadado é pior do que mostrá-la fora de hora.
@@ -286,6 +289,7 @@ export const severityIsUnexplained = (item: SeverityEvidenceItem): boolean =>
 
 export type NewsFilterState = {
   severity: string;
+  source?: string;
   kevOnly: boolean;
   orgOnly: boolean;
   sortByRelevance: boolean;
@@ -305,6 +309,9 @@ export function activeFilterChips(state: NewsFilterState, pt: boolean): ActiveFi
   const chips: ActiveFilterChip[] = [];
   if (state.severity && state.severity !== "all") {
     chips.push({ key: "severity", label: `${pt ? "Severidade" : "Severity"}: ${state.severity}` });
+  }
+  if (state.source && state.source !== "all") {
+    chips.push({ key: "source", label: `${pt ? "Fonte" : "Source"}: ${state.source}` });
   }
   if (state.kevOnly) chips.push({ key: "kevOnly", label: pt ? "Só KEV" : "KEV only" });
   if (state.orgOnly) chips.push({ key: "orgOnly", label: pt ? "Só da organização" : "Org only" });
