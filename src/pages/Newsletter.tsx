@@ -943,7 +943,10 @@ const Newsletter = () => {
                   }
                 />
               ) : (
-                <div className="grid grid-cols-1 items-start gap-2.5 lg:grid-cols-2">
+                // Sem items-start: a grade estica os dois cards da mesma linha pra
+                // bater a mesma altura — é o que reduz a variação de tamanho entre
+                // um card que expandiu e o vizinho que ficou fechado.
+                <div className="grid grid-cols-1 gap-2.5 lg:grid-cols-2">
                   {storyCards.map((card, idx) => {
                     const item = card.sources[0];
                     const enrichKey = enrichKeyOf(card);
@@ -957,7 +960,7 @@ const Newsletter = () => {
                       <div
                         key={idx}
                         className={cn(
-                          "rounded-lg border border-l-[3px] bg-card p-4 transition-colors hover:border-border/50",
+                          "flex h-full flex-col rounded-lg border border-l-[3px] bg-card p-4 transition-colors hover:border-border/50",
                           accent,
                           featured && "shadow-sm ring-1 ring-primary/10",
                         )}
@@ -1098,7 +1101,7 @@ const Newsletter = () => {
                             pela análise. Os títulos das fontes ficam como o veículo
                             publicou — é por eles que o analista reencontra a matéria
                             depois, e traduzir quebraria a busca. */}
-                        <h3 className={cn("mt-2 font-bold text-foreground", featured ? "text-lg leading-snug" : "text-base leading-snug")}>
+                        <h3 className={cn("mt-2 line-clamp-2 font-bold text-foreground", featured ? "text-lg leading-snug" : "text-base leading-snug")}>
                           <a href={item.link} target="_blank" rel="noopener noreferrer" className="hover:text-primary transition-colors">
                             {enr?.title || card.title}
                           </a>
