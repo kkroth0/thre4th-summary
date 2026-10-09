@@ -138,6 +138,7 @@ test('menção a linux kernel com CVE real ainda leva a penalidade de volume', (
     const withoutKernel = scoreArticle('CVE-2026-9999 fixed in some other package');
 
     assert.ok(withKernel.reasons.some((r) => r.startsWith('Low Interest')));
+    assert.ok(withKernel.score < withoutKernel.score);
 });
 
 // ─── phishingTechniques — pro dashboard de tendências de phishing ──────────
@@ -150,7 +151,6 @@ test('scoreArticle reconhece sub-técnicas de phishing, uma ou várias por artig
 
 test('scoreArticle sem vocabulário de phishing devolve lista vazia', () => {
     assert.deepEqual(scoreArticle('Ransomware group leaks stolen hospital records').phishingTechniques, []);
-    assert.ok(withKernel.score < withoutKernel.score);
 });
 
 // ─── Colapso das USN de kernel do Ubuntu ───────────────────────────────────
