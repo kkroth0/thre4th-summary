@@ -16,6 +16,7 @@ import {
     scoreArticle, localizeEnrichment, severityFromScore, extractIOCs, CTI_FEEDS,
     extractReadableText, collectArtifactLinks, githubArtifact, ARTIFACT_TEXT_FILE,
     protectTerms, restoreTerms, collapseKernelNotices, isTransientFeedError, isPureNoise,
+    ttpIdsFrom,
 } from './ctiIntel.js';
 import { actorTargeting } from './actorProfile.js';
 import { buildSoftwareIndex, buildActorNameIndex } from './actorSoftware.js';
@@ -57,6 +58,9 @@ import {
     selectDailyEdition,
 } from './dailyEditions.js';
 import { buildActorIndex, matchActors } from './actorMatch.js';
+import { buildMalwareIndex, matchMalware } from './malwareMatch.js';
+import { buildCampaignIndex, matchCampaigns } from './campaignMatch.js';
+import { explainCorrelation } from './correlationEvidence.js';
 import { categorize } from './newsCategories.js';
 import { mergeIntoStories } from './newsStories.js';
 import { parseFeed } from './feedParse.js';
@@ -246,6 +250,30 @@ const actorIndex = (() => {
     } catch (error) {
         console.error('actor index unavailable:', error.message);
         return buildActorIndex([]);
+    }
+})();
+
+// Same pattern, same reason: ~4000 malware-family names and aliases, indexed
+// once at boot rather than per article.
+const malwareIndex = (() => {
+    try {
+        const raw = JSON.parse(fs.readFileSync(path.join(__dirname, 'data', 'malware.json'), 'utf8'));
+        return buildMalwareIndex(Array.isArray(raw) ? raw : raw.malware);
+    } catch (error) {
+        console.error('malware index unavailable:', error.message);
+        return buildMalwareIndex([]);
+    }
+})();
+
+// Same pattern again: ~166 named operations (MITRE ATT&CK + Tidal Cyber),
+// indexed once at boot.
+const campaignIndex = (() => {
+    try {
+        const raw = JSON.parse(fs.readFileSync(path.join(__dirname, 'data', 'campaigns.json'), 'utf8'));
+        return buildCampaignIndex(Array.isArray(raw) ? raw : raw.campaigns);
+    } catch (error) {
+        console.error('campaign index unavailable:', error.message);
+        return buildCampaignIndex([]);
     }
 })();
 
@@ -1870,6 +1898,12 @@ async function refreshNewsletterFeed() {
                 // FunkSec, APT29 e Contagious Interview quando se lê o corpo.
                 const paraAtor = corpos.get(item.link) || item.text || item.description || '';
                 item.actors = matchActors(`${item.title} ${paraAtor}`, actorIndex);
+                item.malware = matchMalware(`${item.title} ${paraAtor}`, malwareIndex);
+                item.campaigns = matchCampaigns(`${item.title} ${paraAtor}`, campaignIndex);
+                // item.ttps already exists (scoreArticle's display labels, set
+                // via the `...intel` spread above) — this just derives the
+                // stable T#### ids newsStories.js compares across articles.
+                item.ttpIds = ttpIdsFrom(item.ttps);
                 const { categories, primary } = categorize(item);
                 item.newsCategories = categories;
                 item.primaryCategory = primary;
@@ -1967,7 +2001,7 @@ app.get('/api/news/stories/:id', requirePremium, (req, res) => {
     const story = newsStoryStore.get(String(req.params.id));
     if (!story) return res.status(404).json({ error: 'story not found' });
     res.set('Cache-Control', 'public, max-age=300');
-    res.json(story);
+    res.json({ ...story, correlationEvidence: explainCorrelation(story) });
 });
 
 // ─── Feed Generator · sugestões do boletim diário ─────────────────────────

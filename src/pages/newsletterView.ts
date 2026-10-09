@@ -102,6 +102,8 @@ export interface StorySource {
   pubDate: string;
   storyId?: string | null;
   actors?: StoryActor[];
+  malware?: StoryActor[];
+  campaigns?: StoryActor[];
   // Navigation buckets from the server's categorize() — not scoreArticle's CTI
   // scoring labels, which the API keeps on the unrelated `categories` field.
   newsCategories?: string[];
@@ -120,6 +122,8 @@ export interface StoryCard<T extends StorySource = StorySource> {
   primaryCategory: string | null;
   categories: string[];
   actors: StoryActor[];
+  malware: StoryActor[];
+  campaigns: StoryActor[];
   cves: string[];
   lastSeen: string;
   score: number;
@@ -175,6 +179,8 @@ export const groupAdvisoriesIntoStories = <T extends StorySource>(
         primaryCategory: item.primaryCategory ?? null,
         categories: [...(item.newsCategories ?? [])],
         actors: [...(item.actors ?? [])],
+        malware: [...(item.malware ?? [])],
+        campaigns: [...(item.campaigns ?? [])],
         cves: [...(item.cves ?? [])],
         lastSeen: item.pubDate,
         score: item.score ?? 0,
@@ -194,6 +200,8 @@ export const groupAdvisoriesIntoStories = <T extends StorySource>(
     for (const category of item.newsCategories ?? []) if (!card.categories.includes(category)) card.categories.push(category);
     for (const cve of item.cves ?? []) if (!card.cves.includes(cve)) card.cves.push(cve);
     for (const actor of item.actors ?? []) if (!card.actors.some((a) => a.id === actor.id)) card.actors.push(actor);
+    for (const m of item.malware ?? []) if (!card.malware.some((seen) => seen.id === m.id)) card.malware.push(m);
+    for (const c of item.campaigns ?? []) if (!card.campaigns.some((seen) => seen.id === c.id)) card.campaigns.push(c);
   }
 
   const cards = [...byStory.values()];

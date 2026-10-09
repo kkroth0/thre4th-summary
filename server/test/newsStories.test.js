@@ -8,7 +8,7 @@ const daysBefore = (n) => new Date(NOW.getTime() - n * 86400000).toISOString();
 const item = (over = {}) => ({
     title: 'Untitled', description: '', link: `https://x.example/${Math.random()}`,
     source: 'Feed', pubDate: NOW.toISOString(), score: 50, severity: 'High',
-    cves: [], actors: [], newsCategories: [], primaryCategory: null, ...over,
+    cves: [], actors: [], malware: [], campaigns: [], ttpIds: [], newsCategories: [], primaryCategory: null, ...over,
 });
 
 // Pins the /api/newsletter compatibility promise at the one seam a pure module
@@ -356,4 +356,137 @@ test('dois veículos cobrindo a mesma campanha agrupam mesmo sem CVE', () => {
 
     assert.equal(stories.length, 1, 'a mesma campanha em dois veículos continuou em cards separados');
     assert.equal(stories[0].sources.length, 2);
+});
+
+// ─── Malware em comum e sobreposição de IOC ────────────────────────────────
+
+test('malware em comum une quando há também um termo raro em comum', () => {
+    const lumma = [{ id: 'm1', name: 'LummaC2', matched: 'LummaC2', via: 'distinctive' }];
+    const stories = mergeIntoStories([], [
+        item({ title: 'LummaC2 infrastructure seized by Europol', link: 'https://a.example/1', malware: lumma }),
+        item({ title: 'Europol disrupts LummaC2 stealer operation', link: 'https://b.example/2', malware: lumma }),
+    ], NOW);
+    assert.equal(stories.length, 1);
+});
+
+// Mesma família, vítimas diferentes: a popularidade de uma família comum
+// (LummaC2/AsyncRAT/RedLine) gera manchete nova toda semana por motivo não
+// relacionado — tratar "mesma família" como prova de "mesma história" seria um
+// eixo de falso-merge pior que o caso análogo do ator (Cl0p/Fortra acima).
+test('malware em comum sem termo raro em comum não une', () => {
+    const lumma = [{ id: 'm1', name: 'LummaC2', matched: 'LummaC2', via: 'distinctive' }];
+    const stories = mergeIntoStories([], [
+        item({ title: 'LummaC2 infects victims via fake CAPTCHA', link: 'https://a.example/1', malware: lumma }),
+        item({ title: 'LummaC2 found on compromised university network', link: 'https://b.example/2', malware: lumma }),
+    ], NOW);
+    assert.equal(stories.length, 2);
+});
+
+test('hash em comum une, mesmo com títulos sem palavra em comum', () => {
+    const hash = 'a'.repeat(64);
+    const stories = mergeIntoStories([], [
+        item({ title: 'Researchers publish malware teardown', link: 'https://a.example/1', iocs: { hashes: [hash], ips: [], domains: [], urls: [] } }),
+        item({ title: 'Vendor ships signature update', link: 'https://b.example/2', iocs: { hashes: [hash], ips: [], domains: [], urls: [] } }),
+    ], NOW);
+    assert.equal(stories.length, 1);
+});
+
+test('domínio e URL em comum também unem sozinhos', () => {
+    for (const iocs of [
+        { hashes: [], ips: [], domains: ['evil-c2.example'], urls: [] },
+        { hashes: [], ips: [], domains: [], urls: ['http://evil-c2.example/panel'] },
+    ]) {
+        const stories = mergeIntoStories([], [
+            item({ title: 'Blog post about a new campaign', link: `https://a.example/${Math.random()}`, iocs }),
+            item({ title: 'Totally different writeup, no shared words', link: `https://b.example/${Math.random()}`, iocs }),
+        ], NOW);
+        assert.equal(stories.length, 1, JSON.stringify(iocs));
+    }
+});
+
+test('IP puro em comum sem corroboração não une; com corroboração une', () => {
+    const ip = { hashes: [], ips: ['203.0.113.9'], domains: [], urls: [] };
+    const semCorroboracao = mergeIntoStories([], [
+        item({ title: 'Quarterly earnings report published today', link: 'https://a.example/1', iocs: ip }),
+        item({ title: 'Local election results announced tonight', link: 'https://b.example/2', iocs: ip }),
+    ], NOW);
+    assert.equal(semCorroboracao.length, 2, 'IP sozinho não é suficiente — hospedagem reusa endereço entre campanhas');
+
+    const lumma = [{ id: 'm1', name: 'LummaC2', matched: 'LummaC2', via: 'distinctive' }];
+    const comCorroboracao = mergeIntoStories([], [
+        item({ title: 'LummaC2 command panel discovered online', link: 'https://c.example/1', iocs: ip, malware: lumma }),
+        item({ title: 'Takedown of the LummaC2 panel completed', link: 'https://d.example/2', iocs: ip, malware: lumma }),
+    ], NOW);
+    assert.equal(comCorroboracao.length, 1, 'IP com ator/malware em comum é evidência suficiente');
+});
+
+test('fonte com manchete de apanhado não empresta IOC pra regra de merge', () => {
+    // Mesmo guard que já existe pra CVE: um post "indicadores da semana" não
+    // pode virar eixo de merge entre campanhas sem relação.
+    const hash = 'b'.repeat(64);
+    const stories = mergeIntoStories([], [
+        item({ title: 'Weekly recap of indicators', link: 'https://a.example/1', iocs: { hashes: [hash], ips: [], domains: [], urls: [] } }),
+        item({ title: 'Completely unrelated single-campaign report', link: 'https://b.example/2', iocs: { hashes: [hash], ips: [], domains: [], urls: [] } }),
+    ], NOW);
+    assert.equal(stories.length, 2, 'o resumo semanal não deveria colar as duas matérias');
+});
+
+// Extensão do teste de ator (linha ~61): sem subtrair também os tokens do
+// nome do malware, duas stories não relacionadas compartilhando ator E
+// malware, mas nenhum outro termo, uniriam só com o nome das entidades.
+test('rareBeyondEntities exclui nomes de ator e de malware, não só de ator', () => {
+    const cl0p = [{ id: 'a1', name: 'Cl0p', matched: 'Cl0p', via: 'context' }];
+    const lumma = [{ id: 'm1', name: 'LummaC2', matched: 'LummaC2', via: 'distinctive' }];
+    const stories = mergeIntoStories([], [
+        item({ title: 'Cl0p and LummaC2 both mentioned in roundup', link: 'https://a.example/1', actors: cl0p, malware: lumma }),
+        item({ title: 'Cl0p and LummaC2 unrelated second mention', link: 'https://b.example/2', actors: cl0p, malware: lumma }),
+    ], NOW);
+    assert.equal(stories.length, 2, 'ator e malware em comum sem mais nenhum termo raro não deveria unir');
+});
+
+// ─── Campanha em comum e sobreposição de TTP ───────────────────────────────
+
+test('campanha em comum une sozinha, sem precisar de termo raro em comum', () => {
+    const dreamJob = [{ id: 'c1', name: 'Operation Dream Job', matched: 'Operation Dream Job', via: 'multiword' }];
+    const stories = mergeIntoStories([], [
+        item({ title: 'New details emerge about a 2019 espionage operation', link: 'https://a.example/1', campaigns: dreamJob }),
+        item({ title: 'Researchers reconstruct timeline of a Lazarus operation', link: 'https://b.example/2', campaigns: dreamJob }),
+    ], NOW);
+    assert.equal(stories.length, 1, 'uma campanha nomeada identifica uma operação específica, suficiente por si só');
+});
+
+test('fonte com manchete de apanhado não empresta campanha pra regra de merge', () => {
+    const campaigns = [
+        { id: 'c1', name: 'Operation Dream Job', matched: 'Operation Dream Job', via: 'multiword' },
+    ];
+    const stories = mergeIntoStories([], [
+        item({ title: 'Weekly recap of notable APT campaigns', link: 'https://a.example/1', campaigns }),
+        item({ title: 'Totally unrelated single-operation report', link: 'https://b.example/2', campaigns }),
+    ], NOW);
+    assert.equal(stories.length, 2, 'o resumo semanal não deveria colar as duas matérias');
+});
+
+test('fonte com mais campanhas que o teto não empresta nenhuma', () => {
+    const many = ['c1', 'c2', 'c3', 'c4'].map((id) => ({ id, name: id, matched: id, via: 'distinctive' }));
+    const stories = mergeIntoStories([], [
+        item({ title: 'Year in review: four notable operations', link: 'https://a.example/1', campaigns: many }),
+        item({ title: 'Totally unrelated single-operation report', link: 'https://b.example/2', campaigns: [many[0]] }),
+    ], NOW);
+    assert.equal(stories.length, 2, 'um apanhado com mais de MAX_TOPIC_CAMPAIGNS não deveria emprestar campanha nenhuma');
+});
+
+test('TTP em comum une quando há também um termo raro em comum', () => {
+    const stories = mergeIntoStories([], [
+        item({ title: 'New phishing kit targets banking customers', link: 'https://a.example/1', ttpIds: ['T1566'] }),
+        item({ title: 'Banking customers hit by fresh phishing wave', link: 'https://b.example/2', ttpIds: ['T1566'] }),
+    ], NOW);
+    assert.equal(stories.length, 1);
+});
+
+test('TTP em comum sem termo raro em comum não une', () => {
+    const stories = mergeIntoStories([], [
+        item({ title: 'Quarterly earnings report published today', link: 'https://a.example/1', ttpIds: ['T1566'] }),
+        item({ title: 'Local election results announced tonight', link: 'https://b.example/2', ttpIds: ['T1566'] }),
+    ], NOW);
+    assert.equal(stories.length, 2, 'T1566 é comum demais pra provar que é a mesma história sozinho');
 });

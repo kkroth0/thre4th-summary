@@ -2227,6 +2227,25 @@ export const fetchNewsMentions = async (ioc: string): Promise<NewsMention[]> => 
     return (await response.json()).mentions || [];
 };
 
+export type CorrelationEvidenceType =
+    | "cve" | "campaign" | "actor" | "malware" | "ioc-hash" | "ioc-domain" | "ioc-url" | "ioc-ip" | "ttp" | "rare-term";
+
+export interface CorrelationEvidence {
+    type: CorrelationEvidenceType;
+    value: string;
+    sourceLinks: string[];
+}
+
+// Por que o servidor agrupou estas fontes numa história só — calculado sob
+// demanda (não no feed plano, que tem ~1200 itens por refresh) quando o
+// usuário expande um card com mais de uma fonte. Falha aqui não pode escalar:
+// o card já mostra a timeline de fontes sem isto, é só a explicação que falta.
+export const fetchStoryCorrelation = async (storyId: string): Promise<CorrelationEvidence[]> => {
+    const response = await fetch(`/api/news/stories/${encodeURIComponent(storyId)}`);
+    if (!response.ok) return [];
+    return (await response.json()).correlationEvidence || [];
+};
+
 export const ENRICHMENT_VENDORS = [
     "VirusTotal", "AlienVault OTX", "ThreatFox", "AbuseIPDB",
     // Para hash e URL, estas duas são quem nomeia a família — e família é a

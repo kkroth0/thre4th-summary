@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import { Link } from "react-router-dom";
-import { ArrowLeft, Globe, BookOpen, AlertTriangle, Search, Mail, Eye, Filter, ChevronDown, RefreshCw, Share2, Loader2, Bookmark, X, PencilLine, ExternalLink } from "lucide-react";
+import { ArrowLeft, Globe, BookOpen, AlertTriangle, Search, Mail, Eye, Filter, ChevronDown, RefreshCw, Share2, Loader2, Bookmark, X, PencilLine, ExternalLink, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -21,7 +21,7 @@ import { cn } from "@/lib/utils";
 import { NEWS_CATEGORY_ORDER, countByCategory, filterNewsletterAdvisories, filterStoryCards, groupAdvisoriesIntoStories, severityEvidence, activeFilterChips, TIME_RANGES } from "./newsletterView";
 import type { TimeRange } from "./newsletterView";
 import type { StoryCard } from "./newsletterView";
-import { generateBoletim, saveKnowledge } from "@/services/threatApi";
+import { generateBoletim, saveKnowledge, fetchStoryCorrelation, type CorrelationEvidence, type CorrelationEvidenceType } from "@/services/threatApi";
 import { useOrgProfile } from "@/hooks/useOrgProfile";
 import { annotateOrg, type OrgMatch } from "@/utils/orgRelevance";
 
@@ -96,6 +96,21 @@ const SEVERITY_PT: Record<string, string> = {
 
 const severityLabel = (severity: string, language: string): string =>
   (language === "pt" ? SEVERITY_PT[severity] : severity) || severity;
+
+// Rótulo do chip de evidência — por que o servidor agrupou estas fontes numa
+// história só (ver server/correlationEvidence.js).
+const EVIDENCE_LABEL: Record<CorrelationEvidenceType, { pt: string; en: string }> = {
+  cve: { pt: "Mesmo CVE", en: "Same CVE" },
+  campaign: { pt: "Mesma campanha", en: "Same campaign" },
+  actor: { pt: "Mesmo ator", en: "Same actor" },
+  malware: { pt: "Mesmo malware", en: "Same malware" },
+  "ioc-hash": { pt: "Mesmo hash", en: "Same hash" },
+  "ioc-domain": { pt: "Mesmo domínio", en: "Same domain" },
+  "ioc-url": { pt: "Mesma URL", en: "Same URL" },
+  "ioc-ip": { pt: "Mesmo IP", en: "Same IP" },
+  ttp: { pt: "Mesma técnica MITRE", en: "Same MITRE technique" },
+  "rare-term": { pt: "Termo em comum", en: "Shared term" },
+};
 
 // Left-accent border + soft tint per severity — carries the visual hierarchy so
 // the eye lands on Critical/High first when scanning the feed.
@@ -403,6 +418,27 @@ const Newsletter = () => {
   // ── Actionable analysis: expand + lazy LLM enrichment + share ──
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [enrichment, setEnrichment] = useState<Record<string, { loading: boolean; data?: EnrichData }>>({});
+  const [correlation, setCorrelation] = useState<Record<string, { loading: boolean; data?: CorrelationEvidence[] }>>({});
+
+  // storyId do servidor é um sha1(link) de 12 hex (ver newsStories.js). O
+  // agrupamento do cliente (newsletterView.ts) também produz chaves sintéticas
+  // ("vendor-advisory:...", "link:...") pra cards que ele mesmo agrupou — esses
+  // não têm uma Story persistida no servidor pra explicar.
+  const isServerStoryId = (id: string) => /^[0-9a-f]{12}$/.test(id);
+
+  const getCorrelation = async (storyId: string): Promise<CorrelationEvidence[]> => {
+    const cached = correlation[storyId]?.data;
+    if (cached) return cached;
+    setCorrelation(p => ({ ...p, [storyId]: { loading: true } }));
+    try {
+      const data = await fetchStoryCorrelation(storyId);
+      setCorrelation(p => ({ ...p, [storyId]: { loading: false, data } }));
+      return data;
+    } catch {
+      setCorrelation(p => ({ ...p, [storyId]: { loading: false, data: [] } }));
+      return [];
+    }
+  };
 
   // A cobertura inteira é o contexto: análise e boletim leem todas as fontes.
   // Escolher quais entram é decisão da tela de geração, não do feed — aqui o
@@ -444,6 +480,9 @@ const Newsletter = () => {
     const item = card.sources[0];
     const open = !isExpanded(card, featured);
     if (open && !enrichment[enrichKeyOf(card)]) void getEnrichment(item, sourcesOf(card));
+    if (open && card.sources.length > 1 && isServerStoryId(card.storyId) && !correlation[card.storyId]) {
+      void getCorrelation(card.storyId);
+    }
     setExpanded(p => ({ ...p, [item.link]: open }));
   };
 
@@ -1085,6 +1124,31 @@ const Newsletter = () => {
                                   </span>
                                   <span className="font-semibold text-foreground">{card.sources.length}</span>
                                 </div>
+
+                                {/* Por que o servidor juntou estas fontes numa história só —
+                                    só existe pra storyId real (o sintético do agrupamento do
+                                    cliente não tem Story persistida pra explicar). Buscado sob
+                                    demanda no toggleExpand, não no feed plano. */}
+                                {isServerStoryId(card.storyId) && (
+                                  correlation[card.storyId]?.loading ? (
+                                    <div className="mt-2 text-[11px] text-muted-foreground">
+                                      {language === "pt" ? "Calculando correlação…" : "Computing correlation…"}
+                                    </div>
+                                  ) : (correlation[card.storyId]?.data ?? []).length > 0 && (
+                                    <div className="mt-2 flex flex-wrap gap-1.5">
+                                      {correlation[card.storyId]!.data!.map((ev, i) => (
+                                        <span
+                                          key={`${ev.type}-${ev.value}-${i}`}
+                                          title={ev.sourceLinks.join(", ")}
+                                          className="inline-flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[11px] text-emerald-700 dark:text-emerald-400"
+                                        >
+                                          <CheckCircle2 className="h-3 w-3" />
+                                          {EVIDENCE_LABEL[ev.type]?.[language === "pt" ? "pt" : "en"] ?? ev.type}: {ev.value}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  )
+                                )}
 
                                 {/* Linha do tempo da cobertura: a data é a espinha à
                                     esquerda, e o filete liga um veículo ao seguinte. As

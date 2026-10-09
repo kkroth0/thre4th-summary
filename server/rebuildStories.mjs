@@ -22,6 +22,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { mergeIntoStories } from './newsStories.js';
 import { buildActorIndex, matchActors } from './actorMatch.js';
+import { buildMalwareIndex, matchMalware } from './malwareMatch.js';
+import { buildCampaignIndex, matchCampaigns } from './campaignMatch.js';
 import { categorize, NEWS_CATEGORIES } from './newsCategories.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -36,6 +38,10 @@ if (!Array.isArray(stories)) throw new Error(`${file} não é uma lista de hist�
 // passar o objeto inteiro constrói um índice vazio, em silêncio.
 const catalog = JSON.parse(fs.readFileSync(path.join(here, 'data/actors.json'), 'utf8'));
 const index = buildActorIndex(Array.isArray(catalog) ? catalog : catalog.actors);
+const malwareCatalog = JSON.parse(fs.readFileSync(path.join(here, 'data/malware.json'), 'utf8'));
+const malwareIndex = buildMalwareIndex(Array.isArray(malwareCatalog) ? malwareCatalog : malwareCatalog.malware);
+const campaignCatalog = JSON.parse(fs.readFileSync(path.join(here, 'data/campaigns.json'), 'utf8'));
+const campaignIndex = buildCampaignIndex(Array.isArray(campaignCatalog) ? campaignCatalog : campaignCatalog.campaigns);
 const byLink = new Map();
 for (const story of stories) {
     for (const source of story.sources || []) {
@@ -48,8 +54,16 @@ for (const story of stories) {
             score: source.score || 0,
             severity: source.severity || null,
             cves: [...(source.cves || [])],
+            // A fonte gravada guarda iocs e ttps por artigo (ver newStory() em
+            // newsStories.js) — sem isto, um rebuild depois da regra de merge
+            // por IOC/TTP perderia essa evidência em silêncio. ttps já são ids
+            // (T####), não os rótulos do scoreArticle, então vão direto.
+            iocs: source.iocs || null,
+            ttpIds: [...(source.ttps || [])],
         };
         item.actors = matchActors(item.title, index);
+        item.malware = matchMalware(item.title, malwareIndex);
+        item.campaigns = matchCampaigns(item.title, campaignIndex);
         const { categories, primary } = categorize(item);
         item.newsCategories = categories;
         item.primaryCategory = primary;
@@ -79,6 +93,12 @@ for (const old of stories) {
     }
     for (const actor of old.actors || []) {
         if (actor && actor.id && !target.actors.some((a) => a.id === actor.id)) target.actors.push(actor);
+    }
+    for (const malware of old.malware || []) {
+        if (malware && malware.id && !target.malware.some((m) => m.id === malware.id)) target.malware.push(malware);
+    }
+    for (const campaign of old.campaigns || []) {
+        if (campaign && campaign.id && !target.campaigns.some((c) => c.id === campaign.id)) target.campaigns.push(campaign);
     }
 }
 

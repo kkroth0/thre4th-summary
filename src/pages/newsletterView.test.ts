@@ -61,7 +61,7 @@ test("timeRange nunca descarta item com data ilegível", () => {
 
 const advisory = (over: Record<string, unknown> = {}) => ({
   title: "T", description: "", link: "https://a.example/1", pubDate: "2026-08-10T00:00:00.000Z",
-  source: "Feed", storyId: "s1", actors: [], newsCategories: [], primaryCategory: null, cves: [], ...over,
+  source: "Feed", storyId: "s1", actors: [], malware: [], campaigns: [], newsCategories: [], primaryCategory: null, cves: [], ...over,
 });
 
 test("itens da mesma história viram um card só, com as fontes dentro", () => {
@@ -88,6 +88,22 @@ test("o card herda categorias e atores da união das fontes", () => {
   assert.deepEqual(cards[0].categories, ["Ransomware", "Vulnerabilities"]);
   assert.deepEqual(cards[0].actors.map((a) => a.id), ["a1"]);
   assert.deepEqual(cards[0].cves, ["CVE-1"]);
+});
+
+test("o card herda malware da união das fontes, sem duplicar por id", () => {
+  const cards = groupAdvisoriesIntoStories([
+    advisory({ link: "https://a.example/1", malware: [{ id: "m1", name: "LummaC2" }] }),
+    advisory({ link: "https://b.example/2", malware: [{ id: "m1", name: "LummaC2" }, { id: "m2", name: "AsyncRAT" }] }),
+  ]);
+  assert.deepEqual(cards[0].malware.map((m) => m.id).sort(), ["m1", "m2"]);
+});
+
+test("o card herda campanhas da união das fontes, sem duplicar por id", () => {
+  const cards = groupAdvisoriesIntoStories([
+    advisory({ link: "https://a.example/1", campaigns: [{ id: "c1", name: "Operation Dream Job" }] }),
+    advisory({ link: "https://b.example/2", campaigns: [{ id: "c1", name: "Operation Dream Job" }] }),
+  ]);
+  assert.deepEqual(cards[0].campaigns.map((c) => c.id), ["c1"]);
 });
 
 test("cards são ordenados pela história mais recente", () => {

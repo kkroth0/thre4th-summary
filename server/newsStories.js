@@ -34,6 +34,14 @@ const JACCARD_THRESHOLD = 0.34;
 // entrado pelo de 19/08, que puxou o Windows IKE. A semana inteira num card.
 const MAX_TOPIC_CVES = 3;
 
+// Same reasoning, same risk, for named campaigns: a "top campaigns of the
+// year" retrospective naming several unrelated operations would otherwise
+// become a transitive merge hub exactly like the CVE-catalog case above —
+// campaigns are treated as sufficient evidence alone (see isSameStory), so
+// they need the same guard CVEs get, not the lighter one-source-mention
+// tolerance that corroboration-gated signals (actor/malware/TTP) can rely on.
+const MAX_TOPIC_CAMPAIGNS = 3;
+
 // O apanhado se anuncia na manchete. O cap acima só pega quem lista muitos
 // CVEs; isto pega quem lista poucos e mesmo assim é catálogo — "CISA Adds Three
 // Known Exploited Vulnerabilities to Catalog" tem exatamente três e virava eixo
@@ -134,12 +142,38 @@ const seriesKey = (source) => `${source.source}\u0000${rareTerms(source.title).j
 
 const dayOf = (value) => String(value || '').slice(0, 10);
 
+// Hash/domain/URL IOCs already passed extractIOCs's false-positive filters
+// (benign resolvers, shared platforms, code hosts) before ever reaching here —
+// what remains is high-precision attacker infrastructure, the same tier of
+// evidence as a shared CVE. A bare IP is weaker: bulletproof/VPS hosting
+// recycles the same address across unrelated campaigns, and cloud ranges get
+// reassigned between tenants, so it needs the same corroboration as an actor
+// or malware match, never sufficient alone.
+const normIoc = (value) => String(value || '').trim().toLowerCase();
+const iocsOf = (source) => {
+    // A ROUNDUP-titled source ("this week's indicators") is exactly the kind of
+    // digest that would otherwise become a false merge axis across unrelated
+    // campaigns — same guard already applied to CVEs above. No count cap is
+    // applied beyond that: a single layer-3 deep dive can legitimately list
+    // 20-50 real IOCs about ONE campaign, and capping by count would penalize
+    // exactly the deep single-subject research this signal is meant to catch.
+    if (!source.iocs || ROUNDUP.test(source.title)) return { strong: [], weak: [] };
+    const { ips = [], domains = [], hashes = [], urls = [] } = source.iocs;
+    return {
+        strong: [...hashes, ...domains, ...urls].map(normIoc).filter(Boolean),
+        weak: ips.map(normIoc).filter(Boolean),
+    };
+};
+
 const signals = (story) => {
     const rare = new Set(story.sources.flatMap((source) => rareTerms(source.title)));
-    // The actor's own name is in both headlines by definition — two unrelated
-    // Cl0p stories both say "Cl0p", and that is not evidence they are one story.
-    // Rule 2 needs corroboration from somewhere else in the title.
+    // The actor's/malware's/campaign's own name is in both headlines by
+    // definition — two unrelated Cl0p stories both say "Cl0p", and that is not
+    // evidence they are one story. The corroboration-gated rules below need
+    // evidence from somewhere else in the title.
     const actorTokens = new Set(story.actors.flatMap((actor) => rareTerms(`${actor.name} ${actor.matched || ''}`)));
+    const malwareTokens = new Set(story.malware.flatMap((m) => rareTerms(`${m.name} ${m.matched || ''}`)));
+    const campaignTokens = new Set(story.campaigns.flatMap((c) => rareTerms(`${c.name} ${c.matched || ''}`)));
     // Só os CVEs de fontes que tratam de um assunto entram na regra 1. Story
     // gravada antes de as fontes carregarem `cves` cai no conjunto da story —
     // volta ao comportamento antigo em vez de perder o sinal.
@@ -150,11 +184,39 @@ const signals = (story) => {
         )))
         : new Set(story.cves);
 
+    // Same scoping as CVEs, same cap, same reason: campaigns are sufficient
+    // evidence alone (see isSameStory), so a "top campaigns" retrospective
+    // needs the same guard a CVE catalog digest does.
+    const scopedCampaigns = story.sources.filter((source) => Array.isArray(source.campaigns));
+    const mergeCampaigns = scopedCampaigns.length
+        ? new Set(scopedCampaigns.flatMap((source) => (
+            source.campaigns.length <= MAX_TOPIC_CAMPAIGNS && !ROUNDUP.test(source.title) ? source.campaigns : []
+        )))
+        : new Set(story.campaigns.map((c) => c.id));
+
     return {
         cves: mergeCves,
+        campaigns: mergeCampaigns,
         actors: new Set(story.actors.map((actor) => actor.id)),
+        malware: new Set(story.malware.map((m) => m.id)),
+        // TTPs are corroboration-gated (see isSameStory), the same light tier
+        // as a bare IP — so only the ROUNDUP title guard applies, no count cap:
+        // one deep-dive article legitimately touching several techniques of
+        // ONE campaign isn't a digest the way citing many CVEs/campaigns is.
+        ttps: new Set(story.sources.flatMap((source) => (
+            !ROUNDUP.test(source.title) ? (source.ttps || []) : []
+        ))),
+        strongIocs: new Set(story.sources.flatMap((source) => iocsOf(source).strong)),
+        weakIocs: new Set(story.sources.flatMap((source) => iocsOf(source).weak)),
         rare,
-        rareBeyondActors: new Set([...rare].filter((term) => !actorTokens.has(term))),
+        // Excludes actor-, malware- AND campaign-name tokens: without this,
+        // two unrelated "LummaC2" stories would have the entity's own name
+        // survive as a shared rare term, satisfying their own corroboration
+        // requirement with nothing but the entity's name — the exact hole
+        // rareBeyondActors already closed for actors, extended to every
+        // entity type that needs corroboration.
+        rareBeyondEntities: new Set([...rare].filter((term) =>
+            !actorTokens.has(term) && !malwareTokens.has(term) && !campaignTokens.has(term))),
         series: new Set(story.sources.map(seriesKey)),
         outlets: new Set(story.sources.map((source) => source.source)),
         days: new Set(story.sources.map((source) => dayOf(source.pubDate))),
@@ -175,7 +237,29 @@ const isSameStory = (a, b) => {
     if (overlaps(a.series, b.series) && !overlaps(a.days, b.days)) return false;
 
     if (overlaps(a.cves, b.cves)) return true;
-    if (overlaps(a.actors, b.actors) && overlaps(a.rareBeyondActors, b.rareBeyondActors)) return true;
+    // A named campaign ("Operation Dream Job") identifies one specific bounded
+    // operation, unlike an actor or malware family — those are persistent
+    // brands that recur across many unrelated incidents, which is exactly why
+    // they need corroboration below. Two articles naming the same campaign are
+    // near-certainly covering the same thing, so this is sufficient alone —
+    // scoped against roundup digests the same way CVEs are (see MAX_TOPIC_CAMPAIGNS).
+    if (overlaps(a.campaigns, b.campaigns)) return true;
+    // Hash/domain/URL: sufficient alone, same tier as CVE (see iocsOf above).
+    if (overlaps(a.strongIocs, b.strongIocs)) return true;
+    // Malware never sufficient alone, even for a nonce-word family name: a
+    // popular commodity family (LummaC2/AsyncRAT/RedLine) gets an unrelated
+    // headline most weeks (new technique, takedown, new victim) — treating
+    // "same family" as proof of "same story" would be a worse false-merge axis
+    // than the "Cl0p twice, different victims" case the actor rule already
+    // guards against below.
+    if (overlaps(a.malware, b.malware) && overlaps(a.rareBeyondEntities, b.rareBeyondEntities)) return true;
+    if (overlaps(a.actors, b.actors) && overlaps(a.rareBeyondEntities, b.rareBeyondEntities)) return true;
+    // Bare IP: same corroboration requirement as actor/malware, never alone.
+    if (overlaps(a.weakIocs, b.weakIocs) && overlaps(a.rareBeyondEntities, b.rareBeyondEntities)) return true;
+    // Weakest tier: a single shared MITRE technique (T1566 phishing, T1486
+    // ransomware encryption...) is common to a huge share of unrelated
+    // articles, so it only ever corroborates, exactly like a bare IP.
+    if (overlaps(a.ttps, b.ttps) && overlaps(a.rareBeyondEntities, b.rareBeyondEntities)) return true;
     if (sameOutletOtherDay(a, b)) return false;
     return jaccard(a.rare, b.rare) >= JACCARD_THRESHOLD;
 };
@@ -187,6 +271,8 @@ const newStory = (item) => ({
     lastSeen: item.pubDate,
     cves: [...(item.cves || [])],
     actors: [...(item.actors || [])],
+    malware: [...(item.malware || [])],
+    campaigns: [...(item.campaigns || [])],
     // item.newsCategories is the navigation bucket list from categorize();
     // item.categories is scoreArticle's unrelated CTI scoring labels — do not
     // read that one here.
@@ -197,8 +283,15 @@ const newStory = (item) => ({
         source: item.source, link: item.link, title: item.title,
         pubDate: item.pubDate, score: item.score || 0, severity: item.severity || null,
         // Por fonte, não só somados na story: é o que permite separar a matéria
-        // sobre uma falha do apanhado que lista dez.
+        // sobre uma falha do apanhado que lista dez. Campanha segue o mesmo
+        // motivo (ids só, como os CVEs — os objetos completos ficam na union
+        // no nível da story, abaixo).
         cves: [...(item.cves || [])],
+        campaigns: (item.campaigns || []).map((c) => c.id),
+        // TTPs (ids T####) também por fonte: é o que faz um artigo-resumo de
+        // uma técnica só não contar como corroboração de outro sobre uma
+        // técnica totalmente diferente.
+        ttps: [...(item.ttpIds || [])],
         // Guardado SÓ por fonte, ao contrário dos cves. A pergunta que isso
         // responde é "qual artigo mencionou este IP" — a união na story não
         // responde nada que a varredura das fontes não responda, e seria um
@@ -224,6 +317,14 @@ const absorb = (target, extra) => {
     const byId = new Map(target.actors.map((actor) => [actor.id, actor]));
     for (const actor of extra.actors) if (!byId.has(actor.id)) byId.set(actor.id, actor);
     merged.actors = [...byId.values()];
+
+    const malwareById = new Map(target.malware.map((m) => [m.id, m]));
+    for (const m of extra.malware) if (!malwareById.has(m.id)) malwareById.set(m.id, m);
+    merged.malware = [...malwareById.values()];
+
+    const campaignById = new Map(target.campaigns.map((c) => [c.id, c]));
+    for (const c of extra.campaigns) if (!campaignById.has(c.id)) campaignById.set(c.id, c);
+    merged.campaigns = [...campaignById.values()];
 
     const links = new Set(target.sources.map((source) => source.link));
     for (const source of extra.sources) if (!links.has(source.link)) merged.sources.push(source);

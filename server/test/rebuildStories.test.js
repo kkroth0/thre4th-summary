@@ -4,8 +4,12 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 
-const SCRIPT = new URL('../rebuildStories.mjs', import.meta.url).pathname;
+// fileURLToPath, not .pathname: on Windows, a file:// URL's .pathname keeps the
+// leading slash ("/C:/Users/...") and spawning node with that gets the drive
+// letter double-prefixed ("C:\C:\Users\..."), module-not-found, every time.
+const SCRIPT = fileURLToPath(new URL('../rebuildStories.mjs', import.meta.url));
 
 const source = (over) => ({ source: 'Feed', score: 50, severity: 'High', cves: [], ...over });
 
@@ -61,4 +65,40 @@ test('reagrupa, guarda .bak e devolve a categoria de quem continuou inteiro', ()
     for (const story of result.filter((s) => s.sources[0].source === 'Chrome Releases')) {
         assert.deepEqual(story.categories, [], 'a categoria do card errado seguiu para as metades');
     }
+});
+
+// A fonte gravada guarda iocs por artigo (newStory() em newsStories.js). Sem
+// reconstruir esse campo aqui, um rebuild depois de mudar a regra de merge por
+// IOC perderia essa evidência em silêncio — real lacuna achada lendo o arquivo.
+test('IOC da fonte gravada é reconstruído e permite remesclar por ele', () => {
+    // rebuildStories.mjs chama mergeIntoStories com `new Date()` real, sem
+    // receber `now` por parâmetro — datas fixas no passado cairiam fora da
+    // janela de 14 dias (STORY_ACTIVE_DAYS) e nunca chegariam a comparar entre
+    // si, mascarando o próprio sinal que este teste quer verificar.
+    const hash = 'c'.repeat(64);
+    const pubA = new Date(Date.now() - 2 * 86400000).toISOString();
+    const pubB = new Date(Date.now() - 1 * 86400000).toISOString();
+    const { result } = run([
+        {
+            id: 'a', title: 'Primeira matéria sem nenhuma palavra em comum',
+            firstSeen: pubA, lastSeen: pubA,
+            cves: [], actors: [], categories: [],
+            sources: [source({
+                link: 'https://x.example/1', title: 'Primeira matéria sem nenhuma palavra em comum',
+                pubDate: pubA, iocs: { hashes: [hash], ips: [], domains: [], urls: [] },
+            })],
+        },
+        {
+            id: 'b', title: 'Segunda matéria totalmente diferente da primeira',
+            firstSeen: pubB, lastSeen: pubB,
+            cves: [], actors: [], categories: [],
+            sources: [source({
+                link: 'https://x.example/2', title: 'Segunda matéria totalmente diferente da primeira',
+                pubDate: pubB, iocs: { hashes: [hash], ips: [], domains: [], urls: [] },
+            })],
+        },
+    ], ['--write']);
+
+    assert.equal(result.length, 1, 'o hash compartilhado devia remesclar as duas em uma história só');
+    assert.equal(result[0].sources.length, 2);
 });

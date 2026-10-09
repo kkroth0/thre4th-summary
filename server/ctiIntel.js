@@ -189,6 +189,14 @@ export const compileLabelMap = (map) =>
     Object.entries(map).map(([label, terms]) => ({ label, re: buildRe(terms, true) }));
 export const SECTOR_RULES = compileLabelMap(TARGET_SECTORS);
 const TTP_RULES = compileLabelMap(ATTACK_TTPS);
+
+// scoreArticle's ttps are display labels ("T1566 — Phishing"), always built
+// from this file's own ATTACK_TTPS keys — so the id is reliably the prefix
+// before " — ". Used by newsStories.js to compare technique ids across
+// articles without re-deriving them from keywords on every merge comparison.
+const TTP_ID_RE = /^(T\d{4}(?:\.\d{3})?)/;
+export const ttpIdsFrom = (labels) =>
+    [...new Set((labels || []).map((label) => TTP_ID_RE.exec(label)?.[1]).filter(Boolean))];
 const THREAT_RULES = Object.entries(
     // collapse duplicate labels (stealer/infostealer, zero-day/0-day) into one regex each
     Object.entries(THREAT_KEYWORDS).reduce((acc, [kw, label]) => {
@@ -606,6 +614,25 @@ export const CTI_FEEDS = [
     { url: 'https://www.welivesecurity.com/en/rss/feed/', source: 'ESET WeLiveSecurity', layer: 1, weight_boost: 15 },
     { url: 'https://thedfirreport.com/feed/', source: 'The DFIR Report', layer: 1, weight_boost: 15 },
 
+    // Gov CSIRTs / national advisory feeds (adicionados a pedido, lote CTIFLOW).
+    { url: 'https://www.cisa.gov/rss.xml', source: 'CISA Alerts', layer: 1, weight_boost: 15 },
+    { url: 'https://www.cyber.gc.ca/api/cccs/rss/v1/get?feed=alerts_advisories&lang=en', source: 'Canada CCCS', layer: 1, weight_boost: 15 },
+    { url: 'https://www.cert.ssi.gouv.fr/avis/feed/', source: 'CERT-FR Avis (ANSSI)', layer: 1, weight_boost: 15 },
+    { url: 'https://www.cert.ssi.gouv.fr/alerte/feed/', source: 'CERT-FR Alertes (ANSSI)', layer: 1, weight_boost: 15 },
+    { url: 'https://www.jpcert.or.jp/rss/jpcert.rdf', source: 'JPCERT/CC (JP)', layer: 1, weight_boost: 12 },
+    { url: 'https://jvn.jp/rss/jvn.rdf', source: 'JVN (JP)', layer: 1, weight_boost: 10 },
+    { url: 'https://advisories.ncsc.nl/rss/advisories', source: 'NCSC-NL Advisories', layer: 1, weight_boost: 15 },
+    { url: 'https://www.ncsc.gov.uk/api/1/services/v1/all-rss-feed.xml', source: 'NCSC UK', layer: 1, weight_boost: 15 },
+    { url: 'https://www.incibe.es/en/incibe-cert/alerta-temprana/avisos/feed', source: 'INCIBE-CERT (ES)', layer: 1, weight_boost: 12 },
+    { url: 'https://cert.pl/en/rss.xml', source: 'CERT.PL', layer: 1, weight_boost: 12 },
+    { url: 'https://ccb.belgium.be/advisories.xml', source: 'CERT-BE (BE)', layer: 1, weight_boost: 12 },
+    { url: 'https://www.kb.cert.org/vuls/atomfeed/', source: 'CERT/CC Vulnerability Notes', layer: 1, weight_boost: 15 },
+    { url: 'https://www.cert.se/feed.rss', source: 'CERT-SE (SE)', layer: 1, weight_boost: 10 },
+    { url: 'https://cert.europa.eu/publications/security-advisories-rss', source: 'CERT-EU Advisories', layer: 1, weight_boost: 15 },
+    // TAG não publica RSS próprio; sai pelo Google Security Blog, que carrega os
+    // relatórios do Threat Analysis Group.
+    { url: 'https://feeds.feedburner.com/GoogleOnlineSecurityBlog', source: 'Google TAG Blog', layer: 1, weight_boost: 15 },
+
     // Layer 2 — TI news & reporting
     { url: 'https://www.bleepingcomputer.com/feed/', source: 'BleepingComputer', layer: 2, weight_boost: 10 },
     { url: 'https://feeds.feedburner.com/TheHackersNews', source: 'The Hacker News', layer: 2, weight_boost: 10 },
@@ -617,6 +644,12 @@ export const CTI_FEEDS = [
     { url: 'https://www.recordedfuture.com/feed', source: 'Recorded Future', layer: 2, weight_boost: 10 },
     { url: 'https://malpedia.caad.fkie.fraunhofer.de/feeds/rss/latest', source: 'Malpedia', layer: 2, weight_boost: 8 },
     { url: 'https://www.proofpoint.com/us/threat-insight-blog.xml', source: 'Proofpoint TI', layer: 2, weight_boost: 12 },
+    { url: 'https://www.infosecurity-magazine.com/rss/news/', source: 'Infosecurity Magazine', layer: 2, weight_boost: 10 },
+    { url: 'https://www.theregister.com/security/headlines.atom', source: 'The Register Security', layer: 2, weight_boost: 10 },
+    { url: 'https://www.wired.com/feed/category/security/latest/rss', source: 'Wired Security', layer: 2, weight_boost: 8 },
+    { url: 'https://darkwebinformer.com/rss/', source: 'Dark Web Informer', layer: 2, weight_boost: 8 },
+    { url: 'https://www.hipaajournal.com/feed/', source: 'HIPAA Journal', layer: 2, weight_boost: 6 },
+    { url: 'https://arstechnica.com/security/feed/', source: 'Ars Technica Security', layer: 2, weight_boost: 8 },
 
     // Layer 3 — Threat research labs
     { url: 'https://isc.sans.edu/rssfeed_full.xml', source: 'SANS ISC', layer: 3, weight_boost: 10 },
@@ -653,10 +686,22 @@ export const CTI_FEEDS = [
     // { url: 'https://www.sophos.com/en-us/category/security-operations/feed', source: 'Sophos Security Operations', layer: 3, weight_boost: 8 },
     // { url: 'https://www.sophos.com/en-us/category/threat-research/feed', source: 'Sophos Threat Research', layer: 3, weight_boost: 10 },
     { url: 'https://www.cybereason.com/blog/rss.xml', source: 'Cybereason', layer: 3, weight_boost: 8 },
+    { url: 'https://www.huntress.com/blog/rss.xml', source: 'Huntress Blog', layer: 3, weight_boost: 12 },
+    { url: 'https://www.kelacyber.com/blog/feed/', source: 'KELA Cyber Blog', layer: 3, weight_boost: 10 },
+    { url: 'https://www.rapid7.com/blog/rss/', source: 'Rapid7 Blog', layer: 3, weight_boost: 10 },
+    { url: 'https://intel471.com/blog/feed', source: 'Intel 471 Blog', layer: 3, weight_boost: 12 },
+    { url: 'https://feeds.feedburner.com/TrendMicroResearch', source: 'Trend Micro Research', layer: 3, weight_boost: 12 },
+    // Sophos X-Ops: news.sophos.com redireciona pro mesmo www.sophos.com que já
+    // tínhamos descartado por bloqueio de TLS/bot mitigation permanente (ver nota
+    // acima). Não adicionada — não existe outro domínio publicando o mesmo feed.
 
     // Layer 4 — LATAM / BR regional
     { url: 'https://www.cisoadvisor.com.br/feed/', source: 'CISO Advisor BR', layer: 4, weight_boost: 15 },
     { url: 'https://thehack.com.br/rss/', source: 'The Hack', layer: 4, weight_boost: 10 },
+    { url: 'https://www.cert.br/rss/certbr-rss.xml', source: 'CERT.br', layer: 4, weight_boost: 12 },
+    // Health-ISAC e CTIR Gov (gov.br) não têm feed RSS público — Health-ISAC é
+    // conteúdo fechado a membros, e CTIR Gov não expõe /RSS em nenhum caminho
+    // testado (confirmado 2026-10-08).
 ];
 
 // ─── Article body + IOC artifacts ──────────────────────────────────────────
