@@ -1000,6 +1000,9 @@ const Newsletter = () => {
                             )}
                             <span className="font-mono text-xs text-muted-foreground" title={new Date(item.pubDate).toLocaleString()}>
                               {relTime(item.pubDate, language)}
+                              <span className="ml-1 opacity-70">
+                                ({new Date(item.pubDate).toLocaleDateString(language === "pt" ? "pt-BR" : "en-US", { day: "2-digit", month: "2-digit", year: "numeric" })})
+                              </span>
                             </span>
 
                             <div className="flex items-center gap-0.5 border-l border-border pl-1.5">
