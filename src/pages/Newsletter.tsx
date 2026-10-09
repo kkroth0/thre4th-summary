@@ -676,7 +676,11 @@ const Newsletter = () => {
             </div>
           </div>
 
-          {/* Busca + filtros — uma barra só */}
+          {/* Busca + filtros — uma barra só, um botão de filtro só: eram 4
+              controles sempre à vista (severidade, período, ordenação, "mais
+              filtros") competindo por espaço — agora é um Popover com tudo
+              dentro, e os chips abaixo (DEN-02) continuam mostrando o que
+              está ativo sem precisar abrir nada. */}
           <div className="flex flex-col gap-3 rounded-lg border bg-card p-3">
             <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
               <div className="relative flex-1">
@@ -695,83 +699,94 @@ const Newsletter = () => {
                 )}
               </div>
 
-              {/* Severidade em pílula: é o filtro mais usado, então fica sempre
-                  à vista em vez de atrás de um popover. */}
-              <div className="flex shrink-0 items-center gap-1 rounded-md border border-border/60 bg-background p-0.5">
-                {([
-                  ["all", language === "pt" ? "Todas" : "All"],
-                  ["Critical", language === "pt" ? "Críticas" : "Critical"],
-                  ["High", language === "pt" ? "Alta" : "High"],
-                  ["Medium", language === "pt" ? "Média" : "Medium"],
-                  ["Low", language === "pt" ? "Baixa" : "Low"],
-                ] as const).map(([value, label]) => (
-                  <button
-                    key={value}
-                    type="button"
-                    onClick={() => setSelectedSeverity(value)}
-                    aria-pressed={selectedSeverity === value}
-                    className={cn(
-                      "rounded px-2.5 py-1.5 text-xs font-semibold transition-colors",
-                      selectedSeverity === value ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground",
-                    )}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2">
-              <Select value={timeRange} onValueChange={(v) => setTimeRange(v as TimeRange)}>
-                <SelectTrigger className="h-9 w-auto gap-1.5 text-xs font-semibold">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {TIME_RANGES.map((range) => (
-                    <SelectItem key={range} value={range}>
-                      {range === "all" && (language === "pt" ? "Todo o período" : "All time")}
-                      {range === "24h" && (language === "pt" ? "Últimas 24h" : "Last 24h")}
-                      {range === "7d" && (language === "pt" ? "Últimos 7 dias" : "Last 7 days")}
-                      {range === "30d" && (language === "pt" ? "Últimos 30 dias" : "Last 30 days")}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              <Select value={sortByRelevance ? "relevance" : "recent"} onValueChange={(v) => setSortByRelevance(v === "relevance")}>
-                <SelectTrigger className="h-9 w-auto gap-1.5 text-xs font-semibold">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="recent">{language === "pt" ? "Mais recentes" : "Most recent"}</SelectItem>
-                  <SelectItem value="relevance">{language === "pt" ? "Mais relevantes" : "Most relevant"}</SelectItem>
-                </SelectContent>
-              </Select>
-
-              {/* KEV + contexto de organização — usados com menos frequência,
-                  continuam atrás de um popover pra não competir por espaço. */}
               <Popover>
                 <PopoverTrigger asChild>
                   <Button
-                    variant={kevOnly || orgOnly || selectedSource !== "all" ? "default" : "outline"}
+                    variant={activeFilterCount > 0 ? "default" : "outline"}
                     size="sm"
-                    className="h-9 gap-1.5 px-3 text-xs font-semibold"
+                    className="h-9 shrink-0 gap-1.5 px-3 text-xs font-semibold"
                   >
                     <Filter className="h-3.5 w-3.5" />
-                    {language === "pt" ? "Mais filtros" : "More filters"}
-                    {(kevOnly || orgOnly || selectedSource !== "all") && (
+                    {language === "pt" ? "Filtros" : "Filters"}
+                    {activeFilterCount > 0 && (
                       <Badge variant="secondary" className="ml-0.5 h-4 min-w-[16px] px-1 text-[10px] tabular-nums">
-                        {[kevOnly, orgOnly, selectedSource !== "all"].filter(Boolean).length}
+                        {activeFilterCount}
                       </Badge>
                     )}
                   </Button>
                 </PopoverTrigger>
-                <PopoverContent align="end" className="w-72 space-y-3">
+                <PopoverContent align="start" className="w-80 space-y-3">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium text-muted-foreground">
+                      {language === "pt" ? "Severidade" : "Severity"}
+                    </label>
+                    <div className="flex items-center gap-1 rounded-md border border-border/60 bg-background p-0.5">
+                      {([
+                        ["all", language === "pt" ? "Todas" : "All"],
+                        ["Critical", language === "pt" ? "Críticas" : "Critical"],
+                        ["High", language === "pt" ? "Alta" : "High"],
+                        ["Medium", language === "pt" ? "Média" : "Medium"],
+                        ["Low", language === "pt" ? "Baixa" : "Low"],
+                      ] as const).map(([value, label]) => (
+                        <button
+                          key={value}
+                          type="button"
+                          onClick={() => setSelectedSeverity(value)}
+                          aria-pressed={selectedSeverity === value}
+                          className={cn(
+                            "flex-1 rounded px-2 py-1.5 text-xs font-semibold transition-colors",
+                            selectedSeverity === value ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground",
+                          )}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 border-t pt-3">
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-medium text-muted-foreground">
+                        {language === "pt" ? "Período" : "Period"}
+                      </label>
+                      <Select value={timeRange} onValueChange={(v) => setTimeRange(v as TimeRange)}>
+                        <SelectTrigger className="h-9 w-full text-xs font-semibold">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {TIME_RANGES.map((range) => (
+                            <SelectItem key={range} value={range}>
+                              {range === "all" && (language === "pt" ? "Todo o período" : "All time")}
+                              {range === "24h" && (language === "pt" ? "Últimas 24h" : "Last 24h")}
+                              {range === "7d" && (language === "pt" ? "Últimos 7 dias" : "Last 7 days")}
+                              {range === "30d" && (language === "pt" ? "Últimos 30 dias" : "Last 30 days")}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-medium text-muted-foreground">
+                        {language === "pt" ? "Ordenar por" : "Sort by"}
+                      </label>
+                      <Select value={sortByRelevance ? "relevance" : "recent"} onValueChange={(v) => setSortByRelevance(v === "relevance")}>
+                        <SelectTrigger className="h-9 w-full text-xs font-semibold">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="recent">{language === "pt" ? "Mais recentes" : "Most recent"}</SelectItem>
+                          <SelectItem value="relevance">{language === "pt" ? "Mais relevantes" : "Most relevant"}</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
                   <Button
                     variant={kevOnly ? "default" : "outline"}
                     size="sm"
                     className={cn(
-                      "h-8 w-full justify-start gap-1.5 text-xs font-semibold",
+                      "h-8 w-full justify-start gap-1.5 border-t text-xs font-semibold",
                       !kevOnly && "text-red-500 border-red-500/30 hover:bg-red-500/5",
                       kevOnly && "bg-red-600 hover:bg-red-600/90 text-white",
                     )}
@@ -822,7 +837,7 @@ const Newsletter = () => {
                   )}
 
                   {activeFilterCount > 0 && (
-                    <Button variant="ghost" size="sm" className="h-8 w-full text-xs text-muted-foreground" onClick={clearFilters}>
+                    <Button variant="ghost" size="sm" className="h-8 w-full border-t text-xs text-muted-foreground" onClick={clearFilters}>
                       {language === "pt" ? "Limpar filtros" : "Clear filters"}
                     </Button>
                   )}
@@ -832,7 +847,7 @@ const Newsletter = () => {
               <Button
                 disabled={loadingNews || isRefreshingNews}
                 onClick={() => loadNews()}
-                className="ml-auto h-9 gap-1.5 px-3 text-xs font-semibold"
+                className="h-9 shrink-0 gap-1.5 px-3 text-xs font-semibold lg:ml-auto"
               >
                 <RefreshCw className={cn("h-3.5 w-3.5", (loadingNews || isRefreshingNews) && "animate-spin")} />
                 {language === "pt" ? "Atualizar agora" : "Refresh now"}
