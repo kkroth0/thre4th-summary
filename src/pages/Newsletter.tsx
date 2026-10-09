@@ -913,7 +913,7 @@ const Newsletter = () => {
               )}
 
               {loadingNews ? (
-                <div className="space-y-4">
+                <div className="grid grid-cols-1 gap-2.5 lg:grid-cols-2">
                   {[1, 2, 3].map((n) => (
                     <div key={n} className="p-4 rounded-lg border bg-card animate-pulse space-y-3">
                       <div className="h-4 w-1/4 bg-muted rounded"></div>
@@ -943,7 +943,7 @@ const Newsletter = () => {
                   }
                 />
               ) : (
-                <div className="flex flex-col gap-2.5">
+                <div className="grid grid-cols-1 items-start gap-2.5 lg:grid-cols-2">
                   {storyCards.map((card, idx) => {
                     const item = card.sources[0];
                     const enrichKey = enrichKeyOf(card);
