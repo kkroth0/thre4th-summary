@@ -2,8 +2,8 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from "react"
 import { Link, useSearchParams } from "react-router-dom";
 import {
   RefreshCw, ShieldAlert, Loader2, Sparkles, Trash2, KeyRound,
-  CheckCircle2, ArrowRight, RotateCcw, ChevronDown, Download, SlidersHorizontal,
-  AlertTriangle, ExternalLink, FileText,
+  ArrowRight, RotateCcw, Download, SlidersHorizontal,
+  AlertTriangle, ExternalLink, FileText, Plus, Search, X, ArrowLeft,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -14,6 +14,7 @@ import { Switch } from "@/components/ui/switch";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   AlertDialog, AlertDialogTrigger, AlertDialogContent, AlertDialogHeader,
   AlertDialogFooter, AlertDialogTitle, AlertDialogDescription, AlertDialogAction,
@@ -34,7 +35,7 @@ import {
 } from "@/services/threatApi";
 import { exportBoletimJSON } from "@/utils/boletimExport";
 import {
-  canOpenReport, filterSuggestions, DEFAULT_SUGGESTION_PREFS, type SuggestionPrefs, canOpenJob, explainFailure, reportTitle } from "./dailyBulletinView";
+  canOpenReport, filterSuggestions, filterReportLibrary, DEFAULT_SUGGESTION_PREFS, type SuggestionPrefs, canOpenJob, explainFailure, reportTitle } from "./dailyBulletinView";
 
 const PREFS_KEY = "daily-suggestion-prefs";
 const loadPrefs = (): SuggestionPrefs => {
@@ -157,12 +158,13 @@ const JobListItem: React.FC<{
   return (
     <div
       role={clickable ? "button" : undefined}
+      aria-pressed={clickable ? selected : undefined}
       tabIndex={clickable ? 0 : undefined}
       onClick={clickable ? () => onSelect(j) : undefined}
-      onKeyDown={clickable ? (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onSelect(j); } } : undefined}
+      onKeyDown={clickable ? (e) => { if (e.target === e.currentTarget && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); onSelect(j); } } : undefined}
       className={cn(
-        "rounded-lg border px-3 py-2.5 transition-colors animate-fade-in",
-        selected ? "border-primary/40 bg-primary/5" : "border-transparent",
+        "rounded-sm border px-3 py-3 transition-colors",
+        selected ? "border-primary/40 bg-primary/5" : "border-transparent border-b-border/60",
         clickable && "cursor-pointer",
         clickable && !selected && "hover:bg-muted/40"
       )}
@@ -177,7 +179,7 @@ const JobListItem: React.FC<{
         </span>
         <span className={`h-2 w-2 rounded-full shrink-0 ${st.dot} ${j.status === "pending" ? "animate-pulse" : ""}`} />
         <div className="min-w-0 flex-1">
-          <div className="text-sm font-medium truncate" title={reportTitle(j)}>{reportTitle(j)}</div>
+          <div className="break-words text-sm font-medium leading-snug" title={reportTitle(j)}>{reportTitle(j)}</div>
           <div className="text-xs text-muted-foreground truncate">
             <span className={st.text}>{pt ? st.pt : st.en}</span>
             {j.status === "done" ? ` · ${timeAgo(j.updatedAt || j.createdAt, pt)}` : ""}
@@ -191,13 +193,13 @@ const JobListItem: React.FC<{
             {Math.floor(elapsed / 1000)}s / {JOB_TIMEOUT_S}s
           </span>
         )}
+      </div>
         {j.status === "done" && (
-          <span className="rounded border px-1.5 py-0.5 font-mono text-[10px] uppercase text-muted-foreground shrink-0">
+          <div className="mt-2 pl-12 text-[10px] text-muted-foreground">
             {j.type}{j.template ? ` · ${j.template === "basico" ? (pt ? "básico" : "basic") : j.template === "premium" ? "premium" : (pt ? "avançado" : "advanced")}` : ""}
             {j.subtype && j.subtype !== "auto" ? ` · ${j.subtype}` : ""}
-          </span>
+          </div>
         )}
-      </div>
       {j.status === "error" && (
         <div className="mt-1.5 flex items-center gap-2 pl-12">
           {/* Resumo em uma linha; a mensagem inteira e o que fazer ficam no
@@ -249,7 +251,14 @@ const DailyBulletin: React.FC = () => {
   // dispara a geração continua sendo o usuário.
   const [searchParams] = useSearchParams();
   const requestedJobId = searchParams.get("job") || "";
+  const [mobileReading, setMobileReading] = useState(() => Boolean(requestedJobId));
   const [pasteUrl, setPasteUrl] = useState(() => searchParams.get("url") || "");
+  const [composerOpen, setComposerOpen] = useState(() => Boolean(searchParams.get("url")));
+  const [submitting, setSubmitting] = useState(false);
+  const [libraryMode, setLibraryMode] = useState("reports");
+  const [librarySearch, setLibrarySearch] = useState("");
+  const [jobStatus, setJobStatus] = useState("all");
+  const urlInputRef = useRef<HTMLInputElement | null>(null);
   const [deckTemplate, setDeckTemplate] = useState<DeckTemplate>(loadDeckTemplate);
   const [deckSubtype, setDeckSubtype] = useState<DeckSubtype>(loadDeckSubtype);
   const [jobs, setJobs] = useState<BoletimJob[]>([]);
@@ -289,9 +298,12 @@ const DailyBulletin: React.FC = () => {
   };
 
   const shownSuggestions = useMemo(
-    () => filterSuggestions(suggestions, prefs).slice(0, 14),
-    [suggestions, prefs],
+    () => filterReportLibrary(filterSuggestions(suggestions, prefs), librarySearch),
+    [suggestions, prefs, librarySearch],
   );
+  const visibleJobs = useMemo(() => filterReportLibrary(jobs, librarySearch)
+    .filter((job) => jobStatus === "all" || job.status === jobStatus), [jobs, librarySearch, jobStatus]);
+  const openComposer = () => { setComposerOpen(true); requestAnimationFrame(() => urlInputRef.current?.focus()); };
 
   // A lista vem do servidor — antes vivia só no localStorage, então o histórico
   // era por navegador e sumia. Chega sem o JSON do boletim; o corpo é buscado
@@ -354,8 +366,8 @@ const DailyBulletin: React.FC = () => {
     url: string, type: DeckType, title: string, template: DeckTemplate = deckTemplate,
     subtype: DeckSubtype = deckSubtype,
   ) => {
-    if (!auth?.authenticated) { toast.error(pt ? "Entre com o GitHub para gerar" : "Sign in with GitHub to generate"); return; }
-    if (!/^https?:\/\//i.test(url)) { toast.error(pt ? "URL inválida" : "Invalid URL"); return; }
+    if (!auth?.authenticated) { toast.error(pt ? "Entre com o GitHub para gerar" : "Sign in with GitHub to generate"); return false; }
+    if (!/^https?:\/\//i.test(url)) { toast.error(pt ? "URL inválida" : "Invalid URL"); return false; }
     try {
       const { id } = await generateBoletim(url, type, title, template, subtype);
       const now = new Date().toISOString();
@@ -363,10 +375,22 @@ const DailyBulletin: React.FC = () => {
         { id, url, type, template, subtype, title, status: "pending", json: null, error: null, createdAt: now, updatedAt: now },
         ...prev,
       ]);
-      toast.success(pt ? "Começou. O relatório abre aqui quando ficar pronto." : "Started. The report opens here when it's ready.");
+      setLibraryMode("reports");
+      setJobStatus("all");
+      setLibrarySearch("");
+      toast.success(pt ? "Geração iniciada. Acompanhe na biblioteca." : "Generation started. Follow it in the library.");
+      return true;
     } catch (e) {
       toast.error((e as Error).message || (pt ? "Falha ao iniciar" : "Failed to start"));
+      return false;
     }
+  };
+  const submitSource = async () => {
+    if (submitting) return;
+    setSubmitting(true);
+    try {
+      if (await generate(pasteUrl.trim(), "auto", "")) { setPasteUrl(""); setComposerOpen(false); }
+    } finally { setSubmitting(false); }
   };
 
   const togglePick = (id: string, on: boolean) =>
@@ -405,17 +429,20 @@ const DailyBulletin: React.FC = () => {
     }
   };
 
-  // Abre/fecha um relatório no painel. A lista vem sem o boletim, então na
+  // Abre um relatório no painel. A lista vem sem o boletim, então na
   // primeira abertura busca o JSON e guarda no estado. Em telas menores
   // (colunas empilhadas) o painel fica abaixo da lista, então rola até ele.
   const selectJob = async (j: BoletimJob) => {
-    const next = selectedId === j.id ? null : j.id;
+    const next = j.id;
+    setMobileReading(true);
     setSelectedId(next);
     if (next && !j.json && j.hasReport) {
       try {
         const full = await fetchJob(j.id);
+        if (!full.json) throw new Error("Report body unavailable");
         setJobs((prev) => prev.map((x) => (x.id === j.id ? { ...x, json: full.json } : x)));
       } catch {
+        setSelectedId((current) => current === j.id ? null : current);
         toast.error(pt ? "Falha ao abrir o relatório" : "Failed to open the report");
       }
     }
@@ -448,39 +475,38 @@ const DailyBulletin: React.FC = () => {
   const selectedFailure = jobs.find((j) => j.id === selectedId && j.status === "error") || null;
 
   return (
-    <PageLayout width="max-w-7xl">
-      {/* FLX-01: o topo gastava 230px fixos — título, subtítulo, campo, seletor,
-          botão e linha de status — para uma ação ocasional: na maior parte do
-          tempo o analista está lendo um relatório pronto, não colando link novo.
-          O subtítulo virou o placeholder do campo, que é onde ele é lido na hora
-          certa, e o título ficou em linha única com a lista logo abaixo. */}
-      <PageHeader title={pt ? "Geração de Relatórios" : "Report Generation"} />
+    <PageLayout width="max-w-[1600px]">
+      <PageHeader
+        title={pt ? "Relatórios de inteligência" : "Intelligence reports"}
+        subtitle={pt ? "Transforme fontes em análises e mantenha sua biblioteca de inteligência." : "Turn sources into analysis and maintain your intelligence library."}
+        actions={<div className="flex items-center gap-3"><span className="hidden text-xs text-muted-foreground sm:inline">{jobs.filter((job) => job.status === "done").length} {pt ? "prontos" : "ready"}</span><Button size="sm" onClick={openComposer} aria-expanded={composerOpen} aria-controls="report-composer" className="gap-2"><Plus className="h-4 w-4" />{pt ? "Novo relatório" : "New report"}</Button></div>}
+      />
 
-      {/* Generator — one calm input row, no card chrome */}
-      <section className="mb-6">
+      {(composerOpen || !auth.authenticated) && <section id="report-composer" className="mb-5 rounded-md border bg-card p-4">
         {auth.authenticated ? (
           <div className="space-y-3">
+            <div className="flex items-center justify-between"><h2 className="text-sm font-semibold">{pt ? "Criar a partir de uma fonte" : "Create from a source"}</h2><Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setComposerOpen(false)} aria-label={pt ? "Fechar criação" : "Close composer"}><X className="h-4 w-4" /></Button></div>
             <div
               data-testid="report-generator-command-bar"
-              className="flex min-h-12 flex-row items-center gap-1 rounded-md border border-border bg-background p-1 shadow-sm sm:flex-row sm:items-center"
+              className="grid items-end gap-3 sm:grid-cols-[1fr_1fr_auto]"
             >
               <Input
+                ref={urlInputRef}
+                aria-label={pt ? "URL da fonte" : "Source URL"}
                 placeholder={pt
-                  ? "Cole o link de um relatório ou notícia — sai o JSON pronto pro slide"
-                  : "Paste a link to a security report or news post — you get the JSON for your slide"}
+                  ? "https://... — notícia, advisory ou pesquisa"
+                  : "https://... — news, advisory or research"}
                 value={pasteUrl}
                 onChange={(e) => setPasteUrl(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter" && pasteUrl.trim()) { generate(pasteUrl.trim(), "auto", ""); setPasteUrl(""); } }}
-                className="h-10 min-w-0 flex-1 border-0 bg-transparent px-3 text-sm shadow-none focus-visible:ring-0"
+                onKeyDown={(e) => { if (e.key === "Enter" && pasteUrl.trim()) void submitSource(); }}
+                className="h-10 min-w-0 bg-background text-sm sm:col-span-3"
               />
               {/* Tipo (vulnerabilidade/campanha) não tem seletor PRÓPRIO: o motor
                   classifica sozinho por padrão (mesma heurística do CLI), e um
                   subtipo concreto do seletor abaixo já implica o tipo (phishing é
                   sempre campanha, cve_unica é sempre vulnerabilidade) -- não faz
                   sentido escolher os dois separado quando um decide o outro. */}
-              <span className="hidden shrink-0 pl-1.5 text-xs text-muted-foreground sm:inline">
-                Subtipo:
-              </span>
+              <div className="space-y-1.5"><span className="block text-xs text-muted-foreground">{pt ? "Tipo de análise" : "Analysis type"}</span>
               <Select
                 value={deckSubtype}
                 onValueChange={(v) => { setDeckSubtype(v as DeckSubtype); saveDeckSubtype(v as DeckSubtype); }}
@@ -489,7 +515,7 @@ const DailyBulletin: React.FC = () => {
                   data-testid="report-generator-subtype-trigger"
                   aria-label={pt ? "Subtipo da ameaça" : "Threat subtype"}
                   title={pt ? "Escolha o subtipo (ou deixe automático)" : "Choose the subtype (or leave it automatic)"}
-                  className="h-10 w-[7.5rem] shrink-0 justify-between rounded-md border-0 bg-muted/60 px-2.5 text-xs font-medium shadow-none focus:ring-0 sm:w-[8.5rem]"
+                  className="h-9 w-full bg-background text-xs"
                 >
                   <span className="truncate">
                     {{
@@ -511,13 +537,12 @@ const DailyBulletin: React.FC = () => {
                   <SelectItem value="cve_varias">{pt ? "Vulnerabilidade (várias CVEs)" : "Vulnerability (multiple CVEs)"}</SelectItem>
                 </SelectContent>
               </Select>
+              </div>
               {/* Rótulo sempre visível: o seletor é a única pista de que dá pra
                   trocar o design do deck, e o aria-label só ajuda quem usa leitor
                   de tela. Sem isso, "Avançado"/"Básico"/"Premium" sozinho não diz
                   a que se refere até o analista clicar. */}
-              <span className="hidden shrink-0 pl-1.5 text-xs text-muted-foreground sm:inline">
-                Template:
-              </span>
+              <div className="space-y-1.5"><span className="block text-xs text-muted-foreground">{pt ? "Formato do relatório" : "Report format"}</span>
               <Select
                 value={deckTemplate}
                 onValueChange={(v) => { setDeckTemplate(v as DeckTemplate); saveDeckTemplate(v as DeckTemplate); }}
@@ -526,7 +551,7 @@ const DailyBulletin: React.FC = () => {
                   data-testid="report-generator-template-trigger"
                   aria-label={pt ? "Template do deck" : "Deck template"}
                   title={pt ? "Selecione o template do deck" : "Select the deck template"}
-                  className="h-10 w-[6.9rem] shrink-0 justify-between rounded-md border-0 bg-muted/60 px-2.5 text-xs font-medium shadow-none focus:ring-0 sm:w-[7.75rem]"
+                  className="h-9 w-full bg-background text-xs"
                 >
                   <span className="truncate">
                     {deckTemplate === "avancado"
@@ -542,8 +567,9 @@ const DailyBulletin: React.FC = () => {
                   <SelectItem value="premium">{pt ? "Template Premium (por subtipo)" : "Premium template (per subtype)"}</SelectItem>
                 </SelectContent>
               </Select>
-              <Button onClick={() => { generate(pasteUrl.trim(), "auto", ""); setPasteUrl(""); }} disabled={!pasteUrl.trim()} className="h-10 shrink-0 gap-2 rounded-md px-3 sm:px-4">
-                <Sparkles className="h-4 w-4" /> {pt ? "Gerar Boletim" : "Generate Bulletin"}
+              </div>
+              <Button onClick={() => void submitSource()} disabled={submitting || !pasteUrl.trim()} className="h-9 gap-2 px-4">
+                {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />} {pt ? "Gerar relatório" : "Generate report"}
               </Button>
             </div>
             {/* O botão fica desabilitado sem URL, e a linha dizia "pronto para
@@ -551,16 +577,7 @@ const DailyBulletin: React.FC = () => {
                 falta. DEN-06: o cinza de rótulo sobe de text-muted-foreground
                 para um tom que passa 4,5:1. */}
             <div data-testid="report-generator-status-row" className="flex items-center gap-1.5 px-1 text-xs text-slate-600 dark:text-slate-300">
-              {pasteUrl.trim() ? (
-                <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-700 dark:text-emerald-400" />
-              ) : (
-                <ArrowRight className="h-3.5 w-3.5 shrink-0 opacity-70" />
-              )}
-              <span className="truncate">
-                {pasteUrl.trim()
-                  ? `${auth.login} · ${pt ? "pronto para gerar" : "ready to generate"}`
-                  : (pt ? "Cole uma URL para liberar a geração" : "Paste a URL to enable generation")}
-              </span>
+              <span>{pt ? "A geração aparece na biblioteca. Você pode continuar lendo enquanto aguarda." : "Generation appears in the library. You can keep reading while you wait."}</span>
               {/* Leva a origem, para Configurações poder oferecer a volta (FLX-06). */}
               <Link to="/settings?from=/relatorios" className="ml-auto shrink-0 hover:text-foreground">{pt ? "Configurações" : "Settings"}</Link>
             </div>
@@ -577,24 +594,25 @@ const DailyBulletin: React.FC = () => {
             </Button>
           </div>
         )}
-      </section>
+      </section>}
 
-      <div className="grid gap-10 lg:grid-cols-[400px_1fr] lg:items-start lg:gap-8">
+      <div className="grid gap-4 lg:grid-cols-[340px_minmax(0,1fr)] lg:items-start">
         {/* ── work column ───────────────────────────────────────────── */}
-        <div className="min-w-0 space-y-10">
-          {/* Your reports — collapsible list of selectable job cards */}
-          <details open className="group">
-            <summary className="mb-1.5 flex cursor-pointer list-none items-center gap-1.5 text-xs font-medium uppercase tracking-wider text-muted-foreground hover:text-foreground [&::-webkit-details-marker]:hidden">
-              <ChevronDown className="h-3.5 w-3.5 transition-transform group-open:rotate-0 -rotate-90" />
-              {pt ? "Seus relatórios" : "Your reports"}{jobs.length > 0 ? ` · ${jobs.length}` : ""}
-            </summary>
+        <Tabs value={libraryMode} onValueChange={setLibraryMode} className={cn("min-w-0 rounded-md border bg-card lg:sticky lg:top-20", mobileReading && "hidden lg:block")}>
+          <div className="space-y-3 border-b p-3">
+            <TabsList className="grid w-full grid-cols-2"><TabsTrigger value="reports" className="gap-2">{pt ? "Biblioteca" : "Library"}<span className="text-[10px] tabular-nums text-muted-foreground">{jobs.length}</span></TabsTrigger><TabsTrigger value="suggestions" className="gap-2">{pt ? "Sugestões" : "Suggestions"}<span className="text-[10px] tabular-nums text-muted-foreground">{suggestions.length}</span></TabsTrigger></TabsList>
+            <div className="relative"><Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" /><Input value={librarySearch} onChange={(event) => setLibrarySearch(event.target.value)} aria-label={pt ? "Buscar na biblioteca e sugestões" : "Search library and suggestions"} placeholder={pt ? "Buscar título, fonte ou CVE" : "Search title, source or CVE"} className="h-9 bg-background pl-8 text-xs" /></div>
+          </div>
+          <TabsContent value="reports" className="mt-0">
+            <div className="flex items-center gap-3 border-b px-3 py-2"><span className="text-xs text-muted-foreground">{visibleJobs.length} {pt ? "relatórios" : "reports"}</span><select aria-label={pt ? "Status do relatório" : "Report status"} value={jobStatus} onChange={(event) => setJobStatus(event.target.value)} className="ml-auto rounded-sm border bg-background px-2 py-1 text-xs"><option value="all">{pt ? "Todos os status" : "All statuses"}</option><option value="done">{pt ? "Prontos" : "Ready"}</option><option value="pending">{pt ? "Em geração" : "Generating"}</option><option value="error">{pt ? "Com erro" : "Failed"}</option></select></div>
 
             {jobs.length > 0 && (
               <div className="mb-1.5 flex items-center gap-2 rounded-lg bg-muted/40 px-3 py-1.5">
                 <Checkbox
-                  checked={picked.length > 0 && picked.length === jobs.length}
-                  onCheckedChange={(value) => setPicked(value ? jobs.map((j) => j.id) : [])}
-                  aria-label={pt ? "Selecionar todos" : "Select all"}
+                  checked={visibleJobs.length > 0 && visibleJobs.every((job) => picked.includes(job.id))}
+                  disabled={!visibleJobs.length}
+                  onCheckedChange={(value) => setPicked((current) => value ? [...new Set([...current, ...visibleJobs.map((job) => job.id)])] : current.filter((id) => !visibleJobs.some((job) => job.id === id)))}
+                  aria-label={pt ? "Selecionar relatórios visíveis" : "Select visible reports"}
                 />
                 {/* DEN-06: text-muted-foreground mede 4,35:1 em 12px, abaixo
                     do mínimo AA. Mesmo tom da linha de status acima. */}
@@ -641,18 +659,19 @@ const DailyBulletin: React.FC = () => {
               </div>
             )}
 
-            {jobs.length === 0 ? (
+            <div className="max-h-[480px] overflow-y-auto p-2 lg:max-h-[calc(100dvh-20rem)]">
+            {visibleJobs.length === 0 ? (
               <EmptyState
                 icon={FileText}
                 bare
-                title={pt ? "Nenhum relatório ainda" : "No reports yet"}
+                title={jobs.length ? (pt ? "Nenhum resultado" : "No results") : (pt ? "Nenhum relatório ainda" : "No reports yet")}
                 description={pt
-                  ? "Cole uma URL no campo acima, ou gere a partir de uma das sugestões."
-                  : "Paste a URL in the field above, or generate from one of the suggestions."}
+                  ? "Use Novo relatório ou escolha uma sugestão. Ajuste a busca para encontrar análises salvas."
+                  : "Use New report or choose a suggestion. Adjust search to find saved analysis."}
               />
             ) : (
               <div className="space-y-1.5">
-                {jobs.map((j) => (
+                {visibleJobs.map((j) => (
                   <JobListItem
                     key={j.id}
                     job={j}
@@ -668,21 +687,21 @@ const DailyBulletin: React.FC = () => {
                 ))}
               </div>
             )}
-          </details>
+            </div>
+          </TabsContent>
 
           {/* Suggestions — quiet hairline list, action on hover */}
-          <section>
-            <div className="flex items-center justify-between mb-1.5">
-              <h2 className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                {pt ? "Sugestões do dia" : "Today's suggestions"}
-                {shownSuggestions.length < suggestions.length ? ` · ${shownSuggestions.length}/${suggestions.length}` : ""}
+          <TabsContent value="suggestions" className="mt-0">
+            <div className="flex items-center justify-between border-b px-3 py-2">
+              <h2 className="text-xs text-muted-foreground">
+                {shownSuggestions.length} {pt ? "fontes disponíveis" : "available sources"}
               </h2>
               <div className="flex items-center gap-1">
                 {/* Personalização do feed: janela no servidor, o resto filtra na
                     tela. Fica no navegador — é preferência, não configuração. */}
                 <Popover>
                   <PopoverTrigger asChild>
-                    <Button variant="ghost" size="sm" className="h-7 px-2 text-muted-foreground" title={pt ? "Personalizar" : "Customize"}>
+                    <Button variant="ghost" size="sm" className="h-7 px-2 text-muted-foreground" aria-label={pt ? "Filtrar sugestões" : "Filter suggestions"} title={pt ? "Filtrar sugestões" : "Filter suggestions"}>
                       <SlidersHorizontal className="h-3.5 w-3.5" />
                     </Button>
                   </PopoverTrigger>
@@ -733,26 +752,28 @@ const DailyBulletin: React.FC = () => {
                     </Button>
                   </PopoverContent>
                 </Popover>
-                <Button variant="ghost" size="sm" className="h-7 px-2 text-muted-foreground" onClick={loadSuggestions} disabled={loading} title={pt ? "Atualizar" : "Refresh"}>
+                <Button variant="ghost" size="sm" className="h-7 px-2 text-muted-foreground" onClick={loadSuggestions} disabled={loading} aria-label={pt ? "Atualizar sugestões" : "Refresh suggestions"} title={pt ? "Atualizar" : "Refresh"}>
                   {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
                 </Button>
               </div>
             </div>
+            <div className="max-h-[480px] overflow-y-auto p-2 lg:max-h-[calc(100dvh-16rem)]">
             {shownSuggestions.length > 0 ? (
               <div className="divide-y divide-border/60">
                 {shownSuggestions.map((s) => (
-                  <div key={s.url} className="group flex items-center gap-3 py-2.5">
+                  <div key={s.url} className="space-y-2 px-2 py-3">
+                    <div className="flex items-start gap-2">
                     <span className={`h-2 w-2 rounded-full shrink-0 ${SEV_DOT[s.severity] || SEV_DOT.Low}`} title={s.severity} />
-                    <a href={s.url} target="_blank" rel="noopener noreferrer" className="min-w-0 flex-1 truncate text-sm hover:underline" title={s.title}>
+                    <a href={s.url} target="_blank" rel="noopener noreferrer" className="line-clamp-3 min-w-0 flex-1 text-sm font-medium leading-snug hover:underline" title={s.title}>
                       {s.title}
                     </a>
                     {s.kev && <ShieldAlert className="h-3.5 w-3.5 text-red-500 shrink-0" aria-label="CISA KEV" />}
-                    {s.cves?.[0] && <span className="hidden xl:inline text-[11px] font-mono text-muted-foreground shrink-0">{s.cves[0]}</span>}
+                    </div><div className="pl-4 text-[11px] text-muted-foreground">{hostOf(s.url)}{s.cves?.[0] && <span className="ml-2 font-mono">{s.cves[0]}</span>}</div>
                     {/* subtype "auto" explícito: suggestedType já vem resolvido pelo
                         próprio servidor, e herdar o subtipo manual da barra (se houver
                         um concreto) forçaria um tipo que pode contradizer suggestedType. */}
-                    <Button size="sm" variant="ghost" onClick={() => generate(s.url, s.suggestedType, s.title, deckTemplate, "auto")} className="h-7 px-2 text-primary shrink-0 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
-                      <Sparkles className="h-3.5 w-3.5 mr-1" /> {pt ? "Gerar Boletim" : "Generate Bulletin"}
+                    <Button size="sm" variant="outline" disabled={!auth.authenticated} onClick={() => generate(s.url, s.suggestedType, s.title, deckTemplate, "auto")} className="ml-4 h-7 gap-1.5 px-2 text-xs">
+                      <FileText className="h-3 w-3" /> {pt ? "Gerar relatório" : "Generate report"}
                     </Button>
                   </div>
                 ))}
@@ -770,18 +791,22 @@ const DailyBulletin: React.FC = () => {
                   : (pt ? "As sugestões vêm da coleta de notícias. Volte depois da próxima rodada." : "Suggestions come from the news collection. Come back after the next round.")}
               />
             )}
-          </section>
-        </div>
+            </div>
+          </TabsContent>
+        </Tabs>
 
         {/* ── report pane ───────────────────────────────────────────── */}
         <div
           ref={paneRef}
-          className="min-w-0 scroll-mt-24 lg:sticky lg:top-20 lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto"
+          className={cn("min-w-0 scroll-mt-24 lg:sticky lg:top-20 lg:max-h-[calc(100dvh-7rem)] lg:overflow-y-auto", !mobileReading && "hidden lg:block")}
         >
+          <Button variant="ghost" size="sm" className="mb-3 gap-2 px-0 lg:hidden" onClick={() => setMobileReading(false)}><ArrowLeft className="h-3.5 w-3.5" />{pt ? "Voltar à biblioteca" : "Back to library"}</Button>
           {selectedFailure ? (
             <FailurePane job={selectedFailure} pt={pt} onRetry={retryJob} />
+          ) : selectedId && !selectedJob ? (
+            <div role="status" className="flex min-h-[420px] items-center justify-center gap-2 rounded-md border bg-card text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" />{pt ? "Abrindo relatório…" : "Opening report…"}</div>
           ) : (
-            <ReportPane job={selectedJob} />
+            <ReportPane job={selectedJob} onCreate={openComposer} />
           )}
         </div>
       </div>

@@ -6,6 +6,7 @@ import {
     PHISH_LIMITS, buildQuery, normalizeBrandTerm, normalizeBrands, scoreHit, hitFromResult,
     mergeHits, applyRetention, selectDueProfiles, createUrlscanSearch, createPhishWatchStore,
     runProfileWatch, runDuePhishWatch, createDnsResolver, markHitDns, recheckHitsDns,
+    createOwnerUrlscanClient,
 } from '../phishingWatch.js';
 
 const FIXTURE = JSON.parse(fs.readFileSync(new URL('./fixtures/urlscanSearch.json', import.meta.url), 'utf8'));
@@ -199,6 +200,44 @@ test('o único endpoint tocado é o de busca, com a chave no cabeçalho', async 
     assert.equal(init.headers['API-Key'], 'chave');
 });
 
+test('BYOK usa a chave do dono, fallback da plataforma e acompanha alteração e remoção', async () => {
+    const keys = new Map([['u1', 'personal-one'], ['u2', 'personal-two']]);
+    const calls = [];
+    const clientFor = createOwnerUrlscanClient({
+        getUserApiKey: ownerId => keys.get(ownerId), platformApiKey: 'platform-key',
+        fetchImpl: async (url, init) => {
+            calls.push({ url, key: init.headers['API-Key'] });
+            return { ok: true, status: 200, json: async () => ({ results: [] }) };
+        },
+    });
+    for (const owner of ['u1', 'u2', 'u3']) await clientFor(owner).search('brand-query');
+    assert.deepEqual(calls.map(call => call.key), ['personal-one', 'personal-two', 'platform-key']);
+    assert.ok(calls.every(call => new URL(call.url).pathname === '/api/v1/search/'));
+    assert.notEqual(clientFor('u1').quotaGroup, clientFor('u2').quotaGroup);
+    assert.equal(clientFor('u3').quotaGroup, clientFor('u4').quotaGroup);
+    keys.set('u1', 'changed-key');
+    await clientFor('u1').search('query');
+    keys.delete('u1');
+    await clientFor('u1').search('query');
+    assert.deepEqual(calls.slice(-2).map(call => call.key), ['changed-key', 'platform-key']);
+    keys.set('u2', 'platform-key');
+    assert.equal(clientFor('u2').quotaGroup, clientFor('u3').quotaGroup, 'a mesma credencial compartilha a cota');
+});
+
+test('BYOK ativa urlscan sem chave global e conta sem credenciais permanece desativada', async () => {
+    const clientFor = createOwnerUrlscanClient({
+        getUserApiKey: ownerId => ownerId === 'u1' ? 'personal-key' : '',
+        fetchImpl: async () => ({ ok: true, status: 200, json: async () => FIXTURE }),
+    });
+    assert.equal(clientFor('u2').search, null);
+    assert.equal(clientFor('u2').quotaGroup, null);
+    const { store } = memoryStore();
+    await runProfileWatch({ store, profile: profile(), search: clientFor('u1').search, now: NOW });
+    assert.equal(store.runOf('p1').lastStatus, 'success');
+    assert.ok(store.list('u1').length > 0);
+    assert.equal(store.list('u2').length, 0);
+});
+
 test('cota estourada e erro do urlscan viram erro tratado', async () => {
     const status = (code) => createUrlscanSearch({ apiKey: 'k', fetchImpl: async () => ({ ok: false, status: code, json: async () => ({}) }) });
     await assert.rejects(status(429)('q'), /cota do urlscan/);
@@ -251,6 +290,31 @@ test('429 interrompe a rodada em vez de varrer o resto dos perfis', async () => 
     assert.deepEqual(seen, ['p1']);
     assert.equal(outcome.attempted, 1);
     assert.equal(outcome.failed, 1);
+});
+
+test('429 pula somente perfis com a mesma credencial, preservando outras contas e cotas', async () => {
+    const { store } = memoryStore();
+    const keys = new Map([['u1', 'personal-one'], ['u2', 'personal-two']]);
+    const seenKeys = [];
+    const clientFor = createOwnerUrlscanClient({
+        getUserApiKey: ownerId => keys.get(ownerId), platformApiKey: 'platform-key',
+        fetchImpl: async (_url, init) => {
+            const key = init.headers['API-Key'];
+            seenKeys.push(key);
+            return { ok: key === 'personal-two', status: key === 'personal-two' ? 200 : 429, json: async () => ({ results: [] }) };
+        },
+    });
+    const profiles = ['u1', 'u1', 'u3', 'u4', 'u2'].map((ownerId, i) => profile({ id: `p${i}`, ownerId }));
+    const outcome = await runDuePhishWatch({
+        store, profiles, now: NOW,
+        quotaGroupFor: p => clientFor(p.ownerId).quotaGroup,
+        runOne: p => runProfileWatch({ store, profile: p, search: clientFor(p.ownerId).search, now: NOW }),
+    });
+    assert.deepEqual(seenKeys, ['personal-one', 'platform-key', 'personal-two']);
+    assert.deepEqual(outcome, { attempted: 3, completed: 1, failed: 2 });
+    assert.equal(store.runOf('p4').lastStatus, 'success');
+    assert.equal(store.runOf('p1'), null);
+    assert.equal(store.runOf('p3'), null);
 });
 
 test('perfil que falha não derruba os outros', async () => {

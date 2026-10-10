@@ -1,9 +1,26 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createNewsMonitoringStore, normalizeNewsMonitoring, filterMonitoredNews, filterMonitoredStories } from '../newsMonitoring.js';
+import { enrichFeedItems } from '../feedEnrichment.js';
+import { mergeIntoStories } from '../newsStories.js';
 
 const selected = (vendorIds = ['fortinet']) => ({ mode: 'selected', vendorIds });
 const publication = (link, vendorIds, over = {}) => ({ link, title: 'Investigação técnica', vendors: vendorIds.map((id) => ({ id })), ...over });
+
+test('novo alias passa pela extração e seleção sem juntar falhas distintas do produto', () => {
+    const now = new Date('2026-10-09T12:00:00Z');
+    const items = enrichFeedItems([
+        { title: 'MegaRAC SP-X CVE-2026-11111 authentication bypass', link: 'https://example.com/a' },
+        { title: 'MegaRAC SP-X CVE-2026-22222 command injection', link: 'https://example.com/b' },
+        { title: 'FortiGate CVE-2026-33333', link: 'https://example.com/c' },
+    ].map((item) => ({ ...item, description: '', source: 'Advisory', pubDate: now.toISOString() })), {
+        actors: () => [], malware: () => [], campaigns: () => [], seller: () => null, categorize: () => ['Vulnerabilities'],
+    });
+    const stories = mergeIntoStories([], items, now);
+    assert.equal(stories.length, 3);
+    assert.deepEqual(filterMonitoredNews(items, selected(['american-megatrends']), stories).map((item) => item.link), ['https://example.com/a', 'https://example.com/b']);
+    assert.deepEqual(filterMonitoredNews(items, selected(['fortinet']), stories).map((item) => item.link), ['https://example.com/c']);
+});
 const memory = () => {
     let persisted;
     let fail = false;

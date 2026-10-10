@@ -5,7 +5,7 @@ import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import crypto from 'node:crypto';
-import { rmSync } from 'node:fs';
+import { readFileSync, rmSync } from 'node:fs';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -15,6 +15,8 @@ const PORT = 3900 + Math.floor(Math.random() * 100);
 const BASE = `http://127.0.0.1:${PORT}`;
 const PREMIUM_OPEN_PATH = path.join(tmpdir(), `threatsumm4ry-smoke-premium-${PORT}.json`);
 const NEWS_MONITORING_PATH = path.join(tmpdir(), `threatsumm4ry-smoke-monitoring-${PORT}.json`);
+const USERS_STORE_PATH = path.join(tmpdir(), `threatsumm4ry-smoke-users-${PORT}.json`);
+const SECRETS_ENCRYPTION_KEY = 'smoke-only-encryption-secret';
 const SESSION_SECRET = 'test-secret';
 const sessionBody = Buffer.from(JSON.stringify({ sub: 'smoke-user', login: 'tester', exp: Math.floor(Date.now() / 1000) + 3600 })).toString('base64url');
 const sessionSig = crypto.createHmac('sha256', SESSION_SECRET).update(sessionBody).digest('base64url');
@@ -43,6 +45,7 @@ before(async () => {
             ...process.env,
             PORT: String(PORT), NODE_ENV: 'test', SESSION_SECRET,
             GITHUB_ALLOWED_LOGINS: 'tester', PREMIUM_OPEN_PATH, NEWS_MONITORING_PATH,
+            USERS_STORE_PATH, SECRETS_ENCRYPTION_KEY, URLSCAN_API_KEY: '',
         },
         stdio: 'ignore',
     });
@@ -55,6 +58,8 @@ after(() => {
     rmSync(`${PREMIUM_OPEN_PATH}.tmp`, { force: true });
     rmSync(NEWS_MONITORING_PATH, { force: true });
     rmSync(`${NEWS_MONITORING_PATH}.tmp`, { force: true });
+    rmSync(USERS_STORE_PATH, { force: true });
+    rmSync(`${USERS_STORE_PATH}.tmp`, { force: true });
 });
 
 test('GET /api/vendors/status returns vendor map', async () => {
@@ -114,6 +119,47 @@ test('monitoramento exige sessão, aceita usuário comum e isola preferências p
     assert.equal((await other.json()).preferences.mode, 'all');
     const invalid = await fetch(`${BASE}/api/news/monitoring`, { method: 'PUT', headers: { ...OUTSIDER_HEADERS, 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: 'selected', vendorIds: ['not-a-vendor'] }) });
     assert.equal(invalid.status, 400);
+});
+
+test('urlscan BYOK é cifrado, isolado por conta e ativa a busca sem chave da plataforma', async () => {
+    const key = 'urlscan-smoke-personal-key';
+    const route = `${BASE}/api/user/keys/urlscan`;
+    const write = (headers, value) => fetch(route, {
+        method: 'PUT', headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: value, ownerId: 'outsider' }),
+    });
+    assert.equal((await write({}, key)).status, 401);
+    assert.equal((await write(AUTH_HEADERS, 'short')).status, 400);
+    const watchStatus = () => fetch(`${BASE}/api/phishing-watch/hits`, { headers: AUTH_HEADERS }).then(r => r.json());
+    assert.equal((await watchStatus()).configured, false);
+
+    const saved = await write(AUTH_HEADERS, key);
+    assert.equal(saved.status, 200);
+    assert.deepEqual(await saved.json(), { provider: 'urlscan', hasKey: true });
+    const own = await fetch(`${BASE}/api/user/keys`, { headers: AUTH_HEADERS }).then(r => r.json());
+    assert.deepEqual(own.keys, { shodan: false, urlscan: true });
+    assert.ok(!JSON.stringify(own).includes(key));
+    const other = await fetch(`${BASE}/api/user/keys`, { headers: OUTSIDER_HEADERS }).then(r => r.json());
+    assert.equal(other.keys.urlscan, false);
+
+    const disk = readFileSync(USERS_STORE_PATH, 'utf8');
+    assert.ok(!disk.includes(key), 'segredo não pode ficar em texto aberto');
+    const blob = Buffer.from(JSON.parse(disk)['smoke-user'].apiKeysEnc.urlscan, 'base64');
+    const decipher = crypto.createDecipheriv('aes-256-gcm', crypto.createHash('sha256').update(SECRETS_ENCRYPTION_KEY).digest(), blob.subarray(0, 12));
+    decipher.setAuthTag(blob.subarray(12, 28));
+    assert.equal(Buffer.concat([decipher.update(blob.subarray(28)), decipher.final()]).toString(), key);
+    assert.equal((await watchStatus()).configured, true);
+    // Perfil inexistente chega à autorização do perfil, sem chamar o fornecedor.
+    const run = await fetch(`${BASE}/api/phishing-watch/run`, {
+        method: 'POST', headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ profileId: 'missing-byok-profile' }),
+    });
+    assert.equal(run.status, 404);
+    assert.equal((await fetch(route, { method: 'DELETE', headers: OUTSIDER_HEADERS })).status, 200);
+    assert.equal((await watchStatus()).configured, true, 'outra conta não remove nossa chave');
+    assert.equal((await fetch(route, { method: 'DELETE', headers: AUTH_HEADERS })).status, 200);
+    assert.equal((await watchStatus()).configured, false);
+    assert.equal(JSON.parse(readFileSync(USERS_STORE_PATH, 'utf8'))['smoke-user'].apiKeysEnc.urlscan, undefined);
 });
 
 test('removed DNSBL endpoints return 404', async () => {

@@ -133,22 +133,23 @@ function ExportMenu({ job, pt }: { job: BoletimJob; pt: boolean }) {
 
 // Painel de leitura da workstation: toolbar com meta/ações + BoletimView.
 // `job === null` (ou sem JSON) mostra o estado vazio.
-export function ReportPane({ job }: { job: BoletimJob | null }) {
+export function ReportPane({ job, onCreate }: { job: BoletimJob | null; onCreate?: () => void }) {
   const { language } = useLanguage();
   const pt = language === "pt";
 
   if (!job || !job.json) {
     return (
-      <div className="flex min-h-[420px] flex-col items-center justify-center gap-4 rounded-lg border border-dashed border-border/60 p-8 text-center">
+      <div className="flex min-h-[480px] flex-col items-center justify-center gap-4 rounded-md border bg-card p-8 text-center">
         <BrandMark className="h-11 w-11 opacity-80" />
         <div>
-          <div className="text-sm font-medium">{pt ? "Nenhum relatório aberto" : "No report open"}</div>
+          <div className="text-base font-semibold">{pt ? "Sua área de análise" : "Your analysis workspace"}</div>
           <p className="mt-1 max-w-[36ch] text-xs text-muted-foreground">
             {pt
-              ? "Selecione um relatório pronto na lista ou cole uma URL para gerar um novo."
-              : "Select a finished report from the list or paste a URL to generate a new one."}
+              ? "Abra um relatório na biblioteca ou use uma fonte para criar uma nova análise."
+              : "Open a report from the library or use a source to create new analysis."}
           </p>
         </div>
+        {onCreate && <Button variant="outline" size="sm" onClick={onCreate}><FileText className="mr-2 h-4 w-4" />{pt ? "Criar relatório" : "Create report"}</Button>}
       </div>
     );
   }
@@ -156,7 +157,7 @@ export function ReportPane({ job }: { job: BoletimJob | null }) {
   const r = job.json;
   const usage = usageTag(r.consumo, pt);
   return (
-    <div className="rounded-lg border bg-card/40 p-5 lg:p-6">
+    <article className="rounded-md border bg-card p-5 lg:p-7">
       {/* toolbar: meta à esquerda, ações à direita */}
       <div className="flex flex-wrap items-center gap-2">
         {r.tlp && (
@@ -164,16 +165,7 @@ export function ReportPane({ job }: { job: BoletimJob | null }) {
             TLP:{r.tlp}
           </Badge>
         )}
-        <Badge variant="secondary" className="font-mono text-[10px] uppercase">{job.type}</Badge>
-        {job.template && (
-          <Badge variant="outline" className="text-[10px]">
-            {job.template === "basico"
-              ? (pt ? "Template básico" : "Basic template")
-              : job.template === "premium"
-                ? (pt ? "Template premium" : "Premium template")
-                : (pt ? "Template avançado" : "Advanced template")}
-          </Badge>
-        )}
+        <span className="text-xs font-medium text-muted-foreground">{job.type === "vuln" ? (pt ? "Vulnerabilidade" : "Vulnerability") : job.type === "campaign" ? (pt ? "Campanha" : "Campaign") : (pt ? "Análise" : "Analysis")}</span>
         {job.subtype && job.subtype !== "auto" && (
           <Badge variant="outline" className="text-[10px]">
             {{
@@ -185,16 +177,17 @@ export function ReportPane({ job }: { job: BoletimJob | null }) {
             }[job.subtype]}
           </Badge>
         )}
-        {r.generated_at && (
-          <span className="text-xs text-muted-foreground" title={pt ? "Geração do boletim" : "Report generated"}>
-            {fmtDate(r.generated_at, pt)}
-          </span>
-        )}
+        <div className="ml-auto"><ExportMenu job={job} pt={pt} /></div>
+      </div>
+      <h2 className="mt-5 max-w-[65ch] text-xl font-semibold leading-snug xl:text-2xl">
+        {r.titulo || job.title || job.url}
+      </h2>
+      <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 border-b pb-5 text-xs text-muted-foreground">
         {/* Publicação da FONTE. Rotulada porque sem isso vira sósia da data acima —
             e um advisory de dois anos passaria por novidade. */}
         {r.source_published && fmtDate(r.source_published, pt) && (
           <span className="text-xs text-muted-foreground" title={pt ? "Publicação da fonte" : "Source published"}>
-            {pt ? "fonte" : "source"} {fmtDate(r.source_published, pt)}
+            {pt ? "Fonte publicada em" : "Source published on"} {fmtDate(r.source_published, pt)}
           </span>
         )}
         {r.source_url && (
@@ -205,19 +198,11 @@ export function ReportPane({ job }: { job: BoletimJob | null }) {
             {hostOf(r.source_url)} <ExternalLink className="h-3 w-3 shrink-0" />
           </a>
         )}
-        <div className="ml-auto flex items-center gap-2">
-          {usage}
-          <ExportMenu job={job} pt={pt} />
-        </div>
       </div>
-
-      <h2 className="mt-4 text-lg font-semibold leading-snug">
-        {r.titulo || job.title || job.url}
-      </h2>
-
       <BoletimView report={r} />
       <ReportRelations job={job} pt={pt} />
-    </div>
+      <details className="mt-8 border-t pt-4 text-xs text-muted-foreground"><summary className="cursor-pointer">{pt ? "Dados de geração" : "Generation details"}</summary><div className="mt-3 flex flex-wrap items-center gap-3">{r.generated_at && <span>{pt ? "Gerado em" : "Generated on"} {fmtDate(r.generated_at, pt)}</span>}{job.template && <span>Template: {job.template}</span>}{usage}</div></details>
+    </article>
   );
 }
 

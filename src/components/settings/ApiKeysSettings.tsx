@@ -26,6 +26,7 @@ interface Provider {
   label: string;
   url?: string;
   placeholder?: string;
+  description?: { pt: string; en: string };
 }
 
 interface Group {
@@ -33,7 +34,7 @@ interface Group {
   items: Provider[];
 }
 
-// Só o provider cuja chave é REALMENTE usada numa consulta. Os outros doze
+// Só providers cuja chave é REALMENTE usada numa consulta. Os outros doze
 // ficavam aqui, guardavam a chave cifrada e apareciam como "configurado" —
 // mas nenhuma rota do server os lia, todas leem só a env. Oferecer campo que
 // não faz nada é pior do que não oferecer.
@@ -42,6 +43,18 @@ const CATALOG: Group[] = [
     title: { pt: "Superfície de Ataque", en: "Attack Surface" },
     items: [
       { id: "shodan", label: "Shodan", url: "https://account.shodan.io/" },
+    ],
+  },
+  {
+    title: { pt: "Vigilância de marcas", en: "Brand monitoring" },
+    items: [
+      {
+        id: "urlscan", label: "urlscan.io", url: "https://urlscan.io/user/profile/",
+        description: {
+          pt: "Usa sua cota nas buscas manuais e automáticas por domínios suspeitos relacionados às marcas dos seus perfis. Consulta páginas já escaneadas pelo urlscan.io.",
+          en: "Uses your quota for manual and automatic searches for suspicious domains related to your profiles' brands. Searches pages already scanned by urlscan.io.",
+        },
+      },
     ],
   },
 ];
@@ -71,9 +84,16 @@ function KeyRow({ provider, configured, onChanged }: { provider: Provider; confi
   };
 
   const remove = async () => {
-    await deleteApiKey(provider.id);
-    toast.success(pt ? `Chave ${provider.label} removida` : `${provider.label} key removed`);
-    onChanged();
+    setBusy(true);
+    try {
+      await deleteApiKey(provider.id);
+      toast.success(pt ? `Chave ${provider.label} removida` : `${provider.label} key removed`);
+      onChanged();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : (pt ? "Falha ao remover" : "Failed to remove"));
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
@@ -94,13 +114,15 @@ function KeyRow({ provider, configured, onChanged }: { provider: Provider; confi
         ) : null}
       </div>
 
+      {provider.description ? <p className="text-xs leading-relaxed text-muted-foreground">{pt ? provider.description.pt : provider.description.en}</p> : null}
+
       {configured && !editing ? (
         <div className="flex flex-1 items-center gap-2">
           <span className="flex-1 rounded-md border border-border bg-secondary/40 px-3 py-2 font-mono text-sm tracking-wider text-muted-foreground">••••••••••••</span>
-          <Button variant="outline" size="sm" onClick={() => setEditing(true)}>{pt ? "Alterar" : "Change"}</Button>
+          <Button variant="outline" size="sm" disabled={busy} onClick={() => setEditing(true)}>{pt ? "Alterar" : "Change"}</Button>
           <AlertDialog>
             <AlertDialogTrigger asChild>
-              <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-destructive"><Trash2 /><span className="sr-only">{pt ? "Remover" : "Remove"}</span></Button>
+              <Button variant="ghost" size="sm" disabled={busy} className="text-muted-foreground hover:text-destructive"><Trash2 /><span className="sr-only">{pt ? "Remover" : "Remove"}</span></Button>
             </AlertDialogTrigger>
             <AlertDialogContent>
               <AlertDialogHeader>
@@ -173,8 +195,8 @@ export function ApiKeysSettings() {
               ser dita com todas as letras. */}
           <p className="mt-1 text-sm text-muted-foreground">
             {pt
-              ? "Conecte sua conta Shodan para usar sua própria cota nas consultas de exposição."
-              : "Connect your Shodan account to use your own quota for exposure lookups."}
+              ? "Use suas próprias chaves e cotas do Shodan e do urlscan.io."
+              : "Use your own Shodan and urlscan.io keys and quotas."}
           </p>
         </div>
         <Badge variant="outline" className="mt-1 shrink-0 text-xs">{loading ? "…" : `${configured}/${total}`} {pt ? "conectada" : "connected"}</Badge>

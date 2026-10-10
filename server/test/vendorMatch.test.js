@@ -6,8 +6,45 @@ import { scoreArticle } from '../ctiIntel.js';
 import { enrichFeedItems, EXTRACTION_VERSION } from '../feedEnrichment.js';
 import { mergeIntoStories } from '../newsStories.js';
 import { categorize } from '../newsCategories.js';
+import { KEV_PRODUCT_ALIASES, OFFICIAL_PRODUCT_ALIASES } from '../vendorProductAliases.js';
 
 const names = (text) => matchVendors(text).map((vendor) => vendor.name);
+
+test('produtos adicionais têm fonte e fornecedor existente, sem aliases órfãos', () => {
+    for (const name of new Set([...Object.keys(KEV_PRODUCT_ALIASES), ...Object.keys(OFFICIAL_PRODUCT_ALIASES)])) {
+        const vendor = VENDOR_CATALOG.find((entry) => entry.name === name);
+        assert.ok(vendor, `Fornecedor inexistente: ${name}`);
+        for (const alias of [...(KEV_PRODUCT_ALIASES[name] ?? []), ...(OFFICIAL_PRODUCT_ALIASES[name]?.aliases ?? [])]) {
+            assert.ok(vendor.aliases.includes(alias), `Alias não integrado: ${alias}`);
+            assert.ok(names(`${alias} security advisory`).includes(name), `Produto não reconhecido: ${alias}`);
+        }
+        if (OFFICIAL_PRODUCT_ALIASES[name]) assert.match(OFFICIAL_PRODUCT_ALIASES[name].source, /^https:\/\//);
+    }
+});
+
+test('produtos sem marca na manchete reconhecem o fornecedor correto', () => {
+    for (const [text, expected] of [
+        ['MegaRAC SP-X BMC vulnerability', 'American Megatrends'],
+        ['Ryzen and EPYC security update', 'AMD'],
+        ['OmniSwitch remote code execution', 'Alcatel-Lucent'],
+        ['ApsaraDB security bulletin', 'Alibaba Cloud'],
+        ['AlmaLinux OS security update', 'AlmaLinux'],
+        ['Amcrest View Pro security advisory', 'Amcrest'],
+        ['MiCollab authentication bypass', 'Mitel'],
+        ['Nexus Repository critical vulnerability', 'Sonatype'],
+        ['TwinCAT security bulletin', 'Beckhoff'],
+        ['CENTUM VP security bulletin', 'Yokogawa'],
+        ['Conjur security bulletin', 'CyberArk'],
+    ]) assert.deepEqual(names(text), [expected], text);
+});
+
+test('produtos genéricos e siglas isoladas não viram fornecedores', () => {
+    assert.deepEqual(names('falcon, singularity, instinct, rainbow, orion, core, command center, enterprise, backup, docs, reader, salt, ECS, OSS, FTA, ACI, RS, PRA and NX'), []);
+    assert.deepEqual(names('Telerik Report Server security advisory'), ['Telerik']);
+    assert.deepEqual(names('Brocade Fabric OS security advisory'), ['Brocade']);
+    assert.deepEqual(names('Langflow security advisory'), ['Langflow']);
+    assert.deepEqual(names('Zimbra Collaboration Suite security advisory'), ['Zimbra']);
+});
 
 test('catálogo tem IDs e aliases sem duplicatas entre fornecedores', () => {
     const ids = new Set(), aliases = new Map();
@@ -52,6 +89,8 @@ test('vários fornecedores e aliases somam a categoria uma única vez', () => {
 });
 
 test('nomes e produtos preservam pontuação, caixa e whitespace', () => {
+    assert.deepEqual(names('WS_FTP Server bulletin'), ['Progress Software']);
+    assert.deepEqual(names('WS FTP Server bulletin'), ['Progress Software']);
     assert.ok(names('NOTEPAD++ bulletin').includes('Notepad++'));
     assert.ok(names('B&R Automation bulletin').includes('B&R Automation'));
     assert.ok(names('Pepperl+Fuchs bulletin').includes('Pepperl+Fuchs'));

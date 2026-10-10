@@ -1,7 +1,7 @@
 import { scoreArticle, extractIOCs, ttpIdsFrom, isPureNoise, severityFromScore } from './ctiIntel.js';
 import { contentHash } from './articleCollector.js';
 
-export const EXTRACTION_VERSION = 'feed-v4';
+export const EXTRACTION_VERSION = 'feed-v5';
 
 // Keep all mentioned CVEs for research/KEV, but use only the article's focus
 // to group coverage. A patch report often recounts older, unrelated flaws.

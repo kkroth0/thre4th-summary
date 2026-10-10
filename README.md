@@ -110,3 +110,11 @@ $VPS_APP_DIR/shared/.env
 Start from [server/.env.example](./server/.env.example). Notable optional keys:
 `NVD_API_KEY` (CVE rate limit), plus the per-source keys for VirusTotal,
 Shodan, Censys, AbuseIPDB, abuse.ch, etc.
+
+Users can add personal Shodan and urlscan.io keys in **Settings → API keys**.
+Keys are encrypted with `SECRETS_ENCRYPTION_KEY` and stored per account in
+`server/.users.json`; API responses expose only whether a key is configured.
+Personal keys take precedence over the platform keys. urlscan.io BYOK applies
+to manual brand searches and scheduled monitoring of the account's organization
+profiles. It searches existing scans. Exhausting one credential's quota does
+not stop profiles using other credentials.

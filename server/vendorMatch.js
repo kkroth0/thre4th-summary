@@ -1,7 +1,8 @@
 import { VENDOR_CATALOG } from './vendorCatalog.js';
 
 const escapeRe = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-const aliasPattern = (alias) => alias.trim().split(/\s+/).map(escapeRe).join('\\s+');
+// The input normalizes underscores; aliases such as WS_FTP must do the same.
+const aliasPattern = (alias) => alias.replace(/_/g, ' ').trim().split(/\s+/).map(escapeRe).join('\\s+');
 
 // Unicode boundaries also reject brands inside Portuguese/Spanish words.
 // Keep punctuation in aliases: Notepad++, B&R and Pepperl+Fuchs are names.

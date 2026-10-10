@@ -1,7 +1,7 @@
 # Fornecedores e projetos reconhecidos pelo ETL
 
 O catálogo curado em [vendorCatalog.js](../../server/vendorCatalog.js) tem 525
-entidades e 835 nomes/aliases distintos. Inclui fornecedores e projetos de
+entidades e 1.261 nomes/aliases distintos. Inclui fornecedores e projetos de
 software relevantes para avisos de vulnerabilidade e pesquisa CTI. Não é uma
 lista de novas fontes RSS: as entradas reconhecem menções no texto coletado.
 
@@ -53,7 +53,7 @@ menção a fornecedor não é sinal suficiente de incidente ou de exploração a
 
 `assets` devolve os nomes canônicos; `vendors` devolve `{id, name, sector,
 matched}`. Os metadados ficam também nas evidências por publicação da história
-e no arquivo permanente. A versão de extração passou para `feed-v3`, permitindo
+e no arquivo permanente. A versão de extração passou para `feed-v5`, permitindo
 atualizar a atribuição das URLs já coletadas e invalidar snapshots anteriores.
 
 ## Controle de ambiguidades
@@ -113,6 +113,19 @@ Inclua o nome da marca entre os aliases quando ele também for seguro isolado.
 Evite termos genéricos, siglas ambíguas sem qualificação e aliases que já
 pertencem a outra entidade. Alterações na atribuição devem atualizar a versão
 de extração quando precisarem invalidar snapshots persistidos.
+
+Produtos adicionais estão em [vendorProductAliases.js](../../server/vendorProductAliases.js).
+A revisão de 09/10/2026 adicionou 426 nomes a 136 entidades, consultando o KEV
+publicado em 08/10/2026 e catálogos oficiais dos fabricantes. A lista oficial
+guarda uma URL de referência por entidade. Produtos ambíguos são qualificados:
+`SolarWinds Orion`, `AMD Instinct`, `Commvault Command Center`; `Orion`, `Instinct`
+e `Command Center` isolados não identificam fornecedor. Projetos sem nome
+alternativo válido continuam reconhecidos pelo próprio nome, sem aliases artificiais.
+
+Nas configurações, a busca inclui esses produtos. A coluna mostra nomes
+reconhecidos em duas linhas, com a lista completa no título da célula e
+visibilidade também em telas pequenas. Aliases com underscore, como `WS_FTP`,
+usam a mesma normalização do texto coletado.
 
 ```bash
 node --test server/test/vendorMatch.test.js server/test/ctiIntel.test.js server/test/feedEnrichment.test.js

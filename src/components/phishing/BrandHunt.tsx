@@ -168,8 +168,9 @@ export function BrandHunt() {
       {!configured && (
         <p className="rounded-md border border-amber-500/30 bg-amber-500/5 p-3 text-xs text-amber-600">
           {pt
-            ? "A chave do urlscan não está configurada no servidor (URLSCAN_API_KEY); a vigilância está parada."
-            : "The urlscan key is not configured on the server (URLSCAN_API_KEY); the watch is idle."}
+            ? "Configure sua chave do urlscan.io para ativar a vigilância de marcas."
+            : "Configure your urlscan.io key to enable brand monitoring."}
+          {" "}<Link className="underline underline-offset-2" to="/settings?section=api-keys">{pt ? "Chaves de API" : "API keys"}</Link>
         </p>
       )}
 

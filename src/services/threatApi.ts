@@ -1714,7 +1714,11 @@ export const saveApiKey = async (provider: string, key: string): Promise<void> =
 };
 
 export const deleteApiKey = async (provider: string): Promise<void> => {
-    await fetch(`/api/user/keys/${encodeURIComponent(provider)}`, { method: 'DELETE' }).catch(() => {});
+    const r = await fetch(`/api/user/keys/${encodeURIComponent(provider)}`, { method: 'DELETE' });
+    if (!r.ok) {
+        const e = await r.json().catch(() => ({}));
+        throw new Error(e.error || `Key API error: ${r.status}`);
+    }
 };
 
 // ─── Knowledge: fontes curadas ─────────────────────────────────────────────

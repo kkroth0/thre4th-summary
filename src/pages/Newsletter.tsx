@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { Link } from "react-router-dom";
-import { ArrowLeft, Globe, BookOpen, AlertTriangle, Search, Mail, Eye, Filter, ChevronDown, RefreshCw, Share2, Loader2, Bookmark, X, PencilLine, ExternalLink, CheckCircle2 } from "lucide-react";
+import { ArrowLeft, Globe, BookOpen, AlertTriangle, Search, Mail, Eye, Filter, ChevronDown, RefreshCw, Share2, Loader2, Bookmark, X, PencilLine, ExternalLink, CheckCircle2, Settings2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -669,16 +669,6 @@ const Newsletter = () => {
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-card px-4 py-3 text-sm">
-            <span className="text-muted-foreground">{monitoring.error
-              ? (language === "pt" ? "Monitoramento indisponível" : "Monitoring unavailable")
-              : !monitoring.data ? (language === "pt" ? "Carregando monitoramento…" : "Loading monitoring…")
-              : monitoring.data.preferences.mode === "selected"
-              ? (language === "pt" ? `Fornecedores monitorados: ${monitoring.data.preferences.vendorIds.length}` : `Monitored vendors: ${monitoring.data.preferences.vendorIds.length}`)
-              : (language === "pt" ? "Monitoramento: todas as notícias" : "Monitoring: all news")}</span>
-            <Link to="/settings?section=monitoring&from=/newsletter#news-vendors" className="font-medium text-primary hover:underline">{language === "pt" ? "Escolher fornecedores" : "Choose vendors"}</Link>
-          </div>
-
           {/* Busca + filtros — uma barra só, um botão de filtro só: eram 4
               controles sempre à vista (severidade, período, ordenação, "mais
               filtros") competindo por espaço — agora é um Popover com tudo
@@ -686,7 +676,7 @@ const Newsletter = () => {
               está ativo sem precisar abrir nada. */}
           <div className="flex flex-col gap-3 rounded-lg border bg-card p-3">
             <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
-              <div className="relative flex-1">
+              <div className="relative min-w-0 flex-1">
                 <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
                 <Input
                   ref={searchInputRef}
@@ -701,6 +691,24 @@ const Newsletter = () => {
                   </kbd>
                 )}
               </div>
+
+              <div className="flex flex-wrap items-center gap-2 lg:shrink-0">
+                <Button asChild variant="outline" size="sm" className="h-9 gap-1.5 px-3 text-xs">
+                  <Link
+                    to="/settings?section=monitoring&from=/newsletter#news-vendors"
+                    aria-label={language === "pt" ? "Configurar fornecedores monitorados" : "Configure monitored vendors"}
+                    title={language === "pt" ? "Configurar fornecedores monitorados" : "Configure monitored vendors"}
+                  >
+                    <Settings2 className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
+                    <span className="text-muted-foreground">{language === "pt" ? "Fornecedores:" : "Vendors:"}</span>
+                    <span className="font-semibold tabular-nums" aria-live="polite">{monitoring.error
+                      ? (language === "pt" ? "Indisponível" : "Unavailable")
+                      : !monitoring.data ? "…"
+                      : monitoring.data.preferences.mode === "selected"
+                      ? monitoring.data.preferences.vendorIds.length
+                      : (language === "pt" ? "Todos" : "All")}</span>
+                  </Link>
+                </Button>
 
               <Popover>
                 <PopoverTrigger asChild>
@@ -850,11 +858,14 @@ const Newsletter = () => {
               <Button
                 disabled={loadingNews || isRefreshingNews}
                 onClick={() => loadNews()}
-                className="h-9 shrink-0 gap-1.5 px-3 text-xs font-semibold lg:ml-auto"
+                className="h-9 shrink-0 gap-1.5 px-3 text-xs font-semibold"
+                aria-label={language === "pt" ? "Atualizar agora" : "Refresh now"}
+                title={language === "pt" ? "Atualizar agora" : "Refresh now"}
               >
                 <RefreshCw className={cn("h-3.5 w-3.5", (loadingNews || isRefreshingNews) && "animate-spin")} />
-                {language === "pt" ? "Atualizar agora" : "Refresh now"}
+                <span className="hidden sm:inline">{language === "pt" ? "Atualizar agora" : "Refresh now"}</span>
               </Button>
+              </div>
             </div>
           </div>
 

@@ -1,12 +1,19 @@
 // Suppliers and software projects relevant to CTI. Explicit aliases replace
 // the default name, so ambiguous brands can require a qualified product/name.
 // Historical brands stay separate: a mention does not prove current ownership.
+import { productAliasesFor } from './vendorProductAliases.js';
+
 const CASE_SENSITIVE_ALIASES = new Set(['SAP', 'ABB', 'AMD', 'HPE', 'WIKA']);
-const group = (sector, rows) => rows.map(([name, ...aliases]) => ({
-    id: name.toLowerCase().normalize('NFD').replace(/\p{Mn}/gu, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''),
-    name, sector, aliases: aliases.length ? aliases : [name],
-    caseSensitiveAliases: (aliases.length ? aliases : [name]).filter((alias) => CASE_SENSITIVE_ALIASES.has(alias)),
-}));
+const group = (sector, rows) => rows.map(([name, ...explicitAliases]) => {
+    const aliases = [...new Map([
+        ...(explicitAliases.length ? explicitAliases : [name]), ...productAliasesFor(name),
+    ].map((alias) => [alias.toLowerCase(), alias])).values()];
+    return {
+        id: name.toLowerCase().normalize('NFD').replace(/\p{Mn}/gu, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''),
+        name, sector, aliases,
+        caseSensitiveAliases: aliases.filter((alias) => CASE_SENSITIVE_ALIASES.has(alias)),
+    };
+});
 
 export const VENDOR_CATALOG = [
     ...group('cloud-platforms', [

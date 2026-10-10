@@ -141,8 +141,8 @@ export function OrgProfileEditor() {
         <CardTitle className="flex items-center gap-2 text-sm"><Building2 className="h-4 w-4 text-muted-foreground" /> {pt ? "Perfis da organização" : "Organization profiles"}</CardTitle>
         <CardDescription>
           {pt
-            ? "Contexto de priorização: setores, regiões e tecnologias. Não restringe a coleta."
-            : "Prioritization context: sectors, regions and technologies. Does not restrict collection."}
+            ? "Identifique notícias relacionadas a setores, regiões e tecnologias da organização. Ative o perfil nos filtros do feed."
+            : "Identify news related to your organization's sectors, regions and technologies. Activate the profile in the feed filters."}
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-3 px-4 pb-4">

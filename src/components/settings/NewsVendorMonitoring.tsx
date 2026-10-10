@@ -78,7 +78,7 @@ export function NewsVendorMonitoring() {
                     <Checkbox checked={selected.has(vendor.id)} disabled={saving} onCheckedChange={(checked) => changeSelection([vendor.id], checked === true)} aria-label={vendor.name} className="mt-0.5" />
                     <span className="truncate text-sm font-medium">{vendor.name}</span></span>
                     <span className="text-xs text-muted-foreground">{pt ? NEWS_VENDOR_SECTORS[vendor.sector]?.pt : NEWS_VENDOR_SECTORS[vendor.sector]?.en}</span>
-                    <span className="hidden truncate font-mono text-[11px] text-muted-foreground sm:block" title={vendor.aliases.join(", ")}>{vendor.aliases.filter((alias) => alias.toLowerCase() !== vendor.name.toLowerCase()).join(", ") || "—"}</span>
+                    <span className="col-span-2 line-clamp-2 break-words text-xs text-muted-foreground sm:col-span-1" title={vendor.aliases.join(", ")}>{vendor.aliases.filter((alias) => alias.toLowerCase() !== vendor.name.toLowerCase()).join(", ") || vendor.aliases.join(", ")}</span>
                   </label>)}
                   {!visible.length && <p className="col-span-full p-4 text-center text-sm text-muted-foreground">{pt ? "Nenhum fornecedor encontrado. Ajuste a busca ou os filtros." : "No vendors found. Adjust your search or filters."}</p>}
                 </div>

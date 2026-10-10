@@ -1,6 +1,15 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { canOpenJob, canOpenReport, DEFAULT_SUGGESTION_PREFS, explainFailure, filterSuggestions, reportTitle } from "./dailyBulletinView.ts";
+import { canOpenJob, canOpenReport, DEFAULT_SUGGESTION_PREFS, explainFailure, filterSuggestions, filterReportLibrary, reportTitle } from "./dailyBulletinView.ts";
+
+test("busca na biblioteca combina título, fonte e CVE sem perder sugestões após a 14ª", () => {
+  const items = Array.from({ length: 40 }, (_, index) => ({ title: `Análise ${index + 1}`, url: `https://vendor.example/report-${index}`, cves: [`CVE-2026-${10000 + index}`] }));
+  assert.equal(filterReportLibrary(items, "").length, 40);
+  assert.deepEqual(filterReportLibrary(items, "ANALISE 40 vendor.example").map((item) => item.title), ["Análise 40"]);
+  assert.deepEqual(filterReportLibrary(items, "CVE-2026-10039").map((item) => item.title), ["Análise 40"]);
+  assert.equal(filterReportLibrary(items, "unknown.example").length, 0);
+  assert.equal(items.length, 40);
+});
 
 test("relatório persistido abre mesmo quando a listagem omite o JSON", () => {
   assert.equal(canOpenReport({ status: "done", json: null, hasReport: true }), true);

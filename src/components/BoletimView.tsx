@@ -44,12 +44,12 @@ const anchorOf = (title: string) =>
 const Section: React.FC<{ title: string; count?: number; children: React.ReactNode }> = ({ title, count, children }) => (
   // data-section é o que o índice lê: seção nova entra nele sem precisar mexer
   // em lista nenhuma. scroll-mt compensa o cabeçalho ao pular pra cá.
-  <div id={anchorOf(title)} data-section={title} className="mt-4 scroll-mt-24 first:mt-0">
-    <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1.5">
+  <section id={anchorOf(title)} data-section={title} className="mt-7 scroll-mt-24 border-t border-border/50 pt-5 first:mt-0 first:border-t-0 first:pt-0">
+    <h3 className="mb-3 text-sm font-semibold text-foreground">
       {title}{typeof count === "number" ? ` (${count})` : ""}
-    </h4>
+    </h3>
     {children}
-  </div>
+  </section>
 );
 
 /**
@@ -60,26 +60,32 @@ const Section: React.FC<{ title: string; count?: number; children: React.ReactNo
  */
 const SectionIndex: React.FC<{ containerRef: React.RefObject<HTMLDivElement>; report: BoletimReport }> = ({ containerRef, report }) => {
   const [titles, setTitles] = React.useState<string[]>([]);
+  const [active, setActive] = React.useState("");
 
   React.useEffect(() => {
     const found = containerRef.current?.querySelectorAll<HTMLElement>("[data-section]");
     setTitles([...(found || [])].map((el) => el.dataset.section || "").filter(Boolean));
+    setActive("");
   }, [containerRef, report]);
 
   if (titles.length < 3) return null;
 
   return (
-    <nav className="mb-4 flex flex-wrap gap-1.5 border-b border-border/60 pb-3">
+    <nav aria-label="Seções do relatório" className="min-w-0 xl:sticky xl:top-4 xl:col-start-2 xl:row-start-1 xl:self-start">
+      <p className="mb-3 hidden text-[10px] font-semibold uppercase tracking-wider text-muted-foreground xl:block">Neste relatório</p>
+      <div className="flex gap-1 overflow-x-auto border-b pb-2 xl:block xl:space-y-0.5 xl:overflow-visible xl:border-b-0 xl:border-l xl:pb-0 xl:pl-3">
       {titles.map((title) => (
         <button
           key={title}
           type="button"
-          onClick={() => document.getElementById(anchorOf(title))?.scrollIntoView({ behavior: "smooth", block: "start" })}
-          className="rounded-full border border-border/60 px-2.5 py-1 text-[11px] font-medium text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
+          onClick={() => { setActive(title); containerRef.current?.querySelector(`#${anchorOf(title)}`)?.scrollIntoView({ behavior: "smooth", block: "start" }); }}
+          aria-current={active === title ? "location" : undefined}
+          className={`shrink-0 rounded-sm px-2 py-2 text-left text-xs transition-colors hover:bg-muted hover:text-foreground xl:block xl:w-full ${active === title ? "bg-muted font-medium text-foreground" : "text-muted-foreground"}`}
         >
           {title}
         </button>
       ))}
+      </div>
     </nav>
   );
 };
@@ -123,8 +129,9 @@ export const BoletimView: React.FC<{ report: BoletimReport }> = ({ report }) => 
   const containerRef = React.useRef<HTMLDivElement>(null);
 
   return (
-    <div ref={containerRef} className="mt-4 text-sm">
+    <div ref={containerRef} className="mt-6 grid min-w-0 gap-6 text-sm xl:grid-cols-[minmax(0,1fr)_170px]">
       <SectionIndex containerRef={containerRef} report={report} />
+      <div className="min-w-0 xl:col-start-1 xl:row-start-1 [&_p]:leading-7">
       {r.sumario_executivo && (
         <Section title="Sumário executivo">
           <p className="text-muted-foreground leading-relaxed">{linkifyRefs(r.sumario_executivo)}</p>
@@ -337,6 +344,7 @@ export const BoletimView: React.FC<{ report: BoletimReport }> = ({ report }) => 
           </ul>
         </Section>
       )}
+      </div>
     </div>
   );
 };

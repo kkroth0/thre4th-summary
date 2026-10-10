@@ -9,6 +9,8 @@
 // A forma é a mesma do exposureWatchlist.js: funções puras aqui, I/O injetado,
 // store em arquivo, e o tick de 15 minutos do index.js acorda quem venceu.
 
+import { createHash } from 'node:crypto';
+
 export const PHISH_LIMITS = {
     brandsPerProfile: 8,
     termMin: 4,
@@ -360,6 +362,19 @@ export function createUrlscanSearch({ apiKey, fetchImpl = fetch, timeoutMs = 150
     };
 }
 
+// A chave pessoal vence a da plataforma. O grupo acompanha a chave efetiva,
+// inclusive quando duas contas usam a mesma credencial, sem expor seu valor.
+export function createOwnerUrlscanClient({ getUserApiKey, platformApiKey, fetchImpl = fetch }) {
+    return (ownerId) => {
+        const apiKey = getUserApiKey(ownerId) || platformApiKey;
+        if (!apiKey) return { search: null, quotaGroup: null };
+        return {
+            search: createUrlscanSearch({ apiKey, fetchImpl }),
+            quotaGroup: createHash('sha256').update(apiKey).digest('hex'),
+        };
+    };
+}
+
 export async function runProfileWatch({ store, profile, search, now = new Date() }) {
     const terms = normalizeBrands(profile.brands);
     if (!terms.length) throw createPhishError(400, 'perfil sem marcas para vigiar');
@@ -386,10 +401,13 @@ export async function runProfileWatch({ store, profile, search, now = new Date()
     }
 }
 
-export async function runDuePhishWatch({ store, profiles, now = new Date(), runOne }) {
+export async function runDuePhishWatch({ store, profiles, now = new Date(), runOne, quotaGroupFor = () => 'shared' }) {
     const due = selectDueProfiles(profiles, store.runs(), now);
     const result = { attempted: 0, completed: 0, failed: 0 };
+    const exhausted = new Set();
     for (const profile of due) {
+        const quotaGroup = quotaGroupFor(profile);
+        if (exhausted.has(quotaGroup)) continue;
         result.attempted += 1;
         try {
             await runOne(profile);
@@ -397,9 +415,9 @@ export async function runDuePhishWatch({ store, profiles, now = new Date(), runO
         } catch (error) {
             result.failed += 1;
             console.error('phishing watch scheduled run failed:', error.message || error);
-            // 429 é cota do dia inteiro: insistir nos outros perfis só queima o
-            // que sobrou. Para a rodada e tenta de novo daqui a pouco.
-            if (error.status === 429) break;
+            // Para apenas os perfis que compartilham a credencial esgotada.
+            // Outras contas com BYOK ainda podem executar nesta rodada.
+            if (error.status === 429) exhausted.add(quotaGroup);
         }
     }
     return result;

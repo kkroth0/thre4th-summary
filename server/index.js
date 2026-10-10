@@ -68,7 +68,7 @@ import { createNewsArchiveStore } from './newsArchiveStore.js';
 import { VENDOR_CATALOG } from './vendorCatalog.js';
 import { createNewsMonitoringStore, filterMonitoredNews, filterMonitoredStories } from './newsMonitoring.js';
 import {
-    PHISH_LIMITS, createPhishWatchStore, createUrlscanSearch, runDuePhishWatch, runProfileWatch,
+    PHISH_LIMITS, createPhishWatchStore, createOwnerUrlscanClient, runDuePhishWatch, runProfileWatch,
     createDnsResolver, recheckHitsDns,
 } from './phishingWatch.js';
 import {
@@ -157,9 +157,10 @@ const newsMonitoringStore = createNewsMonitoringStore({
 const PHISH_WATCH_PATH = path.join(__dirname, '.phish-watch.json');
 const phishWatchStore = createPhishWatchStore({ filePath: PHISH_WATCH_PATH, readFileSync: fs.readFileSync, writeJsonAtomic });
 // Só busca, nunca submete: submeter publicaria a URL do cliente no urlscan.
-const urlscanSearch = () => (process.env.URLSCAN_API_KEY
-    ? createUrlscanSearch({ apiKey: process.env.URLSCAN_API_KEY })
-    : null);
+const urlscanClientFor = createOwnerUrlscanClient({
+    getUserApiKey: (ownerId) => getUserApiKey(ownerId, 'urlscan'),
+    platformApiKey: process.env.URLSCAN_API_KEY,
+});
 // Resolução direta contra os nameservers, sem depender de o urlscan reescanear.
 const phishDnsResolver = createDnsResolver({
     resolve4: dns.promises.resolve4,
@@ -2152,12 +2153,12 @@ function requireFeedSecret(req, res) {
     return true;
 }
 
-// ─── Auth GitHub + BYOK (chave OpenRouter por usuário, cifrada em repouso) ───
+// ─── Auth GitHub + BYOK (chaves de fornecedores cifradas em repouso) ────────
 // Login via GitHub OAuth (fluxo escrito à mão, sem passport). A sessão é um
 // cookie httpOnly assinado por HMAC — mesma origem que o app (Pages serve o app
 // e faz proxy de /api pelo túnel), então não há CORS com credenciais. Login é
-// aberto; a allow-list controla apenas recursos premium. Cada usuário traz a
-// própria chave OpenRouter (BYOK): ela é cifrada (AES-256-GCM) e guardada em
+// aberto; a allow-list controla apenas recursos premium. Cada usuário traz as
+// próprias chaves de fornecedores (BYOK): cifradas (AES-256-GCM) e guardadas em
 // .users.json; nunca vai pro store de jobs, nunca ao worker público, nunca ao log.
 
 // Chave-mestra p/ cifrar segredos dos usuários. Aceita 64-hex, base64 de 32B, ou
@@ -2217,8 +2218,8 @@ function getCookie(req, name) {
 }
 
 // Store de usuários (flat JSON, como os jobs). apiKeysEnc = chaves BYOK de vendor
-// (VirusTotal/Shodan/etc.) cifradas; a geração usa a chave OpenRouter do servidor.
-const USERS_STORE_PATH = path.join(__dirname, '.users.json');
+// (Shodan/urlscan) cifradas; a geração usa a chave OpenRouter do servidor.
+const USERS_STORE_PATH = process.env.USERS_STORE_PATH || path.join(__dirname, '.users.json');
 function loadUsers() { try { return JSON.parse(fs.readFileSync(USERS_STORE_PATH, 'utf8')); } catch { return {}; } }
 function saveUsers() { try { writeJsonAtomic(USERS_STORE_PATH, usersStore); } catch (e) { console.error('users store write failed:', e.message); } }
 let usersStore = loadUsers();   // { githubId: { login, apiKeysEnc, createdAt, updatedAt } }
@@ -2390,13 +2391,13 @@ app.post('/api/auth/logout', (req, res) => {
 // lookups de vendor. A geração de relatórios NÃO usa mais BYOK — roda na chave
 // OpenRouter compartilhada do servidor. Nunca devolve valores, só quais providers
 // estão configurados.
-// Só entra aqui o provider cuja chave é REALMENTE lida em alguma consulta.
+// Só entram providers cuja chave é REALMENTE lida em alguma consulta.
 // Os outros doze (virustotal, abuseipdb, alienvault, pulsedive, censys,
 // hybridanalysis, metadefender, urlhaus, threatfox, phishtank, whois,
 // dnsdumpster) ficavam guardados cifrados, apareciam como "configurado" na tela
 // e nenhuma rota os lia — todas leem só process.env. Prometer o que não
 // acontece é pior do que não oferecer.
-const BYOK_PROVIDERS = new Set(['shodan']);
+const BYOK_PROVIDERS = new Set(['shodan', 'urlscan']);
 function userKeysStatus(u) {
     const out = {};
     const m = (u && u.apiKeysEnc) || {};
@@ -2464,14 +2465,15 @@ async function runExposureForAsset(asset) {
 
 async function runPhishWatchTick() {
     if (process.env.NODE_ENV === 'test') return;
-    const search = urlscanSearch();
-    if (!search) return;
+    const profiles = orgProfileStore.allProfiles();
+    const clients = new Map(profiles.map((profile) => [profile.id, urlscanClientFor(profile.ownerId)]));
     await runDuePhishWatch({
         store: phishWatchStore,
-        profiles: orgProfileStore.allProfiles(),
+        profiles: profiles.filter((profile) => clients.get(profile.id).search),
         now: new Date(),
+        quotaGroupFor: (profile) => clients.get(profile.id).quotaGroup,
         runOne: async (profile) => {
-            await runProfileWatch({ store: phishWatchStore, profile, search });
+            await runProfileWatch({ store: phishWatchStore, profile, search: clients.get(profile.id).search });
             await syncTicketsFromHits(profile.ownerId, profile.id);
         },
     });
@@ -3891,7 +3893,7 @@ app.get('/api/phishing-watch/hits', requirePremium, (req, res) => {
     const profileId = req.query.profileId ? String(req.query.profileId) : undefined;
     const status = req.query.status ? String(req.query.status) : undefined;
     res.json({
-        configured: Boolean(process.env.URLSCAN_API_KEY),
+        configured: Boolean(urlscanClientFor(req.user.sub).search),
         hits: phishWatchStore.list(req.user.sub, { profileId, status }),
         run: profileId ? phishWatchStore.runOf(profileId) : null,
         intervalMs: PHISH_LIMITS.runIntervalMs,
@@ -3944,8 +3946,8 @@ app.post('/api/phishing-watch/tickets/:id/status', requirePremium, (req, res) =>
 });
 
 app.post('/api/phishing-watch/run', requirePremium, scanLimiter, async (req, res) => {
-    const search = urlscanSearch();
-    if (!search) return res.status(500).json({ error: 'API Key missing' });
+    const { search } = urlscanClientFor(req.user.sub);
+    if (!search) return res.status(500).json({ error: 'Configure uma chave urlscan.io em Chaves de API' });
     try {
         // getProfile confere o dono: perfil de outro usuário responde 404.
         const profile = orgProfileStore.get(req.user.sub, String((req.body || {}).profileId || ''));

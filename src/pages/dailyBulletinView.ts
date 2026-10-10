@@ -32,6 +32,17 @@ export function reportTitle(job: { title?: string | null; url: string }): string
   return titleFromUrl(job.url);
 }
 
+/** One search for the report library and the entire available suggestion list. */
+export function filterReportLibrary<T extends { title?: string | null; url: string; cves?: string[] }>(items: T[], query: string): T[] {
+  const normalize = (value: string) => value.normalize("NFD").replace(/\p{Mn}/gu, "").toLowerCase();
+  const terms = normalize(query.trim()).split(/\s+/).filter(Boolean);
+  if (!terms.length) return items;
+  return items.filter((item) => {
+    const text = normalize([reportTitle(item), item.url, ...(item.cves ?? [])].join(" "));
+    return terms.every((term) => text.includes(term));
+  });
+}
+
 // ─── Falha legível ─────────────────────────────────────────────────────────
 // A mensagem do worker é escrita para quem lê log: "timeout após 240s (árvore
 // de processos encerrada)". O analista precisa saber o que fazer com isso.

@@ -4,7 +4,7 @@ import test from "node:test";
 
 const read = (path: string) => readFile(path, "utf8");
 
-test("report generator uses a single-line desktop command bar", async () => {
+test("report composer preserves source, subtype and template controls", async () => {
   const source = await read("src/pages/DailyBulletin.tsx");
   const start = source.indexOf('data-testid="report-generator-command-bar"');
   assert.ok(start > -1, "command bar should have a stable test id");
@@ -13,15 +13,14 @@ test("report generator uses a single-line desktop command bar", async () => {
   assert.ok(statusStart > start, "status row should sit outside the command bar");
   const commandBar = source.slice(start, statusStart);
 
-  assert.match(commandBar, /sm:flex-row/);
-  assert.match(commandBar, /sm:items-center/);
+  assert.match(commandBar, /aria-label=\{pt \? "URL da fonte" : "Source URL"\}/);
   assert.match(commandBar, /data-testid="report-generator-template-trigger"/);
   // Subtipo (malware/phishing/ransomware/cve_unica/cve_varias, ou automático)
   // substitui o antigo seletor de tipo -- um subtipo concreto já implica o
   // tipo, então não precisa escolher os dois.
   assert.match(commandBar, /data-testid="report-generator-subtype-trigger"/);
   assert.doesNotMatch(commandBar, /data-testid="report-generator-type-trigger"/);
-  assert.match(commandBar, /generate\(pasteUrl\.trim\(\), "auto", ""\)/);
+  assert.match(source, /generate\(pasteUrl\.trim\(\), "auto", ""\)/);
   assert.doesNotMatch(commandBar, /<SelectValue\s*\/>/);
   assert.doesNotMatch(commandBar, /flex-col gap-2 rounded-xl bg-muted\/40 p-2/);
 });
