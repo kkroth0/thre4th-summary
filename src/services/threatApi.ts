@@ -2066,6 +2066,51 @@ export interface NewsArchiveRow {
     archivedAt: string;
 }
 
+export interface PhishingEvidence {
+    kind: string; label: string; field: 'title' | 'summary' | 'body'; term: string; snippet: string;
+}
+export interface PhishingTtp {
+    id: string; name: string; tactics: string[]; basis: 'reported' | 'inferred'; reason: string;
+}
+export interface PhishingReport extends NewsArchiveRow {
+    id: string; description: string; groupId: string;
+    groupBasis: 'named-campaign' | 'correlated-story' | 'publication'; campaignName: string;
+    primaryTechnique: string | null; vectors: string[]; sectors: string[]; regions: string[];
+    brands: string[]; actorNames: string[]; software: string[]; nationState: 'reported' | 'unknown';
+    ttps: PhishingTtp[]; evidence: PhishingEvidence[]; sourceType: string;
+    profileMatches: { profileId: string; profileName: string; reasons: string[] }[];
+}
+export interface PhishingCampaign {
+    id: string; name: string; basis: PhishingReport['groupBasis']; firstPublished: string;
+    lastPublished: string; reportCount: number; description: string; techniques: string[];
+    vectors: string[]; brands: string[]; sectors: string[]; regions: string[]; actors: string[];
+    software: string[]; ttpIds: string[]; sources: string[]; links: string[]; reportIds: string[];
+}
+export interface PhishingFilters {
+    search?: string; technique?: string; sector?: string; region?: string; brand?: string;
+    profileId?: string; nationState?: string;
+}
+export interface PhishingDataset {
+    reports: PhishingReport[]; campaigns: PhishingCampaign[]; total: number; truncated: boolean;
+    range: { from?: string; to?: string }; filters: PhishingFilters;
+    facets: { techniques: string[]; sectors: string[]; regions: string[]; brands: string[]; profiles: { id: string; name: string }[] };
+    summary: {
+        publications: number; groups: number; correlatedGroups: number; withTechnique: number;
+        nationState: number; brazil: number; distinctTtps: number;
+        months: { label: string; count: number }[]; techniques: { label: string; count: number }[];
+        sectors: { label: string; count: number }[]; regions: { label: string; count: number }[];
+        sources: { label: string; count: number }[];
+    };
+    ttps: { id: string; name: string; tactics: string[]; reports: number; groups: number; reported: number; inferred: number }[];
+}
+export const fetchPhishingReports = async (params: PhishingFilters & { from?: string; to?: string; limit?: number } = {}): Promise<PhishingDataset> => {
+    const query = new URLSearchParams();
+    for (const [key, value] of Object.entries(params)) if (value) query.set(key, String(value));
+    const response = await fetch(`/api/phishing/reports?${query}`);
+    if (!response.ok) throw new Error(`Phishing reports API error: ${response.status}`);
+    return response.json();
+};
+
 // Arquivo permanente do feed (nunca podado, ao contrário do /api/newsletter
 // de 10 min e do /api/news/stories de 60 dias). Usado pelo dashboard de
 // tendências de phishing e pela exportação em /phishing-analyzer.

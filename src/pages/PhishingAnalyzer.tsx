@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { ArrowLeft, Globe, Shield, ShieldAlert, Mail, Eye, Sparkles, Filter, CheckCircle2, ChevronRight, Upload, AlertTriangle, FileText, Check, AlertCircle, RefreshCw, Terminal, ExternalLink, Copy, Loader2, ShieldCheck, Network, Hash, Image as ImageIcon, Download, FileJson, Search, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -169,7 +169,14 @@ const PhishingAnalyzer = () => {
   // A página tem dois trabalhos: analisar um e-mail que chegou, e caçar domínio
   // de phishing antes de ele chegar. As abas de dentro pertencem ao e-mail
   // analisado, então a troca de trabalho mora aqui em cima.
-  const [mode, setMode] = useState<"eml" | "hunt" | "tickets" | "trends">("eml");
+  const [phishingParams, setPhishingParams] = useSearchParams();
+  const view = phishingParams.get('view');
+  const mode = view === 'campaigns' ? 'trends' : view === 'hunt' ? 'hunt' : view === 'tickets' ? 'tickets' : 'eml';
+  const setMode = (value: 'eml' | 'hunt' | 'tickets' | 'trends') => {
+    const next = new URLSearchParams(phishingParams);
+    next.set('view', value === 'trends' ? 'campaigns' : value === 'eml' ? 'email' : value);
+    setPhishingParams(next);
+  };
   const [fileName, setFileName] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   // Live threat-intel enrichment (reuses the main scan engine).
@@ -585,6 +592,10 @@ const PhishingAnalyzer = () => {
                     ? (language === "pt"
                       ? "Todo phishing começa com um domínio novo. A caça acha no dia em que ele nasce, cruzando as marcas do seu perfil com tudo que o urlscan já varreu — e nenhuma URL sua vira scan público."
                       : "Every phishing campaign starts with a new domain. The hunt finds it the day it is born, crossing your profile's brands with everything urlscan has already scanned — and no URL of yours ever becomes a public scan.")
+                    : mode === "trends"
+                      ? (language === "pt"
+                        ? "Acompanhe campanhas, correlacione publicações e revise técnicas e evidências antes de exportar o levantamento."
+                        : "Track campaigns, correlate publications and review techniques and evidence before exporting the research.")
                     : (language === "pt"
                       ? "Do achado até a derrubada: evidência congelada antes de o domínio sumir, contato de abuse descoberto sozinho, e o pedido pronto para enviar."
                       : "From find to takedown: evidence frozen before the domain disappears, abuse contacts discovered on their own, and the request ready to send.")}
@@ -603,12 +614,12 @@ const PhishingAnalyzer = () => {
             )}
           </div>
 
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             {([
               { key: "eml" as const, label: language === "pt" ? "Analisar e-mail" : "Analyze email" },
               { key: "hunt" as const, label: language === "pt" ? "Caça a domínios" : "Domain hunt" },
               { key: "tickets" as const, label: language === "pt" ? "Tickets" : "Tickets" },
-              { key: "trends" as const, label: language === "pt" ? "Tendências" : "Trends" },
+              { key: "trends" as const, label: language === "pt" ? "Campanhas" : "Campaigns" },
             ]).map((tab) => (
               <button
                 key={tab.key}

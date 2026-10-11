@@ -5,7 +5,7 @@ import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import crypto from 'node:crypto';
-import { readFileSync, rmSync } from 'node:fs';
+import { readFileSync, writeFileSync, rmSync } from 'node:fs';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -16,6 +16,8 @@ const BASE = `http://127.0.0.1:${PORT}`;
 const PREMIUM_OPEN_PATH = path.join(tmpdir(), `threatsumm4ry-smoke-premium-${PORT}.json`);
 const NEWS_MONITORING_PATH = path.join(tmpdir(), `threatsumm4ry-smoke-monitoring-${PORT}.json`);
 const USERS_STORE_PATH = path.join(tmpdir(), `threatsumm4ry-smoke-users-${PORT}.json`);
+const NEWS_ARCHIVE_PATH = path.join(tmpdir(), `threatsumm4ry-smoke-archive-${PORT}.json`);
+const ORG_PROFILES_PATH = path.join(tmpdir(), `threatsumm4ry-smoke-profiles-${PORT}.json`);
 const SECRETS_ENCRYPTION_KEY = 'smoke-only-encryption-secret';
 const SESSION_SECRET = 'test-secret';
 const sessionBody = Buffer.from(JSON.stringify({ sub: 'smoke-user', login: 'tester', exp: Math.floor(Date.now() / 1000) + 3600 })).toString('base64url');
@@ -39,13 +41,21 @@ async function waitForBoot(timeoutMs = 15000) {
 }
 
 before(async () => {
+    writeFileSync(NEWS_ARCHIVE_PATH, JSON.stringify([
+        { link: 'https://example.com/a', title: 'ClickFix phishing targets banks in Brazil', source: 'Research', pubDate: '2026-10-08T23:59:59.999Z', storyId: 'same' },
+        { link: 'https://example.com/b', title: 'ClickFix phishing campaign', source: 'News', pubDate: '2026-10-09T00:00:00Z', storyId: 'same' },
+    ]));
+    writeFileSync(ORG_PROFILES_PATH, JSON.stringify([
+        { id: 'owned', ownerId: 'smoke-user', name: 'Own profile', sectors: ['Financial'] },
+        { id: 'private', ownerId: 'outsider', name: 'Private profile', sectors: ['Financial'] },
+    ]));
     proc = spawn(process.execPath, ['index.js'], {
         cwd: path.join(__dirname, '..'),
         env: {
             ...process.env,
             PORT: String(PORT), NODE_ENV: 'test', SESSION_SECRET,
             GITHUB_ALLOWED_LOGINS: 'tester', PREMIUM_OPEN_PATH, NEWS_MONITORING_PATH,
-            USERS_STORE_PATH, SECRETS_ENCRYPTION_KEY, URLSCAN_API_KEY: '',
+            USERS_STORE_PATH, NEWS_ARCHIVE_PATH, ORG_PROFILES_PATH, SECRETS_ENCRYPTION_KEY, URLSCAN_API_KEY: '',
         },
         stdio: 'ignore',
     });
@@ -60,6 +70,24 @@ after(() => {
     rmSync(`${NEWS_MONITORING_PATH}.tmp`, { force: true });
     rmSync(USERS_STORE_PATH, { force: true });
     rmSync(`${USERS_STORE_PATH}.tmp`, { force: true });
+    for (const target of [NEWS_ARCHIVE_PATH, ORG_PROFILES_PATH]) { rmSync(target, { force: true }); rmSync(`${target}.tmp`, { force: true }); }
+});
+
+test('phishing report API enforces owner isolation, strict dates and includes the last day', async () => {
+    assert.equal((await fetch(`${BASE}/api/phishing/reports`)).status, 401);
+    const response = await fetch(`${BASE}/api/phishing/reports?from=2026-08-01&to=2026-10-08`, { headers: AUTH_HEADERS });
+    assert.equal(response.status, 200);
+    assert.match(response.headers.get('cache-control'), /private.*no-store/);
+    const data = await response.json();
+    assert.equal(data.reports.length, 1);
+    assert.equal(data.summary.publications, 1);
+    assert.deepEqual(data.facets.profiles, [{ id: 'owned', name: 'Own profile' }]);
+    assert.ok(!JSON.stringify(data).includes('Private profile'));
+    assert.equal((await fetch(`${BASE}/api/phishing/reports?profileId=private`, { headers: AUTH_HEADERS })).status, 404);
+    assert.equal((await fetch(`${BASE}/api/phishing/reports?from=2026-02-30`, { headers: AUTH_HEADERS })).status, 400);
+    const own = await fetch(`${BASE}/api/phishing/reports?profileId=owned&region=Brazil`, { headers: AUTH_HEADERS }).then(res => res.json());
+    assert.equal(own.reports.length, 1);
+    assert.deepEqual(own.reports[0].profileMatches[0].reasons, ['Setor: Financial']);
 });
 
 test('GET /api/vendors/status returns vendor map', async () => {

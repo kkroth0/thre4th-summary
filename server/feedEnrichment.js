@@ -1,7 +1,8 @@
 import { scoreArticle, extractIOCs, ttpIdsFrom, isPureNoise, severityFromScore } from './ctiIntel.js';
 import { contentHash } from './articleCollector.js';
+import { analyzePhishing } from './phishingIntel.js';
 
-export const EXTRACTION_VERSION = 'feed-v5';
+export const EXTRACTION_VERSION = 'feed-v6';
 
 // Keep all mentioned CVEs for research/KEV, but use only the article's focus
 // to group coverage. A patch report often recounts older, unrelated flaws.
@@ -33,6 +34,11 @@ export function enrichFeedItems(items, { texts = new Map(), actors, malware, cam
             contentHash: contentHash(text), extractionVersion: EXTRACTION_VERSION,
             topicCves: topicCvesOf(item.title, item.text || item.description || '', texts.get(item.link) || ''),
         };
+        enriched.phishingIntel = analyzePhishing({ title: item.title, description: item.text || item.description, bodyText: texts.get(item.link) });
+        enriched.phishingTechniques = enriched.phishingIntel.techniques;
+        enriched.threats = enriched.threats.filter(threat => threat !== 'Phishing');
+        if (enriched.phishingIntel.detected) enriched.threats.push('Phishing');
+        enriched.ttps = [...new Set([...enriched.ttps.filter(ttp => !/^T1566\b/.test(ttp)), ...enriched.phishingIntel.ttps.map(ttp => ttp.id)])];
         enriched.ttpIds = ttpIdsFrom(enriched.ttps);
         const result = categorize(enriched);
         enriched.newsCategories = result.categories;

@@ -86,7 +86,7 @@ usando título, conteúdo do feed e texto coletado. Cada publicação recebe:
 - categorias de navegação e sinais usados no score;
 - fornecedores/projetos reconhecidos, com ID, nome canônico e alias mencionado;
 - `topicCves`, separado de todos os CVEs mencionados, para identificar o foco;
-- `contentHash` SHA-256 do texto processado e `extractionVersion: feed-v5`.
+- `contentHash` SHA-256 do texto processado e `extractionVersion: feed-v6`.
 
 A extração prefere o contêiner do corpo do artigo e remove blocos de notícias
 relacionadas. Aliases comuns como Action, Play, INC, Expand e Power exigem nome

@@ -53,7 +53,7 @@ menção a fornecedor não é sinal suficiente de incidente ou de exploração a
 
 `assets` devolve os nomes canônicos; `vendors` devolve `{id, name, sector,
 matched}`. Os metadados ficam também nas evidências por publicação da história
-e no arquivo permanente. A versão de extração passou para `feed-v5`, permitindo
+e no arquivo permanente. A versão de extração passou para `feed-v6`, permitindo
 atualizar a atribuição das URLs já coletadas e invalidar snapshots anteriores.
 
 ## Controle de ambiguidades

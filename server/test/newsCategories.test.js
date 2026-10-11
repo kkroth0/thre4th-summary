@@ -109,8 +109,9 @@ test('Phishing reconhece as técnicas do levantamento de campanhas', () => {
     }
 });
 
-test('Phishing também vem do threat label já computado pelo scoreArticle', () => {
-    assert.deepEqual(categorize(item({ title: 'x', threats: ['Phishing'] })).categories, ['Phishing']);
+test('Phishing exige evidência da publicação, sem herdar label genérico', () => {
+    assert.deepEqual(categorize(item({ title: 'x', threats: ['Phishing'] })).categories, []);
+    assert.ok(categorize(item({ title: 'Phishing campaign targets banks' })).categories.includes('Phishing'));
 });
 
 test('Microsoft reconhece a marca e os produtos', () => {

@@ -4,6 +4,8 @@
 // original foi "quero conseguir armazenar estas notícias, todas, os links e
 // as categorias" — isto é a base de dados pra isso, consultável e exportável,
 // sem tela nova. Mesmo padrão de fs-por-injeção do createStoryStore.
+import { analyzePhishing, PHISHING_VERSION } from './phishingIntel.js';
+
 export function createNewsArchiveStore({ filePath, readFileSync, writeJsonAtomic }) {
     let rows = [];
     try {
@@ -29,7 +31,7 @@ export function createNewsArchiveStore({ filePath, readFileSync, writeJsonAtomic
                     phishingTechniques: Array.isArray(item.phishingTechniques) ? item.phishingTechniques : [],
                     archivedAt: old?.archivedAt || new Date().toISOString(),
                 };
-                for (const field of ["description", "storyId", "contentHash", "extractionVersion", "cves", "actors", "malware", "campaigns", "ttpIds", "iocs", "vendors", "assets"]) {
+                for (const field of ["description", "text", "layer", "phishingIntel", "storyId", "contentHash", "extractionVersion", "cves", "actors", "malware", "campaigns", "ttpIds", "iocs", "vendors", "assets"]) {
                     if (item[field] !== undefined) row[field] = item[field];
                     else if (old?.[field] !== undefined) row[field] = old[field];
                 }
@@ -42,6 +44,20 @@ export function createNewsArchiveStore({ filePath, readFileSync, writeJsonAtomic
             writeJsonAtomic(filePath, next);
             rows = next;
             return additions;
+        },
+        reclassifyPhishing({ bodyFor = () => '' } = {}) {
+            let changed = 0;
+            const next = rows.map(row => {
+                if (row.phishingIntel?.version === PHISHING_VERSION) return row;
+                const phishingIntel = analyzePhishing({ ...row, bodyText: bodyFor(row.link) });
+                const categories = (row.categories || []).filter(category => category !== 'Phishing');
+                if (phishingIntel.detected) categories.push('Phishing');
+                changed++;
+                return { ...row, phishingIntel, phishingTechniques: phishingIntel.techniques, categories,
+                    primaryCategory: categories.includes(row.primaryCategory) ? row.primaryCategory : categories[0] || null };
+            });
+            if (changed) { writeJsonAtomic(filePath, next); rows = next; }
+            return changed;
         },
         list({ category, source, from, to, limit } = {}) {
             let result = rows;

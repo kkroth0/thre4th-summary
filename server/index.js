@@ -65,6 +65,7 @@ import { collectArticleTexts } from './articleCollector.js';
 import { enrichFeedItems, applyVulnerabilityContext, EXTRACTION_VERSION } from './feedEnrichment.js';
 import { createStoryStore } from './newsStoryStore.js';
 import { createNewsArchiveStore } from './newsArchiveStore.js';
+import { buildPhishingDataset, phishingQuery } from './phishingDataset.js';
 import { VENDOR_CATALOG } from './vendorCatalog.js';
 import { createNewsMonitoringStore, filterMonitoredNews, filterMonitoredStories } from './newsMonitoring.js';
 import {
@@ -147,7 +148,7 @@ const dailyEditionStore = createEditionStore({ filePath: DAILY_SUMMARIES_PATH, w
 
 const NEWS_STORIES_PATH = path.join(__dirname, '.news-stories.json');
 const newsStoryStore = createStoryStore({ filePath: NEWS_STORIES_PATH, readFileSync: fs.readFileSync, writeJsonAtomic });
-const NEWS_ARCHIVE_PATH = path.join(__dirname, '.news-archive.json');
+const NEWS_ARCHIVE_PATH = process.env.NEWS_ARCHIVE_PATH || path.join(__dirname, '.news-archive.json');
 const newsArchiveStore = createNewsArchiveStore({ filePath: NEWS_ARCHIVE_PATH, readFileSync: fs.readFileSync, writeJsonAtomic });
 const newsMonitoringStore = createNewsMonitoringStore({
     filePath: process.env.NEWS_MONITORING_PATH || path.join(__dirname, '.news-monitoring.json'),
@@ -242,7 +243,7 @@ async function recheckTicketDns(now = new Date()) {
     }
 }
 
-const ORG_PROFILES_PATH = path.join(__dirname, '.org-profiles.json');
+const ORG_PROFILES_PATH = process.env.ORG_PROFILES_PATH || path.join(__dirname, '.org-profiles.json');
 const orgProfileStore = createProfileStore({ filePath: ORG_PROFILES_PATH, readFileSync: fs.readFileSync, writeJsonAtomic });
 
 // Data de primeira aparição das fontes raspadas. Sem isto, cada refresh de 10
@@ -1550,6 +1551,11 @@ async function fetchFeedWithRetry(url, options) {
 // Background newsletter feed refresher
 const rssCollectionCache = createFeedCache({ directory: path.join(__dirname, '.feed-cache', 'rss'), fs, writeJsonAtomic });
 const articleCollectionCache = createFeedCache({ directory: path.join(__dirname, '.feed-cache', 'articles'), fs, writeJsonAtomic });
+// Reclassify metadata only; preserve publications and reuse existing body
+// caches without issuing hundreds of historical requests on startup.
+if (process.env.NODE_ENV !== 'test') try {
+    newsArchiveStore.reclassifyPhishing({ bodyFor: link => articleCollectionCache.get(link)?.text || '' });
+} catch (error) { console.error('phishing archive reclassification failed:', error.message); }
 const previousFeedSnapshot = rssCollectionCache.get('newsletter:snapshot');
 if (previousFeedSnapshot?.extractionVersion === EXTRACTION_VERSION && Array.isArray(previousFeedSnapshot.items)) {
     const enabled = new Set([...effectiveFeeds().map((feed) => feed.url), ...SCRAPE_SOURCES.filter((source) => !feedOverrides.disabled.includes(source.url)).map((source) => source.url)]);
@@ -1713,6 +1719,24 @@ app.get('/api/news/stories', requirePremium, async (req, res) => {
 // de tendências de phishing e a exportação em /phishing-analyzer, mas serve
 // qualquer categoria, não só Phishing.
 //   GET /api/news/archive?category=Phishing&from=2026-08-01&to=2026-10-08
+const phishingTechniqueCatalog = JSON.parse(fs.readFileSync(new URL('./data/attack.json', import.meta.url), 'utf8')).techniques;
+app.get('/api/phishing/reports', requirePremium, (req, res) => {
+    try {
+        const options = phishingQuery(req.query);
+        if (options.filters.profileId) orgProfileStore.get(req.user.sub, options.filters.profileId);
+        const rows = newsArchiveStore.list({
+            from: options.range.from,
+            to: options.range.to ? `${options.range.to}T23:59:59.999Z` : undefined,
+        });
+        res.set('Cache-Control', 'private, no-store');
+        res.json(buildPhishingDataset(rows, { ...options, profiles: orgProfileStore.list(req.user.sub), techniqueCatalog: phishingTechniqueCatalog }));
+    } catch (error) {
+        if (error.status && error.publicMessage) return res.status(error.status).json({ error: error.publicMessage });
+        const { status, message } = sanitizeError(error);
+        res.status(status).json({ error: message });
+    }
+});
+
 app.get('/api/news/archive', requirePremium, (req, res) => {
     try {
         res.set('Cache-Control', 'private, max-age=300');

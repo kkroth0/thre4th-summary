@@ -1,262 +1,126 @@
-// Tendências de phishing: volume diário + quebra por técnica, a partir do
-// arquivo permanente (/api/news/archive), categoria Phishing. Componente
-// próprio pelo mesmo motivo de BrandHunt/PhishTickets — o PhishingAnalyzer já
-// é grande, e isto não pertence ao fluxo de análise de um e-mail.
-import { useEffect, useMemo, useState } from "react";
-import { Download, Loader2, TrendingUp } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { EmptyState } from "@/components/EmptyState";
-import { useLanguage } from "@/contexts/LanguageContext";
-import { toast } from "sonner";
-import { fetchNewsArchive, type NewsArchiveRow } from "@/services/threatApi";
-import { exportPhishingTrendsExcel } from "@/utils/phishingTrendsExport";
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { Download, ExternalLink, Loader2, Search } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { useLanguage } from '@/contexts/LanguageContext';
+import { toast } from 'sonner';
+import { fetchPhishingReports, type PhishingDataset, type PhishingFilters, type PhishingReport } from '@/services/threatApi';
+import { exportPhishingTrendsExcel } from '@/utils/phishingTrendsExport';
 
-const PERIODS = ["30d", "90d", "all"] as const;
-type Period = (typeof PERIODS)[number];
-const PERIOD_DAYS: Record<Exclude<Period, "all">, number> = { "30d": 30, "90d": 90 };
-
-const PERIOD_LABEL: Record<Period, { pt: string; en: string }> = {
-  "30d": { pt: "30 dias", en: "30 days" },
-  "90d": { pt: "90 dias", en: "90 days" },
-  all: { pt: "Tudo", en: "All time" },
+type Query = PhishingFilters & { from?: string; to?: string };
+const inputStyle = 'min-w-0 w-full rounded border border-border bg-background px-3 py-2 text-sm text-foreground';
+const calendarDate = (value: Date) => `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}-${String(value.getDate()).padStart(2, '0')}`;
+const preset = (days: number): Query => {
+  const end = new Date();
+  const start = new Date(end);
+  start.setDate(start.getDate() - days + 1);
+  return { from: calendarDate(start), to: calendarDate(end) };
 };
+const labels = { 'named-campaign': ['Campanha nomeada', 'Named campaign'], 'correlated-story': ['Evento correlacionado', 'Correlated event'], publication: ['Publicação sem vínculo confirmado', 'Publication without confirmed links'] };
+const safeUrl = (value: string) => /^https?:\/\//i.test(value);
 
-/** YYYY-MM-DD local ao pubDate, pra agrupar por dia sem depender de timezone do navegador. */
-const dayKey = (iso: string) => String(iso || "").slice(0, 10);
-
-function dailyCounts(rows: NewsArchiveRow[]): { day: string; count: number }[] {
-  const byDay = new Map<string, number>();
-  for (const row of rows) {
-    const key = dayKey(row.pubDate);
-    if (!key) continue;
-    byDay.set(key, (byDay.get(key) || 0) + 1);
-  }
-  return [...byDay.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([day, count]) => ({ day, count }));
-}
-
-function techniqueCounts(rows: NewsArchiveRow[]): { technique: string; count: number }[] {
-  const byTechnique = new Map<string, number>();
-  for (const row of rows) for (const t of row.phishingTechniques) byTechnique.set(t, (byTechnique.get(t) || 0) + 1);
-  return [...byTechnique.entries()].sort((a, b) => b[1] - a[1]).map(([technique, count]) => ({ technique, count }));
-}
-
-// Linha + área, uma série só (contagem diária) — um hue só (o primary do
-// tema), sem paleta categórica: identidade não é o trabalho aqui, magnitude é.
-function DailyVolumeChart({ data, pt }: { data: { day: string; count: number }[]; pt: boolean }) {
-  const [hover, setHover] = useState<number | null>(null);
-  const width = 760;
-  const height = 220;
-  const padding = { top: 16, right: 16, bottom: 28, left: 36 };
-  const plotW = width - padding.left - padding.right;
-  const plotH = height - padding.top - padding.bottom;
-
-  if (data.length === 0) return null;
-  const maxCount = Math.max(1, ...data.map((d) => d.count));
-  const x = (i: number) => padding.left + (data.length === 1 ? plotW / 2 : (i / (data.length - 1)) * plotW);
-  const y = (count: number) => padding.top + plotH - (count / maxCount) * plotH;
-
-  const linePath = data.map((d, i) => `${i === 0 ? "M" : "L"} ${x(i)} ${y(d.count)}`).join(" ");
-  const areaPath = `${linePath} L ${x(data.length - 1)} ${padding.top + plotH} L ${x(0)} ${padding.top + plotH} Z`;
-
-  // 4 linhas de referência horizontais, recessivas — não é grade pesada.
-  const gridLines = [0, 0.25, 0.5, 0.75, 1].map((fraction) => ({
-    y: padding.top + plotH * (1 - fraction),
-    value: Math.round(maxCount * fraction),
-  }));
-
-  // ~6 rótulos de data, nunca um por dia — a legibilidade some com mais que isso.
-  const labelEvery = Math.max(1, Math.ceil(data.length / 6));
-  const fmtDay = (day: string) => {
-    const d = new Date(`${day}T00:00:00Z`);
-    return isNaN(d.getTime()) ? day : d.toLocaleDateString(pt ? "pt-BR" : "en-US", { day: "2-digit", month: "2-digit" });
-  };
-
-  return (
-    <div className="relative">
-      <svg
-        viewBox={`0 0 ${width} ${height}`}
-        className="h-[220px] w-full"
-        onMouseLeave={() => setHover(null)}
-        onMouseMove={(e) => {
-          const rect = e.currentTarget.getBoundingClientRect();
-          const relX = ((e.clientX - rect.left) / rect.width) * width;
-          let nearest = 0;
-          let best = Infinity;
-          for (let i = 0; i < data.length; i++) {
-            const d = Math.abs(x(i) - relX);
-            if (d < best) { best = d; nearest = i; }
-          }
-          setHover(nearest);
-        }}
-      >
-        {gridLines.map((line, i) => (
-          <g key={i}>
-            <line x1={padding.left} x2={width - padding.right} y1={line.y} y2={line.y} className="stroke-border/50" strokeWidth={1} />
-            <text x={padding.left - 8} y={line.y} textAnchor="end" dominantBaseline="middle" className="fill-muted-foreground text-[9px]">
-              {line.value}
-            </text>
-          </g>
-        ))}
-        {data.map((d, i) => (
-          i % labelEvery === 0 && (
-            <text key={d.day} x={x(i)} y={height - 8} textAnchor="middle" className="fill-muted-foreground text-[9px]">
-              {fmtDay(d.day)}
-            </text>
-          )
-        ))}
-        <path d={areaPath} fill="hsl(var(--primary))" opacity={0.12} stroke="none" />
-        <path d={linePath} fill="none" stroke="hsl(var(--primary))" strokeWidth={2} />
-        {hover !== null && (
-          <>
-            <line x1={x(hover)} x2={x(hover)} y1={padding.top} y2={padding.top + plotH} className="stroke-foreground/20" strokeWidth={1} />
-            <circle cx={x(hover)} cy={y(data[hover].count)} r={4} fill="hsl(var(--primary))" />
-          </>
-        )}
-        {/* Camada de hover: um alvo por ponto, maior que a marca, pra não exigir mira. */}
-        {data.map((d, i) => (
-          <rect
-            key={d.day}
-            x={x(i) - plotW / Math.max(1, data.length) / 2}
-            y={padding.top}
-            width={plotW / Math.max(1, data.length)}
-            height={plotH}
-            fill="transparent"
-            onMouseEnter={() => setHover(i)}
-          />
-        ))}
-      </svg>
-      {hover !== null && (
-        <div
-          className="pointer-events-none absolute rounded border bg-popover px-2 py-1 text-[11px] shadow-sm"
-          style={{ left: `${(x(hover) / width) * 100}%`, top: 4, transform: "translateX(-50%)" }}
-        >
-          <div className="font-semibold text-foreground">{data[hover].count} reports</div>
-          <div className="text-muted-foreground">{fmtDay(data[hover].day)}</div>
-        </div>
-      )}
+function Publication({ row, pt }: { row: PhishingReport; pt: boolean }) {
+  const l = (a: string, b: string) => pt ? a : b;
+  const unknown = l('Não identificado', 'Not identified');
+  const metadata = [
+    [l('Vetor', 'Vector'), row.vectors], [l('Setor-alvo', 'Target sector'), row.sectors],
+    [l('Região-alvo', 'Target region'), row.regions], [l('Marca imitada', 'Impersonated brand'), row.brands],
+    [l('Ator citado', 'Mentioned actor'), row.actorNames], ['Malware / Kit', row.software],
+  ] as const;
+  return <article className="space-y-3 border-t border-border py-4 first:border-t-0">
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+      <time dateTime={row.pubDate}>{row.pubDate.slice(0, 10) || unknown}</time><span>{row.source}</span><span>{row.sourceType}</span>
+      {safeUrl(row.link) && <a href={row.link} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-primary hover:underline">{l('Abrir fonte', 'Open source')}<ExternalLink className="h-3 w-3" /></a>}
     </div>
-  );
-}
-
-// Barras horizontais, mesmo hue único — ranking de magnitude por categoria
-// (técnica), não identidade entre séries, então uma cor só é a escolha certa.
-function TechniqueBarChart({ data, pt }: { data: { technique: string; count: number }[]; pt: boolean }) {
-  const top = data.slice(0, 10);
-  if (top.length === 0) {
-    return <p className="py-6 text-center text-xs text-muted-foreground">{pt ? "Nenhuma técnica identificada no período." : "No technique identified in this period."}</p>;
-  }
-  const maxCount = Math.max(1, ...top.map((d) => d.count));
-  return (
-    <div className="space-y-2">
-      {top.map((d) => (
-        <div key={d.technique} className="flex items-center gap-2 text-xs">
-          <span className="w-44 shrink-0 truncate text-muted-foreground" title={d.technique}>{d.technique}</span>
-          <div className="relative h-5 flex-1 rounded bg-muted/40">
-            <div
-              className="absolute inset-y-0 left-0 rounded bg-primary/70"
-              style={{ width: `${Math.max(4, (d.count / maxCount) * 100)}%` }}
-            />
-          </div>
-          <span className="w-8 shrink-0 text-right font-mono font-semibold text-foreground">{d.count}</span>
-        </div>
-      ))}
-    </div>
-  );
+    <h4 className="break-words text-sm font-semibold">{row.title}</h4>
+    <p className="line-clamp-3 break-words text-sm text-muted-foreground">{row.description}</p>
+    <dl className="grid gap-x-5 gap-y-2 text-xs sm:grid-cols-2 lg:grid-cols-3">{metadata.map(([label, values]) => <div key={label}><dt className="text-muted-foreground">{label}</dt><dd className="mt-0.5 break-words">{values.join(', ') || unknown}</dd></div>)}</dl>
+    {row.ttps.length > 0 && <div className="flex flex-wrap gap-2 text-xs">{row.ttps.map(ttp => <a key={ttp.id} href={`https://attack.mitre.org/techniques/${ttp.id.replace('.', '/')}/`} target="_blank" rel="noopener noreferrer" className="rounded border border-border px-2 py-1" title={`${ttp.name}: ${ttp.reason}`}>{ttp.id} · {ttp.basis === 'reported' ? l('citado', 'reported') : l('inferido', 'inferred')}</a>)}</div>}
+    {row.profileMatches.length > 0 && <p className="text-xs text-muted-foreground">{row.profileMatches.map(match => `${match.profileName}: ${match.reasons.join(', ')}`).join(' · ')}</p>}
+    <details className="text-xs"><summary className="cursor-pointer py-1 font-medium">{l('Evidências do matching', 'Matching evidence')} · {row.evidence.length}</summary>
+      <div className="mt-2 space-y-3 border-l-2 border-primary/40 pl-3">{row.evidence.map((e, i) => <div key={i}><p className="font-medium">{e.label} · {e.field === 'title' ? l('título', 'title') : e.field === 'body' ? l('corpo', 'body') : l('resumo', 'summary')} · “{e.term}”</p><p className="mt-1 break-words text-muted-foreground">{e.snippet}</p></div>)}</div>
+    </details>
+  </article>;
 }
 
 export function PhishingTrends() {
   const { language } = useLanguage();
-  const pt = language === "pt";
-  const [period, setPeriod] = useState<Period>("90d");
+  const pt = language === 'pt';
+  const l = (a: string, b: string) => pt ? a : b;
+  const [query, setQuery] = useState<Query>(() => preset(90));
+  const [draft, setDraft] = useState<Query>(query);
+  const [data, setData] = useState<PhishingDataset | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+  const [retry, setRetry] = useState(0);
   const [exporting, setExporting] = useState(false);
-  const [rows, setRows] = useState<NewsArchiveRow[]>([]);
-  const [total, setTotal] = useState(0);
+  const [view, setView] = useState<'campaigns' | 'reports'>('campaigns');
+  const [page, setPage] = useState(1);
+  const [facets, setFacets] = useState<PhishingDataset['facets']>({ techniques: [], sectors: [], regions: [], brands: [], profiles: [] });
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
-    const from = period === "all" ? undefined : new Date(Date.now() - PERIOD_DAYS[period] * 86400000).toISOString();
-    fetchNewsArchive({ category: "Phishing", from, limit: 20000 })
-      .then((res) => { if (!cancelled) { setRows(res.rows); setTotal(res.total); } })
-      .catch(() => { if (!cancelled) toast.error(pt ? "Falha ao carregar o arquivo de notícias" : "Failed to load the news archive"); })
+    setLoading(true); setError(false); setData(null); setPage(1);
+    fetchPhishingReports({ ...query, limit: 20000 })
+      .then(result => { if (!cancelled) { setData(result); setFacets(result.facets); } })
+      .catch(() => { if (!cancelled) setError(true); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [period]);
+  }, [query, retry]);
 
-  const daily = useMemo(() => dailyCounts(rows), [rows]);
-  const techniques = useMemo(() => techniqueCounts(rows), [rows]);
-
-  const onExport = async () => {
-    setExporting(true);
-    try {
-      await exportPhishingTrendsExcel(rows);
-    } catch {
-      toast.error(pt ? "Falha ao exportar" : "Export failed");
-    } finally {
-      setExporting(false);
-    }
+  const reportsByGroup = useMemo(() => {
+    const groups = new Map<string, PhishingReport[]>();
+    for (const row of data?.reports || []) groups.set(row.groupId, [...(groups.get(row.groupId) || []), row]);
+    return groups;
+  }, [data]);
+  const apply = (event: FormEvent) => {
+    event.preventDefault();
+    if (draft.from && draft.to && draft.from > draft.to) { toast.error(l('A data inicial deve preceder a final', 'Start date must precede end date')); return; }
+    setQuery({ ...draft });
   };
-
-  return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-1 rounded-md border border-border/60 bg-background p-0.5">
-          {PERIODS.map((value) => (
-            <button
-              key={value}
-              type="button"
-              onClick={() => setPeriod(value)}
-              aria-pressed={period === value}
-              className={`rounded px-2.5 py-1.5 text-xs font-semibold transition-colors ${period === value ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"}`}
-            >
-              {PERIOD_LABEL[value][pt ? "pt" : "en"]}
-            </button>
-          ))}
-        </div>
-        <Button variant="outline" size="sm" className="gap-1.5" onClick={onExport} disabled={exporting || rows.length === 0}>
-          {exporting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
-          {pt ? "Exportar" : "Export"}
-        </Button>
-      </div>
-
-      {loading ? (
-        <div className="flex items-center justify-center gap-2 py-16 text-sm text-muted-foreground">
-          <Loader2 className="h-4 w-4 animate-spin" />
-          {pt ? "Carregando arquivo…" : "Loading archive…"}
-        </div>
-      ) : rows.length === 0 ? (
-        <EmptyState
-          icon={TrendingUp}
-          title={pt ? "Nenhum report de phishing no arquivo ainda" : "No phishing report archived yet"}
-          description={pt
-            ? "O arquivo é alimentado a cada atualização do boletim — volte depois que o feed coletar notícias categorizadas como Phishing."
-            : "The archive fills up on every feed refresh — check back once the feed collects items categorized as Phishing."}
-        />
-      ) : (
-        <>
-          <Card>
-            <CardContent className="p-4">
-              <div className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
-                <TrendingUp className="h-3.5 w-3.5" />
-                {pt ? `Volume diário · ${total} no total arquivado` : `Daily volume · ${total} archived in total`}
-              </div>
-              <DailyVolumeChart data={daily} pt={pt} />
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-4">
-              <div className="mb-3 text-xs font-semibold text-muted-foreground">
-                {pt ? "Por técnica (top 10 no período)" : "By technique (top 10 in period)"}
-              </div>
-              <TechniqueBarChart data={techniques} pt={pt} />
-            </CardContent>
-          </Card>
-        </>
-      )}
+  const choosePeriod = (days?: number) => { const value = { ...draft, from: undefined, to: undefined, ...(days ? preset(days) : {}) }; setDraft(value); setQuery(value); };
+  const exportData = async () => {
+    if (!data) return;
+    setExporting(true);
+    try { await exportPhishingTrendsExcel(data); } catch { toast.error(l('Falha ao exportar', 'Export failed')); } finally { setExporting(false); }
+  };
+  const field = (key: keyof Query, value: string) => setDraft(previous => ({ ...previous, [key]: value }));
+  const select = (key: keyof Query, label: string, values: { value: string; label: string }[]) => <label className="space-y-1 text-xs text-muted-foreground"><span>{label}</span><select className={inputStyle} value={draft[key] || ''} onChange={event => field(key, event.target.value)}><option value="">{l('Todos', 'All')}</option>{values.map(value => <option key={value.value} value={value.value}>{value.label}</option>)}</select></label>;
+  const options = (values: string[]) => values.map(value => ({ value, label: value }));
+  const count = view === 'campaigns' ? data?.campaigns.length || 0 : data?.reports.length || 0;
+  const pages = Math.max(1, Math.ceil(count / 20));
+  return <section className="space-y-5" aria-label={l('Inteligência de campanhas de phishing', 'Phishing campaign intelligence')}>
+    <div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="text-lg font-semibold">{l('Campanhas de phishing', 'Phishing campaigns')}</h2><p className="mt-1 text-sm text-muted-foreground">{l('Publicações, vínculos e técnicas com evidências das fontes.', 'Publications, relationships and techniques with source evidence.')}</p></div>
+      <Button size="sm" variant="outline" onClick={exportData} disabled={loading || !data?.reports.length || exporting} className="gap-2">{exporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}{l('Exportar Excel', 'Export Excel')}</Button>
     </div>
-  );
+    <form onSubmit={apply} className="space-y-3 rounded border border-border p-4">
+      <div className="flex flex-wrap items-center gap-2">{[30, 90].map(days => <Button key={days} type="button" size="sm" variant="outline" onClick={() => choosePeriod(days)}>{days} {l('dias', 'days')}</Button>)}<Button type="button" size="sm" variant="outline" onClick={() => choosePeriod()}>{l('Todo o arquivo', 'Entire archive')}</Button><span className="text-xs text-muted-foreground">{l('Ou defina o período abaixo', 'Or set the date range below')}</span></div>
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <label className="space-y-1 text-xs text-muted-foreground">{l('De', 'From')}<input type="date" aria-label={l('Data inicial', 'Start date')} className={inputStyle} value={draft.from || ''} onInput={event => field('from', event.currentTarget.value)} onChange={event => field('from', event.target.value)} /></label>
+        <label className="space-y-1 text-xs text-muted-foreground">{l('Até', 'To')}<input type="date" aria-label={l('Data final', 'End date')} className={inputStyle} value={draft.to || ''} onInput={event => field('to', event.currentTarget.value)} onChange={event => field('to', event.target.value)} /></label>
+        {select('technique', l('Técnica', 'Technique'), options(facets.techniques))}
+        {select('region', l('Região-alvo', 'Target region'), options([...new Set(['Brazil', 'LATAM', ...facets.regions])]))}
+        {select('sector', l('Setor-alvo', 'Target sector'), options(facets.sectors))}
+        {select('brand', l('Marca imitada', 'Impersonated brand'), options(facets.brands))}
+        {select('profileId', l('Perfil da organização', 'Organization profile'), facets.profiles.map(profile => ({ value: profile.id, label: profile.name })))}
+        {select('nationState', 'Nation-state', [{ value: 'reported', label: l('Citado na fonte', 'Reported in source') }, { value: 'unknown', label: l('Não identificado', 'Not identified') }])}
+      </div>
+      <div className="flex flex-col gap-2 sm:flex-row"><input className={inputStyle} aria-label={l('Buscar publicações', 'Search publications')} placeholder={l('Buscar título, campanha, ator ou kit', 'Search title, campaign, actor or kit')} value={draft.search || ''} onChange={event => field('search', event.target.value)} maxLength={200} /><Button type="submit" size="sm" className="gap-2"><Search className="h-4 w-4" />{l('Aplicar filtros', 'Apply filters')}</Button></div>
+    </form>
+    <p className="text-xs text-muted-foreground">{l('Recorte aplicado', 'Applied selection')}: {query.from || l('início do arquivo', 'archive start')} → {query.to || l('última publicação', 'latest publication')}{[query.search, query.technique, query.region, query.sector, query.brand, query.profileId ? facets.profiles.find(profile => profile.id === query.profileId)?.name : '', query.nationState === 'reported' ? 'Nation-state' : ''].filter(Boolean).map(value => ` · ${value}`).join('')}</p>
+    {loading ? <p role="status" className="flex items-center justify-center gap-2 py-12 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" />{l('Analisando arquivo…', 'Analyzing archive…')}</p> : error ? <div role="alert" className="rounded border border-destructive/40 p-4 text-sm"><p>{l('Não foi possível carregar as campanhas.', 'Could not load campaigns.')}</p><Button className="mt-3" size="sm" variant="outline" onClick={() => setRetry(value => value + 1)}>{l('Tentar novamente', 'Retry')}</Button></div> : data && <>
+      <div className="grid grid-cols-2 divide-x divide-border rounded border border-border lg:grid-cols-4">{[
+        [data.summary.publications, l('Publicações', 'Publications')], [data.summary.groups, l('Grupos de campanha / evento', 'Campaign / event groups')],
+        [data.summary.correlatedGroups, l('Grupos com várias publicações', 'Groups with multiple publications')], [data.summary.distinctTtps, l('TTPs identificados', 'Identified TTPs')],
+      ].map(([value, label]) => <div key={label} className="p-4"><p className="font-mono text-2xl font-semibold">{value}</p><p className="mt-1 text-xs text-muted-foreground">{label}</p></div>)}</div>
+      <p className="text-xs text-muted-foreground">{l(`${data.summary.withTechnique} de ${data.summary.publications} publicações com técnica identificada. Campos sem evidência ficam como não identificados.`, `${data.summary.withTechnique} of ${data.summary.publications} publications have an identified technique. Fields without evidence remain unidentified.`)}</p>
+      {data.truncated && <p role="alert" className="text-sm text-primary">{l(`Limite atingido: ${data.reports.length} de ${data.total} publicações. Reduza o período para uma exportação completa.`, `Limit reached: ${data.reports.length} of ${data.total} publications. Narrow the range for a complete export.`)}</p>}
+      {data.summary.techniques.length > 0 && <div className="rounded border border-border p-4"><h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{l('Técnicas no recorte', 'Techniques in selection')}</h3><div className="flex flex-wrap gap-2">{data.summary.techniques.slice(0, 12).map(item => <button type="button" key={item.label} className="rounded border border-border px-2.5 py-1.5 text-xs hover:border-primary" onClick={() => { const value = { ...query, technique: item.label }; setDraft(value); setQuery(value); }}>{item.label}<span className="ml-2 font-mono text-primary">{item.count}</span></button>)}</div></div>}
+      <div className="flex flex-wrap gap-2">{(['campaigns', 'reports'] as const).map(value => <Button key={value} size="sm" variant={view === value ? 'default' : 'outline'} aria-pressed={view === value} onClick={() => { setView(value); setPage(1); }}>{value === 'campaigns' ? l('Campanhas e eventos', 'Campaigns and events') : l('Publicações', 'Publications')} · {value === 'campaigns' ? data.campaigns.length : data.reports.length}</Button>)}</div>
+      {count === 0 ? <p className="rounded border border-dashed border-border p-8 text-center text-sm text-muted-foreground">{l('Nenhuma publicação de phishing neste recorte. Ajuste os filtros ou aguarde novas coletas.', 'No phishing publications in this selection. Adjust filters or wait for new collections.')}</p> : <div className="rounded border border-border">
+        {view === 'reports' ? <div className="px-4">{data.reports.slice((page - 1) * 20, page * 20).map(row => <Publication key={row.id} row={row} pt={pt} />)}</div> : data.campaigns.slice((page - 1) * 20, page * 20).map(group => <details key={group.id} className="group border-b border-border last:border-0"><summary className="cursor-pointer list-none p-4 hover:bg-muted/20"><div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground"><span>{labels[group.basis][pt ? 0 : 1]}</span><span>{group.firstPublished.slice(0, 10)} → {group.lastPublished.slice(0, 10)}</span><span className="font-mono text-primary">{group.reportCount} {l('publicações', 'publications')} · {group.sources.length} {l('fontes', 'sources')}</span><span className="ml-auto">{l('Ver fontes +', 'View sources +')}</span></div><h3 className="mt-2 break-words text-base font-semibold">{group.name}</h3><p className="mt-2 text-xs text-muted-foreground">{group.techniques.join(' · ') || l('Técnica não identificada', 'Technique not identified')}</p><p className="mt-1 text-xs text-muted-foreground">{group.sources.join(' · ')}</p></summary><div className="border-t border-border bg-muted/10 px-4">{(reportsByGroup.get(group.id) || []).map(row => <Publication key={row.id} row={row} pt={pt} />)}</div></details>)}
+      </div>}
+      {pages > 1 && <div className="flex items-center justify-between gap-2"><Button size="sm" variant="outline" disabled={page === 1} onClick={() => setPage(value => value - 1)}>{l('Anterior', 'Previous')}</Button><span className="text-xs text-muted-foreground">{page} / {pages}</span><Button size="sm" variant="outline" disabled={page === pages} onClick={() => setPage(value => value + 1)}>{l('Próxima', 'Next')}</Button></div>}
+      <p className="text-xs leading-relaxed text-muted-foreground">{l('MITRE citado e inferido são separados. Recortes por organização indicam relevância ao perfil, sem afirmar que ela foi vítima. Grupos sem vínculo confirmado representam publicações individuais.', 'Reported and inferred MITRE mappings are separate. Organization cuts indicate profile relevance without asserting victim status. Unlinked groups represent individual publications.')}</p>
+    </>}
+  </section>;
 }

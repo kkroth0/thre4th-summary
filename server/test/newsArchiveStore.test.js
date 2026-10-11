@@ -13,6 +13,27 @@ const row = (over = {}) => ({
     categories: ['Ransomware'], primaryCategory: 'Ransomware', ...over,
 });
 
+test('phishing migration reclassifies cached body, removes generic labels and preserves history', () => {
+    const filePath = tempFile();
+    const store = createNewsArchiveStore({ filePath, readFileSync: fs.readFileSync, writeJsonAtomic });
+    store.add([row({ title: 'Router patch', categories: ['Phishing', 'Vulnerabilities'], primaryCategory: 'Phishing' }), row({ link: 'https://a.example/2', title: 'Research findings', storyId: 'same-event', description: 'New investigation.' })]);
+    const archivedAt = store.all()[1].archivedAt;
+    assert.equal(store.reclassifyPhishing({ bodyFor: link => link.endsWith('/2') ? 'Attackers use ClickFix phishing to deliver malware.' : 'Recommendations: prevent phishing with training.' }), 2);
+    assert.deepEqual(store.all()[0].categories, ['Vulnerabilities']);
+    assert.equal(store.all()[0].primaryCategory, 'Vulnerabilities');
+    assert.ok(store.all()[1].phishingTechniques.includes('ClickFix'));
+    assert.equal(store.all()[1].storyId, 'same-event');
+    assert.equal(store.all()[1].archivedAt, archivedAt);
+    assert.equal(store.reclassifyPhishing(), 0);
+    assert.equal(createNewsArchiveStore({ filePath, readFileSync: fs.readFileSync, writeJsonAtomic }).all()[1].phishingIntel.detected, true);
+});
+test('failed reclassification write cannot advance memory or erase original archive', () => {
+    const initial = [row({ categories: ['Phishing'] })];
+    const store = createNewsArchiveStore({ filePath: 'unused', readFileSync: () => JSON.stringify(initial), writeJsonAtomic: () => { throw new Error('disk full'); } });
+    assert.throws(() => store.reclassifyPhishing(), /disk full/);
+    assert.deepEqual(store.all(), initial);
+});
+
 test('reenriquecimento atualiza evidências e classificação preservando archivedAt', () => {
     const store = createNewsArchiveStore({ filePath: tempFile(), readFileSync: fs.readFileSync, writeJsonAtomic });
     store.add([row({ contentHash: 'before', storyId: 'old' })]);
