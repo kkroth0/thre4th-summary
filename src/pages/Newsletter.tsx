@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
+import { LayoutGrid, List } from 'lucide-react';
+import { StoryTable } from '@/components/workbench/StoryTable';
 import { ArrowLeft, Globe, BookOpen, AlertTriangle, Search, Mail, Eye, Filter, ChevronDown, RefreshCw, Share2, Loader2, Bookmark, X, PencilLine, ExternalLink, CheckCircle2, Settings2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -198,6 +200,8 @@ const Newsletter = () => {
   
   // Newsletter States
   const [advisories, setAdvisories] = useState<Advisory[]>([]);
+  const [feedView, setFeedView] = useState<'table' | 'cards'>('table');
+  const [searchParams] = useSearchParams();
   const [searchNews, setSearchNews] = useState("");
   const [loadingNews, setLoadingNews] = useState(true);
   const [newsError, setNewsError] = useState<string | null>(null);
@@ -674,7 +678,7 @@ const Newsletter = () => {
               filtros") competindo por espaço — agora é um Popover com tudo
               dentro, e os chips abaixo (DEN-02) continuam mostrando o que
               está ativo sem precisar abrir nada. */}
-          <div className="flex flex-col gap-3 rounded-lg border bg-card p-3">
+          <div className="intel-panel flex flex-col gap-3 p-4">
             <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
               <div className="relative min-w-0 flex-1">
                 <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -908,6 +912,10 @@ const Newsletter = () => {
                       : (language === "pt" ? `Ver todas (+${hiddenCategoryCount})` : `Show all (+${hiddenCategoryCount})`)}
                   </button>
                 )}
+                <div className="ml-auto flex gap-1 rounded-lg border p-1" aria-label={language === 'pt' ? 'Visualização do feed' : 'Feed view'}>
+                  <Button type="button" size="sm" variant={feedView === 'table' ? 'secondary' : 'ghost'} className="h-7 gap-1.5 px-2 text-xs" aria-pressed={feedView === 'table'} onClick={() => setFeedView('table')}><List className="h-3.5 w-3.5" />{language === 'pt' ? 'Tabela' : 'Table'}</Button>
+                  <Button type="button" size="sm" variant={feedView === 'cards' ? 'secondary' : 'ghost'} className="h-7 gap-1.5 px-2 text-xs" aria-pressed={feedView === 'cards'} onClick={() => setFeedView('cards')}><LayoutGrid className="h-3.5 w-3.5" />Cards</Button>
+                </div>
               </div>
 
               {/* DEN-02: os chips de categoria são o filtro primário, porque
@@ -980,6 +988,8 @@ const Newsletter = () => {
                     </Button>
                   )}
                 />
+              ) : feedView === 'table' ? (
+                <StoryTable rows={storyCards} pt={language === 'pt'} initialId={searchParams.get('story')} onSave={keepAdvisory} onReport={makeBoletim} isSaved={row => savedLinks.has(row.sources[0].link)} isReporting={row => boletimBusy === row.storyId} evidence={correlation} onSelect={id => { if (isServerStoryId(id)) void getCorrelation(id); }} />
               ) : (
                 // Sem items-start: a grade estica os dois cards da mesma linha pra
                 // bater a mesma altura — é o que reduz a variação de tamanho entre

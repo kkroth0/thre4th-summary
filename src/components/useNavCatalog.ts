@@ -1,5 +1,5 @@
 import type React from "react";
-import { Rss, Lightbulb, FileSearch, Users, MapPinned, BookOpen, Shield, CalendarCheck, ShieldCheck, Search, Mail, Radar } from "lucide-react";
+import { Activity, Layers, Bug, Rss, Lightbulb, FileSearch, Users, MapPinned, BookOpen, Shield, CalendarCheck, ShieldCheck, Search, Mail, Radar } from "lucide-react";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { actorPageCopy } from "@/pages/actorsView";
 
@@ -33,6 +33,9 @@ export function useNavCatalog() {
     {
       label: pt ? "Pesquisa e contexto" : "Research and context",
       items: [
+        { path: '/dashboard', label: pt ? 'Visão geral' : 'Overview', icon: Activity },
+        { path: '/bulk', label: pt ? 'Enriquecimento em lote' : 'Bulk enrichment', icon: Layers },
+        { path: '/malware', label: pt ? 'Software e malware' : 'Software and malware', icon: Bug },
         {
           path: "/knowledge",
           label: tr({ pt: "Coleções", en: "Collections", es: "Colecciones", fr: "Collections" }),

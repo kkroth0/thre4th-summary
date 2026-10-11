@@ -1207,65 +1207,10 @@ const Index = () => {
           )}
 
           {!isAnalyzing && results.length === 0 && (
-            <section className="mx-auto max-w-5xl py-14 md:py-20">
-              <div className="soc-panel relative overflow-hidden rounded-lg border-primary/35 p-7 md:p-9">
-                <div className="absolute inset-x-0 top-0 h-1 bg-primary" />
-                <div className="flex flex-col gap-8 md:flex-row md:items-start md:justify-between">
-                  <div className="max-w-2xl">
-                    <span className="inline-flex items-center rounded-full border border-primary/25 bg-primary/10 px-3 py-1 text-[11px] font-black uppercase tracking-wide text-primary">
-                      {language === "pt" ? "Apoio à pesquisa CTI" : "Supporting CTI research"}
-                    </span>
-                    <h1 className="mt-4 text-3xl font-black tracking-tight text-foreground md:text-5xl">
-                      {language === "pt" ? "Consulta de indicadores" : "Indicator lookup"}
-                    </h1>
-                    <p className="mt-4 text-base font-semibold leading-8 text-muted-foreground md:text-lg">
-                      {language === "pt"
-                        ? "Consulte IPs, domínios, URLs ou hashes. A busca consolida reputação, DNS, WHOIS, vendors e contexto operacional em um único resultado."
-                        : "Query IPs, domains, URLs, or hashes. Search consolidates reputation, DNS, WHOIS, vendors and operational context into one result."}
-                    </p>
-                  </div>
-                  <div className="grid min-w-0 grid-cols-3 gap-2 md:w-72">
-                    {[
-                      ["21", language === "pt" ? "fontes" : "sources"],
-                      ["4", "IOC"],
-                      ["PDF", "export"],
-                    ].map(([value, label]) => (
-                      <div key={label} className="rounded-lg border border-border bg-background p-3 text-center">
-                        <div className="font-mono text-lg font-black text-foreground">{value}</div>
-                        <div className="mt-1 text-[10px] font-bold uppercase tracking-wide text-muted-foreground">{label}</div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* The search form is the hero on the empty state — not a pointer to a bar elsewhere. */}
-                <div className="mt-8">
-                  <SearchForm
-                    query={query}
-                    setQuery={setQuery}
-                    onSubmit={handleSearch}
-                    isLoading={isAnalyzing}
-                    className="w-full"
-                    selectedVendors={selectedVendors}
-                    onVendorsChange={setSelectedVendors}
-                  />
-                </div>
-
-                <div className="mt-5 flex flex-wrap items-center gap-2">
-                  <span className="mr-1 text-[11px] font-black uppercase tracking-wide text-muted-foreground">
-                    {language === "pt" ? "Exemplos" : "Try"}
-                  </span>
-                  {["14.103.115.208", "https://example.com", "example.com", "8.8.8.8"].map((sample) => (
-                    <button
-                      key={sample}
-                      onClick={() => setQuery(sample)}
-                      className="rounded-full border border-border bg-background px-3 py-1.5 font-mono text-xs font-semibold text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary"
-                    >
-                      {sample}
-                    </button>
-                  ))}
-                </div>
-              </div>
+            <section className="intel-panel p-5 sm:p-7">
+              <div className="mb-6"><h1 className="page-title">{language === 'pt' ? 'Buscar indicadores' : 'Search indicators'}</h1><p className="page-lede">{language === 'pt' ? 'Investigue IPs, domínios, URLs e hashes. Cole vários indicadores para enriquecer em lote.' : 'Investigate IPs, domains, URLs and hashes. Paste multiple indicators for bulk enrichment.'}</p></div>
+              <SearchForm query={query} setQuery={setQuery} onSubmit={handleSearch} isLoading={isAnalyzing} className="w-full" selectedVendors={selectedVendors} onVendorsChange={setSelectedVendors} />
+              <div className="mt-5 flex flex-wrap items-center gap-2"><span className="mr-1 text-xs text-muted-foreground">{language === 'pt' ? 'Exemplos' : 'Examples'}</span>{['8.8.8.8', 'example.com', 'https://example.com'].map(sample => <button key={sample} type="button" onClick={() => setQuery(sample)} className="rounded-md border px-3 py-1.5 font-mono text-xs text-muted-foreground hover:text-primary">{sample}</button>)}</div>
             </section>
           )}
 

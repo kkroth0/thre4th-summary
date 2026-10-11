@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type ElementType } from "react";
+import { useSearchParams } from 'react-router-dom';
 import {
   AlertCircle,
   BookOpen,
@@ -829,7 +830,9 @@ const Actors = () => {
   const [sourceFilter, setSourceFilter] = useState<SourceFilter>("all");
   const [sortMode, setSortMode] = useState<SortMode>("techniques");
 
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [actorSearchParams] = useSearchParams();
+  const actorParam = actorSearchParams.get('actor');
+  const [selectedId, setSelectedId] = useState<string | null>(actorParam);
   const [selected, setSelected] = useState<ActorDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState(false);
@@ -893,6 +896,8 @@ const Actors = () => {
       setDetailLoading(false);
     }
   }, []);
+
+  useEffect(() => { if (actorParam) void openActor(actorParam); }, [actorParam, openActor]);
 
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();

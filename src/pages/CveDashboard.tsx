@@ -1,3 +1,4 @@
+import { VulnerabilityTable } from '@/components/workbench/VulnerabilityTable';
 import React, { useState, useEffect, useMemo } from "react";
 import { Link } from "react-router-dom";
 import { ArrowLeft, Globe, Shield, AlertTriangle, Search, Eye, BarChart2, RefreshCw, ExternalLink, X, ChevronLeft, Calendar } from "lucide-react";
@@ -188,7 +189,7 @@ const CveDashboard = () => {
   const handlePivotSearch = (cveId: string) => {
     localStorage.setItem("pivotSearchQuery", cveId);
     toast.success(tr({ pt: `Pesquisando ${cveId} no painel...`, en: `Searching ${cveId} on main dashboard...`, es: `Buscando ${cveId} en el panel...`, fr: `Recherche de ${cveId} dans le tableau de bord...` }));
-    window.location.href = "/";
+    window.location.href = "/analyzer";
   };
 
   // Parse CVSS severity class
@@ -712,48 +713,7 @@ const CveDashboard = () => {
                   <p className="text-muted-foreground font-medium">{t("noCvesFound") || "No CVEs found"}</p>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 gap-4">
-                  {filteredExploitedCves.map((cve) => (
-                    <Card key={cve.cveID} className="border shadow-sm bg-card hover:shadow-md transition-all">
-                      <CardHeader className="pb-2 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                        <div className="flex items-center gap-3">
-                          <Badge variant="outline" className="font-mono text-sm border-red-500/30 text-red-500 bg-red-500/5">
-                            {cve.cveID}
-                          </Badge>
-                          <Badge variant="secondary">
-                            {cve.vendorProject} - {cve.product}
-                          </Badge>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs text-muted-foreground">
-                            {t("dueDate") || "Due Date"}: <strong className="text-red-500">{cve.dueDate}</strong>
-                          </span>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="h-7 px-2.5 rounded text-xs gap-1 border-border/50 hover:bg-primary/5"
-                            onClick={() => handlePivotSearch(cve.cveID)}
-                            title={t("pivotSearchTooltip") || "Pivot search on dashboard"}
-                          >
-                            <Eye className="h-3 w-3" />
-                            {t("pivotSearch") || "Pivot Search"}
-                          </Button>
-                        </div>
-                      </CardHeader>
-                      <CardContent className="space-y-3">
-                        <div className="text-sm font-semibold">{cve.vulnerabilityName}</div>
-                        <p className="text-sm text-muted-foreground">{cve.shortDescription}</p>
-                        
-                        {cve.requiredAction && (
-                          <div className="p-3 rounded-lg bg-muted/40 border text-xs space-y-1">
-                            <div className="font-semibold text-foreground uppercase tracking-wider">{t("requiredAction") || "Required Action"}</div>
-                            <div className="text-muted-foreground leading-relaxed">{cve.requiredAction}</div>
-                          </div>
-                        )}
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
+                <VulnerabilityTable pt={language === 'pt'} onInvestigate={handlePivotSearch} rows={filteredExploitedCves.map(cve => ({ id: cve.cveID, name: cve.vulnerabilityName, description: cve.shortDescription, published: cve.dateAdded, vendor: cve.vendorProject, product: cve.product, cvss: recentCves.find(row => row.id === cve.cveID)?.cvss ?? null, kev: true, mitigation: cve.requiredAction, dueDate: cve.dueDate }))} />
               )}
             </TabsContent>
 
@@ -776,96 +736,7 @@ const CveDashboard = () => {
                   <p className="text-muted-foreground font-medium">{t("noCvesFound") || "No CVEs found"}</p>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 gap-4">
-                  {filteredRecentCves.map((cve) => {
-                    const sev = getCvssSeverity(cve.cvss);
-                    return (
-                      <Card key={cve.id} className="border shadow-sm bg-card hover:shadow-md transition-all border-border/50 hover:border-border/50">
-                        <CardHeader className="pb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border/50">
-                          <div className="flex flex-wrap items-center gap-2.5">
-                            <Badge variant="outline" className="font-mono text-sm border-border/50 text-primary bg-primary/5 font-bold">
-                              {cve.id}
-                            </Badge>
-                            <Badge variant="outline" className={`${sev.color} font-bold`}>
-                              {t("severity") || "Severity"}: {sev.label} {cve.cvss ? `(${cve.cvss})` : ""}
-                            </Badge>
-                            <Badge variant="outline" className="bg-blue-500/5 text-blue-400 border-blue-500/20 font-medium text-[10px]">
-                              Source: {cve.source || "NIST NVD"}
-                            </Badge>
-                            {cve.vectorString && (
-                              <span className="text-[10px] font-mono text-muted-foreground/75 bg-muted/30 px-2 py-0.5 rounded border border-muted/50">
-                                {cve.vectorString}
-                              </span>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-2.5 shrink-0 self-end sm:self-auto">
-                            <span className="text-xs text-muted-foreground/70">
-                              {t("publishDate") || "Published"}: {cve.Published ? new Date(cve.Published).toLocaleDateString() : "N/A"}
-                            </span>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="h-7 px-2.5 rounded text-xs gap-1 border-border/50 hover:bg-primary/5"
-                              onClick={() => handlePivotSearch(cve.id)}
-                              title={t("pivotSearchTooltip") || "Pivot search on dashboard"}
-                            >
-                              <Eye className="h-3 w-3" />
-                              {t("pivotSearch") || "Pivot Search"}
-                            </Button>
-                          </div>
-                        </CardHeader>
-                        <CardContent className="pt-4 space-y-4">
-                          {/* Description */}
-                          <div className="space-y-1.5">
-                            <h4 className="text-xs font-semibold text-foreground/80 uppercase tracking-wider">Description</h4>
-                            <p className="text-sm text-muted-foreground leading-relaxed">{cve.summary}</p>
-                          </div>
-
-                          {/* Mitigation Section */}
-                          {cve.mitigation && (
-                            <div className="p-3.5 rounded-lg bg-emerald-500/5 border border-emerald-500/10 space-y-1.5">
-                              <h4 className="text-xs font-bold text-emerald-500 flex items-center gap-1.5 uppercase tracking-wider">
-                                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                                Recommended Mitigation & Remediation
-                              </h4>
-                              <p className="text-xs text-muted-foreground/90 leading-relaxed">{cve.mitigation}</p>
-                            </div>
-                          )}
-
-                          {/* References/URLs */}
-                          {cve.references && cve.references.length > 0 && (
-                            <div className="space-y-2">
-                              <h4 className="text-xs font-semibold text-foreground/80 uppercase tracking-wider">Reference Links (NIST & Vendor Advisories)</h4>
-                              <div className="flex flex-wrap gap-2">
-                                {cve.references.map((url, idx) => {
-                                  let label = "Reference Link";
-                                  try {
-                                    const hostname = new URL(url).hostname;
-                                    label = hostname.replace("www.", "");
-                                  } catch {
-                                    label = "Reference Link";
-                                  }
-                                  return (
-                                    <a
-                                      key={idx}
-                                      href={url}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="inline-flex items-center gap-1 text-[11px] font-medium text-primary hover:underline bg-primary/5 hover:bg-primary/10 border border-border/50 px-2 py-0.5 rounded transition-all"
-                                    >
-                                      {label}
-                                      <ExternalLink className="h-2.5 w-2.5" />
-                                    </a>
-                                  );
-                                })}
-                              </div>
-                            </div>
-                          )}
-                        </CardContent>
-                      </Card>
-                    );
-                  })}
-                </div>
+                <VulnerabilityTable pt={language === 'pt'} onInvestigate={handlePivotSearch} rows={filteredRecentCves.map(cve => ({ id: cve.id, description: cve.summary, published: cve.Published, cvss: cve.cvss, kev: exploitedCves.some(row => row.cveID === cve.id), source: cve.source, mitigation: cve.mitigation, vector: cve.vectorString, references: cve.references }))} />
               )}
             </TabsContent>
           </Tabs>

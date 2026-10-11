@@ -40,7 +40,7 @@ export function PageLayout({
       {bare ? (
         <div className="relative z-10 flex-1">{children}</div>
       ) : (
-        <main className={`relative z-10 flex-1 container mx-auto px-4 pb-12 pt-6 ${width} ${className}`}>
+        <main className={`relative z-10 flex-1 container mx-auto px-4 pb-12 pt-6 lg:px-8 ${width} ${className}`}>
           {children}
         </main>
       )}

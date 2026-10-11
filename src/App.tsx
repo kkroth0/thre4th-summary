@@ -11,6 +11,7 @@ import { WorkspaceShell } from "./components/WorkspaceShell";
 
 const Home = lazy(() => import("./pages/Home"));
 const Index = lazy(() => import("./pages/Index"));
+const BulkEnrichment = lazy(() => import("./pages/BulkEnrichment"));
 const Login = lazy(() => import("./pages/Login"));
 const Profile = lazy(() => import("./pages/Profile"));
 const Settings = lazy(() => import("./pages/Settings"));
@@ -18,6 +19,8 @@ const VendorDirectory = lazy(() => import("./pages/VendorDirectory"));
 const AttackSurface = lazy(() => import("./pages/AttackSurface"));
 const ExposureWatchlist = lazy(() => import("./pages/ExposureWatchlist"));
 const Newsletter = lazy(() => import("./pages/Newsletter"));
+const IntelligenceOverview = lazy(() => import("./pages/IntelligenceOverview"));
+const MalwareCatalog = lazy(() => import("./pages/MalwareCatalog"));
 const CveDashboard = lazy(() => import("./pages/CveDashboard"));
 const Actors = lazy(() => import("./pages/Actors"));
 const PhishingAnalyzer = lazy(() => import("./pages/PhishingAnalyzer"));
@@ -50,6 +53,9 @@ const App = () => (
                 {/* Public Routes (CTI & CVE Dashboard) */}
                 <Route path="/" element={<Home />} />
                 <Route path="/analyzer" element={<Index />} />
+                <Route path="/bulk" element={<BulkEnrichment />} />
+                <Route path="/dashboard" element={<PremiumRoute feature="advisory-feed"><IntelligenceOverview /></PremiumRoute>} />
+                <Route path="/malware" element={<MalwareCatalog />} />
                 <Route path="/cves" element={<CveDashboard />} />
                 <Route path="/atores" element={<Actors />} />
                 <Route path="/actors" element={<Navigate to="/atores" replace />} />

@@ -1,5 +1,5 @@
 const WORKSPACE_ROUTES = [
-  '/newsletter', '/knowledge', '/relatorios', '/analyzer', '/atores', '/cves',
+  '/dashboard', '/bulk', '/malware', '/newsletter', '/knowledge', '/relatorios', '/analyzer', '/atores', '/cves',
   '/patch-tuesday', '/sap-patch', '/threat-map', '/vendors', '/attack-surface',
   '/exposure-watchlist', '/phishing-analyzer', '/settings', '/profile', '/admin',
 ];

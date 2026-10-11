@@ -4,6 +4,51 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Investigation workspace: neutral surfaces, compact controls and data tables. */
+@layer components {
+  .workbench {
+    --primary: 217 72% 48%;
+    --primary-foreground: 0 0% 100%;
+    --ring: 217 72% 48%;
+    --sidebar-primary: 217 72% 48%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar: 0 0% 98%;
+    --radius: 0.5rem;
+    font-weight: 400;
+  }
+  .dark .workbench {
+    --background: 220 10% 7%;
+    --foreground: 0 0% 92%;
+    --card: 220 8% 5%;
+    --card-foreground: 0 0% 92%;
+    --popover: 220 7% 10%;
+    --popover-foreground: 0 0% 92%;
+    --secondary: 220 5% 13%;
+    --secondary-foreground: 0 0% 92%;
+    --muted: 220 5% 13%;
+    --muted-foreground: 220 3% 65%;
+    --accent: 220 5% 13%;
+    --accent-foreground: 0 0% 92%;
+    --border: 220 5% 17%;
+    --input: 220 5% 21%;
+    --sidebar: 0 0% 3%;
+    --sidebar-background: 0 0% 3%;
+    --sidebar-foreground: 0 0% 92%;
+    --sidebar-border: 220 5% 12%;
+    --sidebar-accent: 220 5% 10%;
+  }
+  .workbench .page-head { border-bottom: 0; padding-bottom: 0; }
+  .workbench .page-title { font-size: 1.5rem; line-height: 2rem; }
+  .intel-panel { @apply rounded-xl border border-border bg-card; }
+  .intel-eyebrow { @apply text-[11px] font-medium uppercase tracking-wider text-muted-foreground; }
+  .intel-table { @apply w-full border-collapse text-left text-[13px]; }
+  .intel-table th { @apply border-y border-border bg-muted/40 px-4 py-3 text-xs font-medium text-muted-foreground; }
+  .intel-table td { @apply border-b border-border px-4 py-4 align-top; }
+  .intel-table tbody tr:last-child td { border-bottom: 0; }
+  .intel-table tbody tr:hover { @apply bg-muted/30; }
+  .workbench nav { scrollbar-width: thin; scrollbar-color: hsl(var(--border)) transparent; }
+}
+
 /* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
 All colors MUST be HSL.
 */

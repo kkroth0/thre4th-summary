@@ -581,7 +581,7 @@ const PhishingAnalyzer = () => {
           <div className="page-head">
             <div>
               <h1 className="page-title">
-                {language === "pt" ? "Análise de Phishing" : "Phishing Analysis"}
+                {mode === 'trends' ? (language === 'pt' ? 'Campanhas de phishing' : 'Phishing campaigns') : (language === "pt" ? "Análise de Phishing" : "Phishing Analysis")}
               </h1>
               <p className="page-lede">
                 {mode === "eml"
