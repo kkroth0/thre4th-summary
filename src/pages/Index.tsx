@@ -1171,12 +1171,12 @@ const Index = () => {
       <Header onLogoClick={handleReset} showBackButton={false} />
 
       {/* Barra de busca persistente: some no estado vazio, onde o formulario ja
-          e o heroi. Fica sticky logo abaixo do header (h-14) em vez de fixed —
+          e o heroi. Fica sticky logo abaixo do header (h-16) em vez de fixed —
           assim ela ocupa o proprio espaco, o conteudo nao precisa de padding
           adivinhado pra compensar e nada passa por baixo dela na rolagem. */}
       {hasResults && (
         <div
-          className="sticky top-14 z-30 border-b border-border bg-background/95 px-4 py-3.5 backdrop-blur md:px-8"
+          className="sticky top-16 z-30 border-b border-border bg-background/95 px-4 py-3.5 backdrop-blur md:px-8"
         >
           <div className="max-w-7xl mx-auto">
             <SearchForm

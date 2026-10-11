@@ -45,7 +45,6 @@ export function PremiumRoute({ children, feature }: { children: React.ReactNode;
     <div
       className="soc-shell relative min-h-screen bg-background flex flex-col"
     >
-      <div className="soc-grid pointer-events-none absolute inset-0 z-0" />
       <Header />
       <main className="relative z-10 flex-1 container mx-auto px-4 py-12 max-w-lg w-full flex flex-col justify-center">
         {loading ? (

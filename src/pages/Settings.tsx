@@ -5,7 +5,7 @@ import { ApiKeysSettings } from "@/components/settings/ApiKeysSettings";
 import { MonitoringSettings } from "@/components/settings/MonitoringSettings";
 import { PreferencesSettings } from "@/components/settings/PreferencesSettings";
 import { PageLayout } from "@/components/PageLayout";
-import { useNavCatalog } from "@/components/Header";
+import { useNavCatalog } from "@/components/useNavCatalog";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { cn } from "@/lib/utils";

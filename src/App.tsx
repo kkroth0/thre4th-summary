@@ -7,6 +7,7 @@ import { LanguageProvider } from "./contexts/LanguageContext";
 import { AuthProvider } from "./contexts/AuthContext";
 import { PremiumRoute } from "./components/PremiumRoute";
 import { Seo } from "./components/Seo";
+import { WorkspaceShell } from "./components/WorkspaceShell";
 
 const Home = lazy(() => import("./pages/Home"));
 const Index = lazy(() => import("./pages/Index"));
@@ -38,8 +39,9 @@ const App = () => (
           <Sonner />
           <BrowserRouter>
             <Seo />
+            <WorkspaceShell>
             <Suspense fallback={
-              <div className="h-screen w-screen flex flex-col items-center justify-center bg-background gap-3">
+              <div role="status" className="min-h-screen w-full flex flex-col items-center justify-center bg-background gap-3">
                 <div className="h-10 w-10 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
                 <span className="text-xs font-semibold text-muted-foreground tracking-wider animate-pulse">Loading ThreatSumm4ry...</span>
               </div>
@@ -81,6 +83,7 @@ const App = () => (
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </Suspense>
+            </WorkspaceShell>
           </BrowserRouter>
         </TooltipProvider>
         </AuthProvider>

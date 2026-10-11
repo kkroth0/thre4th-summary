@@ -24,8 +24,7 @@ interface PageLayoutProps {
 }
 
 /**
- * Standard page shell: Vercel-like top navigation, centered content, shared
- * Footer, and the subtle background treatment used across internal tools.
+ * Shared page content inside the workspace sidebar shell.
  */
 export function PageLayout({
   children,
@@ -37,7 +36,6 @@ export function PageLayout({
 }: PageLayoutProps) {
   return (
     <div className="soc-shell relative min-h-screen bg-background flex flex-col">
-      <div className="soc-grid pointer-events-none absolute inset-0 z-0" />
       <Header showBackButton={showBackButton} actions={headerActions} />
       {bare ? (
         <div className="relative z-10 flex-1">{children}</div>

@@ -10,6 +10,7 @@ All colors MUST be HSL.
 
 @layer base {
   :root {
+    color-scheme: light;
     --background: 0 0% 100%;
     --foreground: 204 37% 11%;
 
@@ -107,6 +108,7 @@ All colors MUST be HSL.
   }
 
   .dark {
+    color-scheme: dark;
     /* tons do mark: #03070A de fundo, #111D25 nas superficies, #27333E nas bordas */
     --background: 204 55% 3%;
     --foreground: 210 40% 98%;
