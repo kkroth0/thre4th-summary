@@ -10,7 +10,7 @@ O workspace usa os HTMLs do Hunt.io fornecidos como referência de navegação, 
 | Feed (`/newsletter`) | Coletor e agrupamento existentes | Tabela paginada ou cards; painel de todas as publicações; evidências de correlação quando disponíveis; salvar coleção e gerar relatório com todas as fontes |
 | Campanhas de phishing | `/api/phishing/reports` | Filtros de período, técnica, região e filtros adicionais; tabela de campanhas/publicações; fontes e evidências no painel; exportação Excel do recorte completo |
 | Software e malware (`/malware`) | `/api/actors/software-index` | Busca por software/ator, tabela paginada e abertura dos perfis relacionados |
-| Atores (`/atores?actor=...`) | Catálogo de atores existente | Perfil aberto por link a partir de software ou notícia |
+| Atores (`/atores?actor=...`) | `/api/actors`, `/api/actors/:id` e `/api/news/stories?actor=...` | Listagem em largura total, filtros por origem/alvos/motivação/fonte e paginação de 25/50/100 registros; perfil completo com aliases, visão geral e abas de técnicas, software, metadados, referências e notícias |
 | Vulnerabilidades (`/cves`) | APIs de CVEs recentes e CISA KEV existentes | Tabelas paginadas, descrição, mitigação, prazo e referências no painel |
 | Vítimas de ransomware (`/threat-map`) | `/api/intel/threat-map` e catálogo `/api/intel/sectors` existentes | Período e prioridades por setor/região; tabela paginada com busca, grupo, país e setor; painel com descrição, datas, fonte, captura e imprensa |
 | Busca de indicadores (`/analyzer`) | Provedores de enriquecimento existentes | Formulário compacto, entrada de múltiplos indicadores e histórico |
@@ -25,6 +25,8 @@ O workspace usa os HTMLs do Hunt.io fornecidos como referência de navegação, 
 - Dados ausentes, incluindo CVSS, são exibidos como não identificados ou `—`, sem preencher métricas presumidas.
 - Ransomware mostra reivindicações da fonte, não incidentes confirmados. Os totais correspondem ao recorte recebido; os filtros da tabela refinam somente as linhas. A comparação temporal aparece apenas quando a janela anterior tem registros, e o contexto fica recolhido. Não atribui níveis de pressão sem uma referência histórica.
 - Mudanças de período ou prioridades carregam um conjunto separado de dados, sem exibir uma resposta anterior como se fosse do novo filtro. A tabela de ransomware pagina todos os registros retornados; referências externas aceitam somente HTTP/HTTPS.
+- A listagem de atores pagina o catálogo inteiro, sem o corte anterior em 180 registros. Ao voltar de um perfil, mantém os filtros, a página e a posição da lista. As consultas de detalhe são separadas por ID e canceladas ao trocar de ator.
+- As métricas do perfil contam relações reais do catálogo. Notícias mostram até cinco eventos correlacionados do feed, com estado de falha separado de ausência de cobertura. A interface não apresenta contagens de IOCs, hosts ou hashes sem uma fonte que as forneça.
 - A exportação de phishing continua usando todo o recorte filtrado, independentemente da página da tabela.
 - O lote consulta IPs públicos IPv4/IPv6, domínios, URLs e hashes MD5/SHA-1/SHA-256. E-mails, CIDRs e IPs privados/reservados são contabilizados como não consultados; nenhum bloco é expandido automaticamente. URLs não geram uma segunda consulta implícita ao host.
 - Falhas de todas as fontes geram estado de falha; falhas de algumas fontes geram resultado parcial. Ausência de sinal não comprova segurança. Interromper bloqueia novas consultas e deixa as que já começaram terminarem.

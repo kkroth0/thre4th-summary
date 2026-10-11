@@ -68,6 +68,13 @@
   .intel-table td { @apply border-b border-border px-4 py-4 align-top; }
   .intel-table tbody tr:last-child td { border-bottom: 0; }
   .intel-table tbody tr:hover { @apply bg-muted/30; }
+  .actor-surface { @apply rounded-3xl border border-border bg-card; }
+  .actor-filter { @apply h-10 max-w-full rounded-full border border-border bg-muted/30 px-4; }
+  .actor-filter select option { @apply bg-background text-foreground; }
+  .actor-table th { @apply border-y border-border bg-muted/25 px-5 py-3 text-xs font-medium text-muted-foreground; }
+  .actor-table td { @apply border-b border-border px-5 py-4 align-middle; }
+  .actor-table tbody tr:last-child td { border-bottom: 0; }
+  .actor-table tbody tr:hover { @apply bg-muted/30; }
   .workbench nav { scrollbar-width: thin; scrollbar-color: hsl(var(--border)) transparent; }
 }
 
