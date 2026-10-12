@@ -31,7 +31,7 @@ export function ActorProfile({ id, summary, pt, onBack, initialTab = 'ips' }: { 
   const [days, setDays] = useState(180); const { auth } = useAuth();
   const evidence = useQuery({ queryKey: ['actor-evidence', auth.login || '', id, days], queryFn: ({ signal }) => fetchActorEvidence(id, days, signal), staleTime: 300_000, retry: false });
   const detail = useQuery({ queryKey: ['actor-detail', id], queryFn: async ({ signal }) => {
-    const response = await fetch(`/api/actors/${encodeURIComponent(id)}`, { signal });
+    const response = await fetch(`/api/actors/${encodeURIComponent(id)}`, { signal, cache: 'no-cache' });
     if (!response.ok) throw new Error(String(response.status));
     return await response.json() as ActorDetail;
   }, staleTime: 30 * 60_000, retry: 1 });

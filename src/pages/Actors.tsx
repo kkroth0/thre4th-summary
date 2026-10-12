@@ -63,7 +63,7 @@ export default function Actors() {
   const [sort, setSort] = useState<Sort>('name');
   const [page, setPage] = useState(1); const [pageSize, setPageSize] = useState(25);
   const catalog = useQuery({ queryKey: ['actor-catalog'], queryFn: async ({ signal }) => {
-    const response = await fetch('/api/actors', { signal });
+    const response = await fetch('/api/actors', { signal, cache: 'no-cache' });
     if (!response.ok) throw new Error(String(response.status));
     return await response.json() as Catalog;
   }, staleTime: 30 * 60_000, retry: 1 });
