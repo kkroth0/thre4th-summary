@@ -1,6 +1,7 @@
 import { ReactNode } from "react";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
+import type { WorkspaceBreadcrumbItem } from '@/components/WorkspaceBreadcrumbs';
 
 interface PageLayoutProps {
   children: ReactNode;
@@ -13,6 +14,7 @@ interface PageLayoutProps {
   showBackButton?: boolean;
   /** Optional actions passed through to the Header. */
   headerActions?: ReactNode;
+  breadcrumbItems?: WorkspaceBreadcrumbItem[];
   /** Extra classes for the <main> column (rarely needed). */
   className?: string;
   /**
@@ -31,12 +33,13 @@ export function PageLayout({
   width = "max-w-3xl",
   showBackButton = false,
   headerActions,
+  breadcrumbItems,
   className = "",
   bare = false,
 }: PageLayoutProps) {
   return (
     <div className="soc-shell relative min-h-screen bg-background flex flex-col">
-      <Header showBackButton={showBackButton} actions={headerActions} />
+      <Header showBackButton={showBackButton} actions={headerActions} breadcrumbItems={breadcrumbItems} />
       {bare ? (
         <div className="relative z-10 flex-1">{children}</div>
       ) : (

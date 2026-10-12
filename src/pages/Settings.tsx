@@ -41,7 +41,7 @@ export default function Settings() {
   ];
 
   return (
-    <PageLayout width="max-w-6xl" className="lg:pt-6">
+    <PageLayout width="max-w-6xl" className="lg:pt-6" breadcrumbItems={[{ label: sections.find(item => item.id === section)!.label }]}>
       <div className="mb-4 flex flex-wrap items-end justify-between gap-3 border-b border-border pb-4">
         <div>
           {from && fromLabel && <Link to={from} className="mb-3 inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"><ArrowLeft className="h-3.5 w-3.5" />{fromLabel}</Link>}

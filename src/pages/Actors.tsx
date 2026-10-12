@@ -84,7 +84,9 @@ export default function Actors() {
   const choices = (values: string[]) => values.filter(Boolean).map(value => ({ value, label: value }));
   const pager = <DataPager pt={pt} total={filtered.length} page={current} pageSize={pageSize} pageSizes={[25, 50, 100]} onPage={setPage} onPageSize={size => { setPageSize(size); setPage(1); }} />;
 
-  return <PageLayout width="max-w-[1600px]" className="actor-workspace">
+  return <PageLayout width="max-w-[1600px]" className="actor-workspace" breadcrumbItems={actorId
+    ? [{ label: actors.find(actor => actor.id === actorId)?.name || (pt ? 'Perfil do ator' : 'Actor profile') }]
+    : view === 'model' ? [{ label: pt ? 'Modelagem de ameaças' : 'Threat modelling' }] : undefined}>
     {actorId ? <ActorProfile key={actorId} id={actorId} summary={actors.find(actor => actor.id === actorId)} pt={pt} onBack={closeActor} /> : <>
       <Tabs value={view} onValueChange={setView}>
         <TabsList variant="underline" className="mb-6 gap-4" aria-label={pt ? 'Visões de atores' : 'Actor views'}>

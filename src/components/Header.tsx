@@ -29,15 +29,17 @@ import { useTheme } from "./theme-provider";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { cn } from "@/lib/utils";
+import { WorkspaceBreadcrumbs, type WorkspaceBreadcrumbItem } from './WorkspaceBreadcrumbs';
 
 interface HeaderProps {
   actions?: React.ReactNode;
   logoAddon?: React.ReactNode;
   onLogoClick?: () => void;
   showBackButton?: boolean;
+  breadcrumbItems?: WorkspaceBreadcrumbItem[];
 }
 
-export function Header({ actions, logoAddon, onLogoClick, showBackButton = false }: HeaderProps) {
+export function Header({ actions, logoAddon, onLogoClick, showBackButton = false, breadcrumbItems = [] }: HeaderProps) {
   const { t, language } = useLanguage();
   const { auth, loading: authLoading, signOut } = useAuth();
   const { pathname } = useLocation();
@@ -50,6 +52,10 @@ export function Header({ actions, logoAddon, onLogoClick, showBackButton = false
   const current = [homeItem, ...navGroups.flatMap((g) => g.items)].find((i) => isRouteActive(i.path, pathname));
   // Autenticado, a entrada principal é o feed de inteligência.
   const homePath = auth.authenticated ? homeItem.path : "/";
+  const pageLabel = current?.label || (pathname === '/settings' ? (pt ? 'Configurações' : 'Settings') : pathname === '/profile' ? (pt ? 'Conta' : 'Account') : pathname === '/admin' ? (pt ? 'Administração' : 'Administration') : pathname === '/exposure-watchlist' ? (pt ? 'Monitoramento de exposição' : 'Exposure monitoring') : (pt ? 'Inteligência de ameaças' : 'Threat intelligence'));
+  const breadcrumbs: WorkspaceBreadcrumbItem[] = pathname === '/dashboard'
+    ? [{ label: 'Dashboard' }]
+    : [{ label: 'Dashboard', to: '/dashboard' }, { label: pageLabel, to: breadcrumbItems.length ? pathname : undefined }, ...breadcrumbItems];
 
   const launcherCard = (item: NavItem) => {
     const Icon = item.icon;
@@ -101,13 +107,13 @@ export function Header({ actions, logoAddon, onLogoClick, showBackButton = false
           <span className="hidden text-sm font-bold tracking-tight text-foreground sm:inline">threatsumm4ry</span>
         </Link>}
 
-        {current && (
+        {workspace && <WorkspaceBreadcrumbs items={breadcrumbs} pt={pt} />}
+        {!workspace && current && (
           <>
             {!workspace && <span className="hidden h-5 w-px bg-border sm:block" />}
             <span className="min-w-0 truncate text-sm font-semibold text-foreground">{current.label}</span>
           </>
         )}
-        {workspace && !current && <span className="min-w-0 truncate text-sm font-semibold">{pathname === '/settings' ? (pt ? 'Configurações' : 'Settings') : pathname === '/profile' ? (pt ? 'Conta' : 'Account') : pathname === '/admin' ? (pt ? 'Administração' : 'Administration') : (pt ? 'Inteligência de ameaças' : 'Threat intelligence')}</span>}
 
         {logoAddon}
 
