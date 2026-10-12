@@ -1,4 +1,5 @@
 import { Network, Rss, Search } from 'lucide-react';
+import { LandingPipelineAnimation } from './LandingPipelineAnimation';
 
 export function LandingPipeline({ pt }: { pt: boolean }) {
   const stages = [
@@ -14,10 +15,7 @@ export function LandingPipeline({ pt }: { pt: boolean }) {
         <p className="mt-3 text-sm leading-relaxed text-muted-foreground">{pt ? 'Uma publicação é o começo. O ThreatSumm4ry reúne o contexto extraído e a cobertura do evento para orientar sua pesquisa.' : 'A publication is the starting point. ThreatSumm4ry brings extracted context and event coverage together to guide your research.'}</p>
       </header>
       <figure className="overflow-hidden rounded-xl border border-border">
-        <picture className="hidden bg-[#0d1117] md:block">
-          <source media="(min-width: 768px)" srcSet={pt ? '/images/etl-pipeline-pt-v1.png' : '/images/etl-pipeline-en-v1.png'} />
-          <img src="/threatsumm4ry-mark.svg" width={pt ? 1942 : 1944} height={809} loading="lazy" decoding="async" className="block h-auto w-full" alt={pt ? 'Fluxo CTI: fontes convergem para coleta e extração, evidências de um evento se conectam a CVEs, IOCs, atores, malware, técnicas e fonte original, e alimentam as ferramentas de investigação.' : 'CTI workflow: sources converge into collection and extraction; event evidence connects CVEs, IOCs, actors, malware, techniques and original sources to investigation tools.'} />
-        </picture>
+        <LandingPipelineAnimation pt={pt} />
         <div className="grid divide-y divide-border bg-card md:grid-cols-3 md:divide-x md:divide-y-0">
           {stages.map(({ icon: Icon, title, text, items }, index) => (
             <div key={title} className="p-5 md:p-6">

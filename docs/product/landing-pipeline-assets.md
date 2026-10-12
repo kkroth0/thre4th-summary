@@ -11,3 +11,11 @@ Use case: style-transfer and text-localization. Edit target: supplied Feedly pip
 ## Prompt EN
 
 Edit target: the generated dark ThreatSumm4ry architecture infographic. Text localization only: preserve every position, all shapes, charcoal background, orange connectors, icons, whitespace and size unchanged. Translate ONLY these labels to exact English: FONTES -> SOURCES; EVIDÊNCIAS -> EVIDENCE; INVESTIGAÇÃO -> INVESTIGATION; Notícias -> News; Pesquisas -> Research; Coleta e extração -> Collection & extraction; Evento -> Event; Ator -> Actor; Fonte original -> Original source; Notícias e IOCs -> News & IOCs; Enriquecimento -> Enrichment; Atores e malware -> Actors & malware; Relatórios -> Reports. Keep CISA, NVD, MSRC, abuse.ch, CVE, IOC, Malware, TTP and Phishing unchanged. Exact clean Inter-style lettering. No added numbers, logos, features, badges or text.
+
+## Animação v2
+
+As imagens v1 permanecem intactas. A landing sobrepõe partículas e pulsos vetoriais com SVG, sem carregar um GIF automaticamente. O ciclo ilustrativo de 8 segundos percorre fontes → extração → evidências → ferramentas; não representa processamento ao vivo. Há controle de pausa, suspensão fora da tela ou em aba oculta, e imagem estática por padrão quando `prefers-reduced-motion: reduce` está ativo; nesse caso, o visitante pode optar pela reprodução manual. No celular, os três estágios continuam em HTML legível.
+
+`src/lib/landingPipelineMotion.ts` compartilha trajetórias e tempos entre a animação SVG e o exportador offline. Os GIFs PT/EN em `public/images/etl-pipeline-{pt,en}-animated-v2.gif` têm 1440 × 600 px, 160 quadros a 20 fps, repetição contínua e paleta fixa; quadros transparentes preservam os pixels que não mudam para reduzir o arquivo e evitar cintilação. Estão disponíveis pelo link de download da landing. A animação foi programada; não usa novas gerações de imagem nem altera textos do diagrama.
+
+Para reproduzir os GIFs com Node 24, instale `@napi-rs/canvas` e `gifenc` em uma pasta separada de ferramentas e rode `node scripts/render-landing-pipeline-gif.mjs <pasta-das-ferramentas> [pasta-dos-quadros-de-verificação]`. Essas bibliotecas são usadas apenas na exportação, sem dependências adicionais na aplicação.

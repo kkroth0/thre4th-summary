@@ -381,3 +381,8 @@ All colors MUST be HSL.
   background: transparent !important;
   border: none !important;
 }
+@media (prefers-reduced-motion: reduce) {
+  .pipeline-motion:not([data-motion-enabled="true"]) {
+    display: none;
+  }
+}
