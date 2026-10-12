@@ -7,6 +7,7 @@ import { RecordDrawer } from '@/components/workbench/RecordDrawer';
 import { toast } from 'sonner';
 import { fetchPhishingReports, type PhishingDataset, type PhishingFilters, type PhishingReport } from '@/services/threatApi';
 import { exportPhishingTrendsExcel } from '@/utils/phishingTrendsExport';
+import { PhishingDashboard } from './PhishingDashboard';
 
 type Query = PhishingFilters & { from?: string; to?: string };
 const inputStyle = 'min-w-0 w-full rounded border border-border bg-background px-3 py-2 text-sm text-foreground';
@@ -44,7 +45,7 @@ function Publication({ row, pt }: { row: PhishingReport; pt: boolean }) {
   </article>;
 }
 
-export function PhishingTrends() {
+export function PhishingTrends({ dashboard = false }: { dashboard?: boolean }) {
   const { language } = useLanguage();
   const pt = language === 'pt';
   const l = (a: string, b: string) => pt ? a : b;
@@ -119,6 +120,7 @@ export function PhishingTrends() {
       ].map(([value, label]) => <div key={label} className="p-3"><p className="font-mono text-xl font-semibold">{value}</p><p className="mt-1 text-xs text-muted-foreground">{label}</p></div>)}</div>
       <p className="text-xs text-muted-foreground">{l(`${data.summary.withTechnique} de ${data.summary.publications} publicações com técnica identificada. Campos sem evidência ficam como não identificados.`, `${data.summary.withTechnique} of ${data.summary.publications} publications have an identified technique. Fields without evidence remain unidentified.`)}</p>
       {data.truncated && <p role="alert" className="text-sm text-primary">{l(`Limite atingido: ${data.reports.length} de ${data.total} publicações. Reduza o período para uma exportação completa.`, `Limit reached: ${data.reports.length} of ${data.total} publications. Narrow the range for a complete export.`)}</p>}
+      {dashboard && <PhishingDashboard data={data} pt={pt} onMonth={month => { const [year, number] = month.split('-').map(Number); if (!year || !number) return; const next = { ...query, from: month + '-01', to: new Date(Date.UTC(year, number, 0)).toISOString().slice(0, 10) }; setDraft(next); setQuery(next); }} onFilter={(key, value) => { const next = { ...query, [key]: value }; setDraft(next); setQuery(next); }} />}
       {data.summary.techniques.length > 0 && <details className="rounded-lg border border-border px-4 py-3"><summary className="cursor-pointer text-xs font-medium text-muted-foreground">{l('Técnicas no recorte', 'Techniques in selection')}</summary><div className="mt-3 flex flex-wrap gap-2">{data.summary.techniques.slice(0, 12).map(item => <button type="button" key={item.label} className="rounded border border-border px-2.5 py-1.5 text-xs hover:border-primary" onClick={() => { const value = { ...query, technique: item.label }; setDraft(value); setQuery(value); }}>{item.label}<span className="ml-2 font-mono text-primary">{item.count}</span></button>)}</div></details>}
       <div className="flex flex-wrap gap-2">{(['campaigns', 'reports'] as const).map(value => <Button key={value} size="sm" variant={view === value ? 'default' : 'outline'} aria-pressed={view === value} onClick={() => { setView(value); setPage(1); }}>{value === 'campaigns' ? l('Campanhas e eventos', 'Campaigns and events') : l('Publicações', 'Publications')} · {value === 'campaigns' ? data.campaigns.length : data.reports.length}</Button>)}</div>
       {count === 0 ? <p className="intel-panel p-8 text-center text-sm text-muted-foreground">{l('Nenhuma publicação neste recorte. Ajuste os filtros ou aguarde novas coletas.', 'No publications in this selection. Adjust filters or wait for new collections.')}</p> : <div className="intel-panel overflow-hidden">

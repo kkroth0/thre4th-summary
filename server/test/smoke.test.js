@@ -165,7 +165,7 @@ test('urlscan BYOK é cifrado, isolado por conta e ativa a busca sem chave da pl
     assert.equal(saved.status, 200);
     assert.deepEqual(await saved.json(), { provider: 'urlscan', hasKey: true });
     const own = await fetch(`${BASE}/api/user/keys`, { headers: AUTH_HEADERS }).then(r => r.json());
-    assert.deepEqual(own.keys, { shodan: false, urlscan: true });
+    assert.deepEqual(own.keys, { shodan: false, urlscan: true, abuse_ch: false });
     assert.ok(!JSON.stringify(own).includes(key));
     const other = await fetch(`${BASE}/api/user/keys`, { headers: OUTSIDER_HEADERS }).then(r => r.json());
     assert.equal(other.keys.urlscan, false);
@@ -190,8 +190,37 @@ test('urlscan BYOK é cifrado, isolado por conta e ativa a busca sem chave da pl
     assert.equal(JSON.parse(readFileSync(USERS_STORE_PATH, 'utf8'))['smoke-user'].apiKeysEnc.urlscan, undefined);
 });
 
-test('removed DNSBL endpoints return 404', async () => {
-    for (const route of ['/api/dnsbl', '/api/dnsbl/batch']) {
+test('Abuse.ch BYOK is encrypted and isolated from other accounts', async () => {
+    const key = 'abuse-ch-smoke-personal-key';
+    const route = `${BASE}/api/user/keys/abuse_ch`;
+    assert.equal((await fetch(route, { method: 'PUT', headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' }, body: JSON.stringify({ key }) })).status, 200);
+    const own = await fetch(`${BASE}/api/user/keys`, { headers: AUTH_HEADERS }).then(r => r.json());
+    const other = await fetch(`${BASE}/api/user/keys`, { headers: OUTSIDER_HEADERS }).then(r => r.json());
+    assert.equal(own.keys.abuse_ch, true);
+    assert.equal(other.keys.abuse_ch, false);
+    assert.ok(!JSON.stringify(own).includes(key));
+    const disk = readFileSync(USERS_STORE_PATH, 'utf8');
+    assert.ok(!disk.includes(key));
+    const blob = Buffer.from(JSON.parse(disk)['smoke-user'].apiKeysEnc.abuse_ch, 'base64');
+    const decipher = crypto.createDecipheriv('aes-256-gcm', crypto.createHash('sha256').update(SECRETS_ENCRYPTION_KEY).digest(), blob.subarray(0, 12));
+    decipher.setAuthTag(blob.subarray(12, 28));
+    assert.equal(Buffer.concat([decipher.update(blob.subarray(28)), decipher.final()]).toString(), key);
+    assert.equal((await fetch(route, { method: 'DELETE', headers: OUTSIDER_HEADERS })).status, 200);
+    assert.equal((await fetch(`${BASE}/api/user/keys`, { headers: AUTH_HEADERS }).then(r => r.json())).keys.abuse_ch, true);
+    assert.equal((await fetch(route, { method: 'DELETE', headers: AUTH_HEADERS })).status, 200);
+    assert.equal((await fetch(`${BASE}/api/user/keys`, { headers: AUTH_HEADERS }).then(r => r.json())).keys.abuse_ch, false);
+});
+
+test('malware routes enforce authentication and validate queries before contacting providers', async () => {
+    for (const route of ['/api/malware/families', '/api/malware/family?id=win.vidar', '/api/malware/sample/' + 'a'.repeat(64)]) {
+        assert.equal((await fetch(`${BASE}${route}`)).status, 401);
+    }
+    assert.equal((await fetch(`${BASE}/api/malware/family`, { headers: AUTH_HEADERS })).status, 400);
+    assert.equal((await fetch(`${BASE}/api/malware/sample/invalid`, { headers: AUTH_HEADERS })).status, 400);
+});
+
+test('removed provider endpoints return 404', async () => {
+    for (const route of ['/api/dnsbl', '/api/dnsbl/batch', '/api/censys', '/api/teamcymru', '/api/hybridanalysis', '/api/metadefender', '/api/circl', '/api/pulsedive']) {
         const response = await fetch(`${BASE}${route}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },

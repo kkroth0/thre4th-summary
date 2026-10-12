@@ -17,15 +17,14 @@ export const buildNetworkOverview = (vendors: VendorData[]): NetworkOverviewItem
   const abuse = data("AbuseIPDB");
   const vt = data("VirusTotal");
   const shodan = data("Shodan");
-  const censys = data("Censys");
   const candidates = [
     ["isp", "ISP", first(geo.ISP, abuse.ISP, shodan.ISP)],
     ["organization", "Organization", first(geo.Organization, shodan.Organization, vt["AS Owner"])],
     ["country", "Country", first(geo.Country, abuse.Country, vt.Country)],
     ["region", "Region", first(geo.Region)],
     ["city", "City", first(geo.City)],
-    ["asn", "ASN/AS", first(geo.AS, abuse.ASN, shodan.ASN, censys.ASN, vt.ASN)],
-    ["network", "Network", first(abuse["CIDR/Network"], vt.Network, censys["BGP Prefix"])],
+    ["asn", "ASN/AS", first(geo.AS, abuse.ASN, shodan.ASN, vt.ASN)],
+    ["network", "Network", first(abuse["CIDR/Network"], vt.Network)],
   ] as const;
   return candidates.filter((entry) => usable(entry[2])).map(([key, label, value]) => ({ key, label, value: String(value) }));
 };

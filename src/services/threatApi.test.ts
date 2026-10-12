@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { detectIOCType, fetchAttackSurfaceCredits, formatVendorData, resolveVendorsForQuery } from "./threatApi";
+import { detectIOCType, fetchThreatData, fetchAttackSurfaceCredits, formatVendorData, resolveVendorsForQuery } from "./threatApi";
 import { refang } from "@/utils/defang";
 import { isSupportedAnalyzerQuery } from "@/utils/iocExtract";
 
@@ -12,12 +12,11 @@ test("detects a public IPv6 address as IP and an IPv6 literal URL as URL", () =>
 test("routes IPv6 only to providers backed by IPv6-capable endpoints", () => {
   const selected = [
     "IP Geolocation", "VirusTotal", "AbuseIPDB", "AlienVault OTX", "Shodan",
-    "ThreatFox", "Pulsedive", "MetaDefender", "Team Cymru", "Censys",
+    "ThreatFox",
   ];
 
   assert.deepEqual(resolveVendorsForQuery("2606:4700:4700::1111", selected), [
     "IP Geolocation", "VirusTotal", "AbuseIPDB", "Shodan", "ThreatFox",
-    "Pulsedive", "MetaDefender", "Censys",
   ]);
 });
 
@@ -28,16 +27,10 @@ test("refanged input makes defanged IOCs searchable", () => {
   assert.equal(isSupportedAnalyzerQuery(refang("hxxps://bad[.]com/x")), true);
 });
 
-test("OpenPhish and Team Cymru expose a capital-S Status the aggregator can count", () => {
+test("OpenPhish exposes a capital-S Status the aggregator can count", () => {
   assert.equal(formatVendorData("OpenPhish", { listed: true, status: "Listed as phishing" }, "http://x").Status, "Phishing");
   assert.equal(formatVendorData("OpenPhish", { listed: false, status: "x" }, "http://x").Status, "Clean");
 
-  // Hash MHR hit → malicious verdict.
-  assert.equal(formatVendorData("Team Cymru", { listed: true, last_seen: "123" }, "abc").Status, "Malicious");
-  // IP → ASN enrichment: no Status, so it stays out of the malicious/clean vote.
-  const cymruIp = formatVendorData("Team Cymru", { asn: "15169", bgp_prefix: "8.8.8.0/24", country: "US" }, "8.8.8.8");
-  assert.equal(cymruIp.Status, undefined);
-  assert.equal(cymruIp.ASN, "15169");
 });
 
 test("loads Shodan credits without exposing account data", async () => {
@@ -49,4 +42,11 @@ test("loads Shodan credits without exposing account data", async () => {
   } finally {
     globalThis.fetch = originalFetch;
   }
+});
+
+test('missing PhishStats results and unverified PhishTank reports do not become malicious or clean votes', async () => {
+  const original = globalThis.fetch;
+  globalThis.fetch = async (path) => new Response(JSON.stringify(String(path).endsWith('/phishstats') ? [] : {results:{in_database:true,verified:false,valid:false}}));
+  try { const result = await fetchThreatData('https://example.com/', ['PhishStats','PhishTank']); assert.equal(result.detections,0); assert.equal(result.reportingVendors,0); assert.equal(result.threatLevel,'unknown'); }
+  finally { globalThis.fetch = original; }
 });

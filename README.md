@@ -36,7 +36,7 @@ the browser never talks to a third party directly:
   with CIRCL (`cve.circl.lu`) as fallback; CISA KEV for known-exploited.
 - **Ransomware** — `ransomware.live` v1 (keyless) for recent claimed victims.
 - **IOC/malware** — abuse.ch (ThreatFox, URLhaus, MalwareBazaar), AlienVault
-  OTX, AbuseIPDB, VirusTotal, Shodan, Censys, Pulsedive, and more.
+  OTX, AbuseIPDB, VirusTotal, Shodan, OpenPhish, PhishStats, PhishTank, and abuse.ch.
 - **Advisories** — MSRC, first.org, vendor RSS feeds.
 
 Each integration is optional: missing a key just disables that one source.
@@ -109,7 +109,7 @@ $VPS_APP_DIR/shared/.env
 
 Start from [server/.env.example](./server/.env.example). Notable optional keys:
 `NVD_API_KEY` (CVE rate limit), plus the per-source keys for VirusTotal,
-Shodan, Censys, AbuseIPDB, abuse.ch, etc.
+Shodan, AbuseIPDB, abuse.ch, etc.
 
 Users can add personal Shodan and urlscan.io keys in **Settings → API keys**.
 Keys are encrypted with `SECRETS_ENCRYPTION_KEY` and stored per account in

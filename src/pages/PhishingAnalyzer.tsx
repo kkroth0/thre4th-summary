@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, Navigate, useSearchParams } from "react-router-dom";
 import { ArrowLeft, Globe, Shield, ShieldAlert, Mail, Eye, Sparkles, Filter, CheckCircle2, ChevronRight, Upload, AlertTriangle, FileText, Check, AlertCircle, RefreshCw, Terminal, ExternalLink, Copy, Loader2, ShieldCheck, Network, Hash, Image as ImageIcon, Download, FileJson, Search, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -21,8 +21,8 @@ import type { ThreatIntelligenceResult } from "@/types/threat-intelligence";
 import { defang, defangList } from "@/utils/defang";
 import { detectTyposquat } from "@/utils/typosquat";
 import { exportIOCsJSON, exportIOCsSTIX } from "@/utils/threatExport";
-import { BrandHunt } from "@/components/phishing/BrandHunt";
-import { PhishTickets } from "@/components/phishing/PhishTickets";
+
+
 import { PhishingTrends } from "@/components/phishing/PhishingTrends";
 
 interface ScoreSignal {
@@ -119,7 +119,7 @@ Return-Path: <noreply@github.com>
 `;
 
 // URL- and domain-capable providers used for live reputation enrichment.
-const URL_VENDORS = ["VirusTotal", "URLhaus", "PhishTank", "OpenPhish", "PhishStats", "Pulsedive"];
+const URL_VENDORS = ["VirusTotal", "URLhaus", "PhishTank", "OpenPhish", "PhishStats"];
 
 // Extract attachment parts (name + decoded bytes) from a raw EML by walking the
 // MIME boundary, so we can compute a real size + hash instead of guessing.
@@ -171,8 +171,9 @@ const PhishingAnalyzer = () => {
   // analisado, então a troca de trabalho mora aqui em cima.
   const [phishingParams, setPhishingParams] = useSearchParams();
   const view = phishingParams.get('view');
-  const mode = view === 'campaigns' ? 'trends' : view === 'hunt' ? 'hunt' : view === 'tickets' ? 'tickets' : 'eml';
-  const setMode = (value: 'eml' | 'hunt' | 'tickets' | 'trends') => {
+  const mode = view === 'email' ? 'eml' : 'trends';
+  const dashboard = view !== 'campaigns' && view !== 'email';
+  const setMode = (value: 'eml' | 'trends' | 'dashboard') => {
     const next = new URLSearchParams(phishingParams);
     next.set('view', value === 'trends' ? 'campaigns' : value === 'eml' ? 'email' : value);
     setPhishingParams(next);
@@ -461,7 +462,7 @@ const PhishingAnalyzer = () => {
   const enrichSender = async (domain: string) => {
     setSenderRepLoading(true);
     try {
-      const res = await fetchThreatDataProgressive(domain, ["VirusTotal", "URLhaus", "WHOIS", "AlienVault OTX", "Pulsedive"], () => {});
+      const res = await fetchThreatDataProgressive(domain, ["VirusTotal", "URLhaus", "WHOIS", "AlienVault OTX"], () => {});
       setSenderRep(res);
     } catch {
       /* enrichment best-effort */
@@ -573,6 +574,8 @@ const PhishingAnalyzer = () => {
     }
   };
 
+  if (view === 'hunt' || view === 'tickets') return <Navigate to={'/domain-monitoring?view=' + view} replace />;
+
   return (
     <PageLayout width="max-w-7xl">
         <div className="space-y-6">
@@ -581,24 +584,10 @@ const PhishingAnalyzer = () => {
           <div className="page-head">
             <div>
               <h1 className="page-title">
-                {mode === 'trends' ? (language === 'pt' ? 'Campanhas de phishing' : 'Phishing campaigns') : (language === "pt" ? "Análise de Phishing" : "Phishing Analysis")}
+                {mode === 'trends' ? (dashboard ? (language === 'pt' ? 'Dashboard de phishing' : 'Phishing dashboard') : (language === 'pt' ? 'Campanhas de phishing' : 'Phishing campaigns')) : (language === 'pt' ? 'Análise de e-mail' : 'Email analysis')}
               </h1>
               <p className="page-lede">
-                {mode === "eml"
-                  ? (language === "pt"
-                    ? "O e-mail suspeito, aberto por dentro: remetente, autenticação, links e anexos. O .eml é lido aqui no navegador e nunca sai da sua máquina."
-                    : "The suspicious email, opened up: sender, authentication, links and attachments. The .eml is read here in the browser and never leaves your machine.")
-                  : mode === "hunt"
-                    ? (language === "pt"
-                      ? "Todo phishing começa com um domínio novo. A caça acha no dia em que ele nasce, cruzando as marcas do seu perfil com tudo que o urlscan já varreu — e nenhuma URL sua vira scan público."
-                      : "Every phishing campaign starts with a new domain. The hunt finds it the day it is born, crossing your profile's brands with everything urlscan has already scanned — and no URL of yours ever becomes a public scan.")
-                    : mode === "trends"
-                      ? (language === "pt"
-                        ? "Acompanhe campanhas, correlacione publicações e revise técnicas e evidências antes de exportar o levantamento."
-                        : "Track campaigns, correlate publications and review techniques and evidence before exporting the research.")
-                    : (language === "pt"
-                      ? "Do achado até a derrubada: evidência congelada antes de o domínio sumir, contato de abuse descoberto sozinho, e o pedido pronto para enviar."
-                      : "From find to takedown: evidence frozen before the domain disappears, abuse contacts discovered on their own, and the request ready to send.")}
+                {mode === 'eml' ? (language === 'pt' ? 'Revise remetente, autenticação, links e anexos. O arquivo de e-mail é processado no navegador.' : 'Review sender, authentication, links and attachments. The email file is processed in the browser.') : (language === 'pt' ? 'Acompanhe tendências, campanhas, técnicas, regiões e marcas citadas nas publicações coletadas.' : 'Track trends, campaigns, techniques, regions and brands mentioned in collected publications.')}
               </p>
             </div>
             {mode === "eml" && parsedData && (
@@ -617,28 +606,24 @@ const PhishingAnalyzer = () => {
           <div className="flex flex-wrap gap-2">
             {([
               { key: "eml" as const, label: language === "pt" ? "Analisar e-mail" : "Analyze email" },
-              { key: "hunt" as const, label: language === "pt" ? "Caça a domínios" : "Domain hunt" },
-              { key: "tickets" as const, label: language === "pt" ? "Tickets" : "Tickets" },
+              { key: "dashboard" as const, label: "Dashboard" },
+
               { key: "trends" as const, label: language === "pt" ? "Campanhas" : "Campaigns" },
             ]).map((tab) => (
               <button
                 key={tab.key}
                 type="button"
                 onClick={() => setMode(tab.key)}
-                aria-pressed={mode === tab.key}
-                className={`rounded-full border px-4 py-1.5 text-xs font-semibold transition ${mode === tab.key ? "border-primary bg-primary/10 text-primary" : "text-muted-foreground hover:border-primary/40"}`}
+                aria-pressed={tab.key === "dashboard" ? dashboard : tab.key === "trends" ? mode === "trends" && !dashboard : mode === tab.key}
+                className={`rounded-full border px-4 py-1.5 text-xs font-semibold transition ${(tab.key === "dashboard" ? dashboard : tab.key === "trends" ? mode === "trends" && !dashboard : mode === tab.key) ? "border-primary bg-primary/10 text-primary" : "text-muted-foreground hover:border-primary/40"}`}
               >
                 {tab.label}
               </button>
             ))}
           </div>
 
-          {mode === "tickets" ? (
-            <PhishTickets />
-          ) : mode === "hunt" ? (
-            <BrandHunt />
-          ) : mode === "trends" ? (
-            <PhishingTrends />
+          {mode === "trends" ? (
+            <PhishingTrends dashboard={dashboard} />
           ) : !parsedData ? (
             /* Dropzone and Sample Loader Card */
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

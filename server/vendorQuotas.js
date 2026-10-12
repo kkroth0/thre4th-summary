@@ -5,7 +5,7 @@
 // campo: quando o formato mudar, o teste quebra no parser certo.
 //
 // Duas famílias:
-//  - endpoint próprio: VirusTotal, Shodan, urlscan, Hybrid Analysis, MetaDefender.
+//  - endpoint próprio: VirusTotal, Shodan, urlscan.
 //  - header da própria consulta: AbuseIPDB devolve X-RateLimit-* em todo /check,
 //    então perguntar num endpoint gastaria um crédito só pra saber quantos
 //    sobraram. Esse se preenche de carona nas buscas (record()).
@@ -18,8 +18,8 @@ export const QUOTA_TTL_MS = 5 * 60 * 1000;
 // state: ok | unconfigured | none | pending | error
 export const NO_QUOTA_VENDORS = [
     'AlienVault OTX', 'URLhaus', 'MalwareBazaar', 'ThreatFox', 'Google Safe Browsing',
-    'PhishTank', 'Pulsedive', 'CIRCL hashlookup', 'PhishStats', 'Ransomware.live',
-    'OpenPhish', 'Team Cymru', 'Censys', 'IP Geolocation', 'WHOIS',
+    'PhishTank', 'PhishStats', 'Ransomware.live',
+    'OpenPhish', 'IP Geolocation', 'WHOIS',
 ];
 
 const num = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : (typeof v === 'string' && v.trim() !== '' && Number.isFinite(Number(v)) ? Number(v) : null));
@@ -53,16 +53,6 @@ export const parseUrlscan = (body) => {
     return quota({ used: d?.used, limit: d?.limit, remaining: d?.remaining, period: 'day', resetAt: d?.reset ?? null });
 };
 
-// { limits: { minute, hour, month } } — só teto, sem consumo: mostra o limite.
-export const parseHybridAnalysis = (body) => quota({ limit: body?.limits?.month, period: 'month' });
-
-// { limit_interval, limit_scan } ou { limits: [{ limit, used }] } conforme o plano.
-export const parseMetaDefender = (body) => {
-    const first = Array.isArray(body?.limits) ? body.limits[0] : null;
-    if (first) return quota({ used: first.used, limit: first.limit, period: 'day' });
-    return quota({ limit: body?.limit_scan, period: 'day' });
-};
-
 // X-RateLimit-Limit / X-RateLimit-Remaining de qualquer resposta do provedor.
 export const parseRateLimitHeaders = (headers) => {
     const get = (k) => (typeof headers?.get === 'function' ? headers.get(k) : headers?.[k]);
@@ -86,14 +76,6 @@ export const QUOTA_SOURCES = [
     {
         name: 'urlscan.io', env: 'URLSCAN_API_KEY', parse: parseUrlscan,
         request: (key) => ['https://urlscan.io/user/quotas/', { 'API-Key': key }],
-    },
-    {
-        name: 'Hybrid Analysis', env: 'HYBRID_ANALYSIS_API_KEY', parse: parseHybridAnalysis,
-        request: (key) => ['https://www.hybrid-analysis.com/api/v2/key/current', { 'api-key': key, 'user-agent': 'Falcon Sandbox' }],
-    },
-    {
-        name: 'MetaDefender', env: 'METADEFENDER_API_KEY', parse: parseMetaDefender,
-        request: (key) => [`https://api.metadefender.com/v4/apikey/${encodeURIComponent(key)}`, { apikey: key }],
     },
 ];
 

@@ -5,7 +5,7 @@ import { normalizeVendorSelection, SUPPORTED_VENDORS } from "./vendorCatalog.ts"
 test("drops removed and unknown vendors from persisted selections", () => {
   assert.equal(SUPPORTED_VENDORS.includes("Criminal IP" as never), false);
   assert.deepEqual(
-    normalizeVendorSelection(["VirusTotal", "Criminal IP", "Unknown Vendor"]),
+    normalizeVendorSelection(["VirusTotal", "Criminal IP", "Censys", "Team Cymru", "Hybrid Analysis", "MetaDefender", "CIRCL hashlookup", "Pulsedive", "Unknown Vendor"]),
     ["VirusTotal"],
   );
 });

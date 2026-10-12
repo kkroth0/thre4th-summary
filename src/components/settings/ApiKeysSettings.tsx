@@ -1,3 +1,4 @@
+import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useState } from "react";
 import { CheckCircle2, ExternalLink, KeyRound, Loader2, ShieldCheck, Trash2 } from "lucide-react";
 import { toast } from "sonner";
@@ -39,6 +40,11 @@ interface Group {
 // mas nenhuma rota do server os lia, todas leem só a env. Oferecer campo que
 // não faz nada é pior do que não oferecer.
 const CATALOG: Group[] = [
+  {
+    title: { pt: 'Inteligência de malware', en: 'Malware intelligence' },
+    items: [{ id: 'abuse_ch', label: 'Abuse.ch', url: 'https://auth.abuse.ch/', placeholder: 'Auth-Key',
+      description: { pt: 'Usa sua Auth-Key no MalwareBazaar, ThreatFox e URLhaus, incluindo buscas de famílias e hashes. A chave é armazenada cifrada por conta.', en: 'Uses your Auth-Key for MalwareBazaar, ThreatFox and URLhaus, including family and hash lookups. The key is encrypted per account.' } }],
+  },
   {
     title: { pt: "Superfície de Ataque", en: "Attack Surface" },
     items: [
@@ -158,6 +164,7 @@ function KeyRow({ provider, configured, onChanged }: { provider: Provider; confi
 }
 
 export function ApiKeysSettings() {
+  const queryClient = useQueryClient();
   const { language } = useLanguage();
   const { refresh } = useAuth();
   const pt = language === "pt";
@@ -177,6 +184,7 @@ export function ApiKeysSettings() {
   useEffect(() => { load(); }, [load]);
 
   const onChanged = () => {
+    void queryClient.invalidateQueries({ predicate: query => ['malware-catalog', 'malware-family', 'malware-sample', 'cidr-shodan', 'cidr-abuse'].includes(String(query.queryKey[0])) });
     load();
     refresh();
   };
@@ -195,8 +203,8 @@ export function ApiKeysSettings() {
               ser dita com todas as letras. */}
           <p className="mt-1 text-sm text-muted-foreground">
             {pt
-              ? "Use suas próprias chaves e cotas do Shodan e do urlscan.io."
-              : "Use your own Shodan and urlscan.io keys and quotas."}
+              ? "Use suas próprias chaves do Abuse.ch, Shodan e urlscan.io."
+              : "Use your own Abuse.ch, Shodan and urlscan.io keys."}
           </p>
         </div>
         <Badge variant="outline" className="mt-1 shrink-0 text-xs">{loading ? "…" : `${configured}/${total}`} {pt ? "conectada" : "connected"}</Badge>

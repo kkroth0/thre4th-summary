@@ -3,6 +3,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+const DomainMonitoring = lazy(() => import('./pages/DomainMonitoring'));
 import { LanguageProvider } from "./contexts/LanguageContext";
 import { AuthProvider } from "./contexts/AuthContext";
 import { PremiumRoute } from "./components/PremiumRoute";
@@ -69,6 +70,7 @@ const App = () => (
                 <Route path="/attack-surface" element={<AttackSurface />} />
                 <Route path="/exposure-watchlist" element={<ExposureWatchlist />} />
                 <Route path="/phishing-analyzer" element={<PhishingAnalyzer />} />
+                <Route path="/domain-monitoring" element={<DomainMonitoring />} />
 
                 {/* Premium Routes (require premium allow-list) */}
                 <Route path="/knowledge" element={<PremiumRoute feature="knowledge"><Knowledge /></PremiumRoute>} />

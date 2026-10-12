@@ -17,14 +17,13 @@ export const mergeAttackSurfaceResponses = (responses: AttackSurfaceResponse[]):
 
   const seen = new Map<string, AttackSurfaceFinding>();
   const warnings = new Set<string>();
-  const providers = { shodan: false, censys: false };
+  const providers = { shodan: false };
   let totalObserved = 0;
 
   for (const response of responses) {
     totalObserved += response.summary.totalObserved;
     response.warnings.forEach((warning) => warnings.add(warning));
     providers.shodan ||= response.summary.providers.shodan;
-    providers.censys ||= response.summary.providers.censys === true;
     // Shodan mostra lookup de host como `ip:x.x.x.x`; a busca já vem formatada.
     const sourceQuery = response.queryKind === "host" ? `ip:${response.query}` : response.query;
     response.findings.forEach((item) => {
@@ -52,7 +51,7 @@ export const mergeAttackSurfaceResponses = (responses: AttackSurfaceResponse[]):
       criticalHighFindings: byRisk.critical + byRisk.high,
       activelyConfirmedOpen: findings.filter((item) => item.validation.status === "open").length,
       byRisk,
-      providers: providers.censys ? { shodan: providers.shodan, censys: true } : { shodan: providers.shodan },
+      providers: providers,
       warnings: [...warnings],
       totalObserved,
     },

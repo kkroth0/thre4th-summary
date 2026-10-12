@@ -7,8 +7,17 @@ import type { StoryDetail } from '@/services/threatApi';
 import { DataPager } from './DataPager';
 import { RecordDrawer } from './RecordDrawer';
 import { SourceIdentity, SourceList } from '@/components/SourceIdentity';
+import { collectNewsIndicators } from '@/utils/newsIndicators';
 
 type Row = StorySource & { description?: string; severity?: string; kev?: boolean; ttps?: string[] };
+function StoryIndicators({ story, pt, onSelect }: { story: StoryCard<Row>; pt: boolean; onSelect?: (id: string, kind: 'ip' | 'domain') => void }) {
+  const indicators = collectNewsIndicators([story]);
+  if (!indicators.length) return null;
+  return <div className="mt-2 flex gap-3 text-[11px] text-muted-foreground">{(['ip', 'domain'] as const).map(kind => {
+    const count = indicators.filter(item => item.kind === kind).length;
+    return count ? <button key={kind} type="button" onClick={() => onSelect?.(story.storyId, kind)} className="rounded-sm hover:text-primary focus-visible:ring-2 focus-visible:ring-ring">{kind === 'ip' ? 'IPs' : pt ? 'Domínios' : 'Domains'}: {count}</button> : null;
+  })}</div>;
+}
 const date = (value: string, pt: boolean) => Number.isFinite(Date.parse(value)) ? new Date(value).toLocaleDateString(pt ? 'pt-BR' : 'en-US') : '—';
 const safeLink = (value: string) => /^https?:\/\//i.test(value);
 function Severity({ sources, pt }: { sources: Row[]; pt: boolean }) {
@@ -18,10 +27,11 @@ function Severity({ sources, pt }: { sources: Row[]; pt: boolean }) {
   return <span className={`rounded border px-1.5 py-0.5 text-[10px] ${value === 'Critical' ? 'border-red-500/30 text-red-500' : value === 'High' ? 'border-orange-500/30 text-orange-500' : 'border-border text-muted-foreground'}`}>{pt ? labels[value] : value}</span>;
 }
 
-export function StoryTable<T extends Row>({ rows, pt, onSave, onReport, onSelect, evidence, initialId, isSaved, isReporting }: {
+export function StoryTable<T extends Row>({ rows, pt, onSave, onReport, onSelect, evidence, initialId, isSaved, isReporting, onIndicators }: {
   rows: StoryCard<T>[]; pt: boolean; onSave?: (row: StoryCard<T>) => void; onReport?: (row: StoryCard<T>) => void;
   onSelect?: (id: string) => void; evidence?: Record<string, { loading: boolean; data?: StoryDetail }>; initialId?: string | null;
   isSaved?: (row: StoryCard<T>) => boolean; isReporting?: (row: StoryCard<T>) => boolean;
+  onIndicators?: (id: string, kind: 'ip' | 'domain') => void;
 }) {
   const [page, setPage] = useState(1);
   const [size, setSize] = useState(20);
@@ -39,7 +49,7 @@ export function StoryTable<T extends Row>({ rows, pt, onSave, onReport, onSelect
     <div className="overflow-x-auto"><table className="intel-table min-w-[760px]">
       <thead><tr><th className="w-[42%]">{pt ? 'Evento / publicação' : 'Event / publication'}</th><th>{pt ? 'Fontes' : 'Sources'}</th><th>{pt ? 'Ator' : 'Actor'}</th><th>Malware / CVE</th><th>{pt ? 'Última publicação' : 'Latest publication'}</th></tr></thead>
       <tbody>{rows.slice((current - 1) * size, current * size).map(row => <tr key={row.storyId}>
-        <td><button type="button" className="text-left font-medium leading-relaxed text-foreground hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" onClick={() => open(row)}>{row.title}</button><div className="mt-1.5 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground"><Severity sources={row.sources} pt={pt} />{row.primaryCategory && <span>{row.primaryCategory}</span>}{row.sources.some(source => source.kev) && <span className="text-red-500">KEV</span>}{row.sources.length > 1 && <span className="inline-flex items-center gap-1"><Layers className="h-3 w-3" />{row.sources.length} {pt ? 'publicações correlacionadas' : 'correlated publications'}</span>}</div></td>
+        <td><button type="button" className="text-left font-medium leading-relaxed text-foreground hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" onClick={() => open(row)}>{row.title}</button><p className="mt-1 line-clamp-2 text-xs leading-relaxed text-muted-foreground">{row.sources[0]?.description}</p><StoryIndicators story={row} pt={pt} onSelect={onIndicators} /><div className="mt-1.5 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground"><Severity sources={row.sources} pt={pt} />{row.primaryCategory && <span>{row.primaryCategory}</span>}{row.sources.some(source => source.kev) && <span className="text-red-500">KEV</span>}{row.sources.length > 1 && <span className="inline-flex items-center gap-1"><Layers className="h-3 w-3" />{row.sources.length} {pt ? 'publicações correlacionadas' : 'correlated publications'}</span>}</div></td>
         <td><SourceList sources={row.sources} /></td><td>{names(row.actors)}</td><td>{row.cves.length ? <span className="font-mono text-[11px]">{row.cves.slice(0, 2).join(', ')}</span> : names(row.malware)}</td><td className="whitespace-nowrap font-mono text-xs">{date(row.lastSeen, pt)}</td>
       </tr>)}</tbody>
     </table></div>

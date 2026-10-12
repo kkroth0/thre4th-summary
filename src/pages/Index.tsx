@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { getFieldCategory } from "@/components/VendorDataTable";
-import { Shield, AlertTriangle, Bug, FileSearch, Globe, Github, Link as LinkIcon, Radar, Database, Eye, Search, LayoutGrid, Mail, ArrowRight, Upload, Copy, Check, Clock, Download, FileJson, FileCode, ChevronDown, Bookmark, MapPinned, Sparkles } from "lucide-react";
+import { Shield, AlertTriangle, Bug, FileSearch, Globe, Github, Link as LinkIcon, Radar, Database, Eye, Search, Mail, ArrowRight, Upload, Copy, Check, Clock, Download, FileJson, FileCode, ChevronDown, Bookmark } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -18,7 +18,6 @@ import { VendorFilter } from "@/components/VendorFilter";
 import { Footer } from "@/components/Footer";
 import { useAuth } from "@/contexts/AuthContext";
 import { VendorQuotas } from "@/components/VendorQuotas";
-import { EnrichmentTab } from "@/components/EnrichmentTab";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { Header } from "@/components/Header";
 
@@ -31,14 +30,16 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
-import { MultiIpSummary } from "@/components/MultiIpSummary";
 import { fetchThreatDataProgressive, saveScan, IOC_SOURCE_COUNT } from "@/services/threatApi";
 import { ScanHistory } from "@/components/ScanHistory";
 import { RecentScans } from "@/components/RecentScans";
 import { useToast } from "@/hooks/use-toast";
 import { SearchForm } from "@/components/SearchForm";
-import { extractIocsFromText, isSupportedAnalyzerQuery } from "@/utils/iocExtract";
+
 import { normalizeVendorSelection, SUPPORTED_VENDORS } from "@/config/vendorCatalog";
+import { IndicatorInvestigation } from '@/components/enrichment/IndicatorInvestigation';
+import { extractEnrichmentTargets, isEnrichmentTarget, parsePublicCidr } from '@/utils/networkInvestigation';
+import { resolveVendorsForQuery } from '@/services/threatApi';
 import { ThreatIntelligenceResult } from "@/types/threat-intelligence";
 import { cn } from "@/lib/utils";
 // jsPDF + autoTable are loaded lazily inside exportGlobalPDF (see below) so the
@@ -55,7 +56,7 @@ const Index = () => {
 
   // Changed data to results array to support multi-IP
   const [results, setResults] = useState<ThreatIntelligenceResult[]>([]);
-  const [activeTab, setActiveTab] = useState<string>("overview");
+  const [activeTab, setActiveTab] = useState<string>("");
 
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isExportingPDF, setIsExportingPDF] = useState(false);
@@ -208,12 +209,12 @@ const Index = () => {
 
     // Extract IOCs by regex first. This handles pasted feeds with flags/emojis
     // attached to IPs, e.g. `118.122.147.49🇮🇳`.
-    const extractedQueries = extractIocsFromText(rawQuery);
+    const extractedQueries = extractEnrichmentTargets(rawQuery);
     const tokens = rawQuery.split(/[\s,"'()\[\]{}|<>]+/).map(t => t.trim()).filter(t => t.length > 0);
     const uniqueTokens = Array.from(new Set(tokens));
 
     // Filter to only valid IOCs
-    let queries = extractedQueries.length > 0 ? extractedQueries : uniqueTokens.filter(isSupportedAnalyzerQuery);
+    let queries = extractedQueries.length > 0 ? extractedQueries : uniqueTokens.filter(isEnrichmentTarget);
 
     // If no valid structured IOCs were found, fall back to the raw split tokens (to trigger type validation warnings properly)
     if (queries.length === 0) {
@@ -221,7 +222,7 @@ const Index = () => {
     }
 
     // Validation
-    const invalidQueries = queries.filter(q => !isSupportedAnalyzerQuery(q));
+    const invalidQueries = queries.filter(q => !isEnrichmentTarget(q));
 
     if (invalidQueries.length > 0) {
       toast({
@@ -235,7 +236,7 @@ const Index = () => {
     setIsAnalyzing(true);
     setError(null);
     setResults([]); // Clear previous results
-    setActiveTab("overview");
+    setActiveTab(queries[0]);
     pushSearchHistory(rawQuery);
 
     try {
@@ -246,10 +247,10 @@ const Index = () => {
         threatLevel: "unknown",
         totalVendors: selectedVendors.length,
         detections: 0,
-        vendorData: selectedVendors.map(vendorName => ({
+        vendorData: (parsePublicCidr(q) ? [] : resolveVendorsForQuery(q, selectedVendors)).map(vendorName => ({
           name: vendorName,
           data: {},
-          loading: true
+          isLoading: true
         }))
       }));
       setResults(initialResults);
@@ -259,6 +260,7 @@ const Index = () => {
       for (let i = 0; i < queries.length; i += BATCH_SIZE) {
         const batch = queries.slice(i, i + BATCH_SIZE);
         await Promise.all(batch.map(async (q) => {
+          if (parsePublicCidr(q)) return;
           try {
             const result = await fetchThreatDataProgressive(q, selectedVendors, (vendorData) => {
               setResults(prev => prev.map(r => {
@@ -266,7 +268,7 @@ const Index = () => {
                   return {
                     ...r,
                     vendorData: r.vendorData.map(v =>
-                      v.name === vendorData.name ? { ...vendorData, loading: false } : v
+                      v.name === vendorData.name ? { ...vendorData, isLoading: false } : v
                     )
                   };
                 }
@@ -304,14 +306,11 @@ const Index = () => {
 
   const onPivot = (artifact: string) => {
     setQuery(artifact);
-    // Use a timeout to allow state update before triggering search
-    setTimeout(() => {
-      const form = document.querySelector('form');
-      if (form) form.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
-    }, 100);
+    void handleSearch(undefined, artifact);
   };
 
   const exportGlobalPDF = async () => {
+    const results = exportableResults;
     if (results.length === 0) return;
     setIsExportingPDF(true);
     toast({
@@ -1067,7 +1066,6 @@ const Index = () => {
       urls.push(`PhishStats: https://phishstats.info/#/search?url=${searchQuery}`);
     } else if (type === "hash") {
       urls.push(`VirusTotal: https://www.virustotal.com/gui/file/${searchQuery}`);
-      urls.push(`Hybrid Analysis: https://www.hybrid-analysis.com/search?query=${searchQuery}`);
       urls.push(`MalwareBazaar: https://bazaar.abuse.ch/browse.php?search=hash:${searchQuery}`);
       urls.push(`CIRCL: https://hashlookup.circl.lu/lookup/md5/${searchQuery}`);
     }
@@ -1097,16 +1095,10 @@ const Index = () => {
       "URLhaus": "abuse.ch",
       "MalwareBazaar": "abuse.ch",
       "PhishTank": "phishtank.com",
-      "Pulsedive": "pulsedive.com",
-      "Hybrid Analysis": "hybrid-analysis.com",
-      "CIRCL hashlookup": "circl.lu",
-      "MetaDefender": "opswat.com",
       "PhishStats": "phishstats.info",
       "WHOIS": "who.is",
       "IP Geolocation": "ip-api.com",
-      "Censys": "censys.io",
       "OpenPhish": "openphish.com",
-      "Team Cymru": "team-cymru.com"
     };
 
     const domain = domainMap[name] || "google.com";
@@ -1131,10 +1123,6 @@ const Index = () => {
       case "URLhaus": fallback = <LinkIcon className="h-5 w-5 text-primary" />; break;
       case "MalwareBazaar": fallback = <Bug className="h-5 w-5 text-primary" />; break;
       case "PhishTank": fallback = <LinkIcon className="h-5 w-5 text-primary" />; break;
-      case "Pulsedive": fallback = <Radar className="h-5 w-5 text-primary" />; break;
-      case "Hybrid Analysis": fallback = <Bug className="h-5 w-5 text-primary" />; break;
-      case "CIRCL hashlookup": fallback = <Database className="h-5 w-5 text-primary" />; break;
-      case "MetaDefender": fallback = <Shield className="h-5 w-5 text-primary" />; break;
       case "PhishStats": fallback = <LinkIcon className="h-5 w-5 text-primary" />; break;
       case "WHOIS": fallback = <FileSearch className="h-5 w-5 text-primary" />; break;
       case "IP Geolocation": fallback = <Globe className="h-5 w-5 text-primary" />; break;
@@ -1152,10 +1140,6 @@ const Index = () => {
       case "URLhaus": return "https://urlhaus.abuse.ch";
       case "MalwareBazaar": return "https://bazaar.abuse.ch";
       case "PhishTank": return "https://phishtank.com";
-      case "Pulsedive": return "https://pulsedive.com";
-      case "Hybrid Analysis": return "https://hybrid-analysis.com";
-      case "CIRCL hashlookup": return "https://hashlookup.circl.lu";
-      case "MetaDefender": return "https://metadefender.opswat.com";
       case "PhishStats": return "https://phishstats.info";
       case "WHOIS": return undefined;
       case "IP Geolocation": return undefined;
@@ -1165,6 +1149,7 @@ const Index = () => {
 
   // A landing e so pra quem nao entrou: com sessao, "/" ja e a busca.
   const hasResults = results.length > 0 || isAnalyzing;
+  const exportableResults = results.filter(result => !parsePublicCidr(result.query));
 
   return (
     <div className={shellClassName}>
@@ -1208,7 +1193,7 @@ const Index = () => {
 
           {!isAnalyzing && results.length === 0 && (
             <section className="intel-panel p-5 sm:p-7">
-              <div className="mb-6"><h1 className="page-title">{language === 'pt' ? 'Buscar indicadores' : 'Search indicators'}</h1><p className="page-lede">{language === 'pt' ? 'Investigue IPs, domínios, URLs e hashes. Cole vários indicadores para enriquecer em lote.' : 'Investigate IPs, domains, URLs and hashes. Paste multiple indicators for bulk enrichment.'}</p></div>
+              <div className="mb-6"><h1 className="page-title">{language === 'pt' ? 'Enriquecimento' : 'Enrichment'}</h1><p className="page-lede">{language === 'pt' ? 'Investigue IPs, domínios, URLs, hashes e blocos CIDR IPv4. Cole vários indicadores para enriquecer em lote.' : 'Investigate IPs, domains, URLs, hashes and IPv4 CIDR blocks. Paste multiple indicators for bulk enrichment.'}</p></div>
               <SearchForm query={query} setQuery={setQuery} onSubmit={handleSearch} isLoading={isAnalyzing} className="w-full" selectedVendors={selectedVendors} onVendorsChange={setSelectedVendors} />
               <div className="mt-5 flex flex-wrap items-center gap-2"><span className="mr-1 text-xs text-muted-foreground">{language === 'pt' ? 'Exemplos' : 'Examples'}</span>{['8.8.8.8', 'example.com', 'https://example.com'].map(sample => <button key={sample} type="button" onClick={() => setQuery(sample)} className="rounded-md border px-3 py-1.5 font-mono text-xs text-muted-foreground hover:text-primary">{sample}</button>)}</div>
             </section>
@@ -1224,20 +1209,14 @@ const Index = () => {
           {results.length > 0 && (
             <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
               <div className="mb-4 flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
-                <TabsList className="soc-panel h-auto w-full flex-wrap justify-start overflow-x-auto rounded-lg p-1 sm:w-auto">
-                  <TabsTrigger value="overview" className="gap-2">
-                    <LayoutGrid className="h-4 w-4" /> Overview
-                  </TabsTrigger>
-                  <TabsTrigger value="enrichment" className="gap-2">
-                    <Sparkles className="h-4 w-4" /> {language === "pt" ? "Enriquecimento" : "Enrichment"}
-                  </TabsTrigger>
+                {results.length > 1 ? <TabsList aria-label={language === 'pt' ? 'Indicadores consultados' : 'Queried indicators'} className="soc-panel h-auto w-full flex-wrap justify-start overflow-x-auto rounded-lg p-1 sm:w-auto">
                   {results.map((result, idx) => (
-                    <TabsTrigger key={idx} value={result.query} className="gap-2">
+                    <TabsTrigger key={idx} value={result.query} className="gap-2 font-mono">
                       {result.threatLevel === "malicious" && <AlertTriangle className="h-3 w-3 text-destructive" />}
                       {result.query}
                     </TabsTrigger>
                   ))}
-                </TabsList>
+                </TabsList> : <h1 className="min-w-0 break-all font-mono text-xl font-semibold">{results[0].query}</h1>}
 
                 <div className="flex items-center gap-2 self-start sm:self-auto">
                   {auth.authenticated && (
@@ -1273,7 +1252,7 @@ const Index = () => {
                         variant="outline"
                         size="sm"
                         className="flex h-9 items-center gap-2 rounded-full border-primary/20 bg-background/45 px-4 shadow-sm hover:bg-primary/10"
-                        disabled={isExportingPDF}
+                        disabled={isExportingPDF || !exportableResults.length}
                         title={isExportingPDF ? "Building Report..." : (language === "pt" ? "Exportar" : "Export")}
                       >
                         <Download className={`h-4 w-4 ${isExportingPDF ? "animate-pulse" : ""}`} />
@@ -1285,13 +1264,13 @@ const Index = () => {
                       <DropdownMenuItem onClick={exportGlobalPDF} className="gap-2 cursor-pointer">
                         <FileSearch className="h-4 w-4" /> {language === "pt" ? "Relatório PDF" : "PDF Report"}
                       </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => exportResultsJSON(results)} className="gap-2 cursor-pointer">
+                      <DropdownMenuItem onClick={() => exportResultsJSON(exportableResults)} className="gap-2 cursor-pointer">
                         <FileJson className="h-4 w-4" /> JSON
                       </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => exportResultsNDJSON(results)} className="gap-2 cursor-pointer">
+                      <DropdownMenuItem onClick={() => exportResultsNDJSON(exportableResults)} className="gap-2 cursor-pointer">
                         <FileCode className="h-4 w-4" /> NDJSON (SIEM)
                       </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => exportResultsSTIX(results)} className="gap-2 cursor-pointer">
+                      <DropdownMenuItem onClick={() => exportResultsSTIX(exportableResults)} className="gap-2 cursor-pointer">
                         <Shield className="h-4 w-4" /> STIX 2.1
                       </DropdownMenuItem>
                     </DropdownMenuContent>
@@ -1299,22 +1278,10 @@ const Index = () => {
                 </div>
               </div>
 
-              <TabsContent value="overview" className="mt-6 animate-fade-in">
-                <div id="pdf-export-overview" className="space-y-6">
-                  <MultiIpSummary
-                    results={results}
-                    onViewDetails={(q) => setActiveTab(q)}
-                  />
-                </div>
-              </TabsContent>
-
-              <TabsContent value="enrichment" className="mt-6 animate-fade-in">
-                <EnrichmentTab results={results} />
-              </TabsContent>
-
               {results.map((data) => (
                 <TabsContent key={data.query} value={data.query} className="mt-6 animate-fade-in">
                   <div id={`pdf-export-${data.query}`} className="space-y-6">
+                    <IndicatorInvestigation data={data} vendors={selectedVendors} pt={language === 'pt'} onPivot={onPivot}>
                     <QuickActions
                       data={data}
                       onRefresh={() => handleSearch()}
@@ -1365,7 +1332,7 @@ const Index = () => {
                             // Define vendor importance tiers
                             const tier1 = ["VirusTotal", "AbuseIPDB"];
                             const tier2 = ["Shodan", "AlienVault OTX"];
-                            const tier3 = ["Pulsedive", "URLhaus", "PhishTank"];
+                            const tier3 = [ "URLhaus", "PhishTank"];
 
                             const getTier = (name: string) => {
                               if (tier1.includes(name)) return 1;
@@ -1393,7 +1360,7 @@ const Index = () => {
                         ))}
                       </div>
                     )}
-
+                    </IndicatorInvestigation>
                   </div>
                 </TabsContent>
               ))}

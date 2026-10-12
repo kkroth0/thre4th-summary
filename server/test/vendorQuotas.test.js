@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-    parseVirusTotal, parseShodan, parseUrlscan, parseHybridAnalysis, parseMetaDefender,
+    parseVirusTotal, parseShodan, parseUrlscan,
     parseRateLimitHeaders, createQuotaReader, QUOTA_SOURCES, NO_QUOTA_VENDORS,
 } from '../vendorQuotas.js';
 
@@ -20,12 +20,7 @@ test('cada provedor fecha usado/limite/restante a partir do que manda', () => {
     assert.deepEqual(parseUrlscan(URLSCAN),
         { state: 'ok', used: 20, limit: 1000, remaining: 980, period: 'day', resetAt: '2026-08-27T00:00:00.000Z' });
 
-    // Só teto, sem consumo: restante fica nulo em vez de virar zero.
-    assert.deepEqual(parseHybridAnalysis({ limits: { minute: 5, hour: 40, month: 800 } }),
-        { state: 'ok', used: null, limit: 800, remaining: null, period: 'month', resetAt: null });
 
-    assert.equal(parseMetaDefender({ limits: [{ limit: 1000, used: 4 }] }).remaining, 996);
-    assert.equal(parseMetaDefender({ limit_scan: 500 }).limit, 500);
 });
 
 test('header de rate limit vale como cota, e string vira número', () => {
@@ -53,7 +48,8 @@ test('base sem chave, provedor fora do ar e cache', async () => {
     assert.equal(by('VirusTotal').remaining, 499);
     assert.equal(by('Shodan').state, 'unconfigured');       // sem chave não vira erro
     assert.equal(by('AbuseIPDB').state, 'pending');          // ainda não houve busca
-    assert.equal(by('Censys').state, 'none');                // Platform API não expõe cota
+    assert.equal(by('Censys'), undefined);
+    assert.equal(by('Team Cymru'), undefined);
     assert.equal(items.length, QUOTA_SOURCES.length + 1 + NO_QUOTA_VENDORS.length);
 
     await reader.read();

@@ -219,7 +219,7 @@ export function BrandHunt() {
             ? (pt ? "Nenhum domínio novo nas últimas rodadas" : "No new domains in the latest runs")
             : (pt ? "Nada nesta aba ainda" : "Nothing in this tab yet")}
           description={status === "new"
-            ? (pt ? "O que é boa notícia: ninguém registrou parecido com a sua marca no período." : "Which is good news: nobody registered anything close to your brand in the period.")
+            ? (pt ? "Nenhum resultado retornado neste recorte. A cobertura depende das fontes e da última rodada de monitoramento." : "No results returned in this selection. Coverage depends on sources and the latest monitoring run.")
             : (pt ? "Rode uma caçada para popular esta lista." : "Run a hunt to populate this list.")}
         />
       ) : (

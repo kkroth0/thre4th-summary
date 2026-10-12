@@ -33,17 +33,11 @@ const VENDOR_OPTIONS: VendorConfig[] = [
     { name: "ThreatFox", free: true, supportsIP: true, supportsDomain: true, supportsHash: true },
     { name: "MalwareBazaar", free: true, supportsIP: false, supportsDomain: false, supportsHash: true },
     { name: "PhishTank", free: true, supportsIP: false, supportsDomain: true, supportsHash: false },
-    { name: "Pulsedive", free: true, supportsIP: true, supportsDomain: true, supportsHash: true },
     { name: "ThreatCrowd", free: true, supportsIP: true, supportsDomain: true, supportsHash: false },
-    { name: "Censys", free: false, supportsIP: true, supportsDomain: false, supportsHash: false },
-    { name: "Hybrid Analysis", free: false, supportsIP: false, supportsDomain: false, supportsHash: true },
-    { name: "CIRCL hashlookup", free: true, supportsIP: false, supportsDomain: false, supportsHash: true },
-    { name: "MetaDefender", free: false, supportsIP: true, supportsDomain: false, supportsHash: true },
     { name: "PhishStats", free: true, supportsIP: false, supportsDomain: true, supportsHash: false },
     { name: "Spamhaus", free: true, supportsIP: true, supportsDomain: true, supportsHash: false },
     { name: "Blocklist.de", free: true, supportsIP: true, supportsDomain: false, supportsHash: false },
     { name: "OpenPhish", free: true, supportsIP: false, supportsDomain: true, supportsHash: false },
-    { name: "Team Cymru", free: true, supportsIP: true, supportsDomain: false, supportsHash: true },
 ];
 
 const VENDOR_LIST = VENDOR_OPTIONS.filter((vendor) => (SUPPORTED_VENDORS as readonly string[]).includes(vendor.name));

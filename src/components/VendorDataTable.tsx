@@ -291,17 +291,12 @@ export const VendorDataTable = ({ vendorData, getVendorLink }: VendorDataTablePr
                           vendor.name === "AbuseIPDB" ? "abuseipdb.com" :
                           vendor.name === "AlienVault OTX" ? "alienvault.com" :
                           vendor.name === "Shodan" ? "shodan.io" :
-                          vendor.name === "Censys" ? "censys.io" :
                           vendor.name === "WHOIS" ? "who.is" :
                           vendor.name === "IP Geolocation" ? "ip-api.com" :
                           vendor.name === "URLhaus" ? "abuse.ch" :
                           vendor.name === "MalwareBazaar" ? "abuse.ch" :                          vendor.name === "PhishTank" ? "phishtank.com" :
-                          vendor.name === "Pulsedive" ? "pulsedive.com" :
-                          vendor.name === "Hybrid Analysis" ? "hybrid-analysis.com" :
-                          vendor.name === "CIRCL hashlookup" ? "circl.lu" :
-                          vendor.name === "MetaDefender" ? "opswat.com" :
                           vendor.name === "PhishStats" ? "phishstats.info" :                          vendor.name === "OpenPhish" ? "openphish.com" :
-                          "team-cymru.com"
+                          "abuse.ch"
                         }`}
                         alt=""
                         className="w-3.5 h-3.5 rounded-sm object-contain shrink-0"

@@ -23,6 +23,9 @@ import { buildSoftwareIndex, buildActorNameIndex } from './actorSoftware.js';
 import { filterExactIocs } from './threatfoxMatch.js';
 import { getShodanCreditStatus, runAttackSurfaceScan } from './attackSurface.js';
 import { shodanAxios } from './shodanGate.js';
+import { createMalwareCatalog } from './malwareCatalog.js';
+import { createPhishingSources } from './phishingSources.js';
+import { createWhoisLookup } from './whoisLookup.js';
 import { otxThrottled, OTX_TIMEOUT_MS } from './otxGate.js';
 import { findMentions } from './newsIocs.js';
 import { refsOfReport, relatedTo } from './attackIndex.js';
@@ -599,8 +602,11 @@ app.post('/api/shodan', scanLimiter, async (req, res) => {
 // URLhaus (e YARAify). Aceita uma env dedicada `ABUSE_CH_API_KEY` ou cai em
 // qualquer uma das específicas — assim configurar uma só chave já liga todos os
 // serviços abuse.ch. Desde 2024 a auth é obrigatória: sem chave, tudo dá 401.
-const abuseChKey = () => (process.env.ABUSE_CH_API_KEY || process.env.THREATFOX_API_KEY
-    || process.env.URLHAUS_API_KEY || process.env.MALWAREBAZAAR_API_KEY || '').trim();
+const abuseChKey = (req) => {
+    const session = req ? verifySession(getCookie(req, 'ts_session')) : null;
+    return (getUserApiKey(session?.sub, 'abuse_ch') || process.env.ABUSE_CH_API_KEY || process.env.THREATFOX_API_KEY
+        || process.env.URLHAUS_API_KEY || process.env.MALWAREBAZAAR_API_KEY || '').trim();
+};
 
 // URLhaus
 app.post('/api/urlhaus', scanLimiter, async (req, res) => {
@@ -629,7 +635,7 @@ app.post('/api/urlhaus', scanLimiter, async (req, res) => {
 
         // abuse.ch now requires an Auth-Key header on all URLhaus API queries.
         const headers = { "Content-Type": "application/x-www-form-urlencoded" };
-        const abKey = abuseChKey();
+        const abKey = abuseChKey(req);
         if (abKey) headers['Auth-Key'] = abKey;
 
         const response = await axios.post(endpoint, params.toString(), { headers });
@@ -656,7 +662,7 @@ app.post('/api/malwarebazaar', scanLimiter, async (req, res) => {
 
         // abuse.ch exige Auth-Key em todas as consultas (inclusive MalwareBazaar).
         const headers = { "Content-Type": "application/x-www-form-urlencoded" };
-        const abKey = abuseChKey();
+        const abKey = abuseChKey(req);
         if (abKey) headers["Auth-Key"] = abKey;
 
         const response = await axios.post(`https://mb-api.abuse.ch/api/v1/`,
@@ -682,7 +688,7 @@ app.post('/api/threatfox', scanLimiter, async (req, res) => {
         const sanitized = sanitizeQuery(query, queryType);
 
         const headers = { "Content-Type": "application/json" };
-        const abKey = abuseChKey();
+        const abKey = abuseChKey(req);
         if (abKey) headers["Auth-Key"] = abKey;
 
         const response = await axios.post(
@@ -701,159 +707,19 @@ app.post('/api/threatfox', scanLimiter, async (req, res) => {
 
 // PhishTank
 app.post('/api/phishtank', scanLimiter, async (req, res) => {
-    const { query } = req.body;
     try {
-        const queryType = detectQueryType(query);
-        if (queryType !== "url") return res.status(400).json({ error: "URL query required" });
-        const sanitized = sanitizeQuery(query, 'url');
-
-        // Safe URL parameters (VULN-08)
-        const params = new URLSearchParams();
-        params.append('url', sanitized);
-        params.append('format', 'json');
-        if (process.env.PHISHTANK_API_KEY) {
-            params.append('app_key', process.env.PHISHTANK_API_KEY);
-        }
-
-        const response = await axios.post(`https://checkurl.phishtank.com/checkurl/`, 
-            params.toString(), 
-            {
-                headers: {
-                    "Content-Type": "application/x-www-form-urlencoded",
-                    "User-Agent": "phishtank/threatsumm4ry"
-                }
-            }
-        );
-        res.json(response.data);
-    } catch (error) {
-        const { status, message } = sanitizeError(error);
-        res.status(status).json({ error: message });
-    }
-});
-
-// Pulsedive
-app.post('/api/pulsedive', scanLimiter, async (req, res) => {
-    const { query } = req.body;
-    const key = process.env.PULSEDIVE_API_KEY || "free";
-    try {
-        const queryType = detectQueryType(query);
-        const sanitized = sanitizeQuery(query, queryType);
-
-        const response = await axios.get(`https://pulsedive.com/api/info.php`, {
-            params: {
-                indicator: sanitized,
-                key: key
-            }
-        });
-        res.json(response.data);
-    } catch (error) {
-        // Pulsedive returns 404 when the indicator simply isn't in its database —
-        // that's a clean "not found", not an error worth surfacing to the user.
-        if (error.response?.status === 404) {
-            return res.json({ data: { "Status": "Not in Pulsedive database" } });
-        }
-        const { status, message } = sanitizeError(error);
-        res.status(status).json({ error: message });
-    }
-});
-
-// Hybrid Analysis
-app.post('/api/hybridanalysis', scanLimiter, async (req, res) => {
-    const { query } = req.body;
-    if (!process.env.HYBRID_ANALYSIS_API_KEY) return res.status(500).json({ error: "API Key missing" });
-
-    try {
-        const queryType = detectQueryType(query);
-        if (queryType !== "hash") return res.json({ data: { "Status": "Hash only" } });
-
-        const sanitized = sanitizeQuery(query, 'hash');
-
-        const params = new URLSearchParams();
-        params.append('hash', sanitized);
-
-        const response = await axios.post(`https://www.hybrid-analysis.com/api/v2/search/hash`,
-            params.toString(),
-            {
-                headers: {
-                    "api-key": process.env.HYBRID_ANALYSIS_API_KEY,
-                    "Content-Type": "application/x-www-form-urlencoded",
-                },
-            }
-        );
-        res.json(response.data);
-    } catch (error) {
-        const { status, message } = sanitizeError(error);
-        res.status(status).json({ error: message });
-    }
-});
-
-// CIRCL hashlookup
-app.post('/api/circl', scanLimiter, async (req, res) => {
-    const { query } = req.body;
-    try {
-        const queryType = detectQueryType(query);
-        if (queryType !== "hash") return res.json({ data: { "Status": "Hash only" } });
-
-        const sanitized = sanitizeQuery(query, 'hash');
-        // CIRCL hashlookup tem endpoints separados por algoritmo — usar o certo
-        // pelo tamanho (MD5=32, SHA1=40, SHA256=64), senão devolve 400/404.
-        const algo = sanitized.length === 32 ? 'md5' : sanitized.length === 40 ? 'sha1' : 'sha256';
-        const response = await axios.get(`https://hashlookup.circl.lu/lookup/${algo}/${sanitized}`,
-            { headers: { Accept: 'application/json' } });
-        res.json(response.data);
-    } catch (error) {
-        const { status, message } = sanitizeError(error);
-        res.status(status).json({ error: message });
-    }
-});
-
-// MetaDefender
-app.post('/api/metadefender', scanLimiter, async (req, res) => {
-    const { query } = req.body;
-    if (!process.env.METADEFENDER_API_KEY) return res.status(500).json({ error: "API Key missing" });
-
-    try {
-        const queryType = detectQueryType(query);
-        if (!["hash", "ip", "domain", "url"].includes(queryType)) return res.json({ data: { "Status": "Hash/IP/Domain/URL only" } });
-        const sanitized = sanitizeQuery(query, queryType);
-
-        // MetaDefender v4 has a reputation endpoint per IOC type.
-        const path = queryType === "hash" ? `hash/${sanitized}`
-            : queryType === "ip" ? `ip/${sanitized}`
-            : queryType === "domain" ? `domain/${sanitized}`
-            : `url/${encodeURIComponent(sanitized)}`;
-        const endpoint = `https://api.metadefender.com/v4/${path}`;
-
-        const response = await axios.get(endpoint, {
-            headers: { "apikey": process.env.METADEFENDER_API_KEY },
-        });
-        sendResponseWithQuota(res, response);
-    } catch (error) {
-        const { status, message } = sanitizeError(error);
-        res.status(status).json({ error: message });
-    }
+        if (detectQueryType(req.body.query) !== 'url') return res.status(400).json({ error: 'URL query required' });
+        res.json(await phishingSources.phishTank(sanitizeQuery(req.body.query, 'url')));
+    } catch (error) { const { status, message } = sanitizeError(error); res.status(status).json({ error: message }); }
 });
 
 // PhishStats
 app.post('/api/phishstats', scanLimiter, async (req, res) => {
-    const { query } = req.body;
     try {
-        const queryType = detectQueryType(query);
-        if (queryType !== "url" && queryType !== "domain") return res.json({ data: { "Status": "URL/Domain only" } });
-        const sanitized = sanitizeQuery(query, queryType);
-
-        const response = await axios.get(`https://phishstats.info:2096/api/phishing`, {
-            params: {
-                _where: `(url,like,${sanitized})`,
-                _sort: '-date',
-                _size: 5
-            }
-        });
-        res.json(response.data);
-    } catch (error) {
-        const { status, message } = sanitizeError(error);
-        res.status(status).json({ error: message });
-    }
+        const type = detectQueryType(req.body.query);
+        if (!['url', 'domain'].includes(type)) return res.status(400).json({ error: 'URL/Domain query required' });
+        res.json(await phishingSources.phishStats(sanitizeQuery(req.body.query, type)));
+    } catch (error) { const { status, message } = sanitizeError(error); res.status(status).json({ error: message }); }
 });
 
 // Ransomware.live
@@ -893,7 +759,7 @@ async function getRecentThreatFoxIocs(days = 7) {
         return memoryCache.threatFoxRecent.data;
     }
     const headers = { 'Content-Type': 'application/json' };
-    const abKey = abuseChKey();
+    const abKey = abuseChKey(req);
     if (abKey) headers['Auth-Key'] = abKey;
     const resp = await axios.post('https://threatfox-api.abuse.ch/api/v1/', {
         query: 'get_iocs',
@@ -1047,26 +913,13 @@ app.get('/api/intel/latam-threats', async (req, res) => {
     }
 });
 
-// WHOIS
+// WHOIS — Who.is snapshot lookup (no paid live refresh).
+const lookupWhois = createWhoisLookup({ http: axios, getKey: () => process.env.WHOIS_API_KEY });
 app.post('/api/whois', scanLimiter, async (req, res) => {
-    const { query } = req.body;
     try {
-        const queryType = detectQueryType(query);
-        if (queryType !== "domain") return res.json({ data: { "Status": "Domain only" } });
-        
-        const sanitized = sanitizeQuery(query, 'domain');
-        const response = await axios.get(`https://www.whoisxmlapi.com/whoisserver/WhoisService`, {
-            params: {
-                apiKey: process.env.WHOIS_API_KEY,
-                domainName: sanitized,
-                outputFormat: 'JSON'
-            }
-        });
-        res.json(response.data);
-    } catch (error) {
-        const { status, message } = sanitizeError(error);
-        res.status(status).json({ error: message });
-    }
+        if (detectQueryType(req.body.query) !== 'domain') return res.status(400).json({ error: 'Domain query required' });
+        res.json(await lookupWhois(sanitizeQuery(req.body.query, 'domain')));
+    } catch (error) { const { status, message } = sanitizeError(error); res.status(status).json({ error: message }); }
 });
 
 // IP Geolocation (Mitigated HTTP/No TLS)
@@ -1118,213 +971,18 @@ app.post('/api/ipgeo', scanLimiter, async (req, res) => {
 });
 
 // OpenPhish
+const phishingSources = createPhishingSources({ http: axios, getKey: provider => provider === 'phishstats' ? process.env.PHISHSTATS_API_KEY : process.env.PHISHTANK_API_KEY });
+app.get('/api/vendors/activity', (req, res) => {
+    res.set('Cache-Control', 'private, no-store');
+    res.json(phishingSources.activity());
+});
 app.post('/api/openphish', scanLimiter, async (req, res) => {
-    const { query } = req.body;
     try {
-        const queryType = detectQueryType(query);
-        if (queryType !== "url" && queryType !== "domain") return res.json({ data: { "Status": "URL/Domain only" } });
-        const sanitized = sanitizeQuery(query, queryType);
-
-        const now = Date.now();
-        if (memoryCache.openphish.expiresAt < now || memoryCache.openphish.urls.size === 0) {
-            const response = await axios.get('https://openphish.com/feed.txt', { timeout: 8000 });
-            const urls = response.data.split('\n').map(u => u.trim()).filter(Boolean);
-            memoryCache.openphish.urls = new Set(urls);
-            memoryCache.openphish.expiresAt = now + memoryCache.openphish.ttl;
-        }
-
-        let found = false;
-        if (memoryCache.openphish.urls.has(sanitized)) {
-            found = true;
-        } else {
-            // Substring match for domains/directories
-            for (const url of memoryCache.openphish.urls) {
-                if (url.includes(sanitized)) {
-                    found = true;
-                    break;
-                }
-            }
-        }
-
-        res.json({
-            listed: found,
-            status: found ? "Listed as phishing" : "Not found in OpenPhish feed"
-        });
-    } catch (error) {
-        const { status, message } = sanitizeError(error);
-        res.status(status).json({ error: message });
-    }
+        const type = detectQueryType(req.body.query);
+        if (!['url', 'domain'].includes(type)) return res.status(400).json({ error: 'URL/Domain query required' });
+        res.json(await phishingSources.openPhish(sanitizeQuery(req.body.query, type), type));
+    } catch (error) { const { status, message } = sanitizeError(error); res.status(status).json({ error: message }); }
 });
-
-// Team Cymru
-app.post('/api/teamcymru', scanLimiter, async (req, res) => {
-    const { query } = req.body;
-    try {
-        const queryType = detectQueryType(query);
-
-        if (queryType === "ip") {
-            const sanitized = sanitizeQuery(query, 'ip');
-            const reversed = sanitized.split('.').reverse().join('.');
-            const dnsQuery = `${reversed}.origin.asn.cymru.com`;
-
-            dns.promises.resolveTxt(dnsQuery)
-                .then(records => {
-                    const parts = records[0][0].split('|').map(s => s.trim());
-                    res.json({
-                        asn: parts[0],
-                        bgp_prefix: parts[1],
-                        country: parts[2],
-                        registry: parts[3],
-                        allocated: parts[4]
-                    });
-                })
-                .catch(() => {
-                    res.json({ status: "No data found" });
-                });
-        } else if (queryType === "hash") {
-            // VULN-13: Validate hash syntax before DNS query
-            const sanitized = sanitizeQuery(query, 'hash');
-            const dnsQuery = `${sanitized}.malware.hash.cymru.com`;
-            
-            dns.promises.resolveTxt(dnsQuery)
-                .then(records => {
-                    const timestamp = records[0][0];
-                    res.json({
-                        listed: true,
-                        last_seen: timestamp,
-                        status: "Hash found in Team Cymru MHR"
-                    });
-                })
-                .catch(() => {
-                    res.json({ listed: false, status: "Hash not found" });
-                });
-        } else {
-            res.json({ data: { "Status": "IP/Hash only" } });
-        }
-    } catch (error) {
-        const { status, message } = sanitizeError(error);
-        res.status(status).json({ error: message });
-    }
-});
-
-// Censys (Platform API v3)
-app.post('/api/censys', scanLimiter, async (req, res) => {
-    const { query } = req.body;
-    if (!process.env.CENSYS_API_KEY) return res.status(500).json({ error: "API Key missing" });
-
-    try {
-        const queryType = detectQueryType(query);
-        if (queryType !== "ip") return res.json({ data: { "Status": "IP only" } });
-
-        const sanitized = sanitizeQuery(query, 'ip');
-        const response = await axios.get(`https://api.platform.censys.io/v3/global/asset/host/${sanitized}`, {
-            headers: {
-                'Authorization': `Bearer ${process.env.CENSYS_API_KEY}`,
-                'Accept': 'application/json'
-            },
-            timeout: 10000
-        });
-
-        const resource = response.data?.result?.resource;
-        if (!resource) return res.json({ data: { "Status": "No data available" } });
-
-        // Platform v3 service.software is an array; pick the entry that actually
-        // names a product/vendor (the first item is often just a {type:[...]}).
-        const namedSoftware = (svc) => {
-            const arr = Array.isArray(svc.software) ? svc.software : (svc.software ? [svc.software] : []);
-            return arr.find(s => s && (s.product || s.vendor)) || null;
-        };
-        // Platform v3 header values look like { headers: ["Apache/2.4.7 (Ubuntu)"] }.
-        const headerValue = (headers, name) => {
-            if (!headers) return null;
-            const v = headers[name] ?? headers[name?.toLowerCase()] ?? headers[name?.toUpperCase()];
-            const raw = v && typeof v === 'object' && Array.isArray(v.headers) ? v.headers : v;
-            return Array.isArray(raw) ? raw[0] : (typeof raw === 'string' ? raw : null);
-        };
-        // Service labels look like [{ value: "WEB_UI" }] or plain strings.
-        const labelStrings = (labels) =>
-            (Array.isArray(labels) ? labels : [])
-                .map(l => (typeof l === 'string' ? l : (l?.value || l?.label)))
-                .filter(Boolean);
-        // CVE list for a service across the field names Censys has used.
-        const serviceVulns = (svc) => {
-            const v = svc.vulnerabilities || svc.vulns || [];
-            return (Array.isArray(v) ? v : [])
-                .map(x => (typeof x === 'string' ? x : (x.cve_id || x.id || x.cve)))
-                .filter(Boolean)
-                .slice(0, 25);
-        };
-        const osString = (os) => os
-            ? ([os.vendor, os.product, os.version].filter(Boolean).join(' ') || null)
-            : null;
-
-        const services = (resource.services || []);
-        // Censys labels/tags (e.g. REMOTE_ACCESS, DATABASE, WEB_UI, LOGIN_PAGE) — strong
-        // context. Merge host-level labels with the per-service ones into one set.
-        const allLabels = [...new Set([
-            ...labelStrings(resource.labels),
-            ...services.flatMap(svc => labelStrings(svc.labels)),
-        ])];
-
-        const result = {
-            ip: resource.ip,
-            service_count: resource.service_count || 0,
-            labels: allLabels,
-            operating_system: osString(resource.operating_system),
-            last_updated: resource.last_updated_at || resource.last_updated || null,
-            services: services.map(svc => {
-                const sw = namedSoftware(svc);
-                // Protocol detail lives under endpoints[]; grab the first HTTP one.
-                const httpEp = (svc.endpoints || []).find(e => e.http);
-                const http = httpEp?.http || null;
-                return {
-                    port: svc.port,
-                    protocol: svc.protocol || svc.extended_service_name || "UNKNOWN",
-                    transport: svc.transport_protocol || "tcp",
-                    software: sw?.product || sw?.vendor || null,
-                    software_version: sw?.version || null,
-                    os: osString(Array.isArray(svc.operating_systems) ? svc.operating_systems[0] : svc.operating_systems),
-                    labels: labelStrings(svc.labels).slice(0, 6),
-                    scan_time: svc.scan_time,
-                    vulnerabilities: serviceVulns(svc),
-                    http_status: http?.status_code || null,
-                    http_protocol: http?.protocol || null,
-                    http_title: http?.html_title || null,
-                    http_server: headerValue(http?.headers, 'Server'),
-                    http_body_hash: http?.body_hash_sha256 || http?.body_hash || null,
-                    favicon_hash: Array.isArray(http?.favicons) && http.favicons[0] ? (http.favicons[0].md5_hash || http.favicons[0].hash) : null,
-                };
-            }),
-            location: resource.location ? {
-                country: resource.location.country,
-                country_code: resource.location.country_code,
-                city: resource.location.city,
-                province: resource.location.province,
-                continent: resource.location.continent,
-                coordinates: resource.location.coordinates || null,
-            } : null,
-            autonomous_system: resource.autonomous_system ? {
-                asn: resource.autonomous_system.asn,
-                name: resource.autonomous_system.name || resource.autonomous_system.description,
-                bgp_prefix: resource.autonomous_system.bgp_prefix,
-                country_code: resource.autonomous_system.country_code || null,
-            } : null,
-            // Reverse DNS names for the host, if Censys resolved any.
-            dns_names: resource.dns?.reverse_dns?.names || resource.dns?.names || [],
-            dns: resource.dns || null,
-        };
-
-        res.json({ data: result });
-    } catch (error) {
-        if (error.response?.status === 404) {
-            return res.json({ data: { "Status": "Host not found in Censys" } });
-        }
-        const { status, message } = sanitizeError(error);
-        res.status(status).json({ error: message });
-    }
-});
-
-
 
 // CTI & CVE Newsletter and CVE Dashboard Endpoints
 
@@ -1374,11 +1032,6 @@ const memoryCache = {
         map: null,
         expiresAt: 0,
         ttl: 12 * 60 * 60 * 1000 // 12 hours
-    },
-    openphish: {
-        urls: new Set(),
-        expiresAt: 0,
-        ttl: 60 * 60 * 1000 // 1 hour
     },
     patchTuesdayMonths: {
         data: null,
@@ -2062,16 +1715,12 @@ app.get('/api/admin/integrations', requireAdmin, (req, res) => {
         { name: 'AlienVault OTX', env: 'ALIENVAULT_API_KEY', configured: set('ALIENVAULT_API_KEY'), required: false, note: 'sem chave a OTX limita por IP (a VPS dá 500 em lookups de IP)' },
         { name: 'Shodan', env: 'SHODAN_API_KEY', configured: set('SHODAN_API_KEY'), required: true },
         { name: 'abuse.ch (MalwareBazaar/ThreatFox/URLhaus)', env: 'ABUSE_CH_API_KEY', configured: !!abuseChKey(), required: true },
-        { name: 'Hybrid Analysis', env: 'HYBRID_ANALYSIS_API_KEY', configured: set('HYBRID_ANALYSIS_API_KEY'), required: true },
-        { name: 'MetaDefender', env: 'METADEFENDER_API_KEY', configured: set('METADEFENDER_API_KEY'), required: true },
         { name: 'WHOIS', env: 'WHOIS_API_KEY', configured: set('WHOIS_API_KEY'), required: true },
-        { name: 'Censys', env: 'CENSYS_API_KEY', configured: set('CENSYS_API_KEY'), required: true },
-        { name: 'Pulsedive', env: 'PULSEDIVE_API_KEY', configured: set('PULSEDIVE_API_KEY'), required: false, note: 'usa o tier free sem chave' },
         { name: 'PhishTank', env: 'PHISHTANK_API_KEY', configured: set('PHISHTANK_API_KEY'), required: false },
         { name: 'urlscan.io', env: 'URLSCAN_API_KEY', configured: set('URLSCAN_API_KEY'), required: false, note: 'sem chave a vigilância de marca de phishing não roda' },
     ];
     // Provedores que não precisam de chave nenhuma.
-    const keyless = ['PhishStats', 'OpenPhish', 'Team Cymru', 'CIRCL hashlookup', 'IP Geolocation', 'Ransomware.live'];
+    const keyless = ['PhishStats', 'OpenPhish', 'IP Geolocation', 'Ransomware.live'];
     res.json({ integrations, keyless });
 });
 
@@ -2416,12 +2065,12 @@ app.post('/api/auth/logout', (req, res) => {
 // OpenRouter compartilhada do servidor. Nunca devolve valores, só quais providers
 // estão configurados.
 // Só entram providers cuja chave é REALMENTE lida em alguma consulta.
-// Os outros doze (virustotal, abuseipdb, alienvault, pulsedive, censys,
-// hybridanalysis, metadefender, urlhaus, threatfox, phishtank, whois,
+// Os outros providers (virustotal, abuseipdb, alienvault,
+// urlhaus, threatfox, phishtank, whois,
 // dnsdumpster) ficavam guardados cifrados, apareciam como "configurado" na tela
 // e nenhuma rota os lia — todas leem só process.env. Prometer o que não
 // acontece é pior do que não oferecer.
-const BYOK_PROVIDERS = new Set(['shodan', 'urlscan']);
+const BYOK_PROVIDERS = new Set(['shodan', 'urlscan', 'abuse_ch']);
 function userKeysStatus(u) {
     const out = {};
     const m = (u && u.apiKeysEnc) || {};
@@ -2476,6 +2125,31 @@ function buildExposureScanDeps(ownerId) {
         shodanApiKey: getUserApiKey(ownerId, 'shodan') || process.env.SHODAN_API_KEY,
     };
 }
+
+const malwareCatalog = createMalwareCatalog({
+    http: axios,
+    getKey: ownerId => getUserApiKey(ownerId, 'abuse_ch') || abuseChKey(),
+    getPublications: () => newsArchiveStore.list(),
+    cacheFile: process.env.MALPEDIA_CACHE_PATH || path.join(__dirname, '.malpedia-cache.json'),
+});
+app.get('/api/malware/families', requirePremium, scanLimiter, async (req, res) => {
+    res.set('Cache-Control', 'private, no-store');
+    try { res.json(await malwareCatalog.list(req.user.sub)); }
+    catch { res.status(503).json({ error: 'Fontes de malware indisponíveis.' }); }
+});
+app.get('/api/malware/family', requirePremium, scanLimiter, async (req, res) => {
+    res.set('Cache-Control', 'private, no-store');
+    const id = req.query.id;
+    if (typeof id !== 'string' || id.length > 180 || /[\x00-\x1f]/.test(id)) return res.status(400).json({ error: 'Família inválida.' });
+    try { const row = await malwareCatalog.detail(req.user.sub, id); if (!row) return res.status(404).json({ error: 'Família não encontrada.' }); res.json(row); }
+    catch { res.status(503).json({ error: 'Fontes de malware indisponíveis.' }); }
+});
+app.get('/api/malware/sample/:hash', requirePremium, scanLimiter, async (req, res) => {
+    res.set('Cache-Control', 'private, no-store');
+    if (!/^(?:[a-f0-9]{32}|[a-f0-9]{40}|[a-f0-9]{64})$/i.test(req.params.hash)) return res.status(400).json({ error: 'Hash inválido.' });
+    try { res.json(await malwareCatalog.samples(req.user.sub, { hash: req.params.hash })); }
+    catch { res.status(503).json({ error: 'MalwareBazaar indisponível.' }); }
+});
 
 async function runExposureForAsset(asset) {
     return runExposureSnapshot({
@@ -4014,23 +3688,16 @@ app.get('/api/vendors/status', (req, res) => {
         // Precisam de chave: sem ela a rota responde erro.
         "VirusTotal": hasKey('VIRUSTOTAL_API_KEY'),
         "AbuseIPDB": hasKey('ABUSEIPDB_API_KEY'),
-        "Shodan": hasKey('SHODAN_API_KEY'),
-        "Censys": hasKey('CENSYS_API_KEY'),
+        "Shodan": hasKey('SHODAN_API_KEY') || !!getUserApiKey(verifySession(getCookie(req, 'ts_session'))?.sub, 'shodan'),
         "WHOIS": hasKey('WHOIS_API_KEY'),
-        "Hybrid Analysis": hasKey('HYBRID_ANALYSIS_API_KEY'),
-        "MetaDefender": hasKey('METADEFENDER_API_KEY'),
-        // Feeds públicos: consultam sem chave. PhishTank e Pulsedive aceitam
-        // chave opcional (app_key e "free"), então respondem de qualquer jeito.
+        // Conectores públicos permitem consulta sem chave; isto não é um healthcheck.
         "AlienVault OTX": true,
-        "URLhaus": true,
-        "MalwareBazaar": true,
-        "ThreatFox": true,
+        "URLhaus": !!abuseChKey(req),
+        "MalwareBazaar": !!abuseChKey(req),
+        "ThreatFox": !!abuseChKey(req),
         "PhishTank": true,
-        "Pulsedive": true,
-        "CIRCL hashlookup": true,
         "PhishStats": true,
         "OpenPhish": true,
-        "Team Cymru": true,
         "IP Geolocation": true
     };
     res.json(status);

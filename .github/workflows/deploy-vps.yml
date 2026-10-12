@@ -97,7 +97,7 @@ jobs:
           ssh -p "${VPS_PORT}" "${target}" "VPS_APP_DIR='${VPS_APP_DIR}' bash -s" <<'REMOTE'
           set -euo pipefail
           APP="${VPS_APP_DIR}"
-          EX=(--exclude=node_modules/ --exclude=node_modules.bak/ --exclude=.env --exclude='.env.*' --exclude=.users.json --exclude=.posts.json --exclude=.daily-summaries.json --exclude=.scans.json --exclude=.allowlist.json --exclude=.feed-jobs.json --exclude=.feed-cache/ --exclude=.feed-sources.json --exclude=.news-stories.json --exclude=.news-monitoring.json --exclude=.phish-watch.json --exclude=.phish-tickets.json --exclude='*.bak.*')
+          EX=(--exclude=node_modules/ --exclude=node_modules.bak/ --exclude=.env --exclude='.env.*' --exclude=.users.json --exclude=.posts.json --exclude=.daily-summaries.json --exclude=.scans.json --exclude=.allowlist.json --exclude=.feed-jobs.json --exclude=.feed-cache/ --exclude=.feed-sources.json --exclude=.news-stories.json --exclude=.news-monitoring.json --exclude=.news-archive.json --exclude=.org-profiles.json --exclude=.malpedia-cache.json --exclude=.malpedia-cache.json.tmp --exclude=.phish-watch.json --exclude=.phish-tickets.json --exclude='*.bak.*')
           rm -rf "$APP/server.prev" "$APP/dist.prev"
           if [ -d "$APP/server" ]; then rsync -a --delete "${EX[@]}" "$APP/server/" "$APP/server.prev/"; fi
           if [ -d "$APP/dist" ]; then rsync -a --delete "$APP/dist/" "$APP/dist.prev/"; fi
@@ -132,6 +132,10 @@ jobs:
             --exclude='.feed-sources.json' \
             --exclude='.news-stories.json' \
             --exclude='.news-monitoring.json' \
+            --exclude='.news-archive.json' \
+            --exclude='.org-profiles.json' \
+            --exclude='.malpedia-cache.json' \
+            --exclude='.malpedia-cache.json.tmp' \
             --exclude='.phish-watch.json' \
             --exclude='.phish-tickets.json' \
             --exclude='*.bak.*' \
@@ -144,6 +148,19 @@ jobs:
       # failed install is recoverable), restart, then healthcheck a JSON API
       # route. Any failure auto-rolls-back code + deps and re-restarts, so a bad
       # push can never leave the service down.
+      - name: Configure runtime credentials
+        shell: bash
+        env:
+          ABUSE_CH_API_KEY: ${{ secrets.ABUSE_CH_API_KEY }}
+          PHISHSTATS_API_KEY: ${{ secrets.PHISHSTATS_API_KEY }}
+          WHOIS_API_KEY: ${{ secrets.WHOIS_API_KEY }}
+        run: |
+          set -euo pipefail
+          target="${VPS_USER}@${VPS_HOST}"
+          # Secret values travel on SSH stdin, never in command arguments or logs.
+          node --input-type=module -e 'process.stdout.write(JSON.stringify(Object.fromEntries(["ABUSE_CH_API_KEY","PHISHSTATS_API_KEY","WHOIS_API_KEY"].map(name=>[name,process.env[name]||""]))))' | \
+            ssh -p "${VPS_PORT}" "${target}" "python3 '${VPS_APP_DIR}/server/configureRuntimeKeys.py' '${VPS_APP_DIR}/.env'"
+
       - name: Install, restart and healthcheck (auto-rollback)
         shell: bash
         run: |
@@ -153,7 +170,7 @@ jobs:
             "VPS_APP_DIR='${VPS_APP_DIR}' VPS_SERVICE='${VPS_SERVICE}' bash -s" <<'REMOTE'
           set -uo pipefail
           APP="${VPS_APP_DIR}"; SVC="${VPS_SERVICE}"
-          EX=(--exclude=node_modules/ --exclude=node_modules.bak/ --exclude=.env --exclude='.env.*' --exclude=.users.json --exclude=.posts.json --exclude=.daily-summaries.json --exclude=.scans.json --exclude=.allowlist.json --exclude=.feed-jobs.json --exclude=.feed-cache/ --exclude=.feed-sources.json --exclude=.news-stories.json --exclude=.news-monitoring.json --exclude=.phish-watch.json --exclude=.phish-tickets.json --exclude='*.bak.*')
+          EX=(--exclude=node_modules/ --exclude=node_modules.bak/ --exclude=.env --exclude='.env.*' --exclude=.users.json --exclude=.posts.json --exclude=.daily-summaries.json --exclude=.scans.json --exclude=.allowlist.json --exclude=.feed-jobs.json --exclude=.feed-cache/ --exclude=.feed-sources.json --exclude=.news-stories.json --exclude=.news-monitoring.json --exclude=.news-archive.json --exclude=.org-profiles.json --exclude=.malpedia-cache.json --exclude=.malpedia-cache.json.tmp --exclude=.phish-watch.json --exclude=.phish-tickets.json --exclude='*.bak.*')
 
           rollback() {
             echo "::error::deploy failed — rolling back to previous release"

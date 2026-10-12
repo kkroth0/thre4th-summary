@@ -53,3 +53,5 @@ hunting-docs/
 
 # Persistent collector snapshots and article bodies
 server/.feed-cache/
+server/.malpedia-cache.json
+server/.malpedia-cache.json.tmp

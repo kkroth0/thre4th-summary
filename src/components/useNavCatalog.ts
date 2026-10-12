@@ -1,5 +1,5 @@
 import type React from "react";
-import { Activity, Layers, Bug, Rss, Lightbulb, FileSearch, Users, MapPinned, BookOpen, Shield, CalendarCheck, ShieldCheck, Search, Mail, Radar } from "lucide-react";
+import { Activity, Layers, Bug, Rss, Lightbulb, FileSearch, Users, MapPinned, BookOpen, Shield, CalendarCheck, ShieldCheck, Search, Mail, Radar, Globe } from "lucide-react";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { actorPageCopy } from "@/pages/actorsView";
 
@@ -23,7 +23,7 @@ export function useNavCatalog() {
 
   const homeItem: NavItem = {
     path: "/newsletter",
-    label: tr({ pt: "Feed de inteligência", en: "Intelligence feed", es: "Feed de inteligencia", fr: "Flux de renseignement" }),
+    label: tr({ pt: "Notícias e IOCs", en: "News and IOCs", es: "Noticias e IOCs", fr: "Actualités et IOCs" }),
     description: pt ? "Notícias, advisories e pesquisas de segurança." : "Security news, advisories and research.",
     icon: Rss,
     premium: true,
@@ -35,7 +35,7 @@ export function useNavCatalog() {
       items: [
         { path: '/dashboard', label: pt ? 'Visão geral' : 'Overview', icon: Activity },
         { path: '/bulk', label: pt ? 'Enriquecimento em lote' : 'Bulk enrichment', icon: Layers },
-        { path: '/malware', label: pt ? 'Software e malware' : 'Software and malware', icon: Bug },
+        { path: '/malware', label: 'Malware', icon: Bug },
         {
           path: "/knowledge",
           label: tr({ pt: "Coleções", en: "Collections", es: "Colecciones", fr: "Collections" }),
@@ -96,13 +96,14 @@ export function useNavCatalog() {
     {
       label: pt ? "Ferramentas de apoio" : "Supporting tools",
       items: [
-        { path: "/analyzer", label: pt ? "Consulta de indicadores" : "Indicator lookup", description: pt ? "IPs, domínios, URLs e hashes." : "IPs, domains, URLs and hashes.", icon: Search },
+        { path: "/analyzer", label: pt ? "Enriquecimento" : "Enrichment", description: pt ? "IPs, domínios, URLs e hashes." : "IPs, domains, URLs and hashes.", icon: Search },
         {
           path: "/phishing-analyzer",
-          label: tr({ pt: "Análise de Phishing", en: "Phishing Analysis", es: "Análisis de Phishing", fr: "Analyse de Phishing" }),
+          label: 'Phishing',
           description: pt ? "E-mails suspeitos, links e anexos." : "Suspicious emails, links and attachments.",
           icon: Mail,
         },
+        { path: '/domain-monitoring', label: pt ? 'Monitoramento de domínios' : 'Domain monitoring', icon: Globe },
         {
           path: "/attack-surface",
           label: tr({ pt: "Superfície de Ataque", en: "Attack Surface", es: "Superficie de Ataque", fr: "Surface d'Attaque" }),

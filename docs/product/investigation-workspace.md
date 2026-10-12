@@ -1,41 +1,40 @@
 # Workspace de investigação
 
-O workspace usa os HTMLs do Hunt.io fornecidos como referência de navegação, densidade de informação e interação. A implementação mantém a marca threatsumm4ry e usa as APIs do projeto. Não importa os scripts, dados de conta, contagens ou integrações dos HTMLs salvos.
+Estado implementado em 12/10/2026. Documentos de planejamento anteriores que mencionam Censys, Team Cymru, Hybrid Analysis, MetaDefender, CIRCL hashlookup ou Pulsedive não descrevem mais as integrações disponíveis.
 
-## Fluxos implementados
+## Navegação e enriquecimento
 
-| Área | Fonte de dados | Interação |
-| --- | --- | --- |
-| Visão geral (`/dashboard`) | `/api/newsletter`, com autorização e fornecedores do usuário | Eventos, fontes, cobertura correlacionada, eventos com KEV, atividade de sete dias e abertura do evento no feed |
-| Feed (`/newsletter`) | Coletor e agrupamento existentes | Tabela paginada ou cards; painel de todas as publicações; evidências de correlação quando disponíveis; salvar coleção e gerar relatório com todas as fontes |
-| Campanhas de phishing | `/api/phishing/reports` | Filtros de período, técnica, região e filtros adicionais; tabela de campanhas/publicações; fontes e evidências no painel; exportação Excel do recorte completo |
-| Software e malware (`/malware`) | `/api/actors/software-index` | Busca por software/ator, tabela paginada e abertura dos perfis relacionados |
-| Atores (`/atores?actor=...`) | `/api/actors`, `/api/actors/:id` e `/api/news/stories?actor=...` | Listagem em largura total, filtros por origem/alvos/motivação/fonte e paginação de 25/50/100 registros; perfil completo com aliases, visão geral e abas de técnicas, software, metadados, referências e notícias |
-| Vulnerabilidades (`/cves`) | APIs de CVEs recentes e CISA KEV existentes | Tabelas paginadas, descrição, mitigação, prazo e referências no painel |
-| Vítimas de ransomware (`/threat-map`) | `/api/intel/threat-map` e catálogo `/api/intel/sectors` existentes | Período e prioridades por setor/região; tabela paginada com busca, grupo, país e setor; painel com descrição, datas, fonte, captura e imprensa |
-| Busca de indicadores (`/analyzer`) | Provedores de enriquecimento existentes | Formulário compacto, entrada de múltiplos indicadores e histórico |
-| Enriquecimento em lote (`/bulk`) | Mesmos provedores do analisador, com compatibilidade por tipo | Importação TXT/LOG/CSV/JSON até 3,8 MB, extração e deduplicação, seleção de fontes, fila de até três indicadores, detalhes por fonte e exportação CSV/JSON/TXT |
+O workspace usa uma lateral de 224 px, recolhível para 56 px. A consulta em `/analyzer` abre diretamente o indicador; múltiplos indicadores têm abas individuais.
 
-## Contagem e interpretação
+Domínios possuem Resumo e fontes, Subdomínios, DNS e WHOIS. Os subdomínios preservam as observações estruturadas do Shodan, com paginação; DNS é a resolução atual. WHOIS usa `GET https://api.who.is/v1/whois/{domain}` com Bearer no backend, cache de 30 minutos, data do snapshot e sem solicitar o refresh pago `live=true`.
 
-- Visão geral reflete o snapshot autorizado do feed, não o histórico completo. Fontes são veículos representados no snapshot, não o total de coletores configurados.
-- Atividade de sete dias considera as datas de publicação presentes nesse snapshot; a janela usa o calendário local do navegador.
-- Um evento com várias publicações preserva a identidade de agrupamento do coletor. O layout não cria novas correlações.
-- Software do índice pode ser uma família maliciosa ou uma ferramenta legítima. Relações com atores são relações históricas do catálogo, não evidência de atividade atual.
-- Dados ausentes, incluindo CVSS, são exibidos como não identificados ou `—`, sem preencher métricas presumidas.
-- Ransomware mostra reivindicações da fonte, não incidentes confirmados. Os totais correspondem ao recorte recebido; os filtros da tabela refinam somente as linhas. A comparação temporal aparece apenas quando a janela anterior tem registros, e o contexto fica recolhido. Não atribui níveis de pressão sem uma referência histórica.
-- Mudanças de período ou prioridades carregam um conjunto separado de dados, sem exibir uma resposta anterior como se fosse do novo filtro. A tabela de ransomware pagina todos os registros retornados; referências externas aceitam somente HTTP/HTTPS.
-- A listagem de atores pagina o catálogo inteiro, sem o corte anterior em 180 registros. Ao voltar de um perfil, mantém os filtros, a página e a posição da lista. As consultas de detalhe são separadas por ID e canceladas ao trocar de ator.
-- As métricas do perfil contam relações reais do catálogo. Notícias mostram até cinco eventos correlacionados do feed, com estado de falha separado de ausência de cobertura. A interface não apresenta contagens de IOCs, hosts ou hashes sem uma fonte que as forneça.
-- A exportação de phishing continua usando todo o recorte filtrado, independentemente da página da tabela.
-- O lote consulta IPs públicos IPv4/IPv6, domínios, URLs e hashes MD5/SHA-1/SHA-256. E-mails, CIDRs e IPs privados/reservados são contabilizados como não consultados; nenhum bloco é expandido automaticamente. URLs não geram uma segunda consulta implícita ao host.
-- Falhas de todas as fontes geram estado de falha; falhas de algumas fontes geram resultado parcial. Ausência de sinal não comprova segurança. Interromper bloqueia novas consultas e deixa as que já começaram terminarem.
-- Os resultados do lote são locais à página e não criam jobs persistidos. Sair encerra a fila, mas consultas já em andamento podem consumir cota. CSV/JSON/TXT exportam todo o filtro visível, não somente a página; JSON preserva respostas e erros das fontes. CSV neutraliza fórmulas de planilha.
+CIDR IPv4 usa AbuseIPDB como base: `/api/abuseipdb/check-block` retorna os endereços com relatos nos últimos 90 dias. O bloco é normalizado, dividido visualmente em subblocos /24 e paginado por aritmética, sem expandir todos os IPs ou consultá-los individualmente. Shodan só é consultado quando o usuário escolhe o complemento, com limite de 100 serviços e sem validação TCP ativa. Ausência de relatos ou observações não é uma confirmação de segurança.
 
-## Layout e acessibilidade
+## Notícias e indicadores
 
-Tema escuro neutro por padrão para visitantes sem preferência salva; tema claro e preferências existentes continuam disponíveis. Navegação fixa e recolhível, submenu de phishing, rolagem independente da navegação, tabela com rolagem horizontal no celular, menu mobile e painéis com Escape, foco contido e retorno do foco ao elemento que os abriu.
+`/newsletter` reúne Publicações, IPs e Domínios. As listas de indicadores usam os IOCs de cada publicação, deduplicam o indicador e preservam links das fontes. Atores e malware de um evento agregado não são herdados automaticamente por todas as fontes. É possível abrir a publicação a partir da evidência ou investigar o indicador no enriquecimento. Não se infere uma resolução IP/domínio a partir de mera coocorrência textual.
 
-## Expansões que exigem dados próprios
+## Malware
 
-As referências de Host Radar, Registrar Radar, C2, histórico de certificados e SQL mostram capacidades adicionais. Implementar essas áreas exige definir coletores, proveniência, cobertura temporal e autorização das respectivas fontes. Os menus atuais expõem áreas que já têm uma API funcional; registros de exemplo são usados exclusivamente para validação local da interface.
+`/malware` reúne o catálogo público de famílias, aliases e plataformas do Malpedia e os metadados de amostras do MalwareBazaar. Não há download nem execução de binários.
+
+- Malpedia: catálogo público `/api/get/families`, sem chave, cache de 24 horas com fallback explicitamente marcado como desatualizado.
+- MalwareBazaar: Auth-Key pessoal ou da plataforma; operações `get_recent` (100 amostras), `get_siginfo` (até 100 por assinatura) e `get_info` por hash. Cache de três minutos separado pela credencial.
+- IPs e hosts: evidências do acervo de notícias que identificam uma única família de forma inequívoca. Aliases ambíguos e publicações com várias famílias não atribuem seus IOCs a todas elas.
+- Contagens representam a cobertura consultada e o acervo local; não representam a telemetria total de um provedor nem confirmam função de C2. Fonte indisponível é diferente de fonte consultada sem resultado.
+
+As rotas `/api/malware/families`, `/api/malware/family?id=...` e `/api/malware/sample/:hash` mantêm o controle de acesso do produto. Caches no frontend são separados por conta. O campo BYOK `abuse_ch` cifra a chave por usuário e tem prioridade no MalwareBazaar, ThreatFox e URLhaus.
+
+## Phishing e monitoramento de domínios
+
+`/phishing-analyzer` abre o dashboard de tendências: publicações por mês, técnicas, setores, regiões, marcas e MITRE citado/inferido. Os recortes são aplicados ao conjunto consultado, incluindo a exportação existente. Campanhas e análise de e-mail permanecem acessíveis.
+
+Caça a domínios e tickets ficam em `/domain-monitoring`. Links antigos `?view=hunt` e `?view=tickets` são redirecionados. O monitoramento continua usando urlscan.io e os perfis da organização.
+
+OpenPhish, PhishStats e PhishTank são integrações de reputação sob demanda no enriquecimento. Não são coletores de campanhas do dashboard. PhishStats usa `https://api.phishstats.info/api/phishing` com `X-API-Key`, cache de 90 minutos e recorte de até 100 candidatos, limitado a cinco correspondências exatas. OpenPhish compara URLs exatas ou limites de hostname, evitando falsos matches de substrings. PhishTank exige uma resposta estruturada e distingue relatos não verificados de phishing confirmado.
+
+## Diretório e credenciais
+
+`/vendors` deriva suas 12 fontes do mesmo catálogo usado pelas consultas. Os filtros usam os tipos efetivamente suportados; não existe filtro CVE sem integração correspondente. Configuração e última resposta são informações separadas. A atividade das três fontes de phishing registra somente data, HTTP e contagem de requisições ao provedor nesta execução do servidor, sem guardar URLs consultadas ou segredos e sem afirmar coleta automática. O cache varia por fonte.
+
+O deploy recebe `ABUSE_CH_API_KEY`, `PHISHSTATS_API_KEY` e `WHOIS_API_KEY` pelos secrets do ambiente `vps-production`. Os valores são enviados por SSH stdin e gravados atomicamente no `.env` da raiz, utilizado pelo runtime. Não entram em bundles, logs ou arquivos versionados.

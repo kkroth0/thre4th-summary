@@ -99,6 +99,7 @@ export interface StoryActor {
 }
 
 export interface StorySource {
+  iocs?: { ips?: string[]; domains?: string[]; hashes?: string[]; urls?: string[] };
   link: string;
   source: string;
   title: string;

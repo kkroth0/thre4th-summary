@@ -31,14 +31,8 @@ export const VENDOR_IOC_SUPPORT: Record<string, ('ip' | 'domain' | 'hash' | 'url
     "MalwareBazaar": ['hash'],
     "ThreatFox": ['ip', 'domain', 'url', 'hash'],
     "PhishTank": ['url'],
-    "Pulsedive": ['ip', 'domain', 'hash', 'url'],
-    "Hybrid Analysis": ['hash'],
-    "CIRCL hashlookup": ['hash'],
-    "MetaDefender": ['ip', 'hash', 'domain', 'url'],
     "PhishStats": ['url', 'domain'],
     "OpenPhish": ['url', 'domain'],
-    "Team Cymru": ['ip', 'hash'],
-    "Censys": ['ip'],
     // "Ransomware.live" e "Google Safe Browsing" saíram: o primeiro é feed de
     // vítimas recentes e ignora a consulta, o segundo nunca teve rota no server
     // (consultar dava 404). Os dois ficavam no mapa de vendors sem nunca serem
@@ -51,11 +45,9 @@ export const VENDOR_IOC_SUPPORT: Record<string, ('ip' | 'domain' | 'hash' | 'url
 export const IOC_SOURCE_COUNT = Object.keys(VENDOR_IOC_SUPPORT).length;
 
 // Conservative allowlist: these repository endpoints use generic IPv6-capable
-// indicator/host/IP paths. OTX is explicitly `/IPv4/`; Team Cymru reverses IPv4
-// octets, so neither may receive a direct IPv6 query.
+// indicator/host/IP paths. OTX is explicitly `/IPv4/`, so it receives no direct IPv6 queries.
 export const IPV6_CAPABLE_VENDORS = new Set([
     "IP Geolocation", "VirusTotal", "AbuseIPDB", "Shodan", "ThreatFox",
-    "Pulsedive", "MetaDefender", "Censys",
 ]);
 
 export const resolveVendorsForQuery = (query: string, selectedVendors: string[]): string[] => {
@@ -286,76 +278,10 @@ export const formatVendorData = (vendorName: string, data: any, query: string): 
             return { "Status": "No data" };
         case "PhishTank":
             return {
-                "Status": data.results?.in_database ? (data.results.valid ? "Verified Phishing" : "Not Phishing") : "Unknown",
+                "Status": data.results?.in_database && data.results?.verified ? (data.results.valid ? "Verified Phishing" : "Clean") : "Unknown",
+                "In Database": data.results?.in_database ? "Yes" : "No",
                 "Verified": data.results?.verified ? "Yes" : "No",
             };
-        case "Pulsedive": {
-            if (data.error || (!data.risk && !data.iid)) return { "Status": "No data" };
-            const pdRisk = (data.risk || "unknown").toLowerCase();
-            const pdStatus = ["critical", "high"].includes(pdRisk) ? "Malicious"
-                : pdRisk === "medium" ? "Suspicious"
-                : pdRisk === "none" || pdRisk === "low" ? "Clean" : "Unknown";
-            return {
-                "Status": pdStatus,
-                "Risk": data.risk || "Unknown",
-                "Risk (recommended)": data.risk_recommended || "Unknown",
-                "Type": data.type || "Unknown",
-                "Threats": Array.isArray(data.threats) ? data.threats.slice(0, 5).map((t: any) => typeof t === 'string' ? t : t.name || t.type || 'Unknown').join(", ") : "None",
-                "Feeds": data.feeds?.length || 0,
-                "First Seen": data.stamp_added || "Unknown",
-                "Last Seen": data.stamp_seen || data.stamp_updated || "Unknown",
-            };
-        }
-
-
-
-        case "Hybrid Analysis":
-            if (Array.isArray(data) && data.length > 0) {
-                const ha = data[0];
-                const haTags = Array.from(new Set(data.flatMap((d: any) => Array.isArray(d.classification_tags) ? d.classification_tags : [])));
-                const mitre = Array.isArray(ha.mitre_attcks) ? ha.mitre_attcks.map((m: any) => m.technique || m.attck_id).filter(Boolean) : [];
-                return {
-                    "Status": ha.verdict === "malicious" ? "Malicious" : ha.verdict === "suspicious" ? "Suspicious" : (ha.verdict || "Unknown"),
-                    "Verdict": ha.verdict || "Unknown",
-                    "Malware Family": ha.vx_family || "N/A",
-                    "Threat Score": ha.threat_score != null ? `${ha.threat_score}/100` : "N/A",
-                    "Threat Level": ha.threat_level != null ? String(ha.threat_level) : "N/A",
-                    "AV Detect": ha.av_detect != null ? `${ha.av_detect}%` : "N/A",
-                    "File Type": ha.type_short || ha.type || "Unknown",
-                    "Submission": ha.submit_name || "Unknown",
-                    "Signatures": ha.total_signatures != null ? ha.total_signatures : "N/A",
-                    "MITRE ATT&CK": mitre.slice(0, 6).join(", ") || "None",
-                    "Classification": haTags.slice(0, 6).join(", ") || "None",
-                    "Analyzed": ha.analysis_start_time || "Unknown",
-                    "Reports": data.length,
-                };
-            }
-            return { "Status": "No analysis found" };
-        case "CIRCL hashlookup":
-            return {
-                "Status": "Found in database",
-                "File Name": data.FileName || "Unknown",
-                "File Size": data.FileSize || "Unknown",
-            };
-        case "MetaDefender": {
-            if (data.scan_results) {
-                return {
-                    "Detection Rate": `${data.scan_results?.total_detected_avs}/${data.scan_results?.total_avs}`,
-                    "Status": data.scan_results?.total_detected_avs > 0 ? "Malicious" : "Clean",
-                    "Threat": data.scan_results?.scan_all_result_a || "Unknown",
-                };
-            }
-            const mdLr = data.lookup_results || {};
-            const mdFlagged = Array.isArray(mdLr.sources)
-                ? mdLr.sources.filter((s: any) => s.assessment && /mali|susp|phish|black|spam|botnet/i.test(s.assessment))
-                : [];
-            return {
-                "Status": (mdLr.detected_by || 0) > 0 ? "Flagged" : "Clean",
-                "Detected By": `${mdLr.detected_by || 0} source${(mdLr.detected_by || 0) === 1 ? "" : "s"}`,
-                "Flagged By": mdFlagged.length ? mdFlagged.map((s: any) => s.provider).slice(0, 5).join(", ") : "None",
-                "Geo Location": [data.geo_info?.city?.name, data.geo_info?.country?.name].filter(Boolean).join(", ") || "Unknown",
-            };
-        }
         case "PhishStats":
             if (Array.isArray(data) && data.length > 0) {
                 return {
@@ -365,7 +291,7 @@ export const formatVendorData = (vendorName: string, data: any, query: string): 
                     "Country": data[0].countrycode || "Unknown",
                 };
             }
-            return { "Status": "Not found in phishing database" };
+            return { "Status": "Unknown", "Records Found": 0 };
         case "WHOIS":
             if (data.WhoisRecord) {
                 const record = data.WhoisRecord;
@@ -373,32 +299,37 @@ export const formatVendorData = (vendorName: string, data: any, query: string): 
                     "Registrar": record.registrarName || "Unknown",
                     "Created": record.createdDate || "Unknown",
                     "Expires": record.expiresDate || "Unknown",
+                    "Updated": record.updatedDate || "Unknown",
+                    "Nameservers": record.nameServers || [],
+                    "Snapshot": record.snapshotTime || "Unknown",
                     "Status": record.status?.[0] || "Unknown",
                 };
             }
             return { "Status": "No WHOIS data available" };
 
         case "Shodan": {
+            const shodanData = data.data && !Array.isArray(data.data) ? data.data : data;
             // Domain queries hit /dns/domain — a different shape (subdomains + DNS records).
-            if (data.subdomains || (Array.isArray(data.data) && data.data[0]?.subdomain !== undefined)) {
-                const records = Array.isArray(data.data) ? data.data : [];
+            if (shodanData.subdomains || (Array.isArray(shodanData.data) && shodanData.data[0]?.subdomain !== undefined)) {
+                const records = Array.isArray(shodanData.data) ? shodanData.data : [];
                 const byType = (t: string) => records.filter((r: any) => r.type === t);
                 return {
                     "Status": records.length > 0 ? "DNS Records Found" : "No DNS data",
-                    "Subdomains": Array.isArray(data.subdomains) ? data.subdomains.length : 0,
-                    "Subdomain List": Array.isArray(data.subdomains) ? data.subdomains.slice(0, 25) : [],
+                    "Subdomains": Array.isArray(shodanData.subdomains) ? shodanData.subdomains.length : 0,
+                    "Subdomain List": Array.isArray(shodanData.subdomains) ? shodanData.subdomains : [],
+                    "DNS Records": records.map((record: any) => ({ subdomain: record.subdomain, type: record.type, value: record.value, last_seen: record.last_seen || null })),
                     "A Records": byType("A").map((r: any) => `${r.subdomain || "@"} → ${r.value}`).slice(0, 10).join(", ") || "None",
                     "MX Records": byType("MX").map((r: any) => r.value).slice(0, 5).join(", ") || "None",
                     "NS Records": byType("NS").map((r: any) => r.value).slice(0, 5).join(", ") || "None",
                     "TXT Records": byType("TXT").length,
                     "Total Records": records.length,
-                    "Tags": Array.isArray(data.tags) ? data.tags.join(", ") : "None",
+                    "Tags": Array.isArray(shodanData.tags) ? shodanData.tags.join(", ") : "None",
                 };
             }
-            const banners = Array.isArray(data.data) ? data.data : [];
-            // The actual CVE list, not just a count. Shodan keys data.vulns by CVE id.
-            const hostVulns = data.vulns ? Object.keys(data.vulns) : [];
-            // Per-service banner detail, mirroring the Censys "Services Detail" shape.
+            const banners = Array.isArray(shodanData.data) ? shodanData.data : [];
+            // The actual CVE list, not just a count. Shodan keys shodanData.vulns by CVE id.
+            const hostVulns = shodanData.vulns ? Object.keys(shodanData.vulns) : [];
+            // Preserve per-service banner details.
             const servicesDetail = banners.map((b: any) => ({
                 port: b.port,
                 transport: b.transport || "tcp",
@@ -415,116 +346,24 @@ export const formatVendorData = (vendorName: string, data: any, query: string): 
                 vulns: b.vulns ? Object.keys(b.vulns) : [],
                 hostnames: Array.isArray(b.hostnames) ? b.hostnames.slice(0, 3) : [],
             }));
-            const location = [data.city, data.region_code, data.country_name].filter(Boolean).join(", ");
+            const location = [shodanData.city, shodanData.region_code, shodanData.country_name].filter(Boolean).join(", ");
             return {
-                "Open Ports": data.ports?.slice(0, 12).join(", ") || "None",
-                "Total Ports": data.ports?.length || 0,
+                "Open Ports": shodanData.ports?.slice(0, 12).join(", ") || "None",
+                "Total Ports": shodanData.ports?.length || 0,
                 "Services": banners.slice(0, 5).map((d: any) => d.product || `${d.port}/${d.transport || 'tcp'}`).join(", ") || "Unknown",
-                "Organization": data.org || "Unknown",
-                "Hostnames": data.hostnames?.slice(0, 5).join(", ") || "None",
-                "Domains": data.domains?.slice(0, 5).join(", ") || "None",
-                "OS": data.os || "Unknown",
+                "Organization": shodanData.org || "Unknown",
+                "Hostnames": shodanData.hostnames?.slice(0, 5).join(", ") || "None",
+                "Domains": shodanData.domains?.slice(0, 5).join(", ") || "None",
+                "OS": shodanData.os || "Unknown",
                 "Location": location || "Unknown",
-                "Last Update": data.last_update || "Unknown",
-                "ASN": data.asn || "Unknown",
-                "ISP": data.isp || "Unknown",
+                "Last Update": shodanData.last_update || "Unknown",
+                "ASN": shodanData.asn || "Unknown",
+                "ISP": shodanData.isp || "Unknown",
                 "Vulnerabilities": `${hostVulns.length} CVEs`,
                 "Vulnerability List": hostVulns,
-                "Tags": data.tags?.slice(0, 8).join(", ") || "None",
+                "Tags": shodanData.tags?.slice(0, 8).join(", ") || "None",
                 "Services Detail": servicesDetail,
             };
-        }
-        case "Censys": {
-            const censysData = data.data || data;
-            if (censysData.Status) return censysData;
-            const services = censysData.services || [];
-            const openPorts = services.map((s: any) => `${s.port}/${s.transport}`).join(", ") || "None";
-            const softwareList = services
-                .filter((s: any) => s.software)
-                .map((s: any) => `${s.software}${s.software_version ? ' ' + s.software_version : ''} (${s.port}/${s.transport})`)
-                .join(", ") || "None detected";
-            const tlsServices = services.filter((s: any) => s.tls_version);
-            const certServices = services.filter((s: any) => s.certificate_subject);
-            const httpServices = services.filter((s: any) => s.http_status || s.http_title);
-
-            // Aggregate CVEs reported across all services.
-            const allVulns = Array.from(new Set(
-                services.flatMap((s: any) => Array.isArray(s.vulnerabilities) ? s.vulnerabilities : [])
-            ));
-
-            const result: Record<string, any> = {
-                "Open Ports": openPorts,
-                "Service Count": censysData.service_count || services.length,
-                "Software": softwareList,
-            };
-
-            if (Array.isArray(censysData.labels) && censysData.labels.length > 0) {
-                result["Labels"] = censysData.labels.join(", ");
-            }
-            if (censysData.operating_system) result["Operating System"] = censysData.operating_system;
-            if (allVulns.length > 0) {
-                result["Vulnerabilities"] = `${allVulns.length} CVEs`;
-                result["Vulnerability List"] = allVulns;
-            }
-            if (Array.isArray(censysData.dns_names) && censysData.dns_names.length > 0) {
-                result["Reverse DNS"] = censysData.dns_names.slice(0, 5).join(", ");
-            }
-            if (censysData.last_updated) result["Last Scanned"] = censysData.last_updated;
-
-            // HTTP fingerprint
-            if (httpServices.length > 0) {
-                const httpSvc = httpServices[0];
-                result["HTTP Status"] = httpSvc.http_status ? String(httpSvc.http_status) : "N/A";
-                result["HTML Title"] = httpSvc.http_title || "N/A";
-                if (httpSvc.http_body_hash) result["Body Hash"] = httpSvc.http_body_hash;
-            }
-
-            // TLS fingerprint
-            if (tlsServices.length > 0) {
-                result["TLS Version"] = tlsServices.map((s: any) => `${s.tls_version} (${s.port})`).join(", ");
-            }
-
-            // Certificate fingerprint
-            if (certServices.length > 0) {
-                const cert = certServices[0];
-                result["Certificate Subject"] = cert.certificate_subject || "N/A";
-                result["Certificate Issuer"] = cert.certificate_issuer || "N/A";
-                if (cert.certificate_fingerprint) result["Cert Fingerprint"] = cert.certificate_fingerprint;
-                if (cert.certificate_names && cert.certificate_names.length > 0) {
-                    result["Certificate Names"] = cert.certificate_names.slice(0, 8).join(", ") + (cert.certificate_names.length > 8 ? ` (+${cert.certificate_names.length - 8} more)` : "");
-                }
-                if (cert.certificate_trusted !== null) {
-                    result["Browser Trust"] = cert.certificate_trusted ? "Trusted" : "Not Trusted";
-                }
-            }
-
-            // ASN
-            if (censysData.autonomous_system) {
-                result["ASN"] = `AS${censysData.autonomous_system.asn} - ${censysData.autonomous_system.name}`;
-                if (censysData.autonomous_system.bgp_prefix) result["BGP Prefix"] = censysData.autonomous_system.bgp_prefix;
-            }
-
-            // Location
-            if (censysData.location) {
-                result["Location"] = [censysData.location.city, censysData.location.province, censysData.location.country].filter(Boolean).join(", ");
-            }
-
-            // Services detail (for expanded vendor card)
-            result["Services Detail"] = services.map((s: any) => ({
-                port: s.port,
-                protocol: s.protocol,
-                transport: s.transport,
-                software: s.software,
-                version: s.software_version,
-                os: s.os,
-                labels: Array.isArray(s.labels) ? s.labels : [],
-                http_status: s.http_status,
-                http_title: s.http_title,
-                http_server: s.http_server,
-                vulns: Array.isArray(s.vulnerabilities) ? s.vulnerabilities : [],
-            }));
-
-            return result;
         }
         case "IP Geolocation":
             if (data.status === "success") {
@@ -553,26 +392,6 @@ export const formatVendorData = (vendorName: string, data: any, query: string): 
                 "Status": data.listed ? "Phishing" : "Clean",
                 "Listed": data.listed ? "Yes" : "No",
             };
-        case "Team Cymru":
-            // Hash → Malware Hash Registry lookup (a real malicious verdict).
-            if (typeof data.listed === "boolean") {
-                return {
-                    "Status": data.listed ? "Malicious" : "Clean",
-                    "Last Seen": data.last_seen || "Unknown",
-                };
-            }
-            // IP → ASN/BGP origin mapping: enrichment, not a verdict, so no "Status"
-            // key (keeps it out of the malicious/clean vote, like IP Geolocation).
-            if (data.asn) {
-                return {
-                    "ASN": data.asn,
-                    "BGP Prefix": data.bgp_prefix || "Unknown",
-                    "Country": data.country || "Unknown",
-                    "Registry": data.registry || "Unknown",
-                    "Allocated": data.allocated || "Unknown",
-                };
-            }
-            return { "Status": "No data" };
         default:
             return data;
     }
@@ -593,16 +412,10 @@ const getVendorLink = (vendorName: string, query: string): string | undefined =>
         case "ThreatFox": return `https://threatfox.abuse.ch/browse/`;
         case "MalwareBazaar": return `https://bazaar.abuse.ch/browse/`;
         case "PhishTank": return `https://phishtank.org/`;
-        case "Pulsedive": return `https://pulsedive.com/indicator/?ioc=${encodedQuery}`;
 
-        case "Hybrid Analysis": return `https://www.hybrid-analysis.com/search?query=${encodedQuery}`;
-        case "CIRCL hashlookup": return `https://hashlookup.circl.lu/`;
-        case "MetaDefender": return `https://metadefender.opswat.com/results/ip/${query}`;
         case "PhishStats": return `https://phishstats.info/`;
 
         case "OpenPhish": return `https://openphish.com/`;
-        case "Team Cymru": return `https://team-cymru.com/community-services/ip-asn-mapping/`;
-        case "Censys": return `https://search.censys.io/hosts/${query}`;
         case "WHOIS": return `https://who.is/whois/${query}`;
         case "IP Geolocation": return `https://ip-api.com/#${query}`;
         default: return undefined;
@@ -693,21 +506,6 @@ const extractVendorTimestamps = (vendorName: string, data: any): TimelineEvent[]
                     pushEvent(e, v, b.subdomain !== undefined ? `DNS ${b.type} record` : `Service :${b.port}`, b.last_seen || b.timestamp, "other"));
                 break;
             }
-            case "Censys": {
-                const c = data.data || data;
-                pushEvent(e, v, "Last scanned", c.last_updated, "analysis");
-                break;
-            }
-            case "Pulsedive": {
-                pushEvent(e, v, "First seen", data.stamp_added, "first_seen");
-                pushEvent(e, v, "Last seen", data.stamp_seen, "last_seen");
-                pushEvent(e, v, "Updated", data.stamp_updated, "other");
-                break;
-            }
-            case "Hybrid Analysis": {
-                (Array.isArray(data) ? data : []).slice(0, 5).forEach((d: any) => pushEvent(e, v, `Analyzed: ${d.vx_family || d.submit_name || "sample"}`, d.analysis_start_time, "analysis"));
-                break;
-            }
             case "WHOIS": {
                 const r = data.WhoisRecord;
                 if (r) {
@@ -777,15 +575,9 @@ export const fetchURLhausData = (query: string) => fetchFromBackend('urlhaus', q
 export const fetchMalwareBazaarData = (query: string) => fetchFromBackend('malwarebazaar', query, "MalwareBazaar");
 export const fetchThreatFoxData = (query: string) => fetchFromBackend('threatfox', query, "ThreatFox");
 export const fetchPhishTankData = (query: string) => fetchFromBackend('phishtank', query, "PhishTank");
-export const fetchPulsediveData = (query: string) => fetchFromBackend('pulsedive', query, "Pulsedive");
 
-export const fetchHybridAnalysisData = (query: string) => fetchFromBackend('hybridanalysis', query, "Hybrid Analysis");
-export const fetchCIRCLData = (query: string) => fetchFromBackend('circl', query, "CIRCL hashlookup");
-export const fetchMetaDefenderData = (query: string) => fetchFromBackend('metadefender', query, "MetaDefender");
 export const fetchPhishStatsData = (query: string) => fetchFromBackend('phishstats', query, "PhishStats");
 export const fetchOpenPhishData = (query: string) => fetchFromBackend('openphish', query, "OpenPhish");
-export const fetchTeamCymruData = (query: string) => fetchFromBackend('teamcymru', query, "Team Cymru");
-export const fetchCensysData = (query: string) => fetchFromBackend('censys', query, "Censys");
 
 // AV engines whose verdict alone is enough to mark an IOC malicious.
 const IMPORTANT_AV_VENDORS = [
@@ -806,14 +598,8 @@ const buildVendorMap = (query: string): Record<string, () => Promise<VendorData>
     "MalwareBazaar": () => fetchMalwareBazaarData(query),
     "ThreatFox": () => fetchThreatFoxData(query),
     "PhishTank": () => fetchPhishTankData(query),
-    "Pulsedive": () => fetchPulsediveData(query),
-    "Hybrid Analysis": () => fetchHybridAnalysisData(query),
-    "CIRCL hashlookup": () => fetchCIRCLData(query),
-    "MetaDefender": () => fetchMetaDefenderData(query),
     "PhishStats": () => fetchPhishStatsData(query),
     "OpenPhish": () => fetchOpenPhishData(query),
-    "Team Cymru": () => fetchTeamCymruData(query),
-    "Censys": () => fetchCensysData(query),
 });
 
 // Resolve which vendors to actually query: the explicit selection (or all known
@@ -861,11 +647,13 @@ const scoreThreatResults = (query: string, results: VendorData[]): ThreatIntelli
     }
 
     results.forEach(vendor => {
-        if (vendor.name === "VirusTotal" || vendor.name === "AbuseIPDB") return;
+        if (["VirusTotal", "AbuseIPDB", "WHOIS"].includes(vendor.name)) return;
         if (vendor.error || Object.keys(vendor.data).length === 0) return;
 
         const status = vendor.data["Status"];
         if (status && typeof status === "string") {
+            if (["PhishTank", "PhishStats", "OpenPhish"].includes(vendor.name) &&
+                !["Phishing", "Verified Phishing", "Found in Phishing Database", "Clean"].includes(status)) return;
             totalChecked++;
             if (status.toLowerCase().includes("malicious") ||
                 status.toLowerCase().includes("unsafe") ||
@@ -1510,7 +1298,7 @@ export interface AttackSurfaceFinding {
     hostnames: string[];
     country: string | null;
     city: string | null;
-    source: { shodan: boolean; censys?: boolean };
+    source: { shodan: boolean };
     observedAt: string | null;
     cves: string[];
     tags: string[];
@@ -1531,7 +1319,7 @@ export interface AttackSurfaceSummary {
     criticalHighFindings: number;
     activelyConfirmedOpen: number;
     byRisk: Record<AttackSurfaceRisk, number>;
-    providers: { shodan: boolean; censys?: boolean };
+    providers: { shodan: boolean };
     warnings: string[];
     totalObserved: number;
 }

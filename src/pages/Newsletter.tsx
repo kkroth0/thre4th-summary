@@ -2,6 +2,8 @@ import React, { useState, useEffect, useMemo, useRef, useCallback } from "react"
 import { Link, useSearchParams } from "react-router-dom";
 import { LayoutGrid, List } from 'lucide-react';
 import { StoryTable } from '@/components/workbench/StoryTable';
+import { NewsIocTable } from '@/components/workbench/NewsIocTable';
+
 import { SourceIdentity } from '@/components/SourceIdentity';
 import { ArrowLeft, Globe, BookOpen, AlertTriangle, Search, Mail, Eye, Filter, ChevronDown, RefreshCw, Share2, Loader2, Bookmark, X, PencilLine, ExternalLink, CheckCircle2, Settings2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -202,7 +204,14 @@ const Newsletter = () => {
   // Newsletter States
   const [advisories, setAdvisories] = useState<Advisory[]>([]);
   const [feedView, setFeedView] = useState<'table' | 'cards'>('table');
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const newsView = searchParams.get('view') === 'ips' ? 'ips' : searchParams.get('view') === 'domains' ? 'domains' : 'posts';
+  const iocStoryId = searchParams.get('iocStory');
+  const setNewsSection = (value: string, storyId?: string) => {
+    const next = new URLSearchParams(searchParams); next.set('view', value); next.delete('story');
+    if (storyId) next.set('iocStory', storyId); else next.delete('iocStory');
+    setFeedView('table'); setSearchParams(next);
+  };
   const [searchNews, setSearchNews] = useState("");
   const [loadingNews, setLoadingNews] = useState(true);
   const [newsError, setNewsError] = useState<string | null>(null);
@@ -627,7 +636,8 @@ const Newsletter = () => {
   };
 
   return (
-    <PageLayout width="max-w-7xl">
+    <PageLayout width="max-w-7xl" breadcrumbItems={[{ label: newsView === 'ips' ? 'IPs' : newsView === 'domains' ? (language === 'pt' ? 'Domínios' : 'Domains') : (language === 'pt' ? 'Publicações' : 'Posts') }]}>
+
         <div className="space-y-6">
 
           {/* Page Title Row */}
@@ -635,12 +645,12 @@ const Newsletter = () => {
             <div>
               <h1 className="page-title flex items-center gap-2">
                 <Mail className="h-6 w-6 text-primary" />
-                {language === "pt" ? "Feed de inteligência" : "Intelligence feed"}
+                {language === "pt" ? "Notícias e IOCs" : "News and IOCs"}
               </h1>
               <p className="page-lede">
                 {language === "pt"
-                  ? "Notícias, advisories e pesquisas para acompanhar ameaças e reunir suas fontes."
-                  : "News, advisories and research to follow threats and bring your sources together."}
+                  ? "Publicações de segurança, indicadores coletados e evidências por fonte."
+                  : "Security publications, collected indicators and source-level evidence."}
               </p>
             </div>
 
@@ -914,8 +924,10 @@ const Newsletter = () => {
                   </button>
                 )}
                 <div className="ml-auto flex gap-1 rounded-lg border p-1" aria-label={language === 'pt' ? 'Visualização do feed' : 'Feed view'}>
-                  <Button type="button" size="sm" variant={feedView === 'table' ? 'secondary' : 'ghost'} className="h-7 gap-1.5 px-2 text-xs" aria-pressed={feedView === 'table'} onClick={() => setFeedView('table')}><List className="h-3.5 w-3.5" />{language === 'pt' ? 'Tabela' : 'Table'}</Button>
-                  <Button type="button" size="sm" variant={feedView === 'cards' ? 'secondary' : 'ghost'} className="h-7 gap-1.5 px-2 text-xs" aria-pressed={feedView === 'cards'} onClick={() => setFeedView('cards')}><LayoutGrid className="h-3.5 w-3.5" />Cards</Button>
+                  <Button type="button" size="sm" variant={newsView === 'posts' && feedView === 'table' ? 'secondary' : 'ghost'} className="h-7 gap-1.5 px-2 text-xs" aria-pressed={newsView === 'posts' && feedView === 'table'} onClick={() => setNewsSection('posts')}><List className="h-3.5 w-3.5" />{language === 'pt' ? 'Publicações' : 'Posts'}</Button>
+                  <Button type="button" size="sm" variant={feedView === 'cards' ? 'secondary' : 'ghost'} className="h-7 gap-1.5 px-2 text-xs" aria-pressed={feedView === 'cards'} onClick={() => { setNewsSection('posts'); setFeedView('cards'); }}><LayoutGrid className="h-3.5 w-3.5" />Cards</Button>
+                  <Button type="button" size="sm" variant={newsView === 'ips' ? 'secondary' : 'ghost'} className="h-7 px-2 text-xs" aria-pressed={newsView === 'ips'} onClick={() => setNewsSection('ips')}>IPs</Button>
+                  <Button type="button" size="sm" variant={newsView === 'domains' ? 'secondary' : 'ghost'} className="h-7 px-2 text-xs" aria-pressed={newsView === 'domains'} onClick={() => setNewsSection('domains')}>{language === 'pt' ? 'Domínios' : 'Domains'}</Button>
                 </div>
               </div>
 
@@ -989,8 +1001,10 @@ const Newsletter = () => {
                     </Button>
                   )}
                 />
+              ) : newsView !== 'posts' ? (
+                <div className="space-y-3">{iocStoryId && <Button variant="outline" size="sm" onClick={() => setNewsSection(newsView)}>{language === 'pt' ? 'Ver indicadores de todas as publicações' : 'Show indicators from all posts'}</Button>}<NewsIocTable key={newsView + ':' + (iocStoryId || '')} stories={storyCards} kind={newsView === 'ips' ? 'ip' : 'domain'} pt={language === 'pt'} storyId={iocStoryId} onPublication={id => { const next = new URLSearchParams(searchParams); next.set('view', 'posts'); next.set('story', id); next.delete('iocStory'); setFeedView('table'); setSearchParams(next); }} /></div>
               ) : feedView === 'table' ? (
-                <StoryTable rows={storyCards} pt={language === 'pt'} initialId={searchParams.get('story')} onSave={keepAdvisory} onReport={makeBoletim} isSaved={row => savedLinks.has(row.sources[0].link)} isReporting={row => boletimBusy === row.storyId} evidence={correlation} onSelect={id => { if (isServerStoryId(id)) void getCorrelation(id); }} />
+                <StoryTable onIndicators={(id, kind) => setNewsSection(kind === 'ip' ? 'ips' : 'domains', id)} rows={storyCards} pt={language === 'pt'} initialId={searchParams.get('story')} onSave={keepAdvisory} onReport={makeBoletim} isSaved={row => savedLinks.has(row.sources[0].link)} isReporting={row => boletimBusy === row.storyId} evidence={correlation} onSelect={id => { if (isServerStoryId(id)) void getCorrelation(id); }} />
               ) : (
                 // Sem items-start: a grade estica os dois cards da mesma linha pra
                 // bater a mesma altura — é o que reduz a variação de tamanho entre

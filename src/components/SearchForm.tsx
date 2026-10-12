@@ -3,7 +3,7 @@ import { ArrowRight, Search, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useToast } from "@/hooks/use-toast";
-import { extractIocsFromText } from "@/utils/iocExtract";
+import { extractEnrichmentTargets } from "@/utils/networkInvestigation";
 
 // Teto só de exibição: 200 chips estouram o layout, mas todos são analisados.
 const CHIP_PREVIEW = 12;
@@ -33,7 +33,7 @@ export const SearchForm = ({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const getExtractedIocs = () => {
-    return extractIocsFromText(query);
+    return extractEnrichmentTargets(query);
   };
 
   const extractedIocs = getExtractedIocs();
@@ -53,7 +53,7 @@ export const SearchForm = ({
       reader.onload = (event) => {
         if (event.target?.result) {
           const text = event.target.result as string;
-          const allIocs = extractIocsFromText(text);
+          const allIocs = extractEnrichmentTargets(text);
 
           if (allIocs.length > 0) {
             setQuery(allIocs.join("\n"));
@@ -95,8 +95,8 @@ export const SearchForm = ({
             <textarea
               ref={textareaRef}
               placeholder={language === "pt"
-                    ? "IPv4/IPv6, domínio, URL ou hash..."
-                    : "IPv4/IPv6, domain, URL, or hash..."
+                    ? "IPv4/IPv6, domínio, URL ou hash · CIDR IPv4..."
+                    : "IPv4/IPv6, domain, URL, or hash · IPv4 CIDR..."
               }
               value={query}
               onChange={(e) => setQuery(e.target.value)}
