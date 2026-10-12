@@ -8,7 +8,7 @@ O workspace usa uma lateral de 224 px, recolhível para 56 px. A consulta em `/a
 
 Domínios possuem Resumo e fontes, Subdomínios, DNS e WHOIS. Os subdomínios preservam as observações estruturadas do Shodan, com paginação; DNS é a resolução atual. WHOIS usa `GET https://api.who.is/v1/whois/{domain}` com Bearer no backend, cache de 30 minutos, data do snapshot e sem solicitar o refresh pago `live=true`.
 
-CIDR IPv4 usa AbuseIPDB como base: `/api/abuseipdb/check-block` retorna os endereços com relatos nos últimos 90 dias. O bloco é normalizado, dividido visualmente em subblocos /24 e paginado por aritmética, sem expandir todos os IPs ou consultá-los individualmente. Shodan só é consultado quando o usuário escolhe o complemento, com limite de 100 serviços e sem validação TCP ativa. Ausência de relatos ou observações não é uma confirmação de segurança.
+CIDR IPv4 usa AbuseIPDB como base: `/api/abuseipdb/check-block` retorna os endereços com relatos nos últimos 30 dias. O bloco é normalizado, dividido visualmente em subblocos /24 e paginado por aritmética, sem expandir todos os IPs ou consultá-los individualmente. Blocos maiores que /24 dependem do plano do AbuseIPDB; o erro de limite é indicado na tela, sem dividir a busca em lote para contornar cotas. Shodan só é consultado quando o usuário escolhe o complemento, com limite de 100 serviços e sem validação TCP ativa. Ausência de relatos ou observações não é uma confirmação de segurança.
 
 ## Notícias e indicadores
 

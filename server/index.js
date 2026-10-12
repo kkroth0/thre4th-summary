@@ -533,7 +533,7 @@ app.post('/api/abuseipdb/check-block', scanLimiter, async (req, res) => {
             axios.get(`https://api.abuseipdb.com/api/v2/check-block`, {
                 params: {
                     network: sanitized,
-                    maxAgeInDays: 90
+                    maxAgeInDays: 30
                 },
                 headers: { "Key": key, "Accept": "application/json" }
             })
