@@ -26,8 +26,10 @@ import { shodanAxios } from './shodanGate.js';
 import { createMalwareCatalog } from './malwareCatalog.js';
 import { createPhishingSources } from './phishingSources.js';
 import { createWhoisLookup } from './whoisLookup.js';
+import { createDomainIntelligence, domainTarget } from './domainIntelligence.js';
+import { actorPublications, buildActorActivity, buildActorEvidence } from './actorEvidence.js';
 import { otxThrottled, OTX_TIMEOUT_MS } from './otxGate.js';
-import { findMentions } from './newsIocs.js';
+import { findMentions, findDomainMentions } from './newsIocs.js';
 import { refsOfReport, relatedTo } from './attackIndex.js';
 import { isJobId, jobSummary, normalizeDeckRequestType, normalizeDeckSubtype, normalizeDeckTemplate, orphanDeckFiles, pruneJobsMap } from './feedJobs.js';
 import { addKnowledgeItem, normalizeKnowledgeInput } from './knowledge.js';
@@ -915,6 +917,21 @@ app.get('/api/intel/latam-threats', async (req, res) => {
 
 // WHOIS — Who.is snapshot lookup (no paid live refresh).
 const lookupWhois = createWhoisLookup({ http: axios, getKey: () => process.env.WHOIS_API_KEY });
+const DOMAIN_DNS_HISTORY_PATH = path.join(__dirname, '.domain-dns-history.json');
+const domainIntelligence = createDomainIntelligence({ http: axios, getWhoisKey: () => process.env.WHOIS_API_KEY,
+    readObservations: () => JSON.parse(fs.readFileSync(DOMAIN_DNS_HISTORY_PATH, 'utf8')),
+    saveObservations: data => writeJsonAtomic(DOMAIN_DNS_HISTORY_PATH, data),
+});
+app.post('/api/domain/:view', requirePremium, scanLimiter, async (req, res) => {
+    const methods = { subdomains: 'subdomains', certificates: 'certificates', history: 'history' };
+    if (!Object.hasOwn(methods, req.params.view)) return res.status(404).json({ error: 'Unknown domain view' });
+    const method = methods[req.params.view];
+    try {
+        const { hostname } = domainTarget(req.body?.query);
+        res.set('Cache-Control', 'private, no-store');
+        res.json(await domainIntelligence[method](hostname, req.body.cursor || ''));
+    } catch { res.status(400).json({ error: 'Invalid domain or cursor' }); }
+});
 app.post('/api/whois', scanLimiter, async (req, res) => {
     try {
         if (detectQueryType(req.body.query) !== 'domain') return res.status(400).json({ error: 'Domain query required' });
@@ -1424,6 +1441,14 @@ app.get('/api/news/mentions', requirePremium, async (req, res) => {
         const { status, message } = sanitizeError(error);
         res.status(status).json({ error: message });
     }
+});
+
+app.get('/api/news/domain-mentions', requirePremium, (req, res) => {
+    try {
+        const { hostname } = domainTarget(req.query.domain);
+        res.set('Cache-Control', 'private, no-store');
+        res.json({ domain: hostname, mentions: findDomainMentions(newsStoryStore.all(), hostname) });
+    } catch { res.status(400).json({ error: 'Invalid domain' }); }
 });
 
 app.get('/api/news/stories/:id', requirePremium, (req, res) => {
@@ -3299,7 +3324,9 @@ const loadActors = () => {
     // Vitimologia (setor/região atacada) sai da descrição — ver actorProfile.js.
     // Feito uma vez aqui porque a descrição só existe no objeto completo, e a
     // listagem (que é onde os filtros rodam) não carrega descrição.
-    actors = actors.map((actor) => ({ ...actor, ...actorTargeting(actor) }));
+    let logos = {};
+    try { logos = JSON.parse(fs.readFileSync(path.join(__dirname, 'data', 'actor-logos.json'), 'utf8')).logos || {}; } catch { /* initials remain available */ }
+    actors = actors.map((actor) => ({ ...actor, ...actorTargeting(actor), logo: logos[actor.id]?.url || null, logoSource: logos[actor.id]?.source || null }));
     const facet = (key) => [...new Set(actors.flatMap((a) => a[key] || []).filter(Boolean))].sort();
     ACTORS_CACHE = {
         actors,
@@ -3401,7 +3428,7 @@ app.get('/api/actors', (req, res) => {
         sectors,
         targets,
         actors: actors.map(a => ({
-            id: a.id, name: a.name, aliases: a.aliases || [], country: a.country || '',
+            id: a.id, name: a.name, aliases: a.aliases || [], country: a.country || '', logo: a.logo, logoSource: a.logoSource,
             motivation: a.motivation || '', source: a.source,
             sectors: a.sectors || [], targets: a.targets || [],
             technique_count: (a.techniques || []).length,
@@ -3427,6 +3454,17 @@ app.get('/api/actors/software-index', (req, res) => {
 });
 
 // Full detail for one actor.
+app.get('/api/actors/activity', requirePremium, (req, res) => {
+    res.set('Cache-Control', 'private, no-store');
+    res.json({ days: 180, activity: buildActorActivity(actorPublications(newsArchiveStore.all(), newsStoryStore.all())) });
+});
+app.get('/api/actors/:id/evidence', requirePremium, (req, res) => {
+    if (!knownActorIds().has(req.params.id)) return res.status(404).json({ error: 'Actor not found' });
+    const days = req.query.days == null ? 180 : Number(req.query.days);
+    if (![0, 30, 90, 180, 365].includes(days)) return res.status(400).json({ error: 'Invalid time range' });
+    res.set('Cache-Control', 'private, no-store');
+    res.json(buildActorEvidence(actorPublications(newsArchiveStore.all(), newsStoryStore.all()), req.params.id, { days }));
+});
 app.get('/api/actors/:id', (req, res) => {
     const actor = loadActors().actors.find(a => a.id === req.params.id);
     if (!actor) return res.status(404).json({ error: 'actor not found' });
@@ -3472,6 +3510,8 @@ app.post('/api/dns/lookup', scanLimiter, async (req, res) => {
         ]);
 
         const flatTxt = txt.map(record => record.join(' '));
+
+        try { domainIntelligence.observe(sanitized, { A: a, AAAA: aaaa, MX: mx.map(record => `${record.exchange} (priority: ${record.priority})`), TXT: flatTxt, NS: ns, CNAME: cname }); } catch { /* unsupported special-use domains do not enter the history store */ }
 
         res.json({
             domain: sanitized,

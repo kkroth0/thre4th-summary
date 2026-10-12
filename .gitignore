@@ -55,3 +55,5 @@ hunting-docs/
 server/.feed-cache/
 server/.malpedia-cache.json
 server/.malpedia-cache.json.tmp
+
+server/.domain-dns-history.json*

@@ -11,7 +11,7 @@ import { analyzePhishing } from './phishingIntel.js';
 
 export const NEWS_CATEGORIES = [
     'Ransomware', 'APTs', 'Data Leaks', 'OT/ICS', 'Vulnerabilities', 'Malware', 'Phishing', 'Microsoft',
-    'Finance/Banking', 'Health/Pharma',
+    'Artificial Intelligence', 'Finance/Banking', 'Health/Pharma',
 ];
 
 const RANSOMWARE = /\b(?:ransomware|double extortion|dupla extors[aã]o|leak site|data leak site|ransom note)\b/i;
@@ -27,6 +27,16 @@ const VULN_CLASS = /\b(?:remote code execution|\brce\b|arbitrary code|authentica
 // so only the qualified forms count — same treatment as the other alternatives
 // here, which are already unambiguous.
 const MICROSOFT = /\b(?:microsoft|windows|exchange server|exchange online|sharepoint|azure|entra id|active directory|office 365|microsoft 365|microsoft teams|microsoft defender|windows defender|microsoft outlook|outlook\.com|hyper-v)\b/i;
+
+// Explicit AI/model terms. Bare "ia"/"ai" in body text, TLDs and names such as
+// Claude/Gemini are ambiguous; short acronyms are accepted only in headlines.
+const AI_TOPIC = /\b(?:artificial intelligence|intelig[eê]ncia artificial|inteligencia artificial|large language models?|modelos? de linguagem|llms?|vllm|generative ai|generative artificial intelligence|ia generativa|genai|chatgpt|openai|deepseek|ollama|anthropic|gpt[- ]?\d{1,2}(?:\.[0-9]+)?|hugging ?face|langchain|langgraph|llama\.cpp|retrieval[- ]augmented generation|model context protocol|prompt injection|prompt[- ]based attacks?|model poisoning|adversarial (?:machine learning|ai)|machine learning|aprendizado de m[aá]quina|(?:ai|ia)[- ](?:powered|assisted|driven|based|enabled|agents?|models?|tools?|security|chatbots?))\b/i;
+export function isAiNews({ title = '', description = '', text = '', bodyText = '' } = {}) {
+    const headline = String(title);
+    return AI_TOPIC.test(`${headline}\n${description || text}\n${String(bodyText).slice(0, 6000)}`)
+        || /(?:^|[\s(])(?:AI|IA)(?=$|[\s,:;)!?-])/.test(headline)
+        || /\b(?:claude|gemini|copilot|mcp)\b/i.test(headline) && /\b(?:model|models|modelo|modelos|ai|ia|llm|prompt|agent|agente|google|microsoft|anthropic)\b/i.test(headline);
+}
 
 // Setor financeiro em PT/ES/EN. Termos genéricos ("financial impact", "credit
 // card data") ficam de fora: aparecem em manchete de qualquer setor. SWIFT e PIX
@@ -59,6 +69,7 @@ export function categorize(item) {
         Malware: threats.some((t) => MALWARE_THREATS.has(t)),
         Phishing: (item.phishingIntel || analyzePhishing({ title, description: item.description || item.text })).detected,
         Microsoft: MICROSOFT.test(text),
+        'Artificial Intelligence': isAiNews(item),
         // Setor sai só do título: é quem *foi atacado*, e a manchete sempre diz.
         // O corpo cita setor de passagem ("from healthcare and finance to
         // manufacturing…") em qualquer post de marketing, e isso carimbava o

@@ -594,8 +594,8 @@ const Newsletter = () => {
   // categoria "ganha" quando uma matéria cabe em mais de uma, não em que
   // ordem os filtros aparecem aqui.
   const categoriesByVolume = useMemo(
-    () => NEWS_CATEGORY_ORDER.filter((name) => categoryCounts[name])
-      .slice().sort((a, b) => categoryCounts[b] - categoryCounts[a]),
+    () => NEWS_CATEGORY_ORDER.filter((name) => categoryCounts[name] || name === 'Artificial Intelligence')
+      .slice().sort((a, b) => a === 'Artificial Intelligence' ? -1 : b === 'Artificial Intelligence' ? 1 : (categoryCounts[b] || 0) - (categoryCounts[a] || 0)),
     [categoryCounts],
   );
   const visibleCategories = showAllCategories ? categoriesByVolume : categoriesByVolume.slice(0, VISIBLE_CATEGORY_CAP);
@@ -909,7 +909,7 @@ const Newsletter = () => {
                     aria-pressed={categoryFilter === name}
                     className={`rounded-full border px-3 py-1 text-xs transition ${categoryFilter === name ? "border-primary bg-primary/10 text-primary" : "text-muted-foreground hover:border-primary/40"}`}
                   >
-                    {name} <span className="tabular-nums opacity-60">{categoryCounts[name]}</span>
+                    {name === 'Artificial Intelligence' && language === 'pt' ? 'Inteligência artificial' : name} <span className="tabular-nums opacity-60">{categoryCounts[name] || 0}</span>
                   </button>
                 ))}
                 {categoriesByVolume.length > VISIBLE_CATEGORY_CAP && (

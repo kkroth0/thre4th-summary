@@ -115,3 +115,22 @@ export function findMentions(stories, indicator) {
     }
     return achados.sort((a, b) => String(b.pubDate || '').localeCompare(String(a.pubDate || '')));
 }
+
+// Domain/URL matches only from extracted source-level indicators. Other IOCs
+// are co-occurrences in that publication, never inferred DNS/C2 associations.
+export function findDomainMentions(stories, domain) {
+    const matches = value => {
+        let host = refangQuery(value);
+        if (/^https?:\/\//.test(host)) { try { host = new URL(host).hostname; } catch { return false; } }
+        return host === domain || host.endsWith(`.${domain}`);
+    };
+    const result = [];
+    for (const story of stories || []) for (const source of story.sources || []) {
+        const matched = [...(source.iocs?.domains || []), ...(source.iocs?.urls || [])].filter(matches);
+        if (!matched.length) continue;
+        result.push({ storyId: story.id, title: source.title || story.title, source: source.source, link: source.link, pubDate: source.pubDate,
+            actors: (source.actors || []).map(actor => actor.name).filter(Boolean), matched,
+            iocs: { ips: source.iocs?.ips || [], domains: source.iocs?.domains || [], hashes: source.iocs?.hashes || [] } });
+    }
+    return result.sort((a, b) => String(b.pubDate || '').localeCompare(String(a.pubDate || ''))).slice(0, 1000);
+}

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { extractIOCs } from '../ctiIntel.js';
-import { findMentions, harvestResearchIocs, isResearchItem, refangQuery } from '../newsIocs.js';
+import { findMentions, findDomainMentions, harvestResearchIocs, isResearchItem, refangQuery } from '../newsIocs.js';
 
 const item = (over = {}) => ({
     title: 'Kimwolf v7', link: `https://unit42.paloaltonetworks.com/${Math.random()}`,
@@ -110,4 +110,10 @@ test('a colheita busca em lotes, não tudo de uma vez', async () => {
 
     assert.equal(pico, 4, `pico de ${pico} buscas simultâneas`);
     assert.equal(items.filter((i) => i.iocs).length, 12, 'todos foram colhidos mesmo em lotes');
+});
+
+
+test('domain associations match URL hosts and subdomains, preserving source-level attribution', () => {
+    const related = [{ id: 'story', actors: [{ name: 'Wrong' }], sources: [{ title: 'Article', link: 'https://lab.example/post', actors: [{ name: 'Actor' }], iocs: { urls: ['https://login.example.com/path'], ips: ['1.1.1.1'] } }, { link: 'https://lab.example/other', iocs: { domains: ['example.com.evil.com'] } }] }];
+    const rows = findDomainMentions(related, 'example.com'); assert.equal(rows.length, 1); assert.deepEqual(rows[0].actors, ['Actor']); assert.deepEqual(rows[0].iocs.ips, ['1.1.1.1']);
 });

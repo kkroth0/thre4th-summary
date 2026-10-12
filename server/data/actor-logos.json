@@ -1,0 +1,75 @@
+{
+  "source": "Actor artwork from user-provided Hunt.io HTML references",
+  "logos": {
+    "misp-09aa3edb": {
+      "url": "/images/actors/misp-09aa3edb.svg",
+      "source": "https://hunt.io/",
+      "referenceFile": "Threat actors – Listing _ Hunt 1.html"
+    },
+    "G0032": {
+      "url": "/images/actors/G0032.svg",
+      "source": "https://hunt.io/",
+      "referenceFile": "Threat actors – Listing _ Hunt 1.html"
+    },
+    "misp-50ee2b1b": {
+      "url": "/images/actors/misp-50ee2b1b.svg",
+      "source": "https://hunt.io/",
+      "referenceFile": "Threat actors – Listing _ Hunt 1.html"
+    },
+    "misp-267488cb": {
+      "url": "/images/actors/misp-267488cb.svg",
+      "source": "https://hunt.io/",
+      "referenceFile": "Threat actors – Listing _ Hunt 1.html"
+    },
+    "misp-825abfd9": {
+      "url": "/images/actors/misp-825abfd9.svg",
+      "source": "https://hunt.io/",
+      "referenceFile": "Threat actors – Listing _ Hunt 1.html"
+    },
+    "G0010": {
+      "url": "/images/actors/G0010.svg",
+      "source": "https://hunt.io/",
+      "referenceFile": "Threat actors – Listing _ Hunt 1.html"
+    },
+    "misp-80c3a67b": {
+      "url": "/images/actors/misp-80c3a67b.svg",
+      "source": "https://hunt.io/",
+      "referenceFile": "Threat actors – Listing _ Hunt 1.html"
+    },
+    "rl-qilin": {
+      "url": "/images/actors/rl-qilin.svg",
+      "source": "https://hunt.io/",
+      "referenceFile": "IOC Hunter _ Hunt_files/qilin.svg"
+    },
+    "G1045": {
+      "url": "/images/actors/G1045.svg",
+      "source": "https://hunt.io/",
+      "referenceFile": "IOC Hunter _ Hunt_files/salt-typhoon.svg"
+    },
+    "G1057": {
+      "url": "/images/actors/G1057.svg",
+      "source": "https://hunt.io/",
+      "referenceFile": "IOC Hunter _ Hunt_files/shinyhunters.svg"
+    },
+    "misp-2ac0db88": {
+      "url": "/images/actors/misp-2ac0db88.svg",
+      "source": "https://hunt.io/",
+      "referenceFile": "IOC Hunter _ Hunt_files/silver-fox.svg"
+    },
+    "G0004": {
+      "url": "/images/actors/G0004.svg",
+      "source": "https://hunt.io/",
+      "referenceFile": "Threat actors – Listing _ Hunt  1_files/apt15.svg"
+    },
+    "G0128": {
+      "url": "/images/actors/G0128.svg",
+      "source": "https://hunt.io/",
+      "referenceFile": "Threat actors – Listing _ Hunt  1_files/apt31.svg"
+    },
+    "misp-f5022a01": {
+      "url": "/images/actors/misp-f5022a01.svg",
+      "source": "https://hunt.io/",
+      "referenceFile": "Threat actors – Listing _ Hunt  1_files/silent-ransom-group.svg"
+    }
+  }
+}

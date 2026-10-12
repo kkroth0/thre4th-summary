@@ -88,7 +88,7 @@ export const filterNewsletterAdvisories = <T extends NewsletterFilterItem>(
 // Same order as NEWS_CATEGORIES on the server: precedence, not importance.
 export const NEWS_CATEGORY_ORDER = [
   "Ransomware", "APTs", "Data Leaks", "OT/ICS", "Vulnerabilities", "Malware", "Phishing", "Microsoft",
-  "Finance/Banking", "Health/Pharma",
+  "Artificial Intelligence", "Finance/Banking", "Health/Pharma",
 ] as const;
 
 export interface StoryActor {

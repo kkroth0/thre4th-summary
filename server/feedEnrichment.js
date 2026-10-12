@@ -2,7 +2,7 @@ import { scoreArticle, extractIOCs, ttpIdsFrom, isPureNoise, severityFromScore }
 import { contentHash } from './articleCollector.js';
 import { analyzePhishing } from './phishingIntel.js';
 
-export const EXTRACTION_VERSION = 'feed-v6';
+export const EXTRACTION_VERSION = 'feed-v7';
 
 // Keep all mentioned CVEs for research/KEV, but use only the article's focus
 // to group coverage. A patch report often recounts older, unrelated flaws.
@@ -40,7 +40,7 @@ export function enrichFeedItems(items, { texts = new Map(), actors, malware, cam
         if (enriched.phishingIntel.detected) enriched.threats.push('Phishing');
         enriched.ttps = [...new Set([...enriched.ttps.filter(ttp => !/^T1566\b/.test(ttp)), ...enriched.phishingIntel.ttps.map(ttp => ttp.id)])];
         enriched.ttpIds = ttpIdsFrom(enriched.ttps);
-        const result = categorize(enriched);
+        const result = categorize({ ...enriched, bodyText: texts.get(item.link) || '' });
         enriched.newsCategories = result.categories;
         enriched.primaryCategory = result.primary;
         return enriched;

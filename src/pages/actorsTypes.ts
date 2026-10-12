@@ -1,4 +1,6 @@
 export interface ActorListItem {
+  logo?: string | null;
+  logoSource?: string | null;
   id: string;
   name: string;
   aliases: string[];

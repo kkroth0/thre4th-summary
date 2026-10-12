@@ -40,6 +40,19 @@ async function waitForBoot(timeoutMs = 15000) {
     throw new Error('server did not boot within 15s');
 }
 
+test('domain investigation and actor archive endpoints enforce premium access and validate targets before upstream calls', async () => {
+    for (const endpoint of ['/api/actors/activity', '/api/actors/G0032/evidence']) {
+        assert.equal((await fetch(`${BASE}${endpoint}`)).status, 401);
+    }
+    const body = { method: 'POST', headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' }, body: JSON.stringify({ query: '127.0.0.1' }) };
+    assert.equal((await fetch(`${BASE}/api/domain/subdomains`, body)).status, 400);
+    assert.equal((await fetch(`${BASE}/api/domain/constructor`, body)).status, 404);
+    assert.equal((await fetch(`${BASE}/api/domain/subdomains`, { ...body, headers: { 'Content-Type': 'application/json' } })).status, 401);
+    assert.equal((await fetch(`${BASE}/api/actors/G0032/evidence?days=-1`, { headers: AUTH_HEADERS })).status, 400);
+    const activity = await fetch(`${BASE}/api/actors/activity`, { headers: AUTH_HEADERS });
+    assert.equal(activity.status, 200); assert.equal(activity.headers.get('Cache-Control'), 'private, no-store');
+});
+
 before(async () => {
     writeFileSync(NEWS_ARCHIVE_PATH, JSON.stringify([
         { link: 'https://example.com/a', title: 'ClickFix phishing targets banks in Brazil', source: 'Research', pubDate: '2026-10-08T23:59:59.999Z', storyId: 'same' },
@@ -329,4 +342,3 @@ test('gate premium não aceita sessão anônima', async () => {
     });
     assert.equal(r.status, 401);
 });
-

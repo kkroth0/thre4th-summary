@@ -7,7 +7,7 @@ const item = (over = {}) => ({ title: '', description: '', threats: [], cves: []
 test('a ordem de precedência é a acordada', () => {
     assert.deepEqual(NEWS_CATEGORIES, [
         'Ransomware', 'APTs', 'Data Leaks', 'OT/ICS', 'Vulnerabilities', 'Malware', 'Phishing', 'Microsoft',
-        'Finance/Banking', 'Health/Pharma',
+        'Artificial Intelligence', 'Finance/Banking', 'Health/Pharma',
     ]);
 });
 
@@ -222,4 +222,12 @@ test('menção de setor no corpo não carimba o balde de setor', () => {
     }));
     assert.ok(!categories.includes('Health/Pharma'));
     assert.ok(!categories.includes('Finance/Banking'));
+});
+
+
+test('AI category recognizes model topics in titles and collected bodies, with guarded acronyms', () => {
+    for (const title of ['LLM prompt injection attack', 'Inteligência artificial no SOC', 'IA generativa', 'ChatGPT leaks credentials', 'OpenAI model security', 'AI agents under attack', 'Google Gemini model exploit', 'MCP agent vulnerability', 'Large language models targeted']) assert.ok(categorize(item({ title })).categories.includes('Artificial Intelligence'), title);
+    for (const title of ['Police said data leaked', 'California healthcare breach', 'Gemini exchange hacked', 'Claude robbed a bank', 'Malware at foo.ai domain', 'Email attacks targeting banks']) assert.ok(!categorize(item({ title })).categories.includes('Artificial Intelligence'), title);
+    assert.ok(categorize(item({ title: 'Security research report', bodyText: 'An attack against large language models.' })).categories.includes('Artificial Intelligence'));
+    assert.ok(categorize(item({ title: 'Phishing with AI agents', cves: ['CVE-2026-12345'] })).categories.includes('Vulnerabilities'));
 });
