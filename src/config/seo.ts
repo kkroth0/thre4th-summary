@@ -40,12 +40,12 @@ export const PUBLIC_SEO_ROUTES: SeoRoute[] = [
       pt: {
         title: "ThreatSumm4ry | Plataforma CTI open source",
         description:
-          "Colete feeds de segurança, organize publicações em coleções e produza relatórios. ThreatSumm4ry é uma plataforma CTI open source para pesquisa de ameaças.",
+          "Colete feeds de segurança, salve publicações para sua pesquisa e produza relatórios. ThreatSumm4ry é uma plataforma CTI open source para pesquisa de ameaças.",
       },
       en: {
         title: "ThreatSumm4ry | Open Source CTI Platform",
         description:
-          "Collect security feeds, organize publications in collections and produce reports. ThreatSumm4ry is an open source CTI platform for threat research.",
+          "Collect security feeds, save publications for your research and produce reports. ThreatSumm4ry is an open source CTI platform for threat research.",
       },
     },
   },

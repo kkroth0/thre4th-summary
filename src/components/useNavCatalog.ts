@@ -1,5 +1,5 @@
 import type React from "react";
-import { Activity, Layers, Bug, Rss, Lightbulb, FileSearch, Users, MapPinned, BookOpen, Shield, CalendarCheck, ShieldCheck, Search, Mail, Radar, Globe } from "lucide-react";
+import { Activity, Layers, Bug, Rss, Bookmark, FileSearch, Users, MapPinned, BookOpen, Shield, CalendarCheck, ShieldCheck, Search, Mail, Radar, Globe } from "lucide-react";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { actorPageCopy } from "@/pages/actorsView";
 
@@ -38,9 +38,9 @@ export function useNavCatalog() {
         { path: '/malware', label: 'Malware', icon: Bug },
         {
           path: "/knowledge",
-          label: tr({ pt: "Coleções", en: "Collections", es: "Colecciones", fr: "Collections" }),
+          label: tr({ pt: "Publicações salvas", en: "Saved publications", es: "Publicaciones guardadas", fr: "Publications enregistrées" }),
           description: pt ? "Notícias e relatórios salvos." : "Saved news and reports.",
-          icon: Lightbulb,
+          icon: Bookmark,
           premium: true,
         },
         {

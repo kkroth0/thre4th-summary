@@ -1,9 +1,10 @@
 import { Link } from "react-router-dom";
-import { ArrowRight, Bookmark, FileText, Github, GitMerge, Network, Rss } from "lucide-react";
+import { ArrowRight, Bookmark, FileText, Github, Rss } from "lucide-react";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { Button } from "@/components/ui/button";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { LandingPipeline } from "@/components/LandingPipeline";
 
 const repository = "https://github.com/kkroth0/thre4th-summary";
 
@@ -12,7 +13,7 @@ export default function Home() {
   const pt = language === "pt";
   const workflow = [
     { icon: Rss, number: "01", title: pt ? "Reúna as fontes" : "Bring sources together", text: pt ? "Notícias, advisories e pesquisas de segurança em um feed com links para as publicações originais." : "Security news, advisories and research in a feed linked to the original publications.", path: "/newsletter" },
-    { icon: Bookmark, number: "02", title: pt ? "Guarde o que importa" : "Save what matters", text: pt ? "Salve as publicações relevantes nas suas coleções para continuar a pesquisa." : "Save relevant publications in your collections to continue your research.", path: "/knowledge" },
+    { icon: Bookmark, number: "02", title: pt ? "Guarde o que importa" : "Save what matters", text: pt ? "Salve publicações relevantes para consultar depois e continuar a investigação." : "Save relevant publications to revisit later and continue your investigation.", path: "/knowledge" },
     { icon: FileText, number: "03", title: pt ? "Produza inteligência" : "Produce intelligence", text: pt ? "Use relatórios e resumos para transformar a leitura em material para sua equipe." : "Use reports and summaries to turn your reading into material for your team.", path: "/relatorios" },
   ];
 
@@ -20,7 +21,7 @@ export default function Home() {
     <div className="flex min-h-screen flex-col bg-background text-foreground">
       <Header />
       <main className="mx-auto w-full max-w-7xl px-5 md:px-8">
-        <section className="grid items-center gap-12 py-16 lg:grid-cols-[1.15fr_1fr] lg:gap-16 lg:py-24">
+        <section className="max-w-4xl py-12 lg:py-16">
           <div>
             <p className="mb-6 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-primary">
               <span className="h-2 w-2 rounded-full bg-primary" />
@@ -30,36 +31,20 @@ export default function Home() {
               {pt ? "Das fontes à inteligência de ameaças." : "From sources to threat intelligence."}
             </h1>
             <p className="mt-6 max-w-xl text-lg leading-relaxed text-muted-foreground">
-              {pt ? "Colete feeds de segurança, organize sua pesquisa e acompanhe as ameaças que importam para sua equipe. Uma plataforma CTI aberta, construída para evoluir com a comunidade." : "Collect security feeds, organize your research and follow the threats that matter to your team. An open CTI platform built to evolve with the community."}
+              {pt ? "Colete publicações de segurança, correlacione eventos e investigue CVEs, indicadores, atores e malware com referências às fontes originais. Uma plataforma CTI open source." : "Collect security publications, correlate events and investigate CVEs, indicators, actors and malware with references to original sources. An open source CTI platform."}
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
               <Button asChild size="lg"><Link to="/newsletter"><Rss className="mr-2 h-4 w-4" />{pt ? "Abrir feed de inteligência" : "Open intelligence feed"}<ArrowRight className="ml-2 h-4 w-4" /></Link></Button>
               <Button asChild size="lg" variant="outline"><a href={repository} target="_blank" rel="noopener noreferrer"><Github className="mr-2 h-4 w-4" />{pt ? "Explorar o código" : "Explore the code"}</a></Button>
             </div>
             <p className="mt-4 max-w-xl text-xs leading-relaxed text-muted-foreground">
-              {pt ? "Código sob AGPL-3.0. A instância hospedada exige uma conta autorizada para feed, coleções e relatórios." : "Code licensed under AGPL-3.0. The hosted instance requires an authorized account for feeds, collections and reports."}
+              {pt ? "Código sob AGPL-3.0. A instância hospedada exige uma conta autorizada para notícias, publicações salvas e relatórios." : "Code licensed under AGPL-3.0. The hosted instance requires an authorized account for news, saved publications and reports."}
             </p>
           </div>
 
-          <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
-            <div className="flex items-center justify-between border-b border-border px-5 py-4">
-              <span className="text-sm font-semibold">{pt ? "Uma pesquisa, várias fontes" : "One investigation, many sources"}</span>
-              <span className="rounded-full bg-primary/10 px-2.5 py-1 text-[10px] font-semibold text-primary">{pt ? "Visão do produto" : "Product vision"}</span>
-            </div>
-            <div className="space-y-5 p-5 sm:p-7">
-              <div className="grid grid-cols-3 gap-2">
-                {["Advisories", pt ? "Notícias" : "News", pt ? "Pesquisas" : "Research"].map(label => <div key={label} className="rounded-lg border border-border bg-background px-2 py-3 text-center text-xs font-medium">{label}</div>)}
-              </div>
-              <div className="flex justify-center text-primary" aria-hidden="true"><GitMerge className="h-6 w-6 rotate-90" /></div>
-              <div className="rounded-xl border border-primary/30 bg-primary/5 p-5">
-                <div className="flex items-center gap-2 text-sm font-semibold"><Network className="h-4 w-4 text-primary" />{pt ? "O evento no centro" : "The event at the center"}</div>
-                <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{pt ? "Uma visão da cobertura, das evidências e das atualizações de cada ameaça." : "One view of each threat's coverage, evidence and updates."}</p>
-                <div className="mt-4 flex flex-wrap gap-2">{["CVE", "Malware", pt ? "Atores" : "Actors", "TTPs"].map(label => <span key={label} className="rounded border border-border bg-background px-2 py-1 font-mono text-[11px] text-muted-foreground">{label}</span>)}</div>
-              </div>
-              <p className="text-xs leading-relaxed text-muted-foreground">{pt ? "Próxima prioridade: melhorar a correlação entre publicações para reunir a cobertura do mesmo evento. O agrupamento atual ainda usa heurísticas." : "Next priority: improve correlation across publications to bring coverage of the same event together. Current grouping still uses heuristics."}</p>
-            </div>
-          </div>
         </section>
+
+        <LandingPipeline pt={pt} />
 
         <section aria-labelledby="workflow-title" className="border-t border-border py-12 md:py-16">
           <div className="mb-8 flex flex-wrap items-end justify-between gap-3">

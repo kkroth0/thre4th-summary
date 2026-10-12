@@ -63,10 +63,10 @@ const Knowledge = () => {
     return (
         <PageLayout width="max-w-6xl">
             <PageHeader
-                title={pt ? "Coleções" : "Collections"}
+                title={pt ? "Publicações salvas" : "Saved publications"}
                 subtitle={pt
-                    ? "As fontes que você guardou para gerar inteligência. Só entra o que você marcar — o feed continua sendo fluxo."
-                    : "The sources you saved to build intel from. Only what you mark lands here — the feed stays a stream."}
+                    ? "Notícias e referências que você salvou para retomar a investigação."
+                    : "News and references you saved to continue your investigation."}
             />
 
             <div className="mb-4 flex flex-wrap items-center gap-2">
@@ -86,7 +86,7 @@ const Knowledge = () => {
                 </select>
                 <span className="ml-auto text-sm text-muted-foreground">
                     {shown.length === items.length
-                        ? `${items.length} ${pt ? "itens" : "items"}`
+                        ? `${items.length} ${pt ? (items.length === 1 ? "publicação" : "publicações") : (items.length === 1 ? "publication" : "publications")}`
                         : `${shown.length} / ${items.length}`}
                 </span>
             </div>
@@ -95,17 +95,18 @@ const Knowledge = () => {
                 <LoadingRows rows={6} />
             ) : items.length === 0 ? (
                 <EmptyState
-                    title={pt ? "Nada guardado ainda" : "Nothing saved yet"}
+                    title={pt ? "Nenhuma publicação salva" : "No saved publications"}
+                    action={<Button asChild size="sm" variant="outline"><Link to="/newsletter">{pt ? "Abrir notícias e IOCs" : "Open News & IOCs"}</Link></Button>}
                     description={pt
-                        ? "Salve uma publicação no Feed de inteligência para começar sua coleção."
-                        : "Save a publication in the Intelligence feed to start your collection."}
+                        ? "Salve notícias em Notícias e IOCs para consultá-las aqui."
+                        : "Save publications from News & IOCs to find them here."}
                 />
             ) : (
                 <div className="overflow-x-auto rounded-lg border border-border">
                     <Table>
                         <TableHeader>
                             <TableRow>
-                                <TableHead>{pt ? "Fonte" : "Source"}</TableHead>
+                                <TableHead>{pt ? "Publicação" : "Publication"}</TableHead>
                                 <TableHead>{pt ? "Técnicas" : "Techniques"}</TableHead>
                                 <TableHead>CVEs</TableHead>
                                 <TableHead>{pt ? "Salvo" : "Saved"}</TableHead>

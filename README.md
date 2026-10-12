@@ -3,9 +3,9 @@
 Open source CTI platform for collecting security feeds, curating publications
 and producing intelligence reports. Licensed under [AGPL-3.0-only](./LICENSE).
 
-The product centers on an analyst workflow: **feed → collections → reports**.
+The product centers on an analyst workflow: **news and IOCs → saved publications → reports**.
 CVE tracking, actor context, ransomware data and indicator lookup support that
-research. The hosted instance currently restricts feed, collections and reports
+research. The hosted instance currently restricts news, saved publications and reports
 to authorized accounts; running your own instance requires configuring its
 integrations and access settings.
 

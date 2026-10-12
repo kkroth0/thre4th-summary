@@ -24,8 +24,8 @@ const COPY: Record<Feature, { pt: [string, string]; en: [string, string] }> = {
     en: ["Attack Surface", "Assets exposed to the internet."],
   },
   knowledge: {
-    pt: ["Coleções", "Publicações salvas para sua pesquisa CTI."],
-    en: ["Collections", "Saved publications for your CTI research."],
+    pt: ["Publicações salvas", "Publicações salvas para sua pesquisa CTI."],
+    en: ["Saved publications", "Saved publications for your CTI research."],
   },
 };
 

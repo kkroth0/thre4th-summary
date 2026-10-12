@@ -121,7 +121,7 @@ export function Header({ actions, logoAddon, onLogoClick, showBackButton = false
           {!workspace && <nav aria-label={pt ? "Fluxo de inteligência" : "Intelligence workflow"} className="mr-2 hidden items-center gap-4 text-xs font-semibold lg:flex">
             {[
               ["/newsletter", pt ? "Feed" : "Feed"],
-              ["/knowledge", pt ? "Coleções" : "Collections"],
+              ["/knowledge", pt ? "Publicações salvas" : "Saved publications"],
               ["/relatorios", pt ? "Relatórios" : "Reports"],
             ].map(([path, label]) => (
               <Link key={path} to={path} className={cn("transition-colors hover:text-primary", isRouteActive(path, pathname) ? "text-primary" : "text-muted-foreground")}>{label}</Link>
