@@ -24,7 +24,7 @@ export interface ActorStory {
   id: string;
   title: string;
   lastSeen: string;
-  sources: { link: string; name?: string }[];
+  sources: { link: string; source?: string; name?: string }[];
 }
 
 export const actorSourceLabel = (source = '') => {

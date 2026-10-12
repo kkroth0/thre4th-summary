@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useRef, useCallback } from "react"
 import { Link, useSearchParams } from "react-router-dom";
 import { LayoutGrid, List } from 'lucide-react';
 import { StoryTable } from '@/components/workbench/StoryTable';
+import { SourceIdentity } from '@/components/SourceIdentity';
 import { ArrowLeft, Globe, BookOpen, AlertTriangle, Search, Mail, Eye, Filter, ChevronDown, RefreshCw, Share2, Loader2, Bookmark, X, PencilLine, ExternalLink, CheckCircle2, Settings2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -1073,7 +1074,7 @@ const Newsletter = () => {
                                     : undefined
                                 }
                               >
-                                <span className="max-w-[140px] truncate text-foreground/80">{item.source}</span>
+                                <SourceIdentity name={item.source} url={item.link} className="max-w-[160px] text-foreground/80" />
                                 {typeof item.weight_boost === "number" && (
                                   <span className="text-primary">P{item.weight_boost}</span>
                                 )}
@@ -1293,7 +1294,7 @@ const Newsletter = () => {
                                           {sourceIdx < ordered.length - 1 && <span className="absolute bottom-0 top-1/2 w-px bg-muted-foreground/30" />}
                                           <span className="relative h-2 w-2 rounded-full bg-primary ring-2 ring-card" />
                                         </span>
-                                        <span className="w-28 shrink-0 truncate font-semibold text-foreground">{source.source}</span>
+                                        <SourceIdentity name={source.source} url={source.link} className="w-32 shrink-0 font-semibold text-foreground" />
                                         <a
                                           href={source.link}
                                           target="_blank"

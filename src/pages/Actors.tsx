@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { DataPager } from '@/components/workbench/DataPager';
+import { SourceIdentity } from '@/components/SourceIdentity';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { actorPageCopy, sortActors } from './actorsView';
 import { actorSourceLabel, type ActorListItem } from './actorsTypes';
@@ -18,6 +19,18 @@ type Catalog = { actors: ActorListItem[]; countries: string[]; sectors: string[]
 const emptyCatalog: Catalog = { actors: [], countries: [], sectors: [], targets: [] };
 const ALL = '__all__';
 type Sort = 'techniques' | 'name' | 'country';
+
+function ActorSource({ source = '' }: { source?: string }) {
+  const entries = [
+    { match: 'attack', name: 'MITRE ATT&CK', url: 'https://attack.mitre.org' },
+    { match: 'misp', name: 'MISP', url: 'https://www.misp-project.org' },
+    { match: 'ransomware.live', name: 'Ransomware.live', url: 'https://www.ransomware.live' },
+  ].filter(entry => source.includes(entry.match));
+  return <span className="inline-flex flex-col gap-1.5 align-middle text-xs text-muted-foreground">
+    {entries.length ? entries.map(entry => <SourceIdentity key={entry.match} name={entry.name} url={entry.url} />)
+      : <SourceIdentity name={actorSourceLabel(source)} />}
+  </span>;
+}
 
 function ActorFilter({ label, value, onChange, options, icon: Icon }: {
   label: string; value: string; onChange: (value: string) => void;
@@ -97,7 +110,7 @@ export default function Actors() {
                 <thead><tr>{[pt ? 'Ator de ameaça' : 'Threat actor', pt ? 'Origem' : 'Origin', 'Aliases', 'TTPs', pt ? 'Setores alvo' : 'Target sectors', pt ? 'Países alvo' : 'Target countries', pt ? 'Motivação' : 'Motivation', pt ? 'Fonte' : 'Source'].map(label => <th key={label}>{label}</th>)}</tr></thead>
                 <tbody>{shown.map(actor => <tr key={actor.id}>
                   <td className="w-72"><div className="flex items-center gap-3"><span aria-hidden className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border bg-muted/30 text-xs font-semibold text-muted-foreground">{actor.name.split(/\s+/).map(part => part[0]).slice(0, 2).join('').toUpperCase()}</span><div className="min-w-0"><button type="button" aria-label={`${pt ? 'Abrir' : 'Open'} ${actor.name}`} className="text-left font-semibold hover:text-primary focus-visible:ring-2 focus-visible:ring-ring" onClick={() => openActor(actor.id)}>{actor.name}</button><p className="mt-1 line-clamp-1 max-w-60 text-xs text-muted-foreground" title={actor.aliases.join(', ')}>{actor.aliases.join(', ') || '—'}</p></div></div></td>
-                  <td>{actor.country || '—'}</td><td className="font-mono tabular-nums">{actor.aliases.length}</td><td className="font-mono tabular-nums">{actor.technique_count || 0}</td><td className="max-w-48"><span className="line-clamp-2" title={actor.sectors.join(', ')}>{actor.sectors.join(', ') || '—'}</span></td><td className="max-w-48"><span className="line-clamp-2" title={actor.targets.join(', ')}>{actor.targets.join(', ') || '—'}</span></td><td className="max-w-44">{actor.motivation || '—'}</td><td><span className="whitespace-nowrap text-xs text-muted-foreground">{actorSourceLabel(actor.source)}</span><button type="button" aria-label={`${pt ? 'Ver perfil de' : 'View profile of'} ${actor.name}`} onClick={() => openActor(actor.id)} className="ml-2 rounded p-1 text-muted-foreground hover:text-primary focus-visible:ring-2 focus-visible:ring-ring"><ChevronRight className="h-3.5 w-3.5" /></button></td>
+                  <td>{actor.country || '—'}</td><td className="font-mono tabular-nums">{actor.aliases.length}</td><td className="font-mono tabular-nums">{actor.technique_count || 0}</td><td className="max-w-48"><span className="line-clamp-2" title={actor.sectors.join(', ')}>{actor.sectors.join(', ') || '—'}</span></td><td className="max-w-48"><span className="line-clamp-2" title={actor.targets.join(', ')}>{actor.targets.join(', ') || '—'}</span></td><td className="max-w-44">{actor.motivation || '—'}</td><td><ActorSource source={actor.source} /><button type="button" aria-label={`${pt ? 'Ver perfil de' : 'View profile of'} ${actor.name}`} onClick={() => openActor(actor.id)} className="ml-2 rounded p-1 text-muted-foreground hover:text-primary focus-visible:ring-2 focus-visible:ring-ring"><ChevronRight className="h-3.5 w-3.5" /></button></td>
                 </tr>)}</tbody>
               </table></div>
               {!shown.length && <div className="px-5 py-12 text-center"><p className="text-sm text-muted-foreground">{pt ? 'Nenhum ator com estes filtros.' : 'No actors match these filters.'}</p>{active && <Button variant="outline" size="sm" className="mt-3" onClick={clear}>{pt ? 'Limpar filtros' : 'Clear filters'}</Button>}</div>}
