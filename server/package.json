@@ -18,7 +18,7 @@
         "express": "^5.2.1",
         "express-rate-limit": "^7.5.0",
         "helmet": "^8.2.0",
-        "stream-json": "^1.9.1",
+        "stream-json": "^3.7.0",
         "tar-stream": "^3.2.2",
         "tldts": "^7.4.18"
     },
