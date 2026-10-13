@@ -520,6 +520,12 @@ function withAbuseKey(req,load) {
     const personal=getUserApiKey(session?.sub,'abuseipdb');
     return personal?load(personal):withKeyRotation('ABUSEIPDB_API_KEY',load);
 }
+function persistProviderEvidence(req,provider,query,data) {
+    const session=verifySession(getCookie(req,'ts_session'));
+    if(!session||!sessionHasPremium(session))return;
+    void iocIntelligence.ingest(sourceObservations(provider,data,{scope:session.sub,query,
+        matchActors:text=>matchActors(text,actorIndex),matchMalware:text=>matchMalware(text,malwareIndex)}).map((row,index)=>({...row,...(index===0?{payload:data}:{})}))).catch(()=>console.warn('IOC lookup evidence could not be persisted'));
+}
 async function cachedProvider(req, res, provider, query, credentials, load) {
     const session = verifySession(getCookie(req, 'ts_session'));
     const result = await lookupCache.get({ provider, query, owner: session?.sub || '', credentials, fresh: req.body?.fresh === true }, async () => {
@@ -533,9 +539,8 @@ async function cachedProvider(req, res, provider, query, credentials, load) {
     res.set('X-Lookup-Cache', result.state);
     res.set('X-Lookup-Collected-At', result.collectedAt);
     if (session && sessionHasPremium(session) && result.state === 'miss') {
-        const name = ({ abuseipdb:'AbuseIPDB', 'abuseipdb-block':'AbuseIPDB', threatfox:'ThreatFox', otx:'OTX', malwarebazaar:'MalwareBazaar',virustotal:'VirusTotal',shodan:'Shodan' })[provider] || provider;
-        void iocIntelligence.ingest(sourceObservations(name, result.value.data, { scope: session.sub, query,
-            matchActors: text => matchActors(text, actorIndex), matchMalware: text => matchMalware(text, malwareIndex) }).map((row,index)=>({...row,...(index===0?{payload:result.value.data}:{})}))).catch(() => console.warn('IOC lookup evidence could not be persisted'));
+        const name = ({ abuseipdb:'AbuseIPDB', 'abuseipdb-block':'AbuseIPDB', threatfox:'ThreatFox', otx:'OTX', malwarebazaar:'MalwareBazaar',virustotal:'VirusTotal',shodan:'Shodan',urlhaus:'URLhaus',phishtank:'PhishTank',ipgeo:'IP Geolocation' })[provider] || provider;
+        persistProviderEvidence(req,name,provider==='urlhaus'?String(req.body.query||''):query,result.value.data);
     }
     return result.value;
 }
@@ -799,7 +804,8 @@ app.post('/api/phishstats', scanLimiter, async (req, res) => {
     try {
         const type = detectQueryType(req.body.query);
         if (!['url', 'domain'].includes(type)) return res.status(400).json({ error: 'URL/Domain query required' });
-        res.json(await phishingSources.phishStats(sanitizeQuery(req.body.query, type), { fresh: req.body?.fresh === true }));
+        const query=sanitizeQuery(req.body.query,type),data=await phishingSources.phishStats(query,{fresh:req.body?.fresh===true});
+        persistProviderEvidence(req,'PhishStats',query,data);res.json(data);
     } catch (error) { const { status, message } = sanitizeError(error); res.status(status).json({ error: message }); }
 });
 
@@ -1014,7 +1020,8 @@ app.post('/api/domain/:view', requirePremium, scanLimiter, async (req, res) => {
 app.post('/api/whois', scanLimiter, async (req, res) => {
     try {
         if (detectQueryType(req.body.query) !== 'domain') return res.status(400).json({ error: 'Domain query required' });
-        res.json(await lookupWhois(sanitizeQuery(req.body.query, 'domain'), { fresh: req.body?.fresh === true }));
+        const query=sanitizeQuery(req.body.query,'domain'),data=await lookupWhois(query,{fresh:req.body?.fresh===true});
+        persistProviderEvidence(req,'WHOIS',query,data);res.json(data);
     } catch (error) { const { status, message } = sanitizeError(error); res.status(status).json({ error: message }); }
 });
 
@@ -1076,7 +1083,8 @@ app.post('/api/openphish', scanLimiter, async (req, res) => {
     try {
         const type = detectQueryType(req.body.query);
         if (!['url', 'domain'].includes(type)) return res.status(400).json({ error: 'URL/Domain query required' });
-        res.json(await phishingSources.openPhish(sanitizeQuery(req.body.query, type), type, { fresh: req.body?.fresh === true }));
+        const query=sanitizeQuery(req.body.query,type),data=await phishingSources.openPhish(query,type,{fresh:req.body?.fresh===true});
+        persistProviderEvidence(req,'OpenPhish',query,data);res.json(data);
     } catch (error) { const { status, message } = sanitizeError(error); res.status(status).json({ error: message }); }
 });
 
@@ -2256,6 +2264,7 @@ const malwareCatalog = createMalwareCatalog({
     getKey: ownerId => getUserApiKey(ownerId, 'abuse_ch') || abuseChKey(),
     getPublications: owner => [...newsArchiveStore.list(),...iocIntelligence.publications({owner})],
     getIntelligenceFamilies: owner => iocIntelligence.families(owner),
+    onSamples:(owner,data)=>{void iocIntelligence.ingest(sourceObservations('MalwareBazaar',data,{scope:owner,matchActors:text=>matchActors(text,actorIndex),matchMalware:text=>matchMalware(text,malwareIndex)})).catch(()=>console.warn('Malware evidence could not be persisted'));},
     cacheFile: process.env.MALPEDIA_CACHE_PATH || path.join(__dirname, '.malpedia-cache.json'),
 });
 app.get('/api/malware/families', requirePremium, scanLimiter, async (req, res) => {

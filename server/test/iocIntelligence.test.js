@@ -68,6 +68,11 @@ test('normalization rejects internal/malformed indicators and accepts defanged d
   assert.equal(normalizeIndicator('46.101.130.1:443','ip:port').value,'46.101.130.1');
 });
 
+test('URLhaus lookup preserves the queried indicator and family evidence',()=>{
+  const rows=sourceObservations('URLhaus',{query_status:'ok',urls:[{tags:['Vidar']}],urlhaus_reference:'https://urlhaus.abuse.ch/host/evil.example.org/'},{query:'evil.example.org',scope:'me',matchMalware});
+  assert.equal(rows[0].value,'evil.example.org');assert.equal(rows[0].malwares[0].id,'win.vidar');
+});
+
 test('explicit OTX adversaries and family labels retain source provenance even before catalogue registration',()=>{
   const rows=sourceObservations('OTX',{results:[{id:'p1',public:true,adversary:'UNC999999',malware_families:['UnknownAgent'],indicators:[{indicator:'46.101.130.1',type:'IPv4'}]}]});
   assert.equal(rows[0].actors[0].name,'UNC999999');assert.equal(rows[0].malwares[0].name,'UnknownAgent');

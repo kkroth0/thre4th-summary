@@ -47,6 +47,11 @@ export function sourceObservations(provider,payload,{scope='global',query,matchA
     if(row.signature&&!attribution.malwares.length)attribution.malwares=[{id:'bazaar:'+row.signature.toLowerCase().replace(/[^a-z0-9]+/g,'-'),name:row.signature}];
     return [row.sha256_hash,row.sha1_hash,row.md5_hash].filter(Boolean).flatMap(hash=>{const value=normalizeIndicator(hash);return value?.type==='hash'?[{value:value.value,type:'hash',scope,provider,externalId:row.sha256_hash||hash,published:utc(row.last_seen||row.first_seen),title:`${row.signature||'Malware sample'} · MalwareBazaar`,link:`https://bazaar.abuse.ch/sample/${encodeURIComponent(row.sha256_hash||hash)}/`,tags:strings(row.tags),...attribution,relation:'attributed-by-source'}]:[];});
   });
+  if(provider==='URLhaus') {
+    const value=normalizeIndicator(query);if(!value)return [];
+    const labels=[payload?.signature,...(payload?.urls||[]).flatMap(row=>strings(row.tags))].filter(Boolean).join(' ');
+    return [{...value,scope,provider,externalId:value.value,title:'URLhaus indicator lookup',link:payload?.urlhaus_reference||'',published:utc(payload?.lastseen||payload?.firstseen),...entities(labels),relation:'reported-by-source'}];
+  }
   if(provider==='VirusTotal') {
     const attributes=payload?.data?.attributes;
     const value=normalizeIndicator(query);if(!value||!attributes)return [];
