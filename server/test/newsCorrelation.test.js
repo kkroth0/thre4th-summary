@@ -20,6 +20,15 @@ test('unchanged publication evidence reuses its event; metadata changes still re
     assert.ok(changed.some(story=>story.cves.includes('CVE-2026-22222')));
 });
 
+test('publication precision upgrades preserve existing events and never mutate the stored input',async()=>{
+    const papers=[article('a',{contentHash:'a'.repeat(64),extractionVersion:'feed-v8',cves:['CVE-2026-11111']}),article('b',{contentHash:'b'.repeat(64),extractionVersion:'feed-v8',cves:['CVE-2026-11111']})];
+    const original=mergeIntoStories([],papers,now),before=JSON.stringify(original);
+    const updated=await mergeIntoStoriesAsync(original,papers.map(row=>({...row,publicationTimeKnown:true,publicationDateBasis:'published',firstCollectedAt:now.toISOString()})),now);
+    assert.equal(JSON.stringify(original),before);assert.equal(updated.length,1);assert.equal(updated[0].id,original[0].id);assert.deepEqual(updated[0].cves,original[0].cves);
+    assert.ok(updated[0].sources.every(source=>source.publicationTimeKnown===true&&source.publicationDateBasis==='published'));
+    assert.deepEqual(await mergeIntoStoriesAsync(updated,papers,now),updated,'missing metadata does not erase known publisher precision');
+});
+
 test('background correlation preserves real-source grouping and yields to queued requests', async () => {
     let requestServed = false;
     setImmediate(() => { requestServed = true; });

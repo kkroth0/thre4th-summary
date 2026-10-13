@@ -417,6 +417,8 @@ function* mergeStorySteps(stories, items, now) {
         return yield* rebuildStorySteps(result, items, now);
     }
     const knownSources = new Map(result.flatMap((story) => story.sources.map((source) => [canonicalArticleUrl(source.link) || source.link, source])));
+    const sourceOwners = new Map(result.flatMap((story) => story.sources.map((source) => [canonicalArticleUrl(source.link) || source.link, story])));
+    const publicationMetadata = new Set(['dateInferred', 'publicationTimeKnown', 'publicationDateBasis', 'firstCollectedAt', 'repository']);
     const signalCache = new WeakMap();
     const sourceSignals = (story, source) => {
         if (signalCache.has(source)) return signalCache.get(source);
@@ -458,6 +460,16 @@ function* mergeStorySteps(stories, items, now) {
         if (item.contentHash && unchanged?.contentHash === item.contentHash && unchanged.extractionVersion === item.extractionVersion) {
             const next = newStory(item).sources[0];
             if (Object.keys(next).every(key => JSON.stringify(next[key] ?? null) === JSON.stringify(unchanged[key] ?? null))) { yield; continue; }
+            if (Object.keys(next).filter(key=>!publicationMetadata.has(key)).every(key=>JSON.stringify(next[key]??null)===JSON.stringify(unchanged[key]??null))) {
+                const link=canonicalArticleUrl(item.link)||item.link,owner=sourceOwners.get(link),index=result.indexOf(owner);
+                if(index>=0){
+                    const source={...unchanged,...Object.fromEntries([...publicationMetadata].filter(key=>next[key]!==undefined).map(key=>[key,next[key]]))};
+                    const updated={...owner,sources:owner.sources.map(row=>row===unchanged?source:row)};
+                    result[index]=updated;
+                    for(const row of updated.sources){const key=canonicalArticleUrl(row.link)||row.link;sourceOwners.set(key,updated);knownSources.set(key,row);}
+                    yield;continue;
+                }
+            }
         }
         yield;
         const link = canonicalArticleUrl(item.link) || item.link;
