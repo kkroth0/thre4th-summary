@@ -17,7 +17,7 @@ export default function IntelligenceOverview() {
   const { auth } = useAuth();
   const monitoring = useNewsMonitoring();
   const selection = monitoring.data ? newsMonitoringCacheKey(auth.login || '', monitoring.data.preferences) : null;
-  const feed = useQuery({ queryKey: ['intelligence-overview', selection], queryFn: ({ signal }) => fetchIntelligenceFeed(signal), enabled: Boolean(selection) && !monitoring.isError, staleTime: 0 });
+  const feed = useQuery({ queryKey: ['intelligence-overview', selection], queryFn: ({ signal }) => fetchIntelligenceFeed(signal), enabled: Boolean(selection) && !monitoring.isError, staleTime: 60000 });
   const failed = monitoring.isError || feed.isError;
   const waiting = !failed && (monitoring.isPending || feed.isPending);
   const rows = useMemo(() => feed.data || [], [feed.data]);

@@ -31,3 +31,11 @@ test('missing Who.is key fails before contacting a provider', async () => {
     const lookup = createWhoisLookup({ getKey: () => '', http: { get: () => assert.fail('must not call upstream') } });
     await assert.rejects(lookup('example.com'), /key missing/);
 });
+
+test('manual refresh and credential rotation cannot reuse an older WHOIS snapshot', async () => {
+    let key = 'old-test-key', calls = 0;
+    const lookup = createWhoisLookup({ getKey: () => key, http: { get: async () => { calls++; return { data: record }; } } });
+    await lookup('example.com'); await lookup('example.com'); assert.equal(calls, 1);
+    await lookup('example.com', { fresh: true }); assert.equal(calls, 2);
+    key = 'rotated-test-key'; await lookup('example.com'); assert.equal(calls, 3);
+});

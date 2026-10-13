@@ -527,12 +527,13 @@ const extractVendorTimestamps = (vendorName: string, data: any): TimelineEvent[]
 };
 
 // Generic fetcher for backend API
-const fetchFromBackend = async (endpoint: string, query: string, vendorName: string): Promise<VendorData> => {
+export interface LookupOptions { fresh?: boolean }
+const fetchFromBackend = async (endpoint: string, query: string, vendorName: string, options: LookupOptions = {}): Promise<VendorData> => {
     try {
         const response = await fetch(`/api/${endpoint}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ query })
+            body: JSON.stringify({ query, ...(options.fresh ? { fresh: true } : {}) })
         });
         const data = await handleResponse(response, vendorName);
 
@@ -587,19 +588,19 @@ const IMPORTANT_AV_VENDORS = [
 ];
 
 // Single source of truth mapping each vendor to its fetch call for a given query.
-const buildVendorMap = (query: string): Record<string, () => Promise<VendorData>> => ({
-    "IP Geolocation": () => fetchIPGeoData(query),
-    "WHOIS": () => fetchWHOISData(query),
-    "VirusTotal": () => fetchVirusTotalData(query),
-    "AbuseIPDB": () => fetchAbuseIPDBData(query),
-    "AlienVault OTX": () => fetchAlienVaultData(query),
-    "Shodan": () => fetchShodanData(query),
-    "URLhaus": () => fetchURLhausData(query),
-    "MalwareBazaar": () => fetchMalwareBazaarData(query),
-    "ThreatFox": () => fetchThreatFoxData(query),
-    "PhishTank": () => fetchPhishTankData(query),
-    "PhishStats": () => fetchPhishStatsData(query),
-    "OpenPhish": () => fetchOpenPhishData(query),
+const buildVendorMap = (query: string, options: LookupOptions = {}): Record<string, () => Promise<VendorData>> => ({
+    "IP Geolocation": () => fetchFromBackend('ipgeo', query, 'IP Geolocation', options),
+    "WHOIS": () => fetchFromBackend('whois', query, 'WHOIS', options),
+    "VirusTotal": () => fetchFromBackend('virustotal', query, 'VirusTotal', options),
+    "AbuseIPDB": () => fetchFromBackend('abuseipdb', query, 'AbuseIPDB', options),
+    "AlienVault OTX": () => fetchFromBackend('alienvault', query, 'AlienVault OTX', options),
+    "Shodan": () => fetchFromBackend('shodan', query, 'Shodan', options),
+    "URLhaus": () => fetchFromBackend('urlhaus', query, 'URLhaus', options),
+    "MalwareBazaar": () => fetchFromBackend('malwarebazaar', query, 'MalwareBazaar', options),
+    "ThreatFox": () => fetchFromBackend('threatfox', query, 'ThreatFox', options),
+    "PhishTank": () => fetchFromBackend('phishtank', query, 'PhishTank', options),
+    "PhishStats": () => fetchFromBackend('phishstats', query, 'PhishStats', options),
+    "OpenPhish": () => fetchFromBackend('openphish', query, 'OpenPhish', options),
 });
 
 // Resolve which vendors to actually query: the explicit selection (or all known
@@ -711,9 +712,10 @@ export const fetchThreatData = async (query: string, selectedVendors?: string[])
 export const fetchThreatDataProgressive = async (
     query: string,
     selectedVendors: string[] | undefined,
-    onProgress: (data: VendorData) => void
+    onProgress: (data: VendorData) => void,
+    options: LookupOptions = {},
 ): Promise<ThreatIntelligenceResult> => {
-    const vendorMap = buildVendorMap(query);
+    const vendorMap = buildVendorMap(query, options);
     const vendorsToQuery = resolveVendorsToQuery(query, vendorMap, selectedVendors);
 
     // Each vendor is wrapped in a timeout + catch so one slow/failed provider
@@ -721,8 +723,9 @@ export const fetchThreatDataProgressive = async (
     const VENDOR_TIMEOUT_MS = 30_000;
 
     const fetchPromises = vendorsToQuery.map(vendor => {
+        let timer: ReturnType<typeof setTimeout>;
         const timeoutPromise = new Promise<never>((_, reject) =>
-            setTimeout(() => reject(new Error(`${vendor} timed out after ${VENDOR_TIMEOUT_MS / 1000}s`)), VENDOR_TIMEOUT_MS)
+            timer = setTimeout(() => reject(new Error(`${vendor} timed out after ${VENDOR_TIMEOUT_MS / 1000}s`)), VENDOR_TIMEOUT_MS)
         );
 
         return Promise.race([vendorMap[vendor](), timeoutPromise])
@@ -738,7 +741,7 @@ export const fetchThreatDataProgressive = async (
                 };
                 onProgress(errorData);
                 return errorData;
-            });
+            }).finally(() => clearTimeout(timer));
     });
 
     const results = await Promise.all(fetchPromises);

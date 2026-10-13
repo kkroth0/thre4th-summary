@@ -1,12 +1,28 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { detectIOCType, fetchThreatData, fetchAttackSurfaceCredits, formatVendorData, resolveVendorsForQuery } from "./threatApi";
+import { detectIOCType, fetchThreatData, fetchThreatDataProgressive, fetchAttackSurfaceCredits, formatVendorData, resolveVendorsForQuery } from "./threatApi";
 import { refang } from "@/utils/defang";
 import { isSupportedAnalyzerQuery } from "@/utils/iocExtract";
 
 test("detects a public IPv6 address as IP and an IPv6 literal URL as URL", () => {
   assert.equal(detectIOCType("2606:4700:4700::1111"), "ip");
   assert.equal(detectIOCType("https://[2606:4700:4700::1111]/status"), "url");
+});
+
+test('manual enrichment refresh requests fresh data; normal lookups permit cached responses', async () => {
+  const previous = globalThis.fetch;
+  const bodies: { query: string; fresh?: boolean }[] = [];
+  globalThis.fetch = async (_input, options) => {
+    bodies.push(JSON.parse(String(options?.body)));
+    return new Response(JSON.stringify({ data: { ip_str: '9.9.9.10', ports: [], data: [] } }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  };
+  try {
+    await fetchThreatData('9.9.9.10', ['Shodan']);
+    let completed = 0;
+    await fetchThreatDataProgressive('9.9.9.10', ['Shodan'], () => { completed++; }, { fresh: true });
+    assert.deepEqual(bodies, [{ query: '9.9.9.10' }, { query: '9.9.9.10', fresh: true }]);
+    assert.equal(completed, 1);
+  } finally { globalThis.fetch = previous; }
 });
 
 test("routes IPv6 only to providers backed by IPv6-capable endpoints", () => {

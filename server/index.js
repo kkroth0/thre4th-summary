@@ -28,7 +28,8 @@ import { createPhishingSources } from './phishingSources.js';
 import { createWhoisLookup } from './whoisLookup.js';
 import { createDomainIntelligence, domainTarget } from './domainIntelligence.js';
 import { createVulnerabilityCatalog } from './vulnerabilityCatalog.js';
-import { createVulnerabilityQueries } from './vulnerabilityQueries.js';
+import { createVulnerabilityQueries, optimizeVulnerabilityCatalog } from './vulnerabilityQueries.js';
+import { createLookupCache } from './lookupCache.js';
 import { PUBLICATION_SOURCES, OT_PUBLICATION_SOURCES, createPublicationResolver } from './publicationSources.js';
 import { createPublicationRequest } from './publicationHttp.js';
 import { actorPublications, buildActorActivity, buildActorEvidence } from './actorEvidence.js';
@@ -474,6 +475,26 @@ const withKeyRotation = async (envName, makeRequest) => {
 };
 
 const quotaReader = createQuotaReader({ getKeys });
+const lookupCache = createLookupCache();
+async function cachedProvider(req, res, provider, query, credentials, load) {
+    const session = verifySession(getCookie(req, 'ts_session'));
+    const result = await lookupCache.get({ provider, query, owner: session?.sub || '', credentials, fresh: req.body?.fresh === true }, async () => {
+        const response = await load();
+        // Keep only the JSON and quota headers, never axios sockets/config/keys.
+        const quotaHeaders = {};
+        for (const name of ['x-ratelimit-remaining', 'x-ratelimit-limit', 'x-ratelimit-reset', 'x-daily-requests-left']) if (response.headers?.[name] !== undefined) quotaHeaders[name] = response.headers[name];
+        return { data: response.data, headers: quotaHeaders };
+    });
+    res.set('Cache-Control', 'private, no-store');
+    res.set('X-Lookup-Cache', result.state);
+    res.set('X-Lookup-Collected-At', result.collectedAt);
+    return result.value;
+}
+
+app.get('/api/admin/performance', requireAdmin, (req, res) => {
+    res.set('Cache-Control', 'private, no-store');
+    res.json({ lookups: lookupCache.stats() });
+});
 
 // --- API Endpoints ---
 
@@ -491,9 +512,9 @@ app.post('/api/virustotal', scanLimiter, async (req, res) => {
         else if (queryType === "hash") endpoint = `https://www.virustotal.com/api/v3/files/${sanitized}`;
         else endpoint = `https://www.virustotal.com/api/v3/urls/${Buffer.from(sanitized).toString('base64').replace(/=/g, "")}`;
 
-        const response = await withKeyRotation('VIRUSTOTAL_API_KEY', (key) =>
+        const response = await cachedProvider(req, res, 'virustotal', sanitized, getKeys('VIRUSTOTAL_API_KEY'), () => withKeyRotation('VIRUSTOTAL_API_KEY', (key) =>
             axios.get(endpoint, { headers: { "x-apikey": key } })
-        );
+        ));
         sendResponseWithQuota(res, response);
     } catch (error) {
         if (error.noKey) return res.status(500).json({ error: "API Key missing" });
@@ -511,7 +532,7 @@ app.post('/api/abuseipdb', scanLimiter, async (req, res) => {
         if (queryType !== "ip") return res.json({ data: { "Status": "IP only" } });
 
         const sanitized = sanitizeQuery(query, 'ip');
-        const response = await withKeyRotation('ABUSEIPDB_API_KEY', (key) =>
+        const response = await cachedProvider(req, res, 'abuseipdb', sanitized, getKeys('ABUSEIPDB_API_KEY'), () => withKeyRotation('ABUSEIPDB_API_KEY', (key) =>
             axios.get(`https://api.abuseipdb.com/api/v2/check`, {
                 params: {
                     ipAddress: sanitized,
@@ -520,7 +541,7 @@ app.post('/api/abuseipdb', scanLimiter, async (req, res) => {
                 },
                 headers: { "Key": key, "Accept": "application/json" }
             })
-        );
+        ));
         sendResponseWithQuota(res, response, 'AbuseIPDB');
     } catch (error) {
         if (error.noKey) return res.status(500).json({ error: "API Key missing" });
@@ -536,7 +557,7 @@ app.post('/api/abuseipdb/check-block', scanLimiter, async (req, res) => {
 
     try {
         const sanitized = sanitizeQuery(query, 'cidr');
-        const response = await withKeyRotation('ABUSEIPDB_API_KEY', (key) =>
+        const response = await cachedProvider(req, res, 'abuseipdb-block', sanitized, getKeys('ABUSEIPDB_API_KEY'), () => withKeyRotation('ABUSEIPDB_API_KEY', (key) =>
             axios.get(`https://api.abuseipdb.com/api/v2/check-block`, {
                 params: {
                     network: sanitized,
@@ -544,7 +565,7 @@ app.post('/api/abuseipdb/check-block', scanLimiter, async (req, res) => {
                 },
                 headers: { "Key": key, "Accept": "application/json" }
             })
-        );
+        ));
         sendResponseWithQuota(res, response, 'AbuseIPDB');
     } catch (error) {
         if (error.noKey) return res.status(500).json({ error: "API Key missing" });
@@ -571,7 +592,7 @@ app.post('/api/alienvault', scanLimiter, async (req, res) => {
 
         // A OTX morre por concorrência sem devolver 429: o gate segura o lote
         // em 4 chamadas em voo e o timeout impede que uma travada ocupe a vaga.
-        const response = await otxThrottled(() => axios.get(endpoint, { headers, timeout: OTX_TIMEOUT_MS }));
+        const response = await cachedProvider(req, res, 'otx', sanitized, process.env.ALIENVAULT_API_KEY || '', () => otxThrottled(() => axios.get(endpoint, { headers, timeout: OTX_TIMEOUT_MS })));
         sendResponseWithQuota(res, response);
     } catch (error) {
         const { status, message } = sanitizeError(error);
@@ -595,9 +616,9 @@ app.post('/api/shodan', scanLimiter, async (req, res) => {
         const endpoint = queryType === "ip"
             ? `https://api.shodan.io/shodan/host/${sanitized}`
             : `https://api.shodan.io/dns/domain/${sanitized}`;
-        const response = await shodanClient.get(endpoint, {
+        const response = await cachedProvider(req, res, 'shodan', sanitized, process.env.SHODAN_API_KEY, () => shodanClient.get(endpoint, {
             params: { key: process.env.SHODAN_API_KEY }
-        });
+        }));
         sendResponseWithQuota(res, response);
     } catch (error) {
         const { status, message } = sanitizeError(error);
@@ -645,7 +666,7 @@ app.post('/api/urlhaus', scanLimiter, async (req, res) => {
         const abKey = abuseChKey(req);
         if (abKey) headers['Auth-Key'] = abKey;
 
-        const response = await axios.post(endpoint, params.toString(), { headers });
+        const response = await cachedProvider(req, res, 'urlhaus', params.toString(), abKey, () => axios.post(endpoint, params.toString(), { headers }));
         res.json(response.data);
     } catch (error) {
         const { status, message } = sanitizeError(error);
@@ -672,10 +693,10 @@ app.post('/api/malwarebazaar', scanLimiter, async (req, res) => {
         const abKey = abuseChKey(req);
         if (abKey) headers["Auth-Key"] = abKey;
 
-        const response = await axios.post(`https://mb-api.abuse.ch/api/v1/`,
+        const response = await cachedProvider(req, res, 'malwarebazaar', sanitized, abKey, () => axios.post(`https://mb-api.abuse.ch/api/v1/`,
             params.toString(),
             { headers }
-        );
+        ));
         res.json(response.data);
     } catch (error) {
         const { status, message } = sanitizeError(error);
@@ -698,11 +719,11 @@ app.post('/api/threatfox', scanLimiter, async (req, res) => {
         const abKey = abuseChKey(req);
         if (abKey) headers["Auth-Key"] = abKey;
 
-        const response = await axios.post(
+        const response = await cachedProvider(req, res, 'threatfox', sanitized, abKey, () => axios.post(
             `https://threatfox-api.abuse.ch/api/v1/`,
             { query: "search_ioc", search_term: sanitized },
             { headers }
-        );
+        ));
         // A busca segue por curinga (é o que casa `ip:porta` e URL do host),
         // mas o que não é o indicador consultado não sai daqui.
         res.json(filterExactIocs(response.data, sanitized));
@@ -716,7 +737,9 @@ app.post('/api/threatfox', scanLimiter, async (req, res) => {
 app.post('/api/phishtank', scanLimiter, async (req, res) => {
     try {
         if (detectQueryType(req.body.query) !== 'url') return res.status(400).json({ error: 'URL query required' });
-        res.json(await phishingSources.phishTank(sanitizeQuery(req.body.query, 'url')));
+        const query = sanitizeQuery(req.body.query, 'url');
+        const response = await cachedProvider(req, res, 'phishtank', query, process.env.PHISHTANK_API_KEY || '', async () => ({ data: await phishingSources.phishTank(query) }));
+        res.json(response.data);
     } catch (error) { const { status, message } = sanitizeError(error); res.status(status).json({ error: message }); }
 });
 
@@ -725,7 +748,7 @@ app.post('/api/phishstats', scanLimiter, async (req, res) => {
     try {
         const type = detectQueryType(req.body.query);
         if (!['url', 'domain'].includes(type)) return res.status(400).json({ error: 'URL/Domain query required' });
-        res.json(await phishingSources.phishStats(sanitizeQuery(req.body.query, type)));
+        res.json(await phishingSources.phishStats(sanitizeQuery(req.body.query, type), { fresh: req.body?.fresh === true }));
     } catch (error) { const { status, message } = sanitizeError(error); res.status(status).json({ error: message }); }
 });
 
@@ -940,7 +963,7 @@ app.post('/api/domain/:view', requirePremium, scanLimiter, async (req, res) => {
 app.post('/api/whois', scanLimiter, async (req, res) => {
     try {
         if (detectQueryType(req.body.query) !== 'domain') return res.status(400).json({ error: 'Domain query required' });
-        res.json(await lookupWhois(sanitizeQuery(req.body.query, 'domain')));
+        res.json(await lookupWhois(sanitizeQuery(req.body.query, 'domain'), { fresh: req.body?.fresh === true }));
     } catch (error) { const { status, message } = sanitizeError(error); res.status(status).json({ error: message }); }
 });
 
@@ -954,7 +977,7 @@ app.post('/api/ipgeo', scanLimiter, async (req, res) => {
         const sanitized = sanitizeQuery(query, 'ip');
 
         // VULN-12: Use HTTPS geolocation api (ipwhois.app instead of HTTP ip-api.com)
-        const response = await axios.get(`https://ipwhois.app/json/${sanitized}`);
+        const response = await cachedProvider(req, res, 'ipgeo', sanitized, '', () => axios.get(`https://ipwhois.app/json/${sanitized}`));
         const data = response.data;
         
         let reverseHostname = "Unknown";
@@ -1002,7 +1025,7 @@ app.post('/api/openphish', scanLimiter, async (req, res) => {
     try {
         const type = detectQueryType(req.body.query);
         if (!['url', 'domain'].includes(type)) return res.status(400).json({ error: 'URL/Domain query required' });
-        res.json(await phishingSources.openPhish(sanitizeQuery(req.body.query, type), type));
+        res.json(await phishingSources.openPhish(sanitizeQuery(req.body.query, type), type, { fresh: req.body?.fresh === true }));
     } catch (error) { const { status, message } = sanitizeError(error); res.status(status).json({ error: message }); }
 });
 
@@ -2924,7 +2947,9 @@ const vulnerabilityCatalog = createVulnerabilityCatalog({
     },
 });
 const vulnerabilityQueries = process.env.NODE_ENV === 'test' ? null : createVulnerabilityQueries({ filePath: path.join(__dirname, '.vulnerability-catalog.sqlite') });
+const vulnerabilityOptimization = process.env.NODE_ENV === 'test' ? Promise.resolve() : optimizeVulnerabilityCatalog(path.join(__dirname, '.vulnerability-catalog.sqlite')).catch(error => { console.warn('Catalog optimization failed:', error.code || error.name); });
 async function queryVulnerabilities(method, params) {
+    await vulnerabilityOptimization;
     const data = vulnerabilityQueries ? await vulnerabilityQueries.query(method, params) : vulnerabilityCatalog[method](params);
     if (data?.status) data.status = vulnerabilityCatalog.status();
     return data;
@@ -2951,7 +2976,8 @@ app.get('/api/vulnerabilities', async (req, res) => { try { res.json(await query
     signal: typeof req.query.signal === 'string' ? req.query.signal : '',
     page: req.query.page, size: req.query.size,
 })); } catch { catalogUnavailable(res); } });
-app.post('/api/vulnerabilities/refresh', requireAuth, (req, res) => {
+app.post('/api/vulnerabilities/refresh', requireAuth, async (req, res) => {
+    await vulnerabilityOptimization;
     void vulnerabilityCatalog.sync({ force: true });
     res.status(202).json({ status: vulnerabilityCatalog.status() });
 });
@@ -3625,6 +3651,7 @@ app.listen(PORT, () => {
     let vulnerabilityRetries = 0;
     const refreshVulnerabilities = async () => {
         try {
+            await vulnerabilityOptimization;
             await vulnerabilityCatalog.sync();
             if (Object.values(vulnerabilityCatalog.status().sources).some(source => ['error', 'stale'].includes(source.status)) && vulnerabilityRetries < 3) {
                 vulnerabilityRetries++;

@@ -1,5 +1,5 @@
 import { useAuth } from '@/contexts/AuthContext';
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { Download, Network, RefreshCw } from 'lucide-react';
@@ -14,8 +14,9 @@ export function CidrInvestigation({ query, vendors, pt, onPivot }: { query: stri
   const range = useMemo(() => parsePublicCidr(query)!, [query]);
   const [includeShodan, setIncludeShodan] = useState(false);
   const shodanEnabled = includeShodan && vendors.includes('Shodan'); const abuseEnabled = vendors.includes('AbuseIPDB');
+  const freshAbuse = useRef(false);
   const shodan = useQuery({ queryKey: ['cidr-shodan', auth.login || '', range.cidr], queryFn: ({ signal }) => lookupCidrShodan(range.cidr, signal), enabled: shodanEnabled, staleTime: 300_000, retry: false });
-  const abuse = useQuery({ queryKey: ['cidr-abuse', auth.login || '', range.cidr], queryFn: ({ signal }) => lookupCidrAbuse(range.cidr, signal), enabled: abuseEnabled, staleTime: 300_000, retry: false });
+  const abuse = useQuery({ queryKey: ['cidr-abuse', auth.login || '', range.cidr], queryFn: ({ signal }) => { const fresh = freshAbuse.current; freshAbuse.current = false; return lookupCidrAbuse(range.cidr, signal, fresh); }, enabled: abuseEnabled, staleTime: 300_000, retry: false });
   const [page, setPage] = useState(1); const [ipPage, setIpPage] = useState(1); const [observedOnly, setObservedOnly] = useState(false);
   const observations = useMemo(() => networkObservations(range, shodanEnabled ? shodan.data?.findings : [], abuseEnabled ? abuse.data : undefined), [range, shodan.data, abuse.data, shodanEnabled, abuseEnabled]);
   const currentIpPage = Math.min(ipPage, Math.max(1, Math.ceil(observations.length / 25)));
@@ -23,7 +24,7 @@ export function CidrInvestigation({ query, vendors, pt, onPivot }: { query: stri
   const known = (shodanEnabled && Boolean(shodan.data)) || (abuseEnabled && Boolean(abuse.data));
   const loading = (shodanEnabled && shodan.isFetching) || (abuseEnabled && abuse.isFetching);
   const l = (a: string, b: string) => pt ? a : b;
-  const refresh = () => { if (shodanEnabled) void shodan.refetch(); if (abuseEnabled) void abuse.refetch(); };
+  const refresh = () => { if (shodanEnabled) void shodan.refetch(); if (abuseEnabled) { freshAbuse.current = true; void abuse.refetch(); } };
   const exportRows = () => {
     const blob = new Blob([JSON.stringify({ cidr: range.cidr, shodan: shodan.data || null, abuseIPDB: abuse.data || null, observations }, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob); const link = document.createElement('a'); link.href = url; link.download = `network-${range.cidr.replace('/', '-')}.json`; link.click(); URL.revokeObjectURL(url);

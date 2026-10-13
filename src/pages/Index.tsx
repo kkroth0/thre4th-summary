@@ -189,7 +189,7 @@ const Index = () => {
     }
   };
 
-  const handleSearch = async (e?: React.FormEvent, override?: string) => {
+  const handleSearch = async (e?: React.FormEvent, override?: string, fresh = false) => {
     if (e) e.preventDefault();
 
     // Refang first: analysts paste defanged IOCs (evil[.]com, hxxp://x, 1.2.3[.]4)
@@ -274,7 +274,7 @@ const Index = () => {
                 }
                 return r;
               }));
-            });
+            }, { fresh });
 
             // Update final result for this query
             setResults(prev => prev.map(r => r.query === q ? result : r));
@@ -1284,7 +1284,7 @@ const Index = () => {
                     <IndicatorInvestigation data={data} vendors={selectedVendors} pt={language === 'pt'} onPivot={onPivot}>
                     <QuickActions
                       data={data}
-                      onRefresh={() => handleSearch()}
+                      onRefresh={() => handleSearch(undefined, undefined, true)}
                       isLoading={isAnalyzing}
                       onCopyLinks={() => copyVendorLinks(data.query)}
                     />

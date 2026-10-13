@@ -28,8 +28,8 @@ export interface AbuseBlock {
   reportedAddress: { ipAddress: string; abuseConfidenceScore?: number; numReports?: number; mostRecentReport?: string; countryCode?: string }[];
   numReports?: number;
 }
-export async function lookupCidrAbuse(cidr: string, signal: AbortSignal): Promise<AbuseBlock> {
-  const raw = await request('/api/abuseipdb/check-block', { query: cidr }, signal) as { data?: { data?: AbuseBlock } & Partial<AbuseBlock> };
+export async function lookupCidrAbuse(cidr: string, signal: AbortSignal, fresh = false): Promise<AbuseBlock> {
+  const raw = await request('/api/abuseipdb/check-block', { query: cidr, ...(fresh ? { fresh: true } : {}) }, signal) as { data?: { data?: AbuseBlock } & Partial<AbuseBlock> };
   const data = raw?.data?.data || raw?.data;
   if (!Array.isArray(data?.reportedAddress)) throw new Error('Invalid AbuseIPDB response');
   return data as AbuseBlock;

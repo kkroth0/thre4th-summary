@@ -156,6 +156,16 @@ test('GET /api/auth/me unauthenticated', async () => {
     assert.equal(body.authenticated, false);
 });
 
+test('lookup performance counters are restricted to administrators and reveal no queries or keys', async () => {
+    const endpoint = `${BASE}/api/admin/performance`;
+    assert.equal((await fetch(endpoint)).status, 401);
+    assert.equal((await fetch(endpoint, { headers: OUTSIDER_HEADERS })).status, 403);
+    const response = await fetch(endpoint, { headers: AUTH_HEADERS });
+    assert.equal(response.status, 200); assert.equal(response.headers.get('cache-control'), 'private, no-store');
+    const body = await response.json(); assert.equal(typeof body.lookups.hits, 'number');
+    assert.ok(!('queries' in body.lookups)); assert.ok(!('credentials' in body.lookups));
+});
+
 test('GET /api/cves/recent never fabricates CVEs before source import', async () => {
     const r = await fetch(`${BASE}/api/cves/recent`);
     assert.equal(r.status, 200);

@@ -38,8 +38,8 @@ export function createPhishingSources({ http, getKey = () => '', now = () => Dat
     };
     return {
         activity: () => Object.fromEntries(PHISHING_LOOKUP_SOURCES.map(name => [name, { mode: 'on_demand', keyConfigured: name === 'OpenPhish' ? false : Boolean(getKey(name === 'PhishStats' ? 'phishstats' : 'phishtank')), ...(activity.get(name) || { state: 'unchecked', lastChecked: null, httpStatus: null, requests: 0 }) }])),
-        async openPhish(query, type) {
-            if (!feed || now() - feed.at >= 1800_000) {
+        async openPhish(query, type, { fresh = false } = {}) {
+            if (fresh || !feed || now() - feed.at >= 1800_000) {
                 if (!pendingFeed) pendingFeed = observed('OpenPhish', async () => {
                     const response = await http.get('https://openphish.com/feed.txt', { timeout: 8000, maxContentLength: 5_000_000, maxRedirects: 3 });
                     feed = { urls: parseOpenPhishFeed(response.data), at: now() };
@@ -49,10 +49,10 @@ export function createPhishingSources({ http, getKey = () => '', now = () => Dat
             const listed = matchOpenPhish(feed.urls, query, type);
             return { listed, status: listed ? 'Listed as phishing' : 'Not found in OpenPhish feed' };
         },
-        async phishStats(query) {
+        async phishStats(query, { fresh = false } = {}) {
             // Never place the API key in a URL, cache key or returned activity data.
             const cached = queryCache.get(query);
-            if (cached && now() - cached.at < 5400_000) return cached.rows;
+            if (!fresh && cached && now() - cached.at < 5400_000) return cached.rows;
             if (pendingQueries.has(query)) return pendingQueries.get(query);
             const pending = observed('PhishStats', async () => {
                 const key = getKey('phishstats');
