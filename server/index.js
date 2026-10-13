@@ -33,6 +33,8 @@ import { createLookupCache } from './lookupCache.js';
 import { PUBLICATION_SOURCES, OT_PUBLICATION_SOURCES, createPublicationResolver } from './publicationSources.js';
 import { REPOSITORY_SOURCES, createRepositoryResolver } from './repositorySources.js';
 import { prepareFeedJobDocuments } from './feedJobDocuments.js';
+import { persistNewsEvidence } from './persistNewsEvidence.js';
+import { publishNewsSnapshot } from './publishNewsSnapshot.js';
 import { createPublicationRequest } from './publicationHttp.js';
 import { actorPublications, buildActorActivity, buildActorEvidence } from './actorEvidence.js';
 import { otxThrottled, OTX_TIMEOUT_MS } from './otxGate.js';
@@ -70,11 +72,10 @@ import { buildCampaignIndex, matchCampaigns } from './campaignMatch.js';
 import { explainCorrelation, explainCorrelationDecisions } from './correlationEvidence.js';
 import { extractSellerHandle, findRelatedBySeller, storySellerHandle } from './darkWebHandle.js';
 import { categorize } from './newsCategories.js';
-import { correlateNewsFeedAsync } from './newsCorrelation.js';
 import { parseFeed } from './feedParse.js';
 import { createFeedCache, createFeedCollector, canonicalArticleUrl, singleFlightRefresh } from './feedCollector.js';
 import { collectArticleTexts } from './articleCollector.js';
-import { enrichFeedItemsAsync, applyVulnerabilityContext, EXTRACTION_VERSION } from './feedEnrichment.js';
+import { enrichFeedItemsAsync, mergeIocEvidence, applyVulnerabilityContext, EXTRACTION_VERSION } from './feedEnrichment.js';
 import { createStoryStore } from './newsStoryStore.js';
 import { createNewsArchiveStore } from './newsArchiveStore.js';
 import { newsExportQuery, newsExportRows, newsExportCsv } from './newsExport.js';
@@ -1258,7 +1259,7 @@ if (process.env.NODE_ENV !== 'test') try {
     newsArchiveStore.reclassifyPhishing({ bodyFor: link => articleCollectionCache.get(link)?.text || '' });
 } catch (error) { console.error('phishing archive reclassification failed:', error.message); }
 const previousFeedSnapshot = rssCollectionCache.get('newsletter:snapshot');
-if (previousFeedSnapshot?.extractionVersion === EXTRACTION_VERSION && Array.isArray(previousFeedSnapshot.items)) {
+if ([EXTRACTION_VERSION, 'feed-v7'].includes(previousFeedSnapshot?.extractionVersion) && Array.isArray(previousFeedSnapshot.items)) {
     const enabled = new Set([...effectiveFeeds().map((feed) => feed.url), ...SCRAPE_SOURCES.filter((source) => !feedOverrides.disabled.includes(source.url)).map((source) => source.url)]);
     memoryCache.newsletter.data = previousFeedSnapshot.items.filter((item) => enabled.has(item.feedUrl) && new Date(item.pubDate).getTime() >= Date.now() - 30 * 86400000)
         .map((item) => ({ ...item, collectionStatus: 'stale' }));
@@ -1323,10 +1324,10 @@ const refreshNewsletterFeed = singleFlightRefresh(async () => {
             cache: articleCollectionCache,
             maxFetches: process.env.NEWS_ARTICLE_MAX_FETCHES === undefined ? 40 : Number(process.env.NEWS_ARTICLE_MAX_FETCHES),
             concurrency: Number(process.env.NEWS_IOC_CONCURRENCY) || 3,
-            fetchText: async (url) => (await fetchArticleText(url, 32000)).text,
+            fetchText: (url) => fetchArticleText(url, 64000),
         });
         let unifiedFeed = await enrichFeedItemsAsync(rawItems, {
-            texts: bodies.texts, actors: (text) => matchActors(text, actorIndex),
+            texts: bodies.texts, supplementalIocs: bodies.supplementalIocs, actors: (text) => matchActors(text, actorIndex),
             malware: (text) => matchMalware(text, malwareIndex), campaigns: (text) => matchCampaigns(text, campaignIndex),
             seller: extractSellerHandle, categorize,
         });
@@ -1334,11 +1335,8 @@ const refreshNewsletterFeed = singleFlightRefresh(async () => {
         const [kevMap, epssMap] = await Promise.all([getKevMap(), getEpssMap(allCves)]);
         applyVulnerabilityContext(unifiedFeed, kevMap, epssMap);
         unifiedFeed.sort((a, b) => b.pubDate.localeCompare(a.pubDate) || a.link.localeCompare(b.link));
-        const correlation = await correlateNewsFeedAsync(unifiedFeed, newsStoryStore);
+        const correlation = await publishNewsSnapshot(unifiedFeed, { archive: newsArchiveStore, stories: newsStoryStore });
         unifiedFeed = correlation.items;
-        try {
-            newsArchiveStore.add(unifiedFeed.map((item) => ({ ...item, categories: item.newsCategories })));
-        } catch (error) { console.error('news archive update failed:', error.message); }
 
         // Raw RSS and collected article text remain in the disk caches. The
         // public feed only carries metadata, hashes and extracted evidence.
@@ -1373,7 +1371,7 @@ app.get('/api/newsletter', requirePremium, async (req, res) => {
     try {
         if (!memoryCache.newsletter.data) {
             // Cold start fallback
-            await refreshNewsletterFeed();
+            void refreshNewsletterFeed();
         }
         if (!memoryCache.newsletter.data) return res.status(503).set('Retry-After', '60').json({ error: 'News feed is not available yet' });
         let data = filterMonitoredNews(memoryCache.newsletter.data || [], newsMonitoringStore.get(req.user.sub), newsStoryStore.all());
@@ -1405,7 +1403,7 @@ app.get('/api/newsletter', requirePremium, async (req, res) => {
 //   GET /api/news/stories?category=Ransomware&actor=<id>&days=30&limit=50
 app.get('/api/news/stories', requirePremium, async (req, res) => {
     try {
-        if (!memoryCache.newsletter.data) await refreshNewsletterFeed();
+        if (!memoryCache.newsletter.data) void refreshNewsletterFeed();
         res.set('Cache-Control', 'private, no-store');
         const stories = newsStoryStore.list({
             category: (req.query.category || '').toString() || undefined,
@@ -1486,7 +1484,7 @@ app.get('/api/news/mentions', requirePremium, async (req, res) => {
     const ioc = (req.query.ioc || '').toString().trim();
     if (!ioc || ioc.length > 2048) return res.status(400).json({ error: 'ioc required' });
     try {
-        if (!memoryCache.newsletter.data) await refreshNewsletterFeed();
+        if (!memoryCache.newsletter.data) void refreshNewsletterFeed();
         res.set('Cache-Control', 'private, max-age=300');
         res.json({ ioc, mentions: findMentions(newsStoryStore.all(), ioc) });
     } catch (error) {
@@ -1526,7 +1524,7 @@ app.get('/api/news/stories/:id', requirePremium, (req, res) => {
 //   GET /api/feed/daily-suggestions?hours=36&limit=10&minScore=0
 app.get('/api/feed/daily-suggestions', requirePremium, async (req, res) => {
     try {
-        if (!memoryCache.newsletter.data) await refreshNewsletterFeed();
+        if (!memoryCache.newsletter.data) void refreshNewsletterFeed();
         const all = filterMonitoredNews(memoryCache.newsletter.data || [], newsMonitoringStore.get(req.user.sub), newsStoryStore.all());
 
         const hours = Math.min(Math.max(parseInt(req.query.hours, 10) || 36, 1), 168);
@@ -1622,7 +1620,7 @@ const dailyEditionGenerator = createEditionGenerator({
     store: dailyEditionStore,
     requestNarrative: requestDailyNarrative,
     getSourceData: async () => {
-        if (!memoryCache.newsletter.data) await refreshNewsletterFeed();
+        if (!memoryCache.newsletter.data) void refreshNewsletterFeed();
         return {
             feed: memoryCache.newsletter.data || [],
             victims: await getRecentRansomwareVictims().catch(() => []),
@@ -2795,7 +2793,13 @@ app.post('/api/newsletter/enrich', requirePremium, scanLimiter, async (req, res)
         // Advanced collection: pull the full article body; fall back to RSS summary.
         // Uma fonte que falhe o scrape entra com o resumo do feed em vez de
         // derrubar a análise das outras.
-        const fetched = await Promise.all(items.map((i) => fetchArticleText(i.link).catch(() => ({ text: '', artifactLinks: [] }))));
+        const fetched = await Promise.all(items.map((i) => {
+            const body = articleCollectionCache.get(i.link);
+            const original = rssCollectionCache.get(i.feedUrl)?.items?.find(row => row.link === i.link);
+            if (i.repositoryReport) return { text: original?.text || '', artifactLinks: [] };
+            if (body?.text && Array.isArray(body.artifactLinks) && Date.now() - Date.parse(body.collectedAt) < 86400000) return { text: body.text, artifactLinks: body.artifactLinks };
+            return fetchArticleText(i.link, 64000).catch(() => ({ text: '', artifactLinks: [] }));
+        }));
         const fullText = fetched.map((f) => f.text).filter(Boolean).join('\n\n');
         const artifactLinks = [...new Set(fetched.flatMap((f) => f.artifactLinks || []))];
         // Rotular cada corpo pela fonte é o que faz a LLM escrever "a Sophos
@@ -2869,6 +2873,17 @@ app.post('/api/newsletter/enrich', requirePremium, scanLimiter, async (req, res)
             }
         }
 
+        const sourceRows = await enrichFeedItemsAsync(items.map((source,n) => ({ ...source, text: fetched[n].text || source.description || '', artifactLinks: fetched[n].artifactLinks })), {
+            supplementalIocs: new Map(items.map((source,n) => [source.link, source.repositoryReport ? source.iocs : mergeIocEvidence(source.iocs,
+                ...artifacts.filter(a => fetched[n].artifactLinks?.includes(a.origin)).map(a => extractIOCs(a.text, { plaintext: true })))])),
+            actors: text => matchActors(text, actorIndex), malware: text => matchMalware(text, malwareIndex),
+            campaigns: text => matchCampaigns(text, campaignIndex), seller: extractSellerHandle, categorize,
+        });
+        const persisted = await persistNewsEvidence(sourceRows, { archive: newsArchiveStore, stories: newsStoryStore, articleCache: articleCollectionCache,
+            originalFor: row => rssCollectionCache.get(row.feedUrl)?.items?.find(source => source.link === row.link) });
+        const replacements = new Map(persisted.map(row => { const publicRow = { ...row }; delete publicRow.text; return [row.link, publicRow]; }));
+        memoryCache.newsletter.data = (memoryCache.newsletter.data || []).map(row => replacements.get(row.link) || row);
+        rssCollectionCache.set('newsletter:snapshot', { extractionVersion: EXTRACTION_VERSION, at: new Date().toISOString(), items: memoryCache.newsletter.data });
         cacheSet(memoryCache.newsletterEnrich.store, cacheKey, { data: payload, expiresAt: now + memoryCache.newsletterEnrich.ttl }, 500);
         res.json(payload);
     } catch (error) {

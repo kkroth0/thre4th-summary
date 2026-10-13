@@ -25,13 +25,15 @@ export function topicCvesOf(title, feedText, bodyText = '') {
     return [];
 }
 
-export function enrichFeedItems(items, { texts = new Map(), actors, malware, campaigns, seller, categorize } = {}) {
+export const mergeIocEvidence = (...sets) => Object.fromEntries(['ips','domains','hashes','urls'].map(type => [type,[...new Set(sets.flatMap(set => set?.[type] || []))]]));
+
+export function enrichFeedItems(items, { texts = new Map(), supplementalIocs = new Map(), actors, malware, campaigns, seller, categorize } = {}) {
     return items.map((item) => {
         const text = [item.title, item.text || item.description || '', texts.get(item.link) || ''].join('\n');
         const enriched = {
             ...item, ...scoreArticle(text, item.weight_boost),
             actors: actors(text), malware: malware(text), campaigns: campaigns(text),
-            iocs: item.repositoryReport ? item.iocs : extractIOCs(text), sellerHandle: seller(text),
+            iocs: mergeIocEvidence(item.repositoryReport ? item.iocs : extractIOCs(text), supplementalIocs.get(item.link)), sellerHandle: seller(text),
             contentHash: contentHash(text), extractionVersion: EXTRACTION_VERSION,
             topicCves: topicCvesOf(item.title, item.text || item.description || '', texts.get(item.link) || ''),
         };
