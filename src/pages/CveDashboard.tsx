@@ -36,7 +36,7 @@ export default function CveDashboard() {
   const overview = useQuery({ queryKey: ['vulnerability-overview'], queryFn: ({ signal }) => vulnerabilityRequest<VulnerabilityOverview>('/api/vulnerabilities/overview', signal), staleTime: 60000, refetchInterval: query => query.state.data?.status.syncing ? 10000 : false });
   const listing = useQuery({ queryKey: ['vulnerabilities', view, debounced, severity, vendor, signal, page, size], enabled: view !== 'overview', placeholderData: keepPreviousData, queryFn: ({ signal: abort }) => vulnerabilityRequest<VulnerabilityPage>(`/api/vulnerabilities?${new URLSearchParams({ view, q: debounced, severity, vendor, signal, page: String(page), size: String(size) })}`, abort), staleTime: 60000, refetchInterval: query => query.state.data?.status.syncing ? 10000 : false });
   const details = useQuery({ queryKey: ['vulnerability-detail', selected], enabled: Boolean(selected), queryFn: ({ signal }) => vulnerabilityRequest<VulnerabilityRecord>(`/api/vulnerabilities/${encodeURIComponent(selected!)}`, signal), staleTime: 60000 });
-  const status = listing.data?.status || overview.data?.status;
+  const status = view === 'overview' ? overview.data?.status : listing.data?.status || overview.data?.status;
   const views = [['overview', l('Visão geral', 'Overview')], ['top', 'Top Threats'], ['weaponized', 'Weaponized'], ['listing', l('Listagem', 'Listing')]];
   const title = views.find(([key]) => key === view)?.[1] || '';
   const refresh = async () => {
