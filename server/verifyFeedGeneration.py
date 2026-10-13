@@ -1,5 +1,6 @@
 """Retry one recent failed bulletin using the existing, authenticated worker."""
 import json
+import hashlib
 import os
 import sys
 import time
@@ -25,9 +26,28 @@ urls = job_urls(job)
 for url in urls:
     assert_public_url(url)
 print(f"Verifying one existing failed bulletin: {job['id'][:8]}, {len(urls)} source(s)", flush=True)
+def cached(key, directory):
+    try:
+        return json.loads((app / 'server/.feed-cache' / directory / (hashlib.sha256(key.encode()).hexdigest() + '.json')).read_text())
+    except (OSError, ValueError):
+        return {}
+
+snapshot = cached('newsletter:snapshot', 'rss').get('items', [])
+documents = []
+for url in urls:
+    row = next((item for item in snapshot if item.get('link') == url), {})
+    body = cached(url, 'articles')
+    original = next((item for item in cached(row.get('feedUrl', ''), 'rss').get('items', []) if item.get('link') == url), {})
+    text = body.get('text') or original.get('text') or ''
+    if len(text) >= 1500:
+        iocs = row.get('iocs') or {}
+        documents.append({'url': url, 'title': row.get('title'), 'text': text[:64000],
+                          'iocText': '\n'.join(value for kind in ['ips', 'domains', 'hashes', 'urls'] for value in iocs.get(kind, []))})
+print(f"Reusing {len(documents)} collected source document(s)", flush=True)
+
 data, attachments = generate(urls, job_deck_type(job), True, 240,
                              model=os.getenv('FEED_WORKER_MODEL') or None,
-                             template=job_template(job), subtype=job_subtype(job))
+                             template=job_template(job), subtype=job_subtype(job), documents=documents)
 secret = os.environ['FEED_AGENT_SECRET']
 for attempt in range(3):
     try:

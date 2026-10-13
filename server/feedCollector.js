@@ -59,21 +59,21 @@ export function singleFlightRefresh(run) {
 }
 
 export function createFeedCollector({ request, parse, resolve, onHealth = () => {}, cache, now = () => new Date(), concurrency = 6, retentionDays = 30, maxItems = 100 }) {
-    const retained = (items, at) => (Array.isArray(items) ? items : []).filter((item) =>
-        typeof item?.link === 'string' && typeof item.pubDate === 'string' && new Date(item.pubDate).getTime() >= at.getTime() - retentionDays * 86400000)
+    const retained = (items, at, days = retentionDays) => (Array.isArray(items) ? items : []).filter((item) =>
+        typeof item?.link === 'string' && typeof item.pubDate === 'string' && new Date(item.pubDate).getTime() >= at.getTime() - days * 86400000)
         .sort((a, b) => b.pubDate.localeCompare(a.pubDate) || a.link.localeCompare(b.link)).slice(0, maxItems);
     return {
         async collect(feeds) {
             const at = now();
             const rows = await mapConcurrent(feeds, concurrency, async (feed) => {
                 const previous = cache.get(feed.url);
-                const oldItems = retained(previous?.items, at);
+                const oldItems = retained(previous?.items, at, feed.retentionDays || retentionDays);
                 onHealth(feed.url, { ok: false, count: oldItems.length, status: 'collecting', error: null, lastSuccessfulAt: previous?.lastSuccessfulAt || null, at: at.toISOString() });
                 const headers = {};
                 if (previous?.etag) headers['If-None-Match'] = previous.etag;
                 if (previous?.lastModified) headers['If-Modified-Since'] = previous.lastModified;
                 try {
-                    const resolved = feed.kind === 'auto' && resolve ? await resolve(feed, previous, { headers }) : null;
+                    const resolved = ['auto', 'github'].includes(feed.kind) && resolve ? await resolve(feed, previous, { headers }) : null;
                     const response = resolved?.response || await request(feed.url, { headers });
                     if (response.status !== 304 && (response.status < 200 || response.status >= 300)) throw new Error('Feed HTTP ' + response.status);
                     if (response.status === 304 && !Array.isArray(previous?.items)) throw new Error('304 without a cached feed');
@@ -86,7 +86,7 @@ export function createFeedCollector({ request, parse, resolve, onHealth = () => 
                         const pubDate = item.dateInferred && old ? old.pubDate : item.pubDate;
                         byLink.set(link, { ...item, link, pubDate, sourceCategories: feed.categories || [], firstCollectedAt: old?.firstCollectedAt || at.toISOString(), collectedAt: at.toISOString() });
                     }
-                    const items = retained([...byLink.values()], at);
+                    const items = retained([...byLink.values()], at, feed.retentionDays || retentionDays);
                     const next = { version: 1, ...resolved?.metadata, items, lastSuccessfulAt: at.toISOString(), etag: response.status === 304 ? previous.etag : response.headers?.etag || null, lastModified: response.status === 304 ? previous.lastModified : response.headers?.['last-modified'] || null };
                     cache.set(feed.url, next);
                     const health = { ok: true, count: items.length, fetchedCount: parsed.length, method: next.method || 'rss', endpoint: next.discoveryUrl || feed.url, status: response.status === 304 ? 'unchanged' : 'fresh', lastSuccessfulAt: next.lastSuccessfulAt, error: null, at: at.toISOString() };

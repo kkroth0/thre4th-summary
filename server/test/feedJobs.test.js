@@ -20,6 +20,7 @@ const mapOf = (...jobs) => Object.fromEntries(jobs.map((j) => [j.id, j]));
 
 test('jobSummary tira o boletim e sinaliza que ele existe', () => {
     const done = jobSummary(job('a', 'done', 'u1', 1));
+    assert.equal('documents' in jobSummary({ ...job('a', 'done', 'u1', 1), documents: [{ text: 'collected source' }] }), false);
     assert.equal(done.hasReport, true);
     assert.equal('json' in done, false);
     assert.equal(done.title, 'a');

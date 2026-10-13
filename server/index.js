@@ -31,6 +31,8 @@ import { createVulnerabilityCatalog } from './vulnerabilityCatalog.js';
 import { createVulnerabilityQueries, optimizeVulnerabilityCatalog } from './vulnerabilityQueries.js';
 import { createLookupCache } from './lookupCache.js';
 import { PUBLICATION_SOURCES, OT_PUBLICATION_SOURCES, createPublicationResolver } from './publicationSources.js';
+import { REPOSITORY_SOURCES, createRepositoryResolver } from './repositorySources.js';
+import { prepareFeedJobDocuments } from './feedJobDocuments.js';
 import { createPublicationRequest } from './publicationHttp.js';
 import { actorPublications, buildActorActivity, buildActorEvidence } from './actorEvidence.js';
 import { otxThrottled, OTX_TIMEOUT_MS } from './otxGate.js';
@@ -1192,7 +1194,7 @@ async function getEpssMap(cveIds) {
 // weight_boost}] }. Assim o dono liga/desliga fontes e adiciona novas sem
 // mexer no código nem redeployar.
 const FEED_SOURCES_PATH = path.join(__dirname, '.feed-sources.json');
-const BUILTIN_FEEDS = [...CTI_FEEDS, ...PUBLICATION_SOURCES, ...OT_PUBLICATION_SOURCES];
+const BUILTIN_FEEDS = [...CTI_FEEDS, ...PUBLICATION_SOURCES, ...OT_PUBLICATION_SOURCES, ...REPOSITORY_SOURCES];
 function loadFeedOverrides() {
     try {
         const o = JSON.parse(fs.readFileSync(FEED_SOURCES_PATH, 'utf8'));
@@ -1261,9 +1263,12 @@ if (previousFeedSnapshot?.extractionVersion === EXTRACTION_VERSION && Array.isAr
     memoryCache.newsletter.data = previousFeedSnapshot.items.filter((item) => enabled.has(item.feedUrl) && new Date(item.pubDate).getTime() >= Date.now() - 30 * 86400000)
         .map((item) => ({ ...item, collectionStatus: 'stale' }));
 }
+const publicationRequest = createPublicationRequest();
+const publicationResolver = createPublicationResolver({ request: publicationRequest });
+const repositoryResolver = createRepositoryResolver({ request: publicationRequest });
 const feedCollector = createFeedCollector({
     cache: rssCollectionCache, parse: parseFeed,
-    resolve: createPublicationResolver({ request: createPublicationRequest() }),
+    resolve: (feed, previous, options) => feed.kind === 'github' ? repositoryResolver(feed, previous, options) : publicationResolver(feed, previous, options),
     onHealth: (url, health) => feedHealth.set(url, health),
     concurrency: Number(process.env.FEED_FETCH_CONCURRENCY) || 6,
     request: (url, { headers }) => fetchFeedWithRetry(url, {
@@ -2377,7 +2382,8 @@ app.post('/api/feed/generate', requirePremium, scanLimiter, async (req, res) => 
         }
         const id = crypto.randomUUID();
         const now = new Date().toISOString();
-        jobsStore[id] = { id, ownerSub: req.user.sub, url, urls, type, template, subtype, title, status: 'pending', json: null, error: null, createdAt: now, updatedAt: now };
+        const documents = prepareFeedJobDocuments(urls, { items: memoryCache.newsletter.data || [], articleCache: articleCollectionCache, rssCache: rssCollectionCache });
+        jobsStore[id] = { id, ownerSub: req.user.sub, url, urls, documents, type, template, subtype, title, status: 'pending', json: null, error: null, createdAt: now, updatedAt: now };
         pruneJobs();
         saveJobs();
         res.json({ id, status: 'pending' });
@@ -2401,7 +2407,9 @@ app.get('/api/feed/job', requirePremium, (req, res) => {
             (j) => j.status === 'pending' && j.createdAt < job.createdAt,
         ).length;
     }
-    res.json({ ...job, queuePosition });
+    const clientJob = { ...job };
+    delete clientJob.documents;
+    res.json({ ...clientJob, queuePosition });
 });
 
 // Boletins do usuário, sem o JSON — é a lista de consulta do /relatorios.
@@ -2494,6 +2502,7 @@ app.get('/api/feed/jobs/pending', (req, res) => {
             // Só importa com template premium; 'auto' (padrão) o motor escolhe.
             ...(j.subtype && j.subtype !== 'auto' ? { subtype: j.subtype } : {}),
             title: j.title,
+            documents: j.documents?.length ? j.documents : prepareFeedJobDocuments(j.urls || [j.url], { items: memoryCache.newsletter.data || [], articleCache: articleCollectionCache, rssCache: rssCollectionCache }),
             ...(workerModel ? { model: workerModel } : {}),
         }));
     res.json({ pending });
@@ -2507,6 +2516,7 @@ app.post('/api/feed/job/result', (req, res) => {
     if (req.body?.error) { job.status = 'error'; job.error = String(req.body.error).slice(0, 500); }
     else if (req.body?.json && typeof req.body.json === 'object') {
         job.status = 'done';
+        job.error = null;
         job.json = req.body.json;
         // O pedido pode ter sido 'auto' (motor decide depois de raspar a URL);
         // o JSON que volta sempre tem o tipo concreto que o motor escolheu

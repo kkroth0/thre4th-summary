@@ -1,5 +1,6 @@
 """Read-only VPS diagnostics; report configuration presence, never credentials."""
 import collections
+import hashlib
 import json
 import re
 import subprocess
@@ -47,7 +48,19 @@ except (OSError, ValueError):
 latest = sorted(jobs.values(), key=lambda row: row.get('updatedAt', ''), reverse=True)[:12]
 worker_log = command('journalctl', '-u', 'bdppt-worker', '-n', '100', '--no-pager', '-o', 'cat')
 patterns = ['timeout', '401', '402', '403', '429', 'No module named', 'Traceback', 'OPENROUTER', 'poll erro', 'ERRO', ' OK']
+repository_status = []
+for url in ['https://github.com/paloaltonetworks/unit42-timely-threat-intel', 'https://github.com/rtkwlf/wolf-tools/tree/main/threat-intelligence']:
+    try:
+        cached = json.loads((app / 'server/.feed-cache/rss' / (hashlib.sha256(url.encode()).hexdigest() + '.json')).read_text())
+        items = cached.get('items', [])
+        c2 = next((item for item in items if 'C2Agent' in item.get('title', '')), {})
+        repository_status.append({'url': url, 'reports': len(items), 'deferred': cached.get('deferredReports'),
+                                  'lastSuccessfulAt': cached.get('lastSuccessfulAt'),
+                                  'c2agentHashes': len((c2.get('iocs') or {}).get('hashes', []))})
+    except (OSError, ValueError):
+        repository_status.append({'url': url, 'status': 'not collected yet'})
 print(json.dumps({
+    'repositorySources': repository_status,
     'configuration': {
         'siteAgentSecret': bool(site_config.get('FEED_AGENT_SECRET')),
         'workerAgentSecret': bool(engine_config.get('FEED_AGENT_SECRET')),
@@ -63,4 +76,5 @@ print(json.dumps({
     'recentJobs': [{'status': row.get('status'), 'createdAt': row.get('createdAt'), 'updatedAt': row.get('updatedAt'), 'sources': len(row.get('urls') or [row.get('url')]), 'error': redact(row.get('error') or '')} for row in latest],
     'workerLogSignals': {pattern: worker_log.count(pattern) for pattern in patterns},
     'workerErrors': [redact(line) for line in worker_log.splitlines() if any(pattern in line for pattern in ['ERRO:', 'poll erro:', 'Error:', 'ModuleNotFoundError'])][-12:],
+    'workerPhases': [redact(line) for line in worker_log.splitlines() if any(pattern in line for pattern in ['Analyzing ', 'Source collected:', 'refinement', 'timed out', 'rate-limited', 'sem pdf', 'sem pptx', 'render excedeu', 'Scraped ', 'OpenRouter model chain'])][-16:],
 }, indent=2))

@@ -392,8 +392,8 @@ export function extractIOCs(text, { plaintext = false } = {}) {
     const domains = new Set();
     const domainSrc = t.replace(RE_EMAIL, ' ');
     // Defanged domains (any mode): a token carrying [.] / (.) / {.}
-    for (const m of domainSrc.matchAll(/\b((?:[a-z0-9-]+(?:\[\.\]|\(\.\)|\{\.\}))+[a-z]{2,})\b/gi)) {
-        addDomain(domains, refang(m[1]));
+    for (const m of domainSrc.matchAll(/\b((?:[a-z0-9-]+(?:\.|\[\.\]|\(\.\)|\{\.\}))+[a-z]{2,})\b/gi)) {
+        if (/\[\.\]|\(\.\)|\{\.\}/.test(m[1])) addDomain(domains, refang(m[1]));
     }
     // Plaintext appendix: also accept plain domains (evil.com, sub.evil.com), after
     // stripping URLs so a URL's host isn't double-counted through a different path.

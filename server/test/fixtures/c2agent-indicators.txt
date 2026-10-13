@@ -1,0 +1,69 @@
+INDICATORS
+
+SHA-256 HASHES FOR THE AGENT IN VERSION ORDER:
+
+- 35fc649622dfea297cb2a37ce2b6a9f89733546a22a5d13410c96ff904126e92 (v0, 2026-09-10, c2agent.exe.bin)
+- 14d7dee40dbe0fd62a9b0fb68b71b58616664bad620d32efeafe127ab599030d (v1, 2026-09-18)
+- 07897df23a207350daacd466c09ffecf29593d9acca9617bbc4512dd3508f835 (v1.x, 2026-09-22)
+- 9bebb49772b14f7ff15b30c6b5657f67828418882ac18b123effea3bedef8618 (v1.x, 2026-09-22, rebuild of 07897df2...)
+- d9c1ddf3d0d56a64d35ef4dd2862c39e336b0b2552ba9cd1085fd19882dbdc8d (v1.x, 2026-09-22)
+- 966bf00ada3671379f56ec9851353b6cbccbbbdb5ad66eee01560ff057382000 (v1.x, 2026-09-22)
+- 04f29d72a1bdd4348880e25d2360319ae4ca637a173f2a3b051daf111a5811cf (v1.x, 2026-09-22, C:\Windows\fdgw6.exe)
+- 6827a35e1ad79a0511d0b9445aeef97e23a0416e2184ce7463747fb2cba1900b (v1.x, 2026-09-22)
+- 9cad1f8a5d858536d83e852d443ed0a01a09a8ecf848496880528d7c05a74f37 (v1.x, 2026-09-22)
+- 02b15d3d2a34e6d6eedda40319e3558bef164309eda3132d8ea625d35c24ed1c (v1.x, 2026-09-22)
+- 319b8e424e113a465893d7b05de053fa22fd2219ee53d37364ab7b585ff603b7 (v1.x, 2026-09-23)
+- 5494c19618058553d769916b08cacbd42c68695416e4b9a9bc55cb0934a15ef5 (v1.x, 2026-09-24, C:\Windows\tym9z.exe, rebuild of 04f29d72...)
+- 88e418ac9d70caf9be2cd3482bc3c17541df97646bb16b3fea1752e2afdf946b (v1.x, 2026-09-24, C:\Windows\81jqu.exe, rebuild of 966bf00a...)
+- 83fe8207e2fc66df527efe0331109625d841e9904bd8b609c21c603777125e38 (v2, 2026-09-27, served as copilot.txt)
+- f954028b957f02f2c73f3d670316a970997af0e1818f2e15304efd4424ef76fb (v2, 2026-09-27)
+- 6f4ddcab4cb6007d308a63f371406ea17177d7444696b1fb62e474eed3207b56 (v2, 2026-10-02, C:\Windows\1cna1b.exe, rebuild of 83fe8207...)
+- 87166fdeb09c4317b22b144d06881f35a2b7ff1fa24bfd2e1c520fe5cf68d533 (v2, 2026-10-02, rebuild of f954028b...)
+- 074147b2f1687571ba2f0ca51037ab2274381b0d3cd3fa5cc63cafd371eb9a1b (v2, 2026-10-02, C:\Windows\r30xxsrlb.exe)
+- aaea58096313c877495ab0c07de3217cefdf1bc9bd9d08df06b44881fe9b90a9 (v2.1, 2026-09-30)
+- fec98965094b2c2da2f82c2bbcc302f767d63ad62e89976ce805717a1c3eb100 (v2.2, 2026-10-01, C:\Windows\e98fqjxp.exe)
+- 376cacae394932b14e23257d2e5a166f1a7ceb68a6135ba265c06c201cda731a (v2.2, 2026-10-01, C:\Windows\pyp50b2.exe)
+- 0a138c328634a1903ebe299eef049d6e516821c6ee17b3c8d023dcbb16207414 (v2.2, 2026-10-02, rebuild of 376cacae)
+- ea459c203b53e8bc6ba4aa11a4efda3b7bd97cd86ab7607b24debe0c1addf6f4 (v2.2, 2026-10-02, C:\Windows\iy06xhfor.exe)
+- 333470f4f2b85b5de18a37499ef1dbc0f3e1d5380cb2c1327f6de838c01f6a97 (v2.3, 2026-10-02, C:\Windows\a3qyudf3.exe)
+- e6ad79c9c792c0337c7d19ad5e6c9e9d94b6355a45460bef2c72000fc3197292 (v2.4, 2026-10-08, served as copilot.txt, newest)
+
+SHA-256 HASHES FOR THE V7 STAGER:
+
+- 18ad1fa64328c998a13cbae0c09f84114433c03872868475e455119a9acb9bed (2026-09-27, C:\Windows\db2683.exe)
+- 8193e19521d27d513ca7c1c47b20f64a385a4189707efbe42483f5556f2c7f2b (2026-09-27, C:\Windows\a441q5v55.exe)
+- 215efb8405e32c9b59a95b560363fb4c51a6471e8c067938d67a464e33facd3c (2026-09-27, C:\Windows\2s7sa.exe)
+- 70b726bc777779abddb7e9a4001f58a9f59faaf0f3a433859e149b0f44c655a3 (2026-09-27, C:\Windows\twjbg2.exe)
+- 9913432b854f344f3b3603a19aab9fec64a24f424b838bbe36ad9a1103e37079 (2026-09-28)
+- 3dcb6cd93093e01119614e40d2d8695ac29c6702482fb73b8c67bd6859d88c62 (2026-09-29)
+- 316c71f65517016ad58770410ca639b9c3bfb2f23ccd341cdaaf13375c829a26 (2026-10-02, C:\Windows\15jk37m.exe)
+
+NETWORK INDICATORS:
+
+- C2 Domain: agent.x90[.]dev
+- Payload URL: hxxps[:]//agent.x90[.]dev/data/copilot.txt (live as of 2026-10-08, serving v2.4)
+- Operator LLM endpoint (v0 only): hxxps[:]//aibox.x90[.]dev
+- Beacon: POST /v1/chat/completions    <-- with X-Poll header (default profile)
+- Alternate beacon paths (v2+ profiles): /api/v2/sync, /v1/cache/warm, /ws/message
+- Proxied LLM traffic: /llm/<id>/v1/chat/completions
+- Interactive shell path: /pty/channel
+- Pivot tunnel: /pivot/channel, /pivot/poll
+- HTTP headers (v1): X-C2AGENT-Agent, X-C2AGENT-Handshake, X-C2AGENT-Key
+- HTTP headers (v2.4): X-Agent-Id, X-Agent-PubKey, X-Shared-Key, X-Pty-Handshake, X-Pivot-Agent
+- Default MCP server (legitimate service, abused): hxxps[:]//mcp.firecrawl[.]dev/v2/mcp
+
+Host Indicators:
+
+- Stager/agent location on disk: C:\Windows\<random 5-9 chars>.exe (observed in VT submission paths)
+- Stager injection target names: sihost.exe, RuntimeBroker.exe, msedgewebview2.exe, conhost.exe, taskhostw.exe, SearchUI.exe, ShellExperienceHost.exe
+- Stager debug log names (debug builds only): stager_v7.log, implant_trace.log
+- Persistence: hidden copy at %LOCALAPPDATA%\<random>\<random>.exe
+- Persistence: %APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\<random>.lnk
+- Persistence: scheduled task created with /sc onlogon
+- Persistence (v1.x variants, 2026-09-22/23): registry Run key plus a file dropped in the Startup folder; daily scheduled task
+- Parent-spoof launcher task (from v1): c2a_<n> (created, then deleted)
+- Runtime keypair file location: %TEMP%\c2agent-kp-* (v1), %TEMP%\iris-kp-* (from v1.x)
+- BOF helper files location (v2.4): %TEMP%\iris-bof-*.coff, %TEMP%\iris-helper-*.exe
+- Command-line marker: --__c2agent-fork2 (v1), --__bf3f4b-fork2 (v2.4; contains the per-build module name)
+- Go build paths (fixed names): c2ai/cmd/c2ai-agent (v0), c2agent/cmd/c2agent-agent (v1), iris/cmd/iris-agent (early v1.x)
+- Go build path pattern (randomized builds): <6 random [0-9a-z] chars>/cmd/iris-agent (agent), <6 random chars>/cmd/stager (stager)

@@ -3,7 +3,7 @@ import { contentHash } from './articleCollector.js';
 import { analyzePhishing } from './phishingIntel.js';
 import { setImmediate as yieldLoop } from 'node:timers/promises';
 
-export const EXTRACTION_VERSION = 'feed-v7';
+export const EXTRACTION_VERSION = 'feed-v8';
 
 // Keep all mentioned CVEs for research/KEV, but use only the article's focus
 // to group coverage. A patch report often recounts older, unrelated flaws.
@@ -31,7 +31,7 @@ export function enrichFeedItems(items, { texts = new Map(), actors, malware, cam
         const enriched = {
             ...item, ...scoreArticle(text, item.weight_boost),
             actors: actors(text), malware: malware(text), campaigns: campaigns(text),
-            iocs: extractIOCs(text), sellerHandle: seller(text),
+            iocs: item.repositoryReport ? item.iocs : extractIOCs(text), sellerHandle: seller(text),
             contentHash: contentHash(text), extractionVersion: EXTRACTION_VERSION,
             topicCves: topicCvesOf(item.title, item.text || item.description || '', texts.get(item.link) || ''),
         };

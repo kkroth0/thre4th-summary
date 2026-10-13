@@ -209,6 +209,7 @@ export default function FeedSourcesManager() {
                                                 <span className="font-medium text-sm truncate">{f.source}</span>
                                                 {!f.builtin && <Badge variant="secondary" className="text-[10px]">custom</Badge>}
                                                 {f.kind === "auto" && <Badge variant="outline" className="text-[10px]">RSS / HTML</Badge>}
+                                                {f.kind === "github" && <Badge variant="outline" className="text-[10px]">GitHub · IOCs</Badge>}
                                                 <FeedStatus feed={f} />
                                             </div>
                                             <div className="text-xs text-muted-foreground truncate" title={f.health?.endpoint || f.url}>{f.health?.endpoint || f.url}</div>
@@ -257,7 +258,7 @@ function FeedStatus({ feed }: { feed: FeedSource }) {
     if (feed.health.ok) {
         return (
             <span className="flex items-center gap-1 text-[10px] text-emerald-600 dark:text-emerald-400">
-                <CheckCircle2 className="h-3 w-3" /> {feed.health.method === "html" ? "HTML · " : "RSS · "}{feed.health.count}{feed.health.status === "unchanged" ? " · sem alterações" : ""}
+                <CheckCircle2 className="h-3 w-3" /> {feed.health.method === "github" ? "GitHub · " : feed.health.method === "html" ? "HTML · " : "RSS · "}{feed.health.count}{feed.health.status === "unchanged" ? " · sem alterações" : ""}
             </span>
         );
     }

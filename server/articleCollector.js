@@ -15,6 +15,7 @@ export async function collectArticleTexts(items, { fetchText, cache, now = new D
     for (const item of [...items].sort((a, b) => String(b.pubDate).localeCompare(String(a.pubDate)) || a.link.localeCompare(b.link))) {
         if (![2, 3].includes(Number(item.layer)) || !item.link || seen.has(item.link)) continue;
         seen.add(item.link);
+        if (item.repositoryReport) { item.articleCollectionStatus = 'repository-body'; continue; }
         if ((item.text || '').length >= 1500) { item.articleCollectionStatus = 'feed-body'; continue; }
         const fingerprint = contentHash(item.title + '\n' + (item.text || item.description || ''));
         const previous = cache.get(item.link);

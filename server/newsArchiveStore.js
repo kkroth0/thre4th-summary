@@ -31,7 +31,7 @@ export function createNewsArchiveStore({ filePath, readFileSync, writeJsonAtomic
                     phishingTechniques: Array.isArray(item.phishingTechniques) ? item.phishingTechniques : [],
                     archivedAt: old?.archivedAt || new Date().toISOString(),
                 };
-                for (const field of ["description", "text", "layer", "dateInferred", "firstCollectedAt", "phishingIntel", "storyId", "contentHash", "extractionVersion", "cves", "actors", "malware", "campaigns", "ttpIds", "iocs", "vendors", "assets"]) {
+                for (const field of ["description", "text", "layer", "dateInferred", "firstCollectedAt", "phishingIntel", "storyId", "contentHash", "extractionVersion", "cves", "actors", "malware", "campaigns", "ttpIds", "iocs", "vendors", "assets", "repository"]) {
                     if (item[field] !== undefined) row[field] = item[field];
                     else if (old?.[field] !== undefined) row[field] = old[field];
                 }

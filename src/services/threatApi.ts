@@ -1152,7 +1152,7 @@ export const signupUrl = '/api/auth/github/login?signup=1';
 export interface FeedHealth {
     ok: boolean; count: number; error: string | null; at: string;
     status?: "fresh" | "unchanged" | "stale" | "failed" | "collecting";
-    method?: "rss" | "html"; endpoint?: string;
+    method?: "rss" | "html" | "github"; endpoint?: string;
     fetchedCount?: number; lastSuccessfulAt?: string | null;
 }
 export interface FeedSource {
@@ -1162,7 +1162,7 @@ export interface FeedSource {
     weight_boost: number;
     builtin: boolean;
     enabled: boolean;
-    kind?: "rss" | "auto";
+    kind?: "rss" | "auto" | "github";
     health: FeedHealth | null;
 }
 export interface FeedsResponse { feeds: FeedSource[]; isAdmin: boolean; }

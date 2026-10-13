@@ -68,6 +68,7 @@ export function normalizeDeckSubtype(raw) {
 /** Metadado do job sem o boletim. A lista carrega isso; o JSON só no detalhe. */
 export function jobSummary(job) {
     const { json, ...meta } = job || {};
+    delete meta.documents;
     return { ...meta, hasReport: Boolean(json) };
 }
 
