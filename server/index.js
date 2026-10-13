@@ -35,7 +35,7 @@ import { REPOSITORY_SOURCES, createRepositoryResolver } from './repositorySource
 import { prepareFeedJobDocuments } from './feedJobDocuments.js';
 import { completeReportEvidence } from './reportEvidence.js';
 import { completeNewsFeed, reviewNewsEvidence } from './newsQuality.js';
-import { rebuildStoryCorrelations } from './newsStories.js';
+import { rebuildStoryCorrelationsAsync } from './newsStories.js';
 import { persistNewsEvidence } from './persistNewsEvidence.js';
 import { publishNewsSnapshot } from './publishNewsSnapshot.js';
 import { createIocIntelligence } from './iocIntelligence.js';
@@ -1317,14 +1317,14 @@ const rssCollectionCache = createFeedCache({ directory: path.join(__dirname, '.f
 const articleCollectionCache = createFeedCache({ directory: path.join(__dirname, '.feed-cache', 'articles'), fs, writeJsonAtomic });
 // Reclassify metadata only; preserve publications and reuse existing body
 // caches without issuing hundreds of historical requests on startup.
-if (process.env.NODE_ENV !== 'test') try {
+const newsQualityReady=(async()=>{if (process.env.NODE_ENV !== 'test') try {
     newsArchiveStore.reclassifyPhishing({ bodyFor: link => articleCollectionCache.get(link)?.text || '' });
     if(!iocIntelligence.state('news-quality-v9')){
         writeJsonAtomic(path.join(__dirname,'.news-quality-v9-backup.json'),{archive:newsArchiveStore.all(),stories:newsStoryStore.all()});
         newsArchiveStore.add(newsArchiveStore.all().map(row=>({...reviewNewsEvidence(row,articleCollectionCache.get(row.link)?.text||'',text=>matchMalware(text,malwareIndex)),extractionVersion:EXTRACTION_VERSION})));
         const revised=new Map(newsArchiveStore.all().map(row=>[row.link,row]));
         const stories=newsStoryStore.all().map(story=>({...story,sources:story.sources.map(source=>({...source,...revised.get(source.link)})).filter(source=>source.securityRelevant!==false)})).filter(story=>story.sources.length);
-        const rebuilt=rebuildStoryCorrelations(stories,completeNewsFeed([],newsArchiveStore.all()));
+        const rebuilt=await rebuildStoryCorrelationsAsync(stories,completeNewsFeed([],newsArchiveStore.all()));
         newsStoryStore.save(rebuilt);
         const identities=new Map(rebuilt.flatMap(story=>story.sources.map(source=>[source.link,story.id])));
         newsArchiveStore.add(newsArchiveStore.all().map(row=>({...row,storyId:identities.get(row.link)||row.storyId})));
@@ -1332,7 +1332,8 @@ if (process.env.NODE_ENV !== 'test') try {
         await iocIntelligence.ingestNews(newsArchiveStore.all());
         iocIntelligence.setState('news-quality-v9',{at:new Date().toISOString()});
     }
-} catch (error) { console.error('phishing archive reclassification failed:', error.message); }
+} catch (error) { console.error('news evidence review failed:', error.message); throw error; }})();
+void newsQualityReady.catch(()=>{});
 const previousFeedSnapshot = rssCollectionCache.get('newsletter:snapshot');
 if ([EXTRACTION_VERSION, 'feed-v7'].includes(previousFeedSnapshot?.extractionVersion) && Array.isArray(previousFeedSnapshot.items)) {
     const enabled = new Set([...effectiveFeeds().map((feed) => feed.url), ...SCRAPE_SOURCES.filter((source) => !feedOverrides.disabled.includes(source.url)).map((source) => source.url)]);
@@ -1355,6 +1356,7 @@ const feedCollector = createFeedCollector({
 });
 
 const refreshNewsletterFeed = singleFlightRefresh(async () => {
+    await newsQualityReady;
     const startedAt = Date.now();
     try {
         const collected = await feedCollector.collect(effectiveFeeds());
@@ -1445,6 +1447,7 @@ app.put('/api/news/monitoring', requireAuth, (req, res) => {
 // category (substring of a category label), layer (1-4), sort (relevance|date).
 app.get('/api/newsletter', requirePremium, async (req, res) => {
     try {
+        await newsQualityReady;
         if (!memoryCache.newsletter.data) {
             // Cold start fallback
             void refreshNewsletterFeed();

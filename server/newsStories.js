@@ -585,6 +585,12 @@ export function mergeIntoStories(stories, items, now) {
 export function rebuildStoryCorrelations(stories, items = [], now = new Date()) {
     return complete(rebuildStorySteps(stories, items, now));
 }
+export async function rebuildStoryCorrelationsAsync(stories, items = [], now = new Date()) {
+    const steps=rebuildStorySteps(stories,items,now);
+    let result=steps.next(),lastYield=performance.now();
+    while(!result.done){if(performance.now()-lastYield>=8){await yieldLoop();lastYield=performance.now();}result=steps.next();}
+    return result.value;
+}
 
 // The production collector can compare thousands of retained publications.
 // Yield between comparisons so worker polls/results and user requests stay live.
