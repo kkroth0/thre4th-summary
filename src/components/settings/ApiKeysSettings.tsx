@@ -41,6 +41,13 @@ interface Group {
 // não faz nada é pior do que não oferecer.
 const CATALOG: Group[] = [
   {
+    title: { pt: 'Coleta contínua de inteligência', en: 'Continuous intelligence collection' },
+    items: [
+      { id:'otx',label:'AlienVault OTX',url:'https://otx.alienvault.com/api',placeholder:'OTX API Key',description:{pt:'Usada nas consultas e na coleta contínua dos seus pulsos. Evidências privadas ficam vinculadas à sua conta.',en:'Used for lookups and continuous pulse collection. Private evidence remains scoped to your account.'} },
+      { id:'abuseipdb',label:'AbuseIPDB',url:'https://www.abuseipdb.com/account/api',placeholder:'API Key',description:{pt:'Acrescenta reputação de IPs às consultas e à base de IOCs. A coleta respeita as cotas da sua chave.',en:'Adds IP reputation to lookups and the IOC inventory. Collection respects your key quota.'} },
+    ],
+  },
+  {
     title: { pt: 'Inteligência de malware', en: 'Malware intelligence' },
     items: [{ id: 'abuse_ch', label: 'Abuse.ch', url: 'https://auth.abuse.ch/', placeholder: 'Auth-Key',
       description: { pt: 'Usa sua Auth-Key no MalwareBazaar, ThreatFox e URLhaus, incluindo buscas de famílias e hashes. A chave é armazenada cifrada por conta.', en: 'Uses your Auth-Key for MalwareBazaar, ThreatFox and URLhaus, including family and hash lookups. The key is encrypted per account.' } }],

@@ -10,6 +10,16 @@ const fixture = JSON.parse(fs.readFileSync(new URL('./fixtures/news-correlation-
 const now = new Date(fixture.evaluationAt);
 const article = (link, extra = {}) => ({ link: `https://test.example/${link}`, source: link, title: 'Citrix NetScaler emergency patch', pubDate: now.toISOString(), cves: [], actors: [], malware: [], campaigns: [], ...extra });
 
+test('unchanged publication evidence reuses its event; metadata changes still rebuild attribution',async()=>{
+    const papers=[article('a',{contentHash:'a'.repeat(64),extractionVersion:'feed-v8',cves:['CVE-2026-11111']}),article('b',{contentHash:'b'.repeat(64),extractionVersion:'feed-v8',cves:['CVE-2026-11111']})];
+    const original=mergeIntoStories([],papers,now);
+    const same=await mergeIntoStoriesAsync(original,papers,now);
+    assert.deepEqual(same,original);
+    const changed=await mergeIntoStoriesAsync(original,[papers[0],{...papers[1],cves:['CVE-2026-22222']}],now);
+    assert.equal(changed.length,2);
+    assert.ok(changed.some(story=>story.cves.includes('CVE-2026-22222')));
+});
+
 test('background correlation preserves real-source grouping and yields to queued requests', async () => {
     let requestServed = false;
     setImmediate(() => { requestServed = true; });

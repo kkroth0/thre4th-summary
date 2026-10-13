@@ -452,6 +452,11 @@ function* mergeStorySteps(stories, items, now) {
     const incoming = (Array.isArray(items) ? items : []).filter((item) => item?.link && new Date(item.pubDate).getTime() >= cutoff)
         .sort((a, b) => String(a.pubDate).localeCompare(String(b.pubDate)) || String(a.link).localeCompare(String(b.link)));
     for (const item of incoming) {
+        const unchanged = knownSources.get(canonicalArticleUrl(item.link) || item.link);
+        if (item.contentHash && unchanged?.contentHash === item.contentHash && unchanged.extractionVersion === item.extractionVersion) {
+            const next = newStory(item).sources[0];
+            if (Object.keys(next).every(key => JSON.stringify(next[key] ?? null) === JSON.stringify(unchanged[key] ?? null))) { yield; continue; }
+        }
         yield;
         const link = canonicalArticleUrl(item.link) || item.link;
         const direct = newStory({ ...item, link });

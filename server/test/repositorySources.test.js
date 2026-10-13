@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { createRepositoryResolver, REPOSITORY_SOURCES, repositoryIocs } from '../repositorySources.js';
+import { createRepositoryResolver, REPOSITORY_SOURCES, repositoryIocs, declaredRepositoryMalware } from '../repositorySources.js';
 import { createFeedCollector } from '../feedCollector.js';
 import { enrichFeedItems } from '../feedEnrichment.js';
 import { prepareFeedJobDocuments } from '../feedJobDocuments.js';
@@ -19,6 +19,12 @@ test('C2Agent preserves all 25 agent and 7 stager hashes, excluding legitimate M
   assert.ok(iocs.domains.includes('agent.x90.dev'));
   assert.ok(iocs.urls.includes('https://agent.x90.dev/data/copilot.txt'));
   assert.ok(!JSON.stringify(iocs).includes('firecrawl'));
+});
+
+test('a family explicitly named by Unit42 becomes a source-backed malware entity',()=>{
+  const item={repositoryReport:true,repository:{repo:REPOSITORY_SOURCES[0].repo},text:"We found a malware family written in Go that we've named ExampleAgent."};
+  assert.deepEqual(declaredRepositoryMalware(item),[{id:'reported:exampleagent',name:'ExampleAgent'}]);
+  assert.deepEqual(declaredRepositoryMalware({...item,repositoryReport:false}),[]);
 });
 
 test('CSV selects indicator columns, parses quotes, ignores references and benign services', () => {

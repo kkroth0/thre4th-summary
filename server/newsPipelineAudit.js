@@ -26,6 +26,25 @@ const sources = stories.flatMap(story=>story.sources||[]);
 const indexed=new Map(sources.map(row=>[row.link,row]));
 const recent=archive.filter(row=>Date.parse(row.pubDate)>=Date.now()-30*86400000);
 const hasIocs=row=>Object.values(row.iocs||{}).some(values=>values?.length);
+const {mergeIntoStoriesAsync}=await import(pathToFileURL(path.join(root,'server/newsStories.js')));
+const sample=(snapshot?.items||[]).filter(row=>indexed.has(row.link)).slice(0,100);
+const benchmarkStart=performance.now();
+const benchmarkStories=await mergeIntoStoriesAsync(stories,sample,new Date());
+const correlationCheck={publications:sample.length,elapsedMs:Math.round(performance.now()-benchmarkStart),retainedStories:benchmarkStories.length,readOnly:true};
+let intelligence={status:'not initialized'};
+const intelligenceFile=path.join(root,'server/.ioc-intelligence.sqlite');
+if(fs.existsSync(intelligenceFile)) {
+  const {default:Database}=await import(pathToFileURL(path.join(root,'server/node_modules/better-sqlite3/lib/index.js')));
+  const db=new Database(intelligenceFile,{readonly:true,fileMustExist:true});db.pragma('query_only = ON');
+  intelligence={
+    indicators:db.prepare('SELECT COUNT(*) count FROM indicators').get().count,
+    observations:db.prepare('SELECT COUNT(*) count FROM observations').get().count,
+    sources:db.prepare('SELECT provider,COUNT(*) observations FROM observations GROUP BY provider').all(),
+    entityLinks:db.prepare('SELECT kind,COUNT(*) links,COUNT(DISTINCT entity) entities FROM entity_links GROUP BY kind').all(),
+    collectors:db.prepare("SELECT id,value FROM intelligence_state WHERE id LIKE 'source:%'").all().map(row=>{const state=JSON.parse(row.value);return {source:row.id.split(':').at(-1),scope:row.id.split(':').length>2?'account':'platform',status:state.status,count:state.count,lastSuccessfulAt:state.lastSuccessfulAt,nextAt:state.nextAt};}),
+    c2agent:db.prepare("SELECT COUNT(DISTINCT o.indicator) hashes FROM observations o JOIN entity_links e ON e.observation=o.id JOIN indicators i ON i.id=o.indicator WHERE e.kind='malware' AND e.name='C2Agent' AND i.type='hash'").get(),
+  };db.close();
+}
 console.log(JSON.stringify({
   checkedAt:new Date().toISOString(), archivePublications:archive.length,storedStories:stories.length,
   publicationsWithIocs:archive.filter(hasIocs).length,uniqueIocs:counts,
@@ -36,6 +55,7 @@ console.log(JSON.stringify({
   recentArchivePublications:recent.length,recentWithIocs:recent.filter(hasIocs).length,
   recentWithStoryEvidence:recent.filter(row=>indexed.has(row.link)).length,
   extractionVersion:snapshot?.extractionVersion,bodyCollection:bodyStats,
+  intelligence,correlationCheck,
   c2agent:c2 ? {link:c2.link,archivedAt:c2.archivedAt,hashes:c2.iocs?.hashes?.length||0,missingExpectedHashes:expected.filter(hash=>!c2.iocs?.hashes?.includes(hash)).length,
     storyHashes:indexed.get(c2.link)?.iocs?.hashes?.length||0,storyId:c2.storyId} : {status:'not archived yet'},
 },null,2));

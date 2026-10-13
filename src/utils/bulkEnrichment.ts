@@ -1,6 +1,7 @@
 import { detectAnalyzerQueryType, extractIocsFromText, isPublicIpv4, isPublicIpv6 } from './iocExtract';
 import { refang } from './defang';
 import type { ThreatIntelligenceResult } from '../types/threat-intelligence';
+import type { BulkContext } from '../services/bulkContext';
 
 export const BULK_MAX_BYTES = 3_800_000;
 export type BulkState = 'queued' | 'running' | 'complete' | 'partial' | 'error' | 'unsupported' | 'stopped';
@@ -10,6 +11,8 @@ export interface BulkRow {
   result?: ThreatIntelligenceResult;
   error?: string;
   completedAt?: string;
+  context?: BulkContext;
+  contextLoading?: boolean;
 }
 
 export function prepareBulkInput(raw: string) {
@@ -74,6 +77,10 @@ const csvCell = (value: unknown) => {
   return `"${text.replace(/"/g, '""')}"`;
 };
 export function bulkCsv(rows: BulkRow[]) {
-  const columns = ['indicator', 'type', 'status', 'verdict', 'detections', 'country', 'asn', 'organization', 'sources', 'failed_sources', 'completed_at'];
-  return [columns, ...rows.map(row => [row.query, detectAnalyzerQueryType(row.query), row.state, row.result?.threatLevel || 'unknown', row.result?.detections ?? '', bulkField(row, ['Country']).value, bulkField(row, ['ASN', 'AS']).value, bulkField(row, ['Organization', 'ISP']).value, row.result?.vendorData.map(vendor => vendor.name).join('; ') || '', row.result?.vendorData.filter(vendor => vendor.error).map(vendor => vendor.name).join('; ') || '', row.completedAt || ''])].map(row => row.map(csvCell).join(',')).join('\r\n');
+  const vendors = [...new Set(rows.flatMap(row => row.result?.vendorData.map(vendor => vendor.name) || []))];
+  const columns = ['indicator', 'type', 'status', 'verdict', 'detections', 'country', 'asn', 'organization', 'sources', 'failed_sources', 'completed_at', 'publications_json', 'correlated_evidence_json', 'context_errors_json', 'result_json', ...vendors.flatMap(name => [`${name}_status`, `${name}_data_json`, `${name}_raw_json`, `${name}_reference`, `${name}_timeline_json`, `${name}_quota_json`])];
+  return [columns, ...rows.map(row => [row.query, detectAnalyzerQueryType(row.query), row.state, row.result?.threatLevel || 'unknown', row.result?.detections ?? '', bulkField(row, ['Country']).value, bulkField(row, ['ASN', 'AS']).value, bulkField(row, ['Organization', 'ISP']).value, row.result?.vendorData.map(vendor => vendor.name).join('; ') || '', row.result?.vendorData.filter(vendor => vendor.error).map(vendor => vendor.name).join('; ') || '', row.completedAt || '', JSON.stringify(row.context?.publications || []), JSON.stringify(row.context?.evidence || []), JSON.stringify(row.context?.errors || []), JSON.stringify(row.result || null), ...vendors.flatMap(name => {
+    const vendor = row.result?.vendorData.find(item => item.name === name);
+    return vendor ? [vendor.error || (vendor.isLoading ? 'pending' : 'ok'), JSON.stringify(vendor.data), JSON.stringify(vendor.rawPayload ?? null), vendor.link || '', JSON.stringify(vendor.timeline || []), JSON.stringify(vendor.quota || null)] : ['not_queried', '', '', '', '', ''];
+  })])].map(row => row.map(csvCell).join(',')).join('\r\n');
 }

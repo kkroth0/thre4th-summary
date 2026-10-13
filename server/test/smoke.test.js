@@ -96,6 +96,15 @@ test('the worker receives all selected sources and requires its dedicated secret
     assert.ok(!JSON.stringify(result).includes('smoke-worker-secret'));
 });
 
+test('unified IOC inventory and export require premium and validate dates',async()=>{
+    for(const route of ['/api/intelligence/status','/api/intelligence/iocs','/api/intelligence/ioc?value=46.101.130.1','/api/intelligence/export?from=2026-10-01&to=2026-10-13'])assert.equal((await fetch(BASE+route)).status,401);
+    const response=await fetch(BASE+'/api/intelligence/iocs',{headers:AUTH_HEADERS});
+    assert.equal(response.status,200);assert.equal((await response.json()).total,0);
+    assert.equal((await fetch(BASE+'/api/intelligence/export?from=bad&to=2026-10-13',{headers:AUTH_HEADERS})).status,400);
+    const exported=await fetch(BASE+'/api/intelligence/export?from=2026-10-01&to=2026-10-13&format=json',{headers:AUTH_HEADERS});
+    assert.equal(exported.status,200);assert.equal((await exported.json()).total,0);
+});
+
 test('archive export enforces authentication, applies monitoring and includes final-day IOC evidence', async () => {
     const route = '/api/news/export?from=2026-10-08&to=2026-10-08&dataset=iocs&format=json';
     assert.equal((await fetch(BASE + route)).status, 401);
@@ -237,7 +246,7 @@ test('urlscan BYOK é cifrado, isolado por conta e ativa a busca sem chave da pl
     assert.equal(saved.status, 200);
     assert.deepEqual(await saved.json(), { provider: 'urlscan', hasKey: true });
     const own = await fetch(`${BASE}/api/user/keys`, { headers: AUTH_HEADERS }).then(r => r.json());
-    assert.deepEqual(own.keys, { shodan: false, urlscan: true, abuse_ch: false });
+    assert.deepEqual(own.keys, { shodan: false, urlscan: true, abuse_ch: false, otx:false, abuseipdb:false });
     assert.ok(!JSON.stringify(own).includes(key));
     const other = await fetch(`${BASE}/api/user/keys`, { headers: OUTSIDER_HEADERS }).then(r => r.json());
     assert.equal(other.keys.urlscan, false);

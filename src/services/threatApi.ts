@@ -527,7 +527,7 @@ const extractVendorTimestamps = (vendorName: string, data: any): TimelineEvent[]
 };
 
 // Generic fetcher for backend API
-export interface LookupOptions { fresh?: boolean }
+export interface LookupOptions { fresh?: boolean; includeRaw?: boolean }
 const fetchFromBackend = async (endpoint: string, query: string, vendorName: string, options: LookupOptions = {}): Promise<VendorData> => {
     try {
         const response = await fetch(`/api/${endpoint}`, {
@@ -542,6 +542,7 @@ const fetchFromBackend = async (endpoint: string, query: string, vendorName: str
             data: formatVendorData(vendorName, data, query),
             link: getVendorLink(vendorName, query),
             timeline: extractVendorTimestamps(vendorName, data),
+            ...(options.includeRaw ? { rawPayload: data } : {}),
         };
     } catch (error) {
         return { name: vendorName, data: {}, error: (error as Error).message };

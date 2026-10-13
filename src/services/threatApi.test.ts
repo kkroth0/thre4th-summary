@@ -9,6 +9,18 @@ test("detects a public IPv6 address as IP and an IPv6 literal URL as URL", () =>
   assert.equal(detectIOCType("https://[2606:4700:4700::1111]/status"), "url");
 });
 
+test('bulk lookup retains the full payload without adding raw retention to normal scans', async () => {
+  const original = globalThis.fetch;
+  const payload = { data: { ip_str: '46.101.130.1', ports: [443], extra: { nested: ['complete-response'] }, data: [] } };
+  globalThis.fetch = async () => new Response(JSON.stringify(payload));
+  try {
+    const normal = await fetchThreatData('46.101.130.1', ['Shodan']);
+    const bulk = await fetchThreatDataProgressive('46.101.130.1', ['Shodan'], () => {}, { includeRaw: true });
+    assert.equal(normal.vendorData[0].rawPayload, undefined);
+    assert.deepEqual(bulk.vendorData[0].rawPayload, payload);
+  } finally { globalThis.fetch = original; }
+});
+
 test('manual enrichment refresh requests fresh data; normal lookups permit cached responses', async () => {
   const previous = globalThis.fetch;
   const bodies: { query: string; fresh?: boolean }[] = [];

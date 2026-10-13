@@ -3,6 +3,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { LayoutGrid, List } from 'lucide-react';
 import { StoryTable } from '@/components/workbench/StoryTable';
 import { NewsIocTable } from '@/components/workbench/NewsIocTable';
+import { IocInventory } from '@/components/workbench/IocInventory';
 import { NewsExportDialog } from '@/components/workbench/NewsExportDialog';
 
 import { SourceIdentity } from '@/components/SourceIdentity';
@@ -207,7 +208,7 @@ const Newsletter = () => {
   const [advisories, setAdvisories] = useState<Advisory[]>([]);
   const [feedView, setFeedView] = useState<'table' | 'cards'>('table');
   const [searchParams, setSearchParams] = useSearchParams();
-  const newsView = searchParams.get('view') === 'ips' ? 'ips' : searchParams.get('view') === 'domains' ? 'domains' : 'posts';
+  const newsView = searchParams.get('view') === 'iocs' ? 'iocs' : searchParams.get('view') === 'ips' ? 'ips' : searchParams.get('view') === 'domains' ? 'domains' : 'posts';
   const iocStoryId = searchParams.get('iocStory');
   const setNewsSection = (value: string, storyId?: string) => {
     const next = new URLSearchParams(searchParams); next.set('view', value); next.delete('story');
@@ -639,7 +640,7 @@ const Newsletter = () => {
   };
 
   return (
-    <PageLayout width="max-w-7xl" breadcrumbItems={[{ label: newsView === 'ips' ? 'IPs' : newsView === 'domains' ? (language === 'pt' ? 'Domínios' : 'Domains') : (language === 'pt' ? 'Publicações' : 'Posts') }]}>
+    <PageLayout width="max-w-7xl" breadcrumbItems={[{ label: newsView === 'iocs' ? (language === 'pt' ? 'Base de IOCs' : 'IOC inventory') : newsView === 'ips' ? 'IPs' : newsView === 'domains' ? (language === 'pt' ? 'Domínios' : 'Domains') : (language === 'pt' ? 'Publicações' : 'Posts') }]}>
 
         <div className="space-y-6">
 
@@ -932,6 +933,7 @@ const Newsletter = () => {
                   <Button type="button" size="sm" variant={feedView === 'cards' ? 'secondary' : 'ghost'} className="h-7 gap-1.5 px-2 text-xs" aria-pressed={feedView === 'cards'} onClick={() => { setNewsSection('posts'); setFeedView('cards'); }}><LayoutGrid className="h-3.5 w-3.5" />Cards</Button>
                   <Button type="button" size="sm" variant={newsView === 'ips' ? 'secondary' : 'ghost'} className="h-7 px-2 text-xs" aria-pressed={newsView === 'ips'} onClick={() => setNewsSection('ips')}>IPs</Button>
                   <Button type="button" size="sm" variant={newsView === 'domains' ? 'secondary' : 'ghost'} className="h-7 px-2 text-xs" aria-pressed={newsView === 'domains'} onClick={() => setNewsSection('domains')}>{language === 'pt' ? 'Domínios' : 'Domains'}</Button>
+                  <Button type="button" size="sm" variant={newsView === 'iocs' ? 'secondary' : 'ghost'} className="h-7 px-2 text-xs" aria-pressed={newsView === 'iocs'} onClick={() => setNewsSection('iocs')}>{language === 'pt' ? 'Base de IOCs' : 'IOC inventory'}</Button>
                 </div>
               </div>
 
@@ -966,7 +968,7 @@ const Newsletter = () => {
                 </div>
               )}
 
-              {monitoring.error ? (
+              {newsView === 'iocs' ? <IocInventory pt={language === 'pt'} /> : monitoring.error ? (
                 <div role="alert" className="rounded-lg border border-destructive/20 bg-destructive/5 p-6 text-center">
                   <p>{language === "pt" ? "Não foi possível carregar seu monitoramento de notícias." : "Unable to load your news monitoring."}</p>
                   <Button size="sm" variant="outline" className="mt-3" onClick={() => monitoring.refetch()}>{language === "pt" ? "Tentar novamente" : "Retry"}</Button>

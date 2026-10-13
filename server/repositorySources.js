@@ -10,6 +10,12 @@ const apiHeaders = { Accept: 'application/vnd.github+json' };
 const safePath = value => typeof value === 'string' && !value.split('/').some(part => !part || part === '.' || part === '..') && !/[\\\u0000-\u001f]/.test(value);
 const encodedPath = value => value.split('/').map(encodeURIComponent).join('/');
 
+export function declaredRepositoryMalware(item) {
+  if(!item.repositoryReport||item.repository?.repo!=='PaloAltoNetworks/Unit42-timely-threat-intel')return [];
+  const match=String(item.text||'').match(/malware family[\s\S]{0,120}?(?:we(?:'ve| have)? named|called|named)\s+["']?([a-z][a-z0-9_-]{2,60})/i);
+  return match?[{id:'reported:'+match[1].toLowerCase(),name:match[1]}]:[];
+}
+
 // Read only published indicator text. Never fetch payloads, YARA executables,
 // policy binaries or links found inside a report.
 function unitsFor(feed, tree) {

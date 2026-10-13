@@ -59,3 +59,5 @@ server/.malpedia-cache.json.tmp
 server/.domain-dns-history.json*
 server/.vulnerability-catalog.sqlite*
 server/.vulnerability-downloads/
+
+server/.ioc-intelligence.sqlite*

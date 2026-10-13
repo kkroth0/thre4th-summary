@@ -2,6 +2,7 @@ import { scoreArticle, extractIOCs, ttpIdsFrom, isPureNoise, severityFromScore }
 import { contentHash } from './articleCollector.js';
 import { analyzePhishing } from './phishingIntel.js';
 import { setImmediate as yieldLoop } from 'node:timers/promises';
+import { declaredRepositoryMalware } from './repositorySources.js';
 
 export const EXTRACTION_VERSION = 'feed-v8';
 
@@ -32,7 +33,7 @@ export function enrichFeedItems(items, { texts = new Map(), supplementalIocs = n
         const text = [item.title, item.text || item.description || '', texts.get(item.link) || ''].join('\n');
         const enriched = {
             ...item, ...scoreArticle(text, item.weight_boost),
-            actors: actors(text), malware: malware(text), campaigns: campaigns(text),
+            actors: actors(text), malware: [...new Map([...declaredRepositoryMalware(item),...malware(text)].map(family=>[family.name.toLowerCase(),family])).values()], campaigns: campaigns(text),
             iocs: mergeIocEvidence(item.repositoryReport ? item.iocs : extractIOCs(text), supplementalIocs.get(item.link)), sellerHandle: seller(text),
             contentHash: contentHash(text), extractionVersion: EXTRACTION_VERSION,
             topicCves: topicCvesOf(item.title, item.text || item.description || '', texts.get(item.link) || ''),

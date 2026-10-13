@@ -21,6 +21,8 @@ export interface VendorData {
     };
     link?: string;
     timeline?: TimelineEvent[];
+    /** Complete provider response, retained by bulk enrichment exports. */
+    rawPayload?: unknown;
 }
 
 export interface ThreatIntelligenceResult {

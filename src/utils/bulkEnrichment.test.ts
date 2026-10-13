@@ -47,3 +47,13 @@ test('enrichment fields ignore failed/loading sources and retain provenance', ()
 test('URL email-like paths and numeric segments remain complete URL assets', () => {
   assert.deepEqual(prepareBulkInput('https://1.1.1.1/24/user@example.com').indicators, ['https://1.1.1.1/24/user@example.com']);
 });
+
+test('bulk CSV includes complete provider payloads, all publications, attribution and failures', () => {
+  const payload = { data: { reports: Array.from({ length: 12 }, (_, i) => ({ comment: `report-${i}` })) } };
+  const row = { query: '46.101.130.1', state: 'partial' as const, result: { query: '46.101.130.1', overallScore: 95, threatLevel: 'malicious' as const, totalVendors: 2, detections: 1, vendorData: [
+    { name: 'AbuseIPDB', data: { 'Total Reports': 12 }, rawPayload: payload },
+    { name: 'VirusTotal', data: {}, error: 'Quota exceeded' },
+  ] }, context: { publications: [{ storyId: 'event', title: 'Report', source: 'Research', link: 'https://lab.example/report', pubDate: '2026-10-12', actors: ['Lazarus'], categories: [] }], evidence: [], errors: ['OTX base unavailable'] } };
+  const csv = bulkCsv([row]);
+  for (const value of ['report-11', 'https://lab.example/report', 'Lazarus', 'Quota exceeded', 'OTX base unavailable', 'AbuseIPDB_raw_json', 'VirusTotal_status']) assert.ok(csv.includes(value), value);
+});
