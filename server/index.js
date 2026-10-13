@@ -28,6 +28,7 @@ import { createPhishingSources } from './phishingSources.js';
 import { createWhoisLookup } from './whoisLookup.js';
 import { createDomainIntelligence, domainTarget } from './domainIntelligence.js';
 import { createVulnerabilityCatalog } from './vulnerabilityCatalog.js';
+import { createVulnerabilityQueries } from './vulnerabilityQueries.js';
 import { PUBLICATION_SOURCES, OT_PUBLICATION_SOURCES, createPublicationResolver } from './publicationSources.js';
 import { createPublicationRequest } from './publicationHttp.js';
 import { actorPublications, buildActorActivity, buildActorEvidence } from './actorEvidence.js';
@@ -2922,32 +2923,43 @@ const vulnerabilityCatalog = createVulnerabilityCatalog({
         return rows;
     },
 });
+const vulnerabilityQueries = process.env.NODE_ENV === 'test' ? null : createVulnerabilityQueries({ filePath: path.join(__dirname, '.vulnerability-catalog.sqlite') });
+async function queryVulnerabilities(method, params) {
+    const data = vulnerabilityQueries ? await vulnerabilityQueries.query(method, params) : vulnerabilityCatalog[method](params);
+    if (data?.status) data.status = vulnerabilityCatalog.status();
+    return data;
+}
+const catalogUnavailable = (res) => res.status(503).json({ error: 'O catálogo está ocupado. Tente novamente em alguns instantes.' });
 app.use('/api/vulnerabilities', (req, res, next) => { res.set('Cache-Control', 'no-store'); next(); });
 // Compatibility for older consumers; only imported source records, no synthetic fallback.
-app.get('/api/cves/recent', (req, res) => {
+app.get('/api/cves/recent', async (req, res) => {
     res.set('Cache-Control', 'no-store');
-    res.json(vulnerabilityCatalog.list({ size: 50 }).rows.map(row => ({
+    try { res.json((await queryVulnerabilities('list', { size: 50 })).rows.map(row => ({
         id: row.id, cvss: row.cvss, summary: row.description, Published: row.published,
         Modified: row.modified, source: row.source, vectorString: row.vector,
         references: row.references.map(reference => reference.url),
-    })));
+    }))); } catch { catalogUnavailable(res); }
 });
-app.get('/api/vulnerabilities/overview', (req, res) => res.json(vulnerabilityCatalog.overview()));
-app.get('/api/vulnerabilities', (req, res) => res.json(vulnerabilityCatalog.list({
+app.get('/api/vulnerabilities/overview', async (req, res) => {
+    try { res.json(await queryVulnerabilities('overview')); } catch { catalogUnavailable(res); }
+});
+app.get('/api/vulnerabilities', async (req, res) => { try { res.json(await queryVulnerabilities('list', {
     view: ['listing', 'top', 'weaponized'].includes(req.query.view) ? req.query.view : 'listing',
     query: typeof req.query.q === 'string' ? req.query.q : '',
     severity: typeof req.query.severity === 'string' ? req.query.severity : '',
     vendor: typeof req.query.vendor === 'string' ? req.query.vendor : '',
     signal: typeof req.query.signal === 'string' ? req.query.signal : '',
     page: req.query.page, size: req.query.size,
-})));
+})); } catch { catalogUnavailable(res); } });
 app.post('/api/vulnerabilities/refresh', requireAuth, (req, res) => {
     void vulnerabilityCatalog.sync({ force: true });
     res.status(202).json({ status: vulnerabilityCatalog.status() });
 });
-app.get('/api/vulnerabilities/:id', (req, res) => {
-    const data = vulnerabilityCatalog.detail(String(req.params.id).toUpperCase());
+app.get('/api/vulnerabilities/:id', async (req, res) => {
+    try {
+    const data = await queryVulnerabilities('detail', String(req.params.id).toUpperCase());
     return data ? res.json(data) : res.status(404).json({ error: 'CVE not found in the imported catalog' });
+    } catch { catalogUnavailable(res); }
 });
 app.get('/api/cves/exploited', async (req, res) => {
     const now = Date.now();
