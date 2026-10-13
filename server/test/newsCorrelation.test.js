@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { mergeIntoStories, CORRELATION_VERSION, compareNewsSources } from '../newsStories.js';
+import { mergeIntoStories, mergeIntoStoriesAsync, CORRELATION_VERSION, compareNewsSources } from '../newsStories.js';
 import { auditCorrelations } from '../correlationAudit.js';
 import { correlateNewsFeed } from '../newsCorrelation.js';
 import { createStoryStore } from '../newsStoryStore.js';
@@ -9,6 +9,16 @@ import { createStoryStore } from '../newsStoryStore.js';
 const fixture = JSON.parse(fs.readFileSync(new URL('./fixtures/news-correlation-2026-10-09.json', import.meta.url), 'utf8'));
 const now = new Date(fixture.evaluationAt);
 const article = (link, extra = {}) => ({ link: `https://test.example/${link}`, source: link, title: 'Citrix NetScaler emergency patch', pubDate: now.toISOString(), cves: [], actors: [], malware: [], campaigns: [], ...extra });
+
+test('background correlation preserves real-source grouping and yields to queued requests', async () => {
+    let requestServed = false;
+    setImmediate(() => { requestServed = true; });
+    const asyncResult = await mergeIntoStoriesAsync([], fixture.items, now);
+    assert.equal(requestServed, true, 'a worker poll must run before the full correlation finishes');
+    assert.deepEqual(asyncResult, mergeIntoStories([], fixture.items, now));
+    const legacy = asyncResult.map(row => ({ ...row, correlationVersion: 2 }));
+    assert.deepEqual(await mergeIntoStoriesAsync(legacy, fixture.items, now), mergeIntoStories(legacy, fixture.items, now));
+});
 
 test('61 publicações reais: todos os 18 pares do mesmo evento e nenhum dos 1812 pares diferentes se misturam', () => {
     const stories = mergeIntoStories([], fixture.items, now);

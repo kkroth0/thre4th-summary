@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { setImmediate as yieldLoop } from 'node:timers/promises';
 import { canonicalArticleUrl } from './feedCollector.js';
 import { NEWS_CATEGORIES } from './newsCategories.js';
 import { sanitizeStoredMalware } from './malwareMatch.js';
@@ -407,11 +408,11 @@ const absorb = (target, extra) => {
     return merged;
 };
 
-export function mergeIntoStories(stories, items, now) {
+function* mergeStorySteps(stories, items, now) {
     const cutoff = now.getTime() - STORY_RETENTION_DAYS * DAY;
     let result = (Array.isArray(stories) ? stories : []).filter((story) => new Date(story.lastSeen).getTime() >= cutoff);
     if (result.some((story) => story.correlationVersion !== CORRELATION_VERSION)) {
-        return rebuildStoryCorrelations(result, items, now);
+        return yield* rebuildStorySteps(result, items, now);
     }
     const knownSources = new Map(result.flatMap((story) => story.sources.map((source) => [canonicalArticleUrl(source.link) || source.link, source])));
     const signalCache = new WeakMap();
@@ -451,6 +452,7 @@ export function mergeIntoStories(stories, items, now) {
     const incoming = (Array.isArray(items) ? items : []).filter((item) => item?.link && new Date(item.pubDate).getTime() >= cutoff)
         .sort((a, b) => String(a.pubDate).localeCompare(String(b.pubDate)) || String(a.link).localeCompare(String(b.link)));
     for (const item of incoming) {
+        yield;
         const link = canonicalArticleUrl(item.link) || item.link;
         const direct = newStory({ ...item, link });
         if (JSON.stringify(knownSources.get(link)) === JSON.stringify(direct.sources[0])) continue;
@@ -468,7 +470,7 @@ export function mergeIntoStories(stories, items, now) {
                     aliases: (owner.aliases || []).filter((alias) => alias !== direct.id && alias !== id && (owner.id !== direct.id || memberIds.has(alias))), sources: remaining });
                 // Removing an updated bridge may disconnect the publications
                 // it formerly joined. Re-evaluate the residual group too.
-                result.push(...(remaining.length > 1 ? rebuildStoryCorrelations([residual], [], now) : [residual]));
+                result.push(...(remaining.length > 1 ? yield* rebuildStorySteps([residual], [], now) : [residual]));
                 if (owner.id === direct.id) {
                     candidate.aliases = (owner.aliases || []).filter((alias) => !memberIds.has(alias));
                 }
@@ -477,7 +479,13 @@ export function mergeIntoStories(stories, items, now) {
         }
         // Every match must be supported by the incoming article itself.
         // Signals inherited from one merge cannot manufacture the next merge.
-        let matches = result.filter((story) => directMatch(story, direct)).sort((a, b) => a.firstSeen.localeCompare(b.firstSeen) || a.id.localeCompare(b.id));
+        const potential = [];
+        let checked = 0;
+        for (const story of result) {
+            if (directMatch(story, direct)) potential.push(story);
+            if (++checked % 32 === 0) yield;
+        }
+        let matches = potential.sort((a, b) => a.firstSeen.localeCompare(b.firstSeen) || a.id.localeCompare(b.id));
         // A CVE-less headline may resemble two different advisories. Preserve
         // it independently until stronger evidence arrives instead of using
         // it as a bridge between incompatible CVE clusters.
@@ -500,7 +508,7 @@ export function mergeIntoStories(stories, items, now) {
  * story's union onto its individual sources. Incoming extraction overrides
  * stored evidence. Split stories keep old links pointing to their anchor;
  * aliases of the former aggregate are never assigned to multiple stories. */
-export function rebuildStoryCorrelations(stories, items = [], now = new Date()) {
+function* rebuildStorySteps(stories, items = [], now = new Date()) {
     const byLink = new Map();
     for (const story of stories) for (const source of story.sources || []) {
         const link = canonicalArticleUrl(source.link) || source.link;
@@ -514,7 +522,7 @@ export function rebuildStoryCorrelations(stories, items = [], now = new Date()) 
         });
     }
     for (const item of items) if (item?.link) byLink.set(canonicalArticleUrl(item.link) || item.link, item);
-    const rebuilt = mergeIntoStories([], [...byLink.values()], now);
+    const rebuilt = yield* mergeStorySteps([], [...byLink.values()], now);
     const targets = new Map(rebuilt.flatMap((story) => story.sources.map((source) => [canonicalArticleUrl(source.link) || source.link, story])));
     const addAliases = (target, aliases) => {
         target.aliases = [...new Set([...(target.aliases || []), ...aliases])].filter((id) => id && id !== target.id);
@@ -543,4 +551,30 @@ export function rebuildStoryCorrelations(stories, items = [], now = new Date()) 
     for (const story of rebuilt) for (const source of story.sources) owners.set(storyId(canonicalArticleUrl(source.link) || source.link), story);
     for (const story of rebuilt) story.aliases = story.aliases.filter((id) => !owners.has(id) || owners.get(id) === story);
     return rebuilt;
+}
+
+const complete = steps => {
+    let result = steps.next();
+    while (!result.done) result = steps.next();
+    return result.value;
+};
+
+export function mergeIntoStories(stories, items, now) {
+    return complete(mergeStorySteps(stories, items, now));
+}
+
+export function rebuildStoryCorrelations(stories, items = [], now = new Date()) {
+    return complete(rebuildStorySteps(stories, items, now));
+}
+
+// The production collector can compare thousands of retained publications.
+// Yield between comparisons so worker polls/results and user requests stay live.
+export async function mergeIntoStoriesAsync(stories, items, now) {
+    const steps = mergeStorySteps(stories, items, now);
+    let result = steps.next(), lastYield = performance.now();
+    while (!result.done) {
+        if (performance.now() - lastYield >= 8) { await yieldLoop(); lastYield = performance.now(); }
+        result = steps.next();
+    }
+    return result.value;
 }

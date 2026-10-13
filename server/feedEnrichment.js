@@ -1,6 +1,7 @@
 import { scoreArticle, extractIOCs, ttpIdsFrom, isPureNoise, severityFromScore } from './ctiIntel.js';
 import { contentHash } from './articleCollector.js';
 import { analyzePhishing } from './phishingIntel.js';
+import { setImmediate as yieldLoop } from 'node:timers/promises';
 
 export const EXTRACTION_VERSION = 'feed-v7';
 
@@ -62,4 +63,14 @@ export function applyVulnerabilityContext(items, kevMap, epssMap) {
         if (values.length) item.epss = Math.max(...values);
     }
     return items;
+}
+
+export async function enrichFeedItemsAsync(items, options) {
+    const enriched = [];
+    let lastYield = performance.now();
+    for (const item of items) {
+        enriched.push(...enrichFeedItems([item], options));
+        if (performance.now() - lastYield >= 8) { await yieldLoop(); lastYield = performance.now(); }
+    }
+    return enriched;
 }

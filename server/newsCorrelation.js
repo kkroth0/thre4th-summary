@@ -1,5 +1,5 @@
 import { canonicalArticleUrl } from './feedCollector.js';
-import { CORRELATION_VERSION, mergeIntoStories } from './newsStories.js';
+import { CORRELATION_VERSION, mergeIntoStories, mergeIntoStoriesAsync } from './newsStories.js';
 
 // Persist a complete correlation result before exposing it to the newsletter.
 // A failed grouping/write must leave the last successfully published feed in
@@ -7,6 +7,16 @@ import { CORRELATION_VERSION, mergeIntoStories } from './newsStories.js';
 export function correlateNewsFeed(items, store, now = new Date()) {
     const started = performance.now();
     const stories = mergeIntoStories(store.all(), items, now);
+    return publishCorrelation(items, store, stories, started);
+}
+
+export async function correlateNewsFeedAsync(items, store, now = new Date()) {
+    const started = performance.now();
+    const stories = await mergeIntoStoriesAsync(store.all(), items, now);
+    return publishCorrelation(items, store, stories, started);
+}
+
+function publishCorrelation(items, store, stories, started) {
     const byLink = new Map(stories.flatMap((story) => story.sources.map((source) => [canonicalArticleUrl(source.link) || source.link, story.id])));
     const sourceCount = stories.reduce((count, story) => count + story.sources.length, 0);
     if (byLink.size !== sourceCount) throw new Error('Correlation assigned the same publication to multiple events');

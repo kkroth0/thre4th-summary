@@ -1,13 +1,23 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { collectArticleTexts } from '../articleCollector.js';
-import { enrichFeedItems, applyVulnerabilityContext, topicCvesOf } from '../feedEnrichment.js';
+import { enrichFeedItems, enrichFeedItemsAsync, applyVulnerabilityContext, topicCvesOf } from '../feedEnrichment.js';
 import { scoreArticle } from '../ctiIntel.js';
 import { mergeIntoStories } from '../newsStories.js';
 import { categorize } from '../newsCategories.js';
 
 const NOW = new Date('2026-10-09T12:00:00Z');
 const item = (extra = {}) => ({ title: 'Technical report', description: 'Research', pubDate: NOW.toISOString(), link: 'https://lab.example/report', layer: 3, text: 'Short RSS summary', weight_boost: 10, source: 'Lab', ...extra });
+
+test('background extraction serves pending requests without changing IOC evidence', async () => {
+    const items = Array.from({ length: 100 }, (_, index) => item({ link: `https://lab.example/${index}`, title: `Malware phishing campaign CVE-2026-${10000 + index}`, text: 'Attackers use phishing and malware with payload.bad[.]example and 9.9.9.10.' }));
+    const options = { actors: () => [], malware: () => [], campaigns: () => [], seller: () => null, categorize };
+    let served = false; setImmediate(() => { served = true; });
+    const result = await enrichFeedItemsAsync(items, options);
+    assert.equal(served, true);
+    assert.deepEqual(result, enrichFeedItems(items, options));
+    assert.ok(result[0].iocs.ips.includes('9.9.9.10'));
+});
 const cache = () => {
     const map = new Map();
     return { get: (key) => map.get(key), set: (key, value) => map.set(key, value) };

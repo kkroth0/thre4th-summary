@@ -66,11 +66,11 @@ import { buildCampaignIndex, matchCampaigns } from './campaignMatch.js';
 import { explainCorrelation, explainCorrelationDecisions } from './correlationEvidence.js';
 import { extractSellerHandle, findRelatedBySeller, storySellerHandle } from './darkWebHandle.js';
 import { categorize } from './newsCategories.js';
-import { correlateNewsFeed } from './newsCorrelation.js';
+import { correlateNewsFeedAsync } from './newsCorrelation.js';
 import { parseFeed } from './feedParse.js';
 import { createFeedCache, createFeedCollector, canonicalArticleUrl, singleFlightRefresh } from './feedCollector.js';
 import { collectArticleTexts } from './articleCollector.js';
-import { enrichFeedItems, applyVulnerabilityContext, EXTRACTION_VERSION } from './feedEnrichment.js';
+import { enrichFeedItemsAsync, applyVulnerabilityContext, EXTRACTION_VERSION } from './feedEnrichment.js';
 import { createStoryStore } from './newsStoryStore.js';
 import { createNewsArchiveStore } from './newsArchiveStore.js';
 import { newsExportQuery, newsExportRows, newsExportCsv } from './newsExport.js';
@@ -1296,7 +1296,7 @@ const refreshNewsletterFeed = singleFlightRefresh(async () => {
             concurrency: Number(process.env.NEWS_IOC_CONCURRENCY) || 3,
             fetchText: async (url) => (await fetchArticleText(url, 32000)).text,
         });
-        let unifiedFeed = enrichFeedItems(rawItems, {
+        let unifiedFeed = await enrichFeedItemsAsync(rawItems, {
             texts: bodies.texts, actors: (text) => matchActors(text, actorIndex),
             malware: (text) => matchMalware(text, malwareIndex), campaigns: (text) => matchCampaigns(text, campaignIndex),
             seller: extractSellerHandle, categorize,
@@ -1305,7 +1305,7 @@ const refreshNewsletterFeed = singleFlightRefresh(async () => {
         const [kevMap, epssMap] = await Promise.all([getKevMap(), getEpssMap(allCves)]);
         applyVulnerabilityContext(unifiedFeed, kevMap, epssMap);
         unifiedFeed.sort((a, b) => b.pubDate.localeCompare(a.pubDate) || a.link.localeCompare(b.link));
-        const correlation = correlateNewsFeed(unifiedFeed, newsStoryStore);
+        const correlation = await correlateNewsFeedAsync(unifiedFeed, newsStoryStore);
         unifiedFeed = correlation.items;
         try {
             newsArchiveStore.add(unifiedFeed.map((item) => ({ ...item, categories: item.newsCategories })));
