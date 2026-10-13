@@ -535,6 +535,10 @@ const fetchFromBackend = async (endpoint: string, query: string, vendorName: str
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ query, ...(options.fresh ? { fresh: true } : {}) })
         });
+        if(response.status===404&&['virustotal','shodan'].includes(endpoint)){
+            const missing=await response.clone().json().catch(()=>null);
+            if(missing?.error==='Resource not found')return {name:vendorName,data:{Status:'No data'},link:getVendorLink(vendorName,query),timeline:[],...(options.includeRaw?{rawPayload:{...missing,httpStatus:404,queryStatus:'not_found'}}:{})};
+        }
         const data = await handleResponse(response, vendorName);
 
         return {

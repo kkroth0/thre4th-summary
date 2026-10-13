@@ -6,6 +6,7 @@ import { completeNewsFeed, reviewNewsEvidence } from '../newsQuality.js';
 import { buildWeeklyReport,weeklyWindow } from '../weeklyReports.js';
 import { completeReportEvidence } from '../reportEvidence.js';
 import { readFileSync } from 'node:fs';
+import { prepareFeedJobDocuments } from '../feedJobDocuments.js';
 
 test('software versions and HTTP/USB terms do not become threat infrastructure or malware',()=>{
   const text='ASUS AiCloud 2.0.0.39 のバージョン is vulnerable. Returns HTTP 404 Not Found. USB audio failed. ftp uploads files. IOC: 154.81.156.10';
@@ -38,4 +39,10 @@ test('bulletin and JSON preserve all 32 C2Agent hashes even when synthesis suppl
   const job={urls:['https://github.com/report'],documents:[{iocText:hashes.join('\n')}]};
   const complete=completeReportEvidence(report,job);assert.equal(complete.iocs.length,32);assert.deepEqual(new Set(complete.iocs.map(row=>row.valor)),new Set(hashes));
   assert.deepEqual(completeReportEvidence(complete,job),complete);
+});
+
+test('bulletin generation reuses an archived repository body when the live RSS entry has rotated out',()=>{
+  const link='https://github.com/research/report',hash='a'.repeat(64);
+  const documents=prepareFeedJobDocuments([link],{items:[{link,title:'Report'},{link,title:'Report',text:'Malware evidence '.repeat(150),iocs:{hashes:[hash]}}]});
+  assert.equal(documents.length,1);assert.ok(documents[0].text.length>=1500);assert.equal(documents[0].iocText,hash);
 });

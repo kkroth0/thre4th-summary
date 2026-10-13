@@ -4,6 +4,17 @@ import { detectIOCType, fetchThreatData, fetchThreatDataProgressive, fetchAttack
 import { refang } from "@/utils/defang";
 import { isSupportedAnalyzerQuery } from "@/utils/iocExtract";
 
+test('known absent VirusTotal and Shodan records are no-data responses while access errors remain failures',async()=>{
+  const original=globalThis.fetch;
+  try{
+    globalThis.fetch=async()=>new Response(JSON.stringify({error:'Resource not found'}),{status:404});
+    const empty=await fetchThreatDataProgressive('46.101.130.1',['VirusTotal','Shodan'],()=>{},{includeRaw:true});
+    assert.ok(empty.vendorData.every(row=>!row.error&&row.data.Status==='No data'&&(row.rawPayload as {queryStatus?:string})?.queryStatus==='not_found'));
+    globalThis.fetch=async()=>new Response(JSON.stringify({error:'Forbidden'}),{status:403});
+    const denied=await fetchThreatData('46.101.130.1',['Shodan']);assert.ok(denied.vendorData[0].error);
+  }finally{globalThis.fetch=original;}
+});
+
 test("detects a public IPv6 address as IP and an IPv6 literal URL as URL", () => {
   assert.equal(detectIOCType("2606:4700:4700::1111"), "ip");
   assert.equal(detectIOCType("https://[2606:4700:4700::1111]/status"), "url");

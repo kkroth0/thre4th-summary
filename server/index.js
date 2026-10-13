@@ -2489,7 +2489,7 @@ app.post('/api/feed/generate', requirePremium, scanLimiter, async (req, res) => 
         }
         const id = crypto.randomUUID();
         const now = new Date().toISOString();
-        const documents = prepareFeedJobDocuments(urls, { items: completeNewsFeed(memoryCache.newsletter.data || [],newsArchiveStore.all()), articleCache: articleCollectionCache, rssCache: rssCollectionCache });
+        const documents = prepareFeedJobDocuments(urls, { items: [...(memoryCache.newsletter.data || []),...newsArchiveStore.all()], articleCache: articleCollectionCache, rssCache: rssCollectionCache });
         jobsStore[id] = { id, ownerSub: req.user.sub, url, urls, documents, type, template, subtype, title, status: 'pending', json: null, error: null, createdAt: now, updatedAt: now };
         pruneJobs();
         saveJobs();
@@ -2609,7 +2609,7 @@ app.get('/api/feed/jobs/pending', (req, res) => {
             // Só importa com template premium; 'auto' (padrão) o motor escolhe.
             ...(j.subtype && j.subtype !== 'auto' ? { subtype: j.subtype } : {}),
             title: j.title,
-            documents: j.documents?.length ? j.documents : prepareFeedJobDocuments(j.urls || [j.url], { items: memoryCache.newsletter.data || [], articleCache: articleCollectionCache, rssCache: rssCollectionCache }),
+            documents: j.documents?.length ? j.documents : prepareFeedJobDocuments(j.urls || [j.url], { items: [...(memoryCache.newsletter.data || []),...newsArchiveStore.all()], articleCache: articleCollectionCache, rssCache: rssCollectionCache }),
             ...(workerModel ? { model: workerModel } : {}),
         }));
     res.json({ pending });
