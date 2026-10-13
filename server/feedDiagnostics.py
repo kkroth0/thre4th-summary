@@ -68,6 +68,8 @@ print(json.dumps({
         'workerOpenrouter': bool(engine_config.get('OPENROUTER_API_KEY')),
     },
     'workerService': command('systemctl', 'show', 'bdppt-worker', '--property=ActiveState,SubState,NRestarts,ExecMainStatus'),
+    'siteService': command('systemctl', 'show', 'bdppt-site', '--property=ActiveState,SubState,NRestarts,ExecMainStatus'),
+    'siteStartupSignals': [redact(line) for line in command('journalctl', '-u', 'bdppt-site', '-n', '100', '--no-pager', '-o', 'cat').splitlines() if re.search(r'Error|ReferenceError|TypeError|heap|Server running|news evidence review', line)][-15:],
     'memory': command('free', '-m'),
     'cpu': command('ps', '-C', 'node', '-o', 'pid,pcpu,pmem,etime,stat'),
     'siteLog': [redact(line) for line in command('journalctl', '-u', 'bdppt-site', '-n', '100', '--no-pager', '-o', 'cat').splitlines() if '[feed]' in line or '[catalog]' in line or 'background refresh newsletter' in line or 'unhandledRejection' in line][-12:],

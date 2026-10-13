@@ -1318,10 +1318,16 @@ const articleCollectionCache = createFeedCache({ directory: path.join(__dirname,
 // Reclassify metadata only; preserve publications and reuse existing body
 // caches without issuing hundreds of historical requests on startup.
 const newsQualityReady=(async()=>{if (process.env.NODE_ENV !== 'test') try {
+    await new Promise(resolve=>setImmediate(resolve));
     newsArchiveStore.reclassifyPhishing({ bodyFor: link => articleCollectionCache.get(link)?.text || '' });
     if(!iocIntelligence.state('news-quality-v9')){
         writeJsonAtomic(path.join(__dirname,'.news-quality-v9-backup.json'),{archive:newsArchiveStore.all(),stories:newsStoryStore.all()});
-        newsArchiveStore.add(newsArchiveStore.all().map(row=>({...reviewNewsEvidence(row,articleCollectionCache.get(row.link)?.text||'',text=>matchMalware(text,malwareIndex)),extractionVersion:EXTRACTION_VERSION})));
+        const reviewed=[];let lastYield=performance.now();
+        for(const row of newsArchiveStore.all()){
+            reviewed.push({...reviewNewsEvidence(row,articleCollectionCache.get(row.link)?.text||'',text=>matchMalware(text,malwareIndex)),extractionVersion:EXTRACTION_VERSION});
+            if(performance.now()-lastYield>=8){await new Promise(resolve=>setImmediate(resolve));lastYield=performance.now();}
+        }
+        newsArchiveStore.add(reviewed);
         const revised=new Map(newsArchiveStore.all().map(row=>[row.link,row]));
         const stories=newsStoryStore.all().map(story=>({...story,sources:story.sources.map(source=>({...source,...revised.get(source.link)})).filter(source=>source.securityRelevant!==false)})).filter(story=>story.sources.length);
         const rebuilt=await rebuildStoryCorrelationsAsync(stories,completeNewsFeed([],newsArchiveStore.all()));
