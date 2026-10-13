@@ -127,7 +127,7 @@ export function createIocIntelligence({filePath=':memory:',now=()=>Date.now()}={
   // Correct previously inferred command/protocol labels without discarding
   // provider observations or explicit family attribution.
   function reviewSoftwareLinks(){
-    if(db.prepare("SELECT 1 FROM intelligence_state WHERE id='software-links-v9'").get())return;
+    if(db.prepare("SELECT 1 FROM intelligence_state WHERE id='software-links-v10'").get())return;
     db.transaction(()=>{
       for(const link of db.prepare("SELECT * FROM entity_links WHERE kind='malware' AND relation='mentioned-by-source'").all()){
         if(!sanitizeStoredMalware([{name:link.name}],link.name).length){
@@ -135,7 +135,7 @@ export function createIocIntelligence({filePath=':memory:',now=()=>Date.now()}={
           db.prepare('DELETE FROM entity_links WHERE observation=? AND kind=? AND entity=?').run(link.observation,link.kind,link.entity);
         }
       }
-      putState.run('software-links-v9',JSON.stringify(true));
+      putState.run('software-links-v10',JSON.stringify(true));
     })();
   }
   function entities(kind,owner='') {

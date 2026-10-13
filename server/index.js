@@ -1320,10 +1320,10 @@ const articleCollectionCache = createFeedCache({ directory: path.join(__dirname,
 const newsQualityReady=(async()=>{if (process.env.NODE_ENV !== 'test') try {
     await new Promise(resolve=>setImmediate(resolve));
     newsArchiveStore.reclassifyPhishing({ bodyFor: link => articleCollectionCache.get(link)?.text || '' });
-    if(!iocIntelligence.state('news-quality-v9')){
-        writeJsonAtomic(path.join(__dirname,'.news-quality-v9-backup.json'),{archive:newsArchiveStore.all(),stories:newsStoryStore.all()});
+    if(!iocIntelligence.state('news-quality-v10')){
+        writeJsonAtomic(path.join(__dirname,'.news-quality-v10-backup.json'),{archive:newsArchiveStore.all(),stories:newsStoryStore.all()});
         const reviewed=[];let lastYield=performance.now();
-        for(const row of newsArchiveStore.all()){
+        for(const row of actorPublications(newsArchiveStore.all(),newsStoryStore.all())){
             reviewed.push({...reviewNewsEvidence(row,articleCollectionCache.get(row.link)?.text||'',text=>matchMalware(text,malwareIndex)),extractionVersion:EXTRACTION_VERSION});
             if(performance.now()-lastYield>=8){await new Promise(resolve=>setImmediate(resolve));lastYield=performance.now();}
         }
@@ -1336,7 +1336,7 @@ const newsQualityReady=(async()=>{if (process.env.NODE_ENV !== 'test') try {
         newsArchiveStore.add(newsArchiveStore.all().map(row=>({...row,storyId:identities.get(row.link)||row.storyId})));
         iocIntelligence.reviewSoftwareLinks();
         await iocIntelligence.ingestNews(newsArchiveStore.all());
-        iocIntelligence.setState('news-quality-v9',{at:new Date().toISOString()});
+        iocIntelligence.setState('news-quality-v10',{at:new Date().toISOString()});
     }
 } catch (error) { console.error('news evidence review failed:', error.message); throw error; }})();
 void newsQualityReady.catch(()=>{});
