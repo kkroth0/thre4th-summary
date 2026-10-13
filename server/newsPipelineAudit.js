@@ -31,7 +31,7 @@ const sample=(snapshot?.items||[]).filter(row=>indexed.has(row.link)).slice(0,10
 const benchmarkStart=performance.now();
 const benchmarkStories=await mergeIntoStoriesAsync(stories,sample,new Date());
 const correlationCheck={publications:sample.length,elapsedMs:Math.round(performance.now()-benchmarkStart),retainedStories:benchmarkStories.length,readOnly:true};
-let intelligence={status:'not initialized'};
+let intelligence={status:'not initialized'},flowSamples=[];
 const intelligenceFile=path.join(root,'server/.ioc-intelligence.sqlite');
 if(fs.existsSync(intelligenceFile)) {
   const {default:Database}=await import(pathToFileURL(path.join(root,'server/node_modules/better-sqlite3/lib/index.js')));
@@ -43,7 +43,29 @@ if(fs.existsSync(intelligenceFile)) {
     entityLinks:db.prepare('SELECT kind,COUNT(*) links,COUNT(DISTINCT entity) entities FROM entity_links GROUP BY kind').all(),
     collectors:db.prepare("SELECT id,value FROM intelligence_state WHERE id LIKE 'source:%'").all().map(row=>{const state=JSON.parse(row.value);return {source:row.id.split(':').at(-1),scope:row.id.split(':').length>2?'account':'platform',status:state.status,count:state.count,lastSuccessfulAt:state.lastSuccessfulAt,nextAt:state.nextAt};}),
     c2agent:db.prepare("SELECT COUNT(DISTINCT o.indicator) hashes FROM observations o JOIN entity_links e ON e.observation=o.id JOIN indicators i ON i.id=o.indicator WHERE e.kind='malware' AND e.name='C2Agent' AND i.type='hash'").get(),
-  };db.close();
+  };
+  const {normalizeIndicator}=await import(pathToFileURL(path.join(root,'server/iocIntelligence.js')));
+  const {declaredRepositoryMalware}=await import(pathToFileURL(path.join(root,'server/repositorySources.js')));
+  const pools=[{name:'IP e atribuição',accept:row=>row.iocs?.ips?.length&&(row.actors?.length||row.malware?.length)},
+    {name:'Hashes de malware',accept:row=>row.iocs?.hashes?.length},
+    {name:'Vulnerabilidade',accept:row=>row.cves?.length},
+    {name:'Sem indicadores declarados',accept:row=>!hasIocs(row)}];
+  const chosen=new Set();
+  const auditRow=(row,category)=>{
+    const expected=[...new Map(Object.values(row.iocs||{}).flat().map(value=>normalizeIndicator(value)).filter(Boolean).map(value=>[value.value,value])).values()];
+    const stored=db.prepare("SELECT i.value,i.type,o.id FROM observations o JOIN indicators i ON i.id=o.indicator WHERE o.provider='news' AND o.external_id=? AND o.scope='global'").all(row.link);
+    const links=stored.length?db.prepare("SELECT DISTINCT e.kind,e.entity id,e.name FROM entity_links e JOIN observations o ON o.id=e.observation WHERE o.provider='news' AND o.external_id=? AND o.scope='global'").all(row.link):[];
+    const actors=(row.actors||[]).map(entity=>({kind:'actor',...entity})),families=[...declaredRepositoryMalware({...row,repositoryReport:!!row.repository}),...(row.malware||[])].map(entity=>({kind:'malware',...entity}));
+    const expectedEntities=[...actors,...families,...(row.cves||[]).map(id=>({kind:'cve',id,name:id}))];
+    const crossSources=expected.slice(0,5).map(ioc=>({indicator:ioc.value,type:ioc.type,providers:db.prepare("SELECT o.provider,COUNT(*) evidence FROM observations o JOIN indicators i ON i.id=o.indicator WHERE i.value=? AND o.scope='global' GROUP BY o.provider ORDER BY o.provider").all(ioc.value)}));
+    const actorProfiles=actors.map(actor=>({id:actor.id,name:actor.name,...buildActorEvidence(rows,actor.id).counts,publicationLinked:buildActorEvidence(rows,actor.id).publications.some(paper=>paper.link===row.link)}));
+    return {selection:category,title:row.title,source:row.source,link:row.link,published:row.pubDate,storyId:row.storyId||indexed.get(row.link)?.storyId||stories.find(story=>story.sources.some(source=>source.link===row.link))?.id||null,
+      rawIocs:Object.values(row.iocs||{}).flat().length,expectedPublicIocs:expected.length,persistedNewsIocs:stored.length,missingIocs:expected.filter(ioc=>!stored.some(record=>record.value===ioc.value)).map(ioc=>ioc.value),
+      entities:expectedEntities.map(entity=>({...entity,linkedInIocBase:links.some(link=>link.kind===entity.kind&&link.id===entity.id)})),actorProfiles,crossSources};
+  };
+  for(const pool of pools){const available=recent.filter(row=>!chosen.has(row.link)&&pool.accept(row));if(available.length){const row=available[crypto.randomInt(available.length)];chosen.add(row.link);flowSamples.push(auditRow(row,pool.name));}}
+  if(c2&&!chosen.has(c2.link))flowSamples.push(auditRow(c2,'Controle C2Agent'));
+  db.close();
   if(intelligence.collectors.some(source=>source.source==='MalwareBazaar'&&source.status==='error')) {
     const {default:dotenv}=await import(pathToFileURL(path.join(root,'server/node_modules/dotenv/lib/main.js')));
     const {default:axios}=await import(pathToFileURL(path.join(root,'server/node_modules/axios/index.js')));
@@ -79,7 +101,7 @@ console.log(JSON.stringify({
   recentArchivePublications:recent.length,recentWithIocs:recent.filter(hasIocs).length,
   recentWithStoryEvidence:recent.filter(row=>indexed.has(row.link)).length,
   extractionVersion:snapshot?.extractionVersion,bodyCollection:bodyStats,
-  intelligence,correlationCheck,weekly,
+  intelligence,correlationCheck,weekly,flowSamples,
   c2agent:c2 ? {link:c2.link,archivedAt:c2.archivedAt,hashes:c2.iocs?.hashes?.length||0,missingExpectedHashes:expected.filter(hash=>!c2.iocs?.hashes?.includes(hash)).length,
     storyHashes:indexed.get(c2.link)?.iocs?.hashes?.length||0,storyId:c2.storyId} : {status:'not archived yet'},
 },null,2));
