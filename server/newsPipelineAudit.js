@@ -44,6 +44,17 @@ if(fs.existsSync(intelligenceFile)) {
     collectors:db.prepare("SELECT id,value FROM intelligence_state WHERE id LIKE 'source:%'").all().map(row=>{const state=JSON.parse(row.value);return {source:row.id.split(':').at(-1),scope:row.id.split(':').length>2?'account':'platform',status:state.status,count:state.count,lastSuccessfulAt:state.lastSuccessfulAt,nextAt:state.nextAt};}),
     c2agent:db.prepare("SELECT COUNT(DISTINCT o.indicator) hashes FROM observations o JOIN entity_links e ON e.observation=o.id JOIN indicators i ON i.id=o.indicator WHERE e.kind='malware' AND e.name='C2Agent' AND i.type='hash'").get(),
   };db.close();
+  if(intelligence.collectors.some(source=>source.source==='MalwareBazaar'&&source.status==='error')) {
+    const {default:dotenv}=await import(pathToFileURL(path.join(root,'server/node_modules/dotenv/lib/main.js')));
+    const {default:axios}=await import(pathToFileURL(path.join(root,'server/node_modules/axios/index.js')));
+    const config=dotenv.parse(fs.readFileSync(path.join(root,'server/.env')));
+    const key=config.ABUSE_CH_API_KEY||config.THREATFOX_API_KEY||config.URLHAUS_API_KEY||config.MALWAREBAZAAR_API_KEY;
+    if(key) {
+      try { const response=await axios.post('https://mb-api.abuse.ch/api/v1/','query=get_recent&selector=time',{headers:{'Auth-Key':key,'Content-Type':'application/x-www-form-urlencoded'},timeout:15000,family:4,maxContentLength:8000000,maxRedirects:0});
+        intelligence.malwareBazaarProbe={status:response.status,queryStatus:String(response.data?.query_status||'').replace(/[^a-z0-9_]/gi,'').slice(0,80),samples:Array.isArray(response.data?.data)?response.data.data.length:null};
+      }catch(error){intelligence.malwareBazaarProbe={status:error.response?.status||null,code:String(error.code||'').replace(/[^a-z0-9_]/gi,'').slice(0,80),sizeLimit:/maxContentLength/i.test(error.message||'')};}
+    }
+  }
 }
 console.log(JSON.stringify({
   checkedAt:new Date().toISOString(), archivePublications:archive.length,storedStories:stories.length,

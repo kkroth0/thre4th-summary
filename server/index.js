@@ -846,7 +846,7 @@ async function getRecentThreatFoxIocs(days = 7) {
         return memoryCache.threatFoxRecent.data;
     }
     const headers = { 'Content-Type': 'application/json' };
-    const abKey = abuseChKey(req);
+    const abKey = abuseChKey();
     if (abKey) headers['Auth-Key'] = abKey;
     const resp = await axios.post('https://threatfox-api.abuse.ch/api/v1/', {
         query: 'get_iocs',
