@@ -380,7 +380,7 @@ export function isSoftwareVersionAt(text, index, value) {
     const before = text.slice(Math.max(0, index - 80), index);
     const after = text.slice(index + value.length, index + value.length + 40);
     return RE_VERSION_BEFORE.test(before)
-        || /(?:AiCloud|FortiOS|FortiClient|PAN-OS|Windows|firmware|software|OpenSSL)\s+v?\s*$/i.test(before)
+        || /(?:AiCloud|FortiOS|FortiClient|PAN-OS|Windows|firmware|software|OpenSSL|Rails|Ruby|\.NET|Java|JDK|Tomcat|Python|Django|Spring|Ubuntu|Debian|Android|iOS|Apache|OpenSSH|PHP|Jenkins|GitLab)\s+v?\s*$/i.test(before)
         || /^\s*(?:以前|以降|未満|以上|のバージョン|版本|version\b)/i.test(after);
 }
 

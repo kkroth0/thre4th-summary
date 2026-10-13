@@ -10,6 +10,7 @@ import { readFileSync } from 'node:fs';
 test('software versions and HTTP/USB terms do not become threat infrastructure or malware',()=>{
   const text='ASUS AiCloud 2.0.0.39 のバージョン is vulnerable. Returns HTTP 404 Not Found. USB audio failed. ftp uploads files. IOC: 154.81.156.10';
   assert.deepEqual(extractIOCs(text).ips,['154.81.156.10']);
+  assert.deepEqual(extractIOCs('One Rails 8.1.3.1 app on Ruby 4.0.6. IP: 64.227.4.134').ips,['64.227.4.134']);
   const families=[{id:'404',name:'404 Keylogger',aliases:['404']},{id:'usb',name:'USBStealer',aliases:['USB']},{id:'ftp',name:'ftp',aliases:[]}];
   const index=buildMalwareIndex(families);
   assert.deepEqual(matchMalware(text,index),[]);

@@ -5,9 +5,10 @@ import { declaredRepositoryMalware } from './repositorySources.js';
 
 export function removeVersionIndicators(iocs, text) {
   const body=String(text||'').replace(/\[\.\]|\(\.\)|\{\.\}/g,'.');
+  const seen=new Set(),valid=new Set();
+  for(const match of body.matchAll(/\b(?:\d{1,3}\.){3}\d{1,3}\b/g)){seen.add(match[0]);if(!isSoftwareVersionAt(body,match.index,match[0]))valid.add(match[0]);}
   return {...iocs,ips:(iocs?.ips||[]).filter(ip=>{
-    const matches=[...body.matchAll(/\b(?:\d{1,3}\.){3}\d{1,3}\b/g)].filter(match=>match[0]===ip);
-    return !matches.length||matches.some(match=>!isSoftwareVersionAt(body,match.index,ip));
+    return !seen.has(ip)||valid.has(ip);
   })};
 }
 export function isRelevantNews(row) {

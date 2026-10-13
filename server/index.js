@@ -34,7 +34,7 @@ import { PUBLICATION_SOURCES, OT_PUBLICATION_SOURCES, createPublicationResolver 
 import { REPOSITORY_SOURCES, createRepositoryResolver } from './repositorySources.js';
 import { prepareFeedJobDocuments } from './feedJobDocuments.js';
 import { completeReportEvidence } from './reportEvidence.js';
-import { completeNewsFeed, reviewNewsEvidence } from './newsQuality.js';
+import { completeNewsFeed, reviewNewsEvidence, removeVersionIndicators } from './newsQuality.js';
 import { rebuildStoryCorrelationsAsync } from './newsStories.js';
 import { persistNewsEvidence } from './persistNewsEvidence.js';
 import { publishNewsSnapshot } from './publishNewsSnapshot.js';
@@ -1337,6 +1337,18 @@ const newsQualityReady=(async()=>{if (process.env.NODE_ENV !== 'test') try {
         iocIntelligence.reviewSoftwareLinks();
         await iocIntelligence.ingestNews(newsArchiveStore.all());
         iocIntelligence.setState('news-quality-v10',{at:new Date().toISOString()});
+    }
+    if(!iocIntelligence.state('news-version-v11')){
+        const revised=[];let lastYield=performance.now();
+        for(const row of newsArchiveStore.all()){
+            revised.push(row.iocs?.ips?.length?{...row,iocs:removeVersionIndicators(row.iocs,[row.title,row.text||row.description,articleCollectionCache.get(row.link)?.text||''].join('\n'))}:row);
+            if(performance.now()-lastYield>=8){await new Promise(resolve=>setImmediate(resolve));lastYield=performance.now();}
+        }
+        newsArchiveStore.add(revised);
+        const byLink=new Map(revised.map(row=>[row.link,row]));
+        newsStoryStore.save(newsStoryStore.all().map(story=>({...story,sources:story.sources.map(source=>({...source,iocs:byLink.get(source.link)?.iocs||source.iocs}))})));
+        await iocIntelligence.ingestNews(revised);
+        iocIntelligence.setState('news-version-v11',{at:new Date().toISOString()});
     }
 } catch (error) { console.error('news evidence review failed:', error.message); throw error; }})();
 void newsQualityReady.catch(()=>{});
