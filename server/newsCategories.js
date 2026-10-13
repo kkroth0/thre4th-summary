@@ -64,7 +64,7 @@ export function categorize(item) {
         // A codename-grade attribution is the strongest APT signal there is.
         APTs: actors.some((a) => a && (a.via === 'codename' || a.via === 'multiword')) || NATION_STATE.test(text),
         'Data Leaks': DATA_LEAK.test(text),
-        'OT/ICS': OT_ICS.test(text),
+        'OT/ICS': (Array.isArray(item.sourceCategories) && item.sourceCategories.includes('OT/ICS')) || OT_ICS.test(text),
         Vulnerabilities: cves.length > 0 || VULN_CLASS.test(text),
         Malware: threats.some((t) => MALWARE_THREATS.has(t)),
         Phishing: (item.phishingIntel || analyzePhishing({ title, description: item.description || item.text })).detected,

@@ -15,6 +15,7 @@ export const SCRAPE_SOURCES = [
         linkPattern: /^\/team82\/research\/(?!white-papers\/)/,
         layer: 3,
         weight_boost: 15,
+        categories: ['OT/ICS'],
         // O post traz article:published_time, então a data é a de verdade.
         datedItems: true,
     },
@@ -25,6 +26,7 @@ export const SCRAPE_SOURCES = [
         linkPattern: /^\/team82\/research\/white-papers\//,
         layer: 3,
         weight_boost: 15,
+        categories: ['OT/ICS'],
         datedItems: true,
     },
     {
@@ -34,6 +36,7 @@ export const SCRAPE_SOURCES = [
         linkPattern: /^\/blog\/[^/]+$/,
         layer: 3,
         weight_boost: 12,
+        categories: ['OT/ICS'],
         // O datePublished do JSON-LD é inconfiável — um post de dezembro/2024
         // chega como "Aug 12, 2026". Melhor datar pela primeira aparição do que
         // publicar uma data errada.
@@ -64,7 +67,7 @@ export function parseListing(html, source) {
             const link = url.toString();
             if (seen.has(link)) return;
             seen.add(link);
-            items.push({ title, link, source: source.source, layer: source.layer, weight_boost: source.weight_boost, description: '' });
+            items.push({ title, link, source: source.source, layer: source.layer, weight_boost: source.weight_boost, sourceCategories: source.categories || [], description: '' });
         });
     } catch { /* HTML impossível de ler: nenhum item, nenhum crash */ }
     return items;

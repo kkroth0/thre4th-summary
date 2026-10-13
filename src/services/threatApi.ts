@@ -1148,7 +1148,8 @@ export const signupUrl = '/api/auth/github/login?signup=1';
 // ─── Catálogo de feeds RSS monitorados pelo coletor ────────────────────────
 export interface FeedHealth {
     ok: boolean; count: number; error: string | null; at: string;
-    status?: "fresh" | "unchanged" | "stale" | "failed";
+    status?: "fresh" | "unchanged" | "stale" | "failed" | "collecting";
+    method?: "rss" | "html"; endpoint?: string;
     fetchedCount?: number; lastSuccessfulAt?: string | null;
 }
 export interface FeedSource {
@@ -1158,6 +1159,7 @@ export interface FeedSource {
     weight_boost: number;
     builtin: boolean;
     enabled: boolean;
+    kind?: "rss" | "auto";
     health: FeedHealth | null;
 }
 export interface FeedsResponse { feeds: FeedSource[]; isAdmin: boolean; }

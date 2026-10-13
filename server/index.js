@@ -28,6 +28,8 @@ import { createPhishingSources } from './phishingSources.js';
 import { createWhoisLookup } from './whoisLookup.js';
 import { createDomainIntelligence, domainTarget } from './domainIntelligence.js';
 import { createVulnerabilityCatalog } from './vulnerabilityCatalog.js';
+import { PUBLICATION_SOURCES, OT_PUBLICATION_SOURCES, createPublicationResolver } from './publicationSources.js';
+import { createPublicationRequest } from './publicationHttp.js';
 import { actorPublications, buildActorActivity, buildActorEvidence } from './actorEvidence.js';
 import { otxThrottled, OTX_TIMEOUT_MS } from './otxGate.js';
 import { findMentions, findDomainMentions } from './newsIocs.js';
@@ -1165,6 +1167,7 @@ async function getEpssMap(cveIds) {
 // weight_boost}] }. Assim o dono liga/desliga fontes e adiciona novas sem
 // mexer no código nem redeployar.
 const FEED_SOURCES_PATH = path.join(__dirname, '.feed-sources.json');
+const BUILTIN_FEEDS = [...CTI_FEEDS, ...PUBLICATION_SOURCES, ...OT_PUBLICATION_SOURCES];
 function loadFeedOverrides() {
     try {
         const o = JSON.parse(fs.readFileSync(FEED_SOURCES_PATH, 'utf8'));
@@ -1186,7 +1189,7 @@ const feedHealth = new Map();
 // (built-in só pode ser desativado, nunca deletado) e `enabled`.
 function catalogFeeds() {
     const disabled = new Set(feedOverrides.disabled);
-    const builtins = CTI_FEEDS.map((f) => ({ ...f, builtin: true, enabled: !disabled.has(f.url) }));
+    const builtins = BUILTIN_FEEDS.map((f) => ({ ...f, builtin: true, enabled: !disabled.has(f.url) }));
     const custom = feedOverrides.custom.map((f) => ({ ...f, builtin: false, enabled: !disabled.has(f.url) }));
     return [...builtins, ...custom];
 }
@@ -1235,6 +1238,8 @@ if (previousFeedSnapshot?.extractionVersion === EXTRACTION_VERSION && Array.isAr
 }
 const feedCollector = createFeedCollector({
     cache: rssCollectionCache, parse: parseFeed,
+    resolve: createPublicationResolver({ request: createPublicationRequest() }),
+    onHealth: (url, health) => feedHealth.set(url, health),
     concurrency: Number(process.env.FEED_FETCH_CONCURRENCY) || 6,
     request: (url, { headers }) => fetchFeedWithRetry(url, {
         headers: { 'User-Agent': 'ThreatSumm4ry/1.0 RSS collector', Accept: 'application/rss+xml,application/atom+xml,application/xml,text/xml', ...headers },
@@ -1311,7 +1316,7 @@ const refreshNewsletterFeed = singleFlightRefresh(async () => {
         rssCollectionCache.set('newsletter:snapshot', { extractionVersion: EXTRACTION_VERSION, at: new Date().toISOString(), items: unifiedFeed });
         memoryCache.newsletter.data = unifiedFeed;
         memoryCache.newsletter.expiresAt = Date.now() + memoryCache.newsletter.ttl;
-        try { rssCollectionCache.prune({ maxEntries: 200 }); articleCollectionCache.prune({ maxEntries: 1500 }); } catch (error) { console.warn('feed cache pruning failed:', error.message); }
+        try { rssCollectionCache.prune({ maxEntries: Math.max(600, effectiveFeeds().length * 3 + 50) }); articleCollectionCache.prune({ maxEntries: 1500 }); } catch (error) { console.warn('feed cache pruning failed:', error.message); }
         console.log('[feed] cycle', JSON.stringify({ elapsedMs: Date.now() - startedAt, sources: collected.health.size, failedSources: [...collected.health.values()].filter((health) => !health.ok).length, articles: unifiedFeed.length, bodies: bodies.stats, correlation: correlation.stats }));
     } catch (error) { console.error('Failed to background refresh newsletter feeds:', error.message); }
 });
@@ -1599,7 +1604,7 @@ function feedListForClient() {
         const h = feedHealth.get(feed.url);
         return {
             url: feed.url, source: feed.source, layer: feed.layer, weight_boost: feed.weight_boost,
-            builtin: feed.builtin, enabled: feed.enabled,
+            builtin: feed.builtin, enabled: feed.enabled, kind: feed.kind || 'rss',
             health: h ? { ...h } : null,
         };
     };
@@ -1623,7 +1628,7 @@ app.post('/api/feeds', requireAdmin, (req, res) => {
     if (u.protocol !== 'http:' && u.protocol !== 'https:') return res.status(400).json({ error: 'URL deve ser http(s)' });
     const clean = u.toString();
     if (!source || !String(source).trim()) return res.status(400).json({ error: 'nome da fonte obrigatório' });
-    const known = new Set([...CTI_FEEDS, ...feedOverrides.custom].map((f) => f.url));
+    const known = new Set([...BUILTIN_FEEDS, ...feedOverrides.custom].map((f) => f.url));
     if (known.has(clean)) return res.status(409).json({ error: 'feed já existe' });
     const layer = Math.min(Math.max(parseInt(req.body.layer, 10) || 2, 1), 4);
     const weight_boost = Math.min(Math.max(parseInt(req.body.weight_boost, 10) || 10, 0), 25);
@@ -1639,7 +1644,7 @@ app.post('/api/feeds', requireAdmin, (req, res) => {
 app.patch('/api/feeds', requireAdmin, (req, res) => {
     const url = String((req.body || {}).url || '');
     const enabled = !!(req.body || {}).enabled;
-    const known = new Set([...CTI_FEEDS, ...feedOverrides.custom].map((f) => f.url));
+    const known = new Set([...BUILTIN_FEEDS, ...feedOverrides.custom].map((f) => f.url));
     if (!known.has(url)) return res.status(404).json({ error: 'feed não encontrado' });
     const set = new Set(feedOverrides.disabled);
     if (enabled) set.delete(url); else set.add(url);
@@ -1655,8 +1660,8 @@ app.delete('/api/feeds', requireAdmin, (req, res) => {
     const before = feedOverrides.custom.length;
     feedOverrides.custom = feedOverrides.custom.filter((f) => f.url !== url);
     if (feedOverrides.custom.length === before) {
-        return res.status(CTI_FEEDS.some((f) => f.url === url) ? 400 : 404)
-            .json({ error: CTI_FEEDS.some((f) => f.url === url) ? 'feed built-in só pode ser desativado' : 'feed não encontrado' });
+        return res.status(BUILTIN_FEEDS.some((f) => f.url === url) ? 400 : 404)
+            .json({ error: BUILTIN_FEEDS.some((f) => f.url === url) ? 'feed built-in só pode ser desativado' : 'feed não encontrado' });
     }
     feedOverrides.disabled = feedOverrides.disabled.filter((d) => d !== url);
     feedHealth.delete(url);
@@ -2892,6 +2897,7 @@ const assertSafePublicUrl = async (raw) => {
 // Exploited CVEs from CISA KEV
 const vulnerabilityCatalog = createVulnerabilityCatalog({
     filePath: process.env.NODE_ENV === 'test' ? ':memory:' : path.join(__dirname, '.vulnerability-catalog.sqlite'),
+    nvdApiKey: process.env.NODE_ENV === 'test' ? undefined : process.env.NVD_API_KEY,
     fetchKev: async () => {
         const rows = await getKevCatalog();
         if (memoryCache.kev.expiresAt <= Date.now() || !rows.length) throw new Error('KEV source is stale');

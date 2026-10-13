@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Rss, Plus, Trash2, CheckCircle2, XCircle, Loader2, Lock } from "lucide-react";
+import { Rss, Plus, Trash2, CheckCircle2, XCircle, Loader2, Lock, Search } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -45,6 +45,7 @@ export default function FeedSourcesManager() {
     const [feeds, setFeeds] = useState<FeedSource[]>([]);
     const [isAdmin, setIsAdmin] = useState(false);
     const [loading, setLoading] = useState(false);
+    const [search, setSearch] = useState("");
     const [busyUrl, setBusyUrl] = useState<string | null>(null);
 
     // form de novo feed
@@ -71,17 +72,25 @@ export default function FeedSourcesManager() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [open]);
 
+    useEffect(() => {
+        if (!open) return;
+        const timer = setInterval(() => void load(), 15000);
+        return () => clearInterval(timer);
+    }, [open]);
+
     const grouped = useMemo(() => {
         const byLayer = new Map<number, FeedSource[]>();
         for (const f of feeds) {
+            if (search && !`${f.source} ${f.url}`.toLowerCase().includes(search.trim().toLowerCase())) continue;
             const arr = byLayer.get(f.layer) || [];
             arr.push(f);
             byLayer.set(f.layer, arr);
         }
         return [...byLayer.entries()].sort((a, b) => a[0] - b[0]);
-    }, [feeds]);
+    }, [feeds, search]);
 
     const enabledCount = feeds.filter((f) => f.enabled).length;
+    const healthyCount = feeds.filter(f => f.enabled && f.health?.ok).length;
 
     const onToggle = async (f: FeedSource, enabled: boolean) => {
         setBusyUrl(f.url);
@@ -142,12 +151,12 @@ export default function FeedSourcesManager() {
                 <DialogHeader>
                     <DialogTitle className="flex items-center gap-2">
                         <Rss className="h-5 w-5" />
-                        Fontes RSS monitoradas
+                        Fontes de notícias
                     </DialogTitle>
                     <DialogDescription>
                         {loading
                             ? "Carregando…"
-                            : `${enabledCount} de ${feeds.length} fontes ativas${isAdmin ? "" : " · somente leitura"}.`}
+                            : `${enabledCount} de ${feeds.length} habilitadas · ${healthyCount} responderam${isAdmin ? "" : " · somente leitura"}.`}
                     </DialogDescription>
                 </DialogHeader>
 
@@ -184,6 +193,7 @@ export default function FeedSourcesManager() {
                     </div>
                 )}
 
+                <div className="relative"><Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" /><Input aria-label="Buscar fonte de notícias" placeholder="Buscar por fonte ou domínio…" className="pl-9" value={search} onChange={event => setSearch(event.target.value)} /></div>
                 <ScrollArea className="max-h-[50vh] pr-3">
                     <div className="space-y-4">
                         {grouped.map(([layer, list]) => (
@@ -198,9 +208,10 @@ export default function FeedSourcesManager() {
                                             <div className="flex items-center gap-2">
                                                 <span className="font-medium text-sm truncate">{f.source}</span>
                                                 {!f.builtin && <Badge variant="secondary" className="text-[10px]">custom</Badge>}
+                                                {f.kind === "auto" && <Badge variant="outline" className="text-[10px]">RSS / HTML</Badge>}
                                                 <FeedStatus feed={f} />
                                             </div>
-                                            <div className="text-xs text-muted-foreground truncate">{f.url}</div>
+                                            <div className="text-xs text-muted-foreground truncate" title={f.health?.endpoint || f.url}>{f.health?.endpoint || f.url}</div>
                                         </div>
                                         {busyUrl === f.url ? (
                                             <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
@@ -217,7 +228,7 @@ export default function FeedSourcesManager() {
                                             </div>
                                         ) : (
                                             <Badge variant={f.enabled ? "default" : "outline"} className="text-[10px] shrink-0">
-                                                {f.enabled ? "ativa" : "inativa"}
+                                                {f.enabled ? "habilitada" : "desativada"}
                                             </Badge>
                                         )}
                                     </div>
@@ -240,12 +251,13 @@ export default function FeedSourcesManager() {
 // ciclo, cinza = ainda não coletado.
 function FeedStatus({ feed }: { feed: FeedSource }) {
     if (!feed.health) {
-        return <span className="text-[10px] text-muted-foreground">—</span>;
+        return <span className="text-[10px] text-muted-foreground">aguardando coleta</span>;
     }
+    if (feed.health.status === "collecting") return <span className="flex items-center gap-1 text-[10px] text-muted-foreground"><Loader2 className="h-3 w-3 animate-spin" /> coletando</span>;
     if (feed.health.ok) {
         return (
             <span className="flex items-center gap-1 text-[10px] text-emerald-600 dark:text-emerald-400">
-                <CheckCircle2 className="h-3 w-3" /> {feed.health.count}{feed.health.status === "unchanged" ? " · sem alterações" : ""}
+                <CheckCircle2 className="h-3 w-3" /> {feed.health.method === "html" ? "HTML · " : "RSS · "}{feed.health.count}{feed.health.status === "unchanged" ? " · sem alterações" : ""}
             </span>
         );
     }

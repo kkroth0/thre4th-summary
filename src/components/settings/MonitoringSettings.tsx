@@ -43,7 +43,7 @@ export function MonitoringSettings() {
         <CardHeader className="p-4 pb-3">
           <CardTitle className="flex items-center gap-2 text-sm"><Rss className="h-4 w-4 text-muted-foreground" /> {pt ? "Fontes de notícias" : "News sources"}</CardTitle>
           <CardDescription>
-            {pt ? "Feeds RSS/Atom da coleta. Edição restrita a administradores." : "RSS/Atom collection feeds. Editing is restricted to administrators."}
+            {pt ? "RSS/Atom e páginas de publicações da coleta. Edição restrita a administradores." : "RSS/Atom feeds and publication pages. Editing is restricted to administrators."}
           </CardDescription>
         </CardHeader>
         <CardContent className="px-4 pb-4"><FeedSourcesManager /></CardContent>

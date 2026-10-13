@@ -51,6 +51,7 @@ interface Advisory {
   title: string;
   link: string;
   pubDate: string;
+  dateInferred?: boolean;
   description: string;
   source: string;
   weight_boost?: number; // confiança/prioridade da fonte (0-20), do catálogo CTI_FEEDS
@@ -174,7 +175,7 @@ const buildShareText = (item: Advisory, e: EnrichData | undefined, lang: string)
   const ttps = mergedField(item, e, "ttps");
   const cves = mergedField(item, e, "cves");
   out.push(`Source: ${item.source}`);
-  out.push(`Date: ${new Date(item.pubDate).toISOString().slice(0, 10)}`);
+  out.push(`${item.dateInferred ? 'Collected' : 'Published'}: ${new Date(item.pubDate).toISOString().slice(0, 10)}`);
   if (assets.length) out.push(`Monitored Assets: ${assets.join(", ")}`);
   if (threats.length) out.push(`Threats: ${threats.join(", ")}`);
   if (sectors.length) out.push(`Targeted Sectors: ${sectors.join(", ")}`);
@@ -259,6 +260,7 @@ const Newsletter = () => {
             title: item.title as string,
             link: item.link as string,
             pubDate: item.pubDate as string,
+            dateInferred: item.dateInferred === true,
             description: item.description as string,
             source: item.source as string,
             weight_boost: typeof item.weight_boost === "number" ? item.weight_boost : undefined,
@@ -1094,7 +1096,8 @@ const Newsletter = () => {
                                 )}
                               </span>
                             )}
-                            <span className="font-mono text-xs text-muted-foreground" title={new Date(item.pubDate).toLocaleString()}>
+                            <span className="font-mono text-xs text-muted-foreground" title={`${item.dateInferred ? (language === 'pt' ? 'Primeira coleta; data de publicação não informada. ' : 'First collected; publication date unavailable. ') : ''}${new Date(item.pubDate).toLocaleString()}`}>
+                              {item.dateInferred && <span className="mr-1">{language === 'pt' ? 'Coleta:' : 'Collected:'}</span>}
                               {relTime(item.pubDate, language)}
                               <span className="ml-1 opacity-70">
                                 ({new Date(item.pubDate).toLocaleDateString(language === "pt" ? "pt-BR" : "en-US", { day: "2-digit", month: "2-digit", year: "numeric" })})

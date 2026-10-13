@@ -58,7 +58,7 @@ export function singleFlightRefresh(run) {
     };
 }
 
-export function createFeedCollector({ request, parse, cache, now = () => new Date(), concurrency = 6, retentionDays = 30, maxItems = 100 }) {
+export function createFeedCollector({ request, parse, resolve, onHealth = () => {}, cache, now = () => new Date(), concurrency = 6, retentionDays = 30, maxItems = 100 }) {
     const retained = (items, at) => (Array.isArray(items) ? items : []).filter((item) =>
         typeof item?.link === 'string' && typeof item.pubDate === 'string' && new Date(item.pubDate).getTime() >= at.getTime() - retentionDays * 86400000)
         .sort((a, b) => b.pubDate.localeCompare(a.pubDate) || a.link.localeCompare(b.link)).slice(0, maxItems);
@@ -68,28 +68,34 @@ export function createFeedCollector({ request, parse, cache, now = () => new Dat
             const rows = await mapConcurrent(feeds, concurrency, async (feed) => {
                 const previous = cache.get(feed.url);
                 const oldItems = retained(previous?.items, at);
+                onHealth(feed.url, { ok: false, count: oldItems.length, status: 'collecting', error: null, lastSuccessfulAt: previous?.lastSuccessfulAt || null, at: at.toISOString() });
                 const headers = {};
                 if (previous?.etag) headers['If-None-Match'] = previous.etag;
                 if (previous?.lastModified) headers['If-Modified-Since'] = previous.lastModified;
                 try {
-                    const response = await request(feed.url, { headers });
+                    const resolved = feed.kind === 'auto' && resolve ? await resolve(feed, previous, { headers }) : null;
+                    const response = resolved?.response || await request(feed.url, { headers });
                     if (response.status !== 304 && (response.status < 200 || response.status >= 300)) throw new Error('Feed HTTP ' + response.status);
                     if (response.status === 304 && !Array.isArray(previous?.items)) throw new Error('304 without a cached feed');
-                    const parsed = response.status === 304 ? [] : parse(response.data, feed.source, feed.layer, { feedUrl: feed.url, now: at });
+                    const parsed = response.status === 304 ? [] : resolved?.items || parse(response.data, feed.source, feed.layer, { feedUrl: feed.url, now: at });
                     const byLink = new Map(oldItems.map((item) => [item.link, item]));
                     for (const item of parsed) {
                         const link = canonicalArticleUrl(item.link, feed.url);
                         if (!link) continue;
                         const old = byLink.get(link);
                         const pubDate = item.dateInferred && old ? old.pubDate : item.pubDate;
-                        byLink.set(link, { ...item, link, pubDate, firstCollectedAt: old?.firstCollectedAt || at.toISOString(), collectedAt: at.toISOString() });
+                        byLink.set(link, { ...item, link, pubDate, sourceCategories: feed.categories || [], firstCollectedAt: old?.firstCollectedAt || at.toISOString(), collectedAt: at.toISOString() });
                     }
                     const items = retained([...byLink.values()], at);
-                    const next = { version: 1, items, lastSuccessfulAt: at.toISOString(), etag: response.status === 304 ? previous.etag : response.headers?.etag || null, lastModified: response.status === 304 ? previous.lastModified : response.headers?.['last-modified'] || null };
+                    const next = { version: 1, ...resolved?.metadata, items, lastSuccessfulAt: at.toISOString(), etag: response.status === 304 ? previous.etag : response.headers?.etag || null, lastModified: response.status === 304 ? previous.lastModified : response.headers?.['last-modified'] || null };
                     cache.set(feed.url, next);
-                    return { items: items.map((item) => ({ ...item, weight_boost: feed.weight_boost, feedUrl: feed.url, collectionStatus: response.status === 304 ? 'unchanged' : 'fresh' })), health: { ok: true, count: items.length, fetchedCount: parsed.length, status: response.status === 304 ? 'unchanged' : 'fresh', lastSuccessfulAt: next.lastSuccessfulAt, error: null, at: at.toISOString() } };
+                    const health = { ok: true, count: items.length, fetchedCount: parsed.length, method: next.method || 'rss', endpoint: next.discoveryUrl || feed.url, status: response.status === 304 ? 'unchanged' : 'fresh', lastSuccessfulAt: next.lastSuccessfulAt, error: null, at: at.toISOString() };
+                    onHealth(feed.url, health);
+                    return { items: items.map((item) => ({ ...item, weight_boost: feed.weight_boost, feedUrl: feed.url, collectionStatus: response.status === 304 ? 'unchanged' : 'fresh' })), health };
                 } catch (error) {
-                    return { items: oldItems.map((item) => ({ ...item, weight_boost: feed.weight_boost, feedUrl: feed.url, collectionStatus: 'stale' })), health: { ok: false, count: oldItems.length, fetchedCount: 0, status: oldItems.length ? 'stale' : 'failed', lastSuccessfulAt: previous?.lastSuccessfulAt || null, error: error.message, at: at.toISOString() } };
+                    const health = { ok: false, count: oldItems.length, fetchedCount: 0, method: previous?.method, endpoint: previous?.discoveryUrl || feed.url, status: oldItems.length ? 'stale' : 'failed', lastSuccessfulAt: previous?.lastSuccessfulAt || null, error: error.message, at: at.toISOString() };
+                    onHealth(feed.url, health);
+                    return { items: oldItems.map((item) => ({ ...item, weight_boost: feed.weight_boost, feedUrl: feed.url, collectionStatus: 'stale' })), health };
                 }
             });
             return { items: rows.flatMap((row) => row.items), health: new Map(feeds.map((feed, i) => [feed.url, rows[i].health])) };

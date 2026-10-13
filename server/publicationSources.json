@@ -1,0 +1,1817 @@
+[
+  {
+    "domain": "cybersecuritynews.com",
+    "source": "cybersecuritynews.com",
+    "url": "https://cybersecuritynews.com/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://cybersecuritynews.com/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "cyberpress.org",
+    "source": "cyberpress.org",
+    "url": "https://cyberpress.org/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://cyberpress.org/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "medium.com",
+    "source": "medium.com",
+    "url": "https://medium.com/tag/cybersecurity",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://medium.com/feed/tag/cybersecurity"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "securityaffairs.com",
+    "source": "securityaffairs.com",
+    "url": "https://securityaffairs.com/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://securityaffairs.com/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "anomali.com",
+    "source": "anomali.com",
+    "url": "https://anomali.com/blog",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://anomali.com/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "hackread.com",
+    "source": "hackread.com",
+    "url": "https://hackread.com/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://hackread.com/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "safedep.io",
+    "source": "safedep.io",
+    "url": "https://safedep.io/blog",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://safedep.io/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "secrss.com",
+    "source": "secrss.com",
+    "url": "https://secrss.com/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://secrss.com/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "socradar.io",
+    "source": "socradar.io",
+    "url": "https://socradar.io/blog",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://socradar.io/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "scworld.com",
+    "source": "scworld.com",
+    "url": "https://scworld.com/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://scworld.com/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "blog.polyswarm.io",
+    "source": "blog.polyswarm.io",
+    "url": "https://blog.polyswarm.io/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://blog.polyswarm.io/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "dailysecurityreview.com",
+    "source": "dailysecurityreview.com",
+    "url": "https://dailysecurityreview.com/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://dailysecurityreview.com/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "socket.dev",
+    "source": "socket.dev",
+    "url": "https://socket.dev/blog",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://socket.dev/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "cyberaccord.com",
+    "source": "cyberaccord.com",
+    "url": "https://cyberaccord.com/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://cyberaccord.com/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "cyberxtron.com",
+    "source": "cyberxtron.com",
+    "url": "https://cyberxtron.com/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://cyberxtron.com/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "securityboulevard.com",
+    "source": "securityboulevard.com",
+    "url": "https://securityboulevard.com/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://securityboulevard.com/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "asec.ahnlab.com",
+    "source": "asec.ahnlab.com",
+    "url": "https://asec.ahnlab.com/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://asec.ahnlab.com/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "hunt.io",
+    "source": "hunt.io",
+    "url": "https://hunt.io/blog",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://hunt.io/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "securelist.ru",
+    "source": "securelist.ru",
+    "url": "https://securelist.ru/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://securelist.ru/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "aikido.dev",
+    "source": "aikido.dev",
+    "url": "https://aikido.dev/blog",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://aikido.dev/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "levelblue.com",
+    "source": "levelblue.com",
+    "url": "https://levelblue.com/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://levelblue.com/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "zscaler.com",
+    "source": "zscaler.com",
+    "url": "https://zscaler.com/blogs",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://zscaler.com/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "moonlock.com",
+    "source": "moonlock.com",
+    "url": "https://moonlock.com/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://moonlock.com/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "intel.breakglass.tech",
+    "source": "intel.breakglass.tech",
+    "url": "https://intel.breakglass.tech/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://intel.breakglass.tech/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "slowmist.medium.com",
+    "source": "slowmist.medium.com",
+    "url": "https://slowmist.medium.com/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://slowmist.medium.com/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "arcticwolf.com",
+    "source": "arcticwolf.com",
+    "url": "https://arcticwolf.com/resources/blog",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://arcticwolf.com/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "picussecurity.com",
+    "source": "picussecurity.com",
+    "url": "https://picussecurity.com/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://picussecurity.com/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "socfortress.medium.com",
+    "source": "socfortress.medium.com",
+    "url": "https://socfortress.medium.com/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://socfortress.medium.com/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "cloudsek.com",
+    "source": "cloudsek.com",
+    "url": "https://cloudsek.com/blog",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://cloudsek.com/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "stealthmole-intelligence-hub.blogspot.com",
+    "source": "stealthmole-intelligence-hub.blogspot.com",
+    "url": "https://stealthmole-intelligence-hub.blogspot.com/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://stealthmole-intelligence-hub.blogspot.com/feeds/posts/default?alt=rss"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "rewterz.com",
+    "source": "rewterz.com",
+    "url": "https://rewterz.com/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://rewterz.com/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "cyberint.com",
+    "source": "cyberint.com",
+    "url": "https://cyberint.com/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://cyberint.com/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "opensourcemalware.com",
+    "source": "opensourcemalware.com",
+    "url": "https://opensourcemalware.com/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://opensourcemalware.com/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "osintteam.blog",
+    "source": "osintteam.blog",
+    "url": "https://osintteam.blog/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://osintteam.blog/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "research.jfrog.com",
+    "source": "research.jfrog.com",
+    "url": "https://research.jfrog.com/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://research.jfrog.com/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "thecyberexpress.com",
+    "source": "thecyberexpress.com",
+    "url": "https://thecyberexpress.com/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://thecyberexpress.com/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "csoonline.com",
+    "source": "csoonline.com",
+    "url": "https://csoonline.com/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://csoonline.com/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "d3lab.net",
+    "source": "d3lab.net",
+    "url": "https://d3lab.net/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://d3lab.net/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "derp.ca",
+    "source": "derp.ca",
+    "url": "https://derp.ca/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://derp.ca/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "netskope.com",
+    "source": "netskope.com",
+    "url": "https://netskope.com/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://netskope.com/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "seqrite.com",
+    "source": "seqrite.com",
+    "url": "https://seqrite.com/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://seqrite.com/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "webflow.sysdig.com",
+    "source": "webflow.sysdig.com",
+    "url": "https://webflow.sysdig.com/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://webflow.sysdig.com/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "alyacofficialblog.tistory.com",
+    "source": "alyacofficialblog.tistory.com",
+    "url": "https://alyacofficialblog.tistory.com/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://alyacofficialblog.tistory.com/rss"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "bfore.ai",
+    "source": "bfore.ai",
+    "url": "https://bfore.ai/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://bfore.ai/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "gurucul.com",
+    "source": "gurucul.com",
+    "url": "https://gurucul.com/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://gurucul.com/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "infosecwriteups.com",
+    "source": "infosecwriteups.com",
+    "url": "https://infosecwriteups.com/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://infosecwriteups.com/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "ox.security",
+    "source": "ox.security",
+    "url": "https://ox.security/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://ox.security/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "reliaquest.com",
+    "source": "reliaquest.com",
+    "url": "https://reliaquest.com/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://reliaquest.com/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "wordfence.com",
+    "source": "wordfence.com",
+    "url": "https://wordfence.com/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://wordfence.com/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "blog-wp.darkatlas.io",
+    "source": "blog-wp.darkatlas.io",
+    "url": "https://blog-wp.darkatlas.io/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://blog-wp.darkatlas.io/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "esentire.com",
+    "source": "esentire.com",
+    "url": "https://esentire.com/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://esentire.com/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "gendigital.com",
+    "source": "gendigital.com",
+    "url": "https://gendigital.com/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://gendigital.com/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "secureblink.com",
+    "source": "secureblink.com",
+    "url": "https://secureblink.com/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://secureblink.com/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "security.com",
+    "source": "security.com",
+    "url": "https://security.com/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://security.com/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "cyberinsider.com",
+    "source": "cyberinsider.com",
+    "url": "https://cyberinsider.com/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://cyberinsider.com/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "cyberproof.com",
+    "source": "cyberproof.com",
+    "url": "https://cyberproof.com/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://cyberproof.com/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "dti.domaintools.com",
+    "source": "dti.domaintools.com",
+    "url": "https://dti.domaintools.com/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://dti.domaintools.com/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "infoblox.com",
+    "source": "infoblox.com",
+    "url": "https://infoblox.com/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://infoblox.com/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "kudelskisecurity.com",
+    "source": "kudelskisecurity.com",
+    "url": "https://kudelskisecurity.com/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://kudelskisecurity.com/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "snyk.io",
+    "source": "snyk.io",
+    "url": "https://snyk.io/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://snyk.io/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "xz.aliyun.com",
+    "source": "xz.aliyun.com",
+    "url": "https://xz.aliyun.com/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://xz.aliyun.com/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "bitdefender.com",
+    "source": "bitdefender.com",
+    "url": "https://bitdefender.com/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://bitdefender.com/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "ctrlaltintel.com",
+    "source": "ctrlaltintel.com",
+    "url": "https://ctrlaltintel.com/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://ctrlaltintel.com/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "cyberscoop.com",
+    "source": "cyberscoop.com",
+    "url": "https://cyberscoop.com/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://cyberscoop.com/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "silentpush.com",
+    "source": "silentpush.com",
+    "url": "https://silentpush.com/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://silentpush.com/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "blog.knowbe4.com",
+    "source": "blog.knowbe4.com",
+    "url": "https://blog.knowbe4.com/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://blog.knowbe4.com/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "blog.synapticsystems.de",
+    "source": "blog.synapticsystems.de",
+    "url": "https://blog.synapticsystems.de/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://blog.synapticsystems.de/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "ctfiot.com",
+    "source": "ctfiot.com",
+    "url": "https://ctfiot.com/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://ctfiot.com/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "endorlabs.com",
+    "source": "endorlabs.com",
+    "url": "https://endorlabs.com/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://endorlabs.com/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "flare.io",
+    "source": "flare.io",
+    "url": "https://flare.io/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://flare.io/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "infostealers.com",
+    "source": "infostealers.com",
+    "url": "https://infostealers.com/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://infostealers.com/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "systemweakness.com",
+    "source": "systemweakness.com",
+    "url": "https://systemweakness.com/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://systemweakness.com/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "cofense.com",
+    "source": "cofense.com",
+    "url": "https://cofense.com/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://cofense.com/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "cside.com",
+    "source": "cside.com",
+    "url": "https://cside.com/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://cside.com/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "theravenfile.com",
+    "source": "theravenfile.com",
+    "url": "https://theravenfile.com/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://theravenfile.com/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "akamai.com",
+    "source": "akamai.com",
+    "url": "https://akamai.com/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://akamai.com/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "bi-zone.medium.com",
+    "source": "bi-zone.medium.com",
+    "url": "https://bi-zone.medium.com/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://bi-zone.medium.com/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "cybersecsentinel.com",
+    "source": "cybersecsentinel.com",
+    "url": "https://cybersecsentinel.com/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://cybersecsentinel.com/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "forcepoint.com",
+    "source": "forcepoint.com",
+    "url": "https://forcepoint.com/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://forcepoint.com/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "genians.co.kr",
+    "source": "genians.co.kr",
+    "url": "https://genians.co.kr/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://genians.co.kr/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "habr.com",
+    "source": "habr.com",
+    "url": "https://habr.com/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://habr.com/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "jamf.com",
+    "source": "jamf.com",
+    "url": "https://jamf.com/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://jamf.com/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "labs.k7computing.com",
+    "source": "labs.k7computing.com",
+    "url": "https://labs.k7computing.com/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://labs.k7computing.com/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "rt-solar.ru",
+    "source": "rt-solar.ru",
+    "url": "https://rt-solar.ru/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://rt-solar.ru/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "sansec.io",
+    "source": "sansec.io",
+    "url": "https://sansec.io/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://sansec.io/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "securonix.com",
+    "source": "securonix.com",
+    "url": "https://securonix.com/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://securonix.com/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "team-cymru.com",
+    "source": "team-cymru.com",
+    "url": "https://team-cymru.com/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://team-cymru.com/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "blog.deception.pro",
+    "source": "blog.deception.pro",
+    "url": "https://blog.deception.pro/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://blog.deception.pro/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "blog.xlab.qianxin.com",
+    "source": "blog.xlab.qianxin.com",
+    "url": "https://blog.xlab.qianxin.com/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://blog.xlab.qianxin.com/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "jumpsec.com",
+    "source": "jumpsec.com",
+    "url": "https://jumpsec.com/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://jumpsec.com/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "mimecast.com",
+    "source": "mimecast.com",
+    "url": "https://mimecast.com/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://mimecast.com/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "posts.inthecyber.com",
+    "source": "posts.inthecyber.com",
+    "url": "https://posts.inthecyber.com/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://posts.inthecyber.com/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "qurium.org",
+    "source": "qurium.org",
+    "url": "https://qurium.org/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://qurium.org/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "resecurity.com",
+    "source": "resecurity.com",
+    "url": "https://resecurity.com/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://resecurity.com/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "spamdetective.medium.com",
+    "source": "spamdetective.medium.com",
+    "url": "https://spamdetective.medium.com/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://spamdetective.medium.com/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "vulncheck.com",
+    "source": "vulncheck.com",
+    "url": "https://vulncheck.com/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://vulncheck.com/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "zimperium.com",
+    "source": "zimperium.com",
+    "url": "https://zimperium.com/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://zimperium.com/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "antiy.com",
+    "source": "antiy.com",
+    "url": "https://antiy.com/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://antiy.com/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "blog.barracuda.com",
+    "source": "blog.barracuda.com",
+    "url": "https://blog.barracuda.com/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://blog.barracuda.com/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "blog.exatrack.com",
+    "source": "blog.exatrack.com",
+    "url": "https://blog.exatrack.com/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://blog.exatrack.com/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "dmpdump.github.io",
+    "source": "dmpdump.github.io",
+    "url": "https://dmpdump.github.io/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://dmpdump.github.io/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "guidepointsecurity.com",
+    "source": "guidepointsecurity.com",
+    "url": "https://guidepointsecurity.com/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://guidepointsecurity.com/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "honeylabs.net",
+    "source": "honeylabs.net",
+    "url": "https://honeylabs.net/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://honeylabs.net/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "meetcyber.net",
+    "source": "meetcyber.net",
+    "url": "https://meetcyber.net/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://meetcyber.net/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "patchstack.com",
+    "source": "patchstack.com",
+    "url": "https://patchstack.com/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://patchstack.com/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "sect.iij.ad.jp",
+    "source": "sect.iij.ad.jp",
+    "url": "https://sect.iij.ad.jp/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://sect.iij.ad.jp/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "attackiq.com",
+    "source": "attackiq.com",
+    "url": "https://attackiq.com/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://attackiq.com/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "aws.amazon.com",
+    "source": "aws.amazon.com",
+    "url": "https://aws.amazon.com/blogs/security/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://aws.amazon.com/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "bitsight.com",
+    "source": "bitsight.com",
+    "url": "https://bitsight.com/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://bitsight.com/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "blog.gdatasoftware.com",
+    "source": "blog.gdatasoftware.com",
+    "url": "https://blog.gdatasoftware.com/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://blog.gdatasoftware.com/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "blog.lukeacha.com",
+    "source": "blog.lukeacha.com",
+    "url": "https://blog.lukeacha.com/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://blog.lukeacha.com/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "blog.nicter.jp",
+    "source": "blog.nicter.jp",
+    "url": "https://blog.nicter.jp/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://blog.nicter.jp/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "github.security.telekom.com",
+    "source": "github.security.telekom.com",
+    "url": "https://github.security.telekom.com/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://github.security.telekom.com/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "greynoise.io",
+    "source": "greynoise.io",
+    "url": "https://greynoise.io/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://greynoise.io/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "mcafee.com",
+    "source": "mcafee.com",
+    "url": "https://mcafee.com/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://mcafee.com/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "netresec.com",
+    "source": "netresec.com",
+    "url": "https://netresec.com/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://netresec.com/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "nsfocusglobal.com",
+    "source": "nsfocusglobal.com",
+    "url": "https://nsfocusglobal.com/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://nsfocusglobal.com/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "pushsecurity.com",
+    "source": "pushsecurity.com",
+    "url": "https://pushsecurity.com/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://pushsecurity.com/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "safebreach.com",
+    "source": "safebreach.com",
+    "url": "https://safebreach.com/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://safebreach.com/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "socprime.com",
+    "source": "socprime.com",
+    "url": "https://socprime.com/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://socprime.com/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "techcommunity.microsoft.com",
+    "source": "techcommunity.microsoft.com",
+    "url": "https://techcommunity.microsoft.com/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://techcommunity.microsoft.com/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "themalwarefiles.com",
+    "source": "themalwarefiles.com",
+    "url": "https://themalwarefiles.com/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://themalwarefiles.com/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "trellix.com",
+    "source": "trellix.com",
+    "url": "https://trellix.com/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://trellix.com/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "urlscan.io",
+    "source": "urlscan.io",
+    "url": "https://urlscan.io/blog/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://urlscan.io/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "blog-en.itochuci.co.jp",
+    "source": "blog-en.itochuci.co.jp",
+    "url": "https://blog-en.itochuci.co.jp/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://blog-en.itochuci.co.jp/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "blog.checkpoint.com",
+    "source": "blog.checkpoint.com",
+    "url": "https://blog.checkpoint.com/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://blog.checkpoint.com/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "blog.pulsedive.com",
+    "source": "blog.pulsedive.com",
+    "url": "https://blog.pulsedive.com/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://blog.pulsedive.com/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "blog.securitybreak.io",
+    "source": "blog.securitybreak.io",
+    "url": "https://blog.securitybreak.io/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://blog.securitybreak.io/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "bolster.ai",
+    "source": "bolster.ai",
+    "url": "https://bolster.ai/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://bolster.ai/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "catonetworks.com",
+    "source": "catonetworks.com",
+    "url": "https://catonetworks.com/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://catonetworks.com/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "cert.gov.ua",
+    "source": "cert.gov.ua",
+    "url": "https://cert.gov.ua/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://cert.gov.ua/feed/"
+    ],
+    "layer": 1,
+    "weight_boost": 15
+  },
+  {
+    "domain": "doublepulsar.com",
+    "source": "doublepulsar.com",
+    "url": "https://doublepulsar.com/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://doublepulsar.com/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "enki.co.kr",
+    "source": "enki.co.kr",
+    "url": "https://enki.co.kr/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://enki.co.kr/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "horizon3.ai",
+    "source": "horizon3.ai",
+    "url": "https://horizon3.ai/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://horizon3.ai/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "intelinsights.substack.com",
+    "source": "intelinsights.substack.com",
+    "url": "https://intelinsights.substack.com/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://intelinsights.substack.com/feed"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "iverify.com",
+    "source": "iverify.com",
+    "url": "https://iverify.com/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://iverify.com/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "kmsec.uk",
+    "source": "kmsec.uk",
+    "url": "https://kmsec.uk/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://kmsec.uk/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "malwr-analysis.com",
+    "source": "malwr-analysis.com",
+    "url": "https://malwr-analysis.com/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://malwr-analysis.com/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "menlosecurity.com",
+    "source": "menlosecurity.com",
+    "url": "https://menlosecurity.com/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://menlosecurity.com/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "mrtiepolo.medium.com",
+    "source": "mrtiepolo.medium.com",
+    "url": "https://mrtiepolo.medium.com/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://mrtiepolo.medium.com/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "ontinue.com",
+    "source": "ontinue.com",
+    "url": "https://ontinue.com/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://ontinue.com/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "opswat.com",
+    "source": "opswat.com",
+    "url": "https://opswat.com/blog",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://opswat.com/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "redasgard.com",
+    "source": "redasgard.com",
+    "url": "https://redasgard.com/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://redasgard.com/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "redasgard.medium.com",
+    "source": "redasgard.medium.com",
+    "url": "https://redasgard.medium.com/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://redasgard.medium.com/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "stepsecurity.io",
+    "source": "stepsecurity.io",
+    "url": "https://stepsecurity.io/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://stepsecurity.io/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "stormshield.com",
+    "source": "stormshield.com",
+    "url": "https://stormshield.com/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://stormshield.com/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "synthient.com",
+    "source": "synthient.com",
+    "url": "https://synthient.com/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://synthient.com/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "threatdown.com",
+    "source": "threatdown.com",
+    "url": "https://threatdown.com/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://threatdown.com/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "threatfabric.com",
+    "source": "threatfabric.com",
+    "url": "https://threatfabric.com/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://threatfabric.com/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "vectra.ai",
+    "source": "vectra.ai",
+    "url": "https://vectra.ai/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://vectra.ai/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "wazuh.com",
+    "source": "wazuh.com",
+    "url": "https://wazuh.com/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://wazuh.com/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "abstract.security",
+    "source": "abstract.security",
+    "url": "https://abstract.security/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://abstract.security/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "acronis.com",
+    "source": "acronis.com",
+    "url": "https://acronis.com/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://acronis.com/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "blog.sucuri.net",
+    "source": "blog.sucuri.net",
+    "url": "https://blog.sucuri.net/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://blog.sucuri.net/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "blogs.cisco.com",
+    "source": "blogs.cisco.com",
+    "url": "https://blogs.cisco.com/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://blogs.cisco.com/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "detect.fyi",
+    "source": "detect.fyi",
+    "url": "https://detect.fyi/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://detect.fyi/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "eclipsemanic.medium.com",
+    "source": "eclipsemanic.medium.com",
+    "url": "https://eclipsemanic.medium.com/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://eclipsemanic.medium.com/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "fieldeffect.com",
+    "source": "fieldeffect.com",
+    "url": "https://fieldeffect.com/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://fieldeffect.com/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "hengineer.medium.com",
+    "source": "hengineer.medium.com",
+    "url": "https://hengineer.medium.com/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://hengineer.medium.com/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "ic3.gov",
+    "source": "ic3.gov",
+    "url": "https://ic3.gov/PSA",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://ic3.gov/feed/"
+    ],
+    "layer": 1,
+    "weight_boost": 15
+  },
+  {
+    "domain": "labs.withsecure.com",
+    "source": "labs.withsecure.com",
+    "url": "https://labs.withsecure.com/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://labs.withsecure.com/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "labs.yarix.com",
+    "source": "labs.yarix.com",
+    "url": "https://labs.yarix.com/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://labs.yarix.com/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "netaskari.substack.com",
+    "source": "netaskari.substack.com",
+    "url": "https://netaskari.substack.com/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://netaskari.substack.com/feed"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "nextron-systems.com",
+    "source": "nextron-systems.com",
+    "url": "https://nextron-systems.com/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://nextron-systems.com/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  },
+  {
+    "domain": "vxrl.medium.com",
+    "source": "vxrl.medium.com",
+    "url": "https://vxrl.medium.com/",
+    "kind": "auto",
+    "rssCandidates": [
+      "https://vxrl.medium.com/feed/"
+    ],
+    "layer": 2,
+    "weight_boost": 10
+  }
+]

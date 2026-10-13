@@ -603,7 +603,7 @@ export function collapseKernelNotices(items) {
 export const CTI_FEEDS = [
     // Layer 1 — PSIRT, vendor advisories & vuln intel (highest confidence)
     { url: 'https://www.cisa.gov/cybersecurity-advisories/all.xml', source: 'CISA Advisories', layer: 1, weight_boost: 20 },
-    { url: 'https://www.cisa.gov/cybersecurity-advisories/ics-advisories.xml', source: 'CISA ICS (OT)', layer: 1, weight_boost: 20 },
+    { url: 'https://www.cisa.gov/cybersecurity-advisories/ics-advisories.xml', source: 'CISA ICS (OT)', layer: 1, weight_boost: 20, categories: ['OT/ICS'] },
     { url: 'https://sec.cloudapps.cisco.com/security/center/psirtrss20/CiscoSecurityAdvisory.xml', source: 'Cisco PSIRT', layer: 1, weight_boost: 20 },
     { url: 'https://api.msrc.microsoft.com/update-guide/rss', source: 'Microsoft MSRC', layer: 1, weight_boost: 20 },
     { url: 'https://filestore.fortinet.com/fortiguard/rss/ir.xml', source: 'FortiGuard PSIRT', layer: 1, weight_boost: 20 },
@@ -692,7 +692,11 @@ export const CTI_FEEDS = [
     { url: 'https://any.run/cybersecurity-blog/rss/', source: 'ANY.RUN Blog', layer: 3, weight_boost: 8 },
     { url: 'https://blog.aquasec.com/rss.xml', source: 'Aqua Security', layer: 3, weight_boost: 8 },
     { url: 'https://trustedsec.com/feed.rss', source: 'TrustedSec', layer: 3, weight_boost: 10 },
-    { url: 'https://industrialcyber.co/feed/', source: 'Industrial Cyber', layer: 3, weight_boost: 10 },
+    { url: 'https://industrialcyber.co/feed/', source: 'Industrial Cyber', layer: 3, weight_boost: 10, categories: ['OT/ICS'] },
+    { url: 'https://www.securityweek.com/category/ics-ot/feed/', source: 'SecurityWeek ICS/OT', layer: 2, weight_boost: 10, categories: ['OT/ICS'] },
+    { url: 'https://br.claroty.com/team82/disclosure-dashboard/feed', source: 'Claroty Team82 Disclosures', layer: 1, weight_boost: 20, categories: ['OT/ICS'] },
+    { url: 'https://productcert.siemens.com/productcert/rss/advisories.atom', source: 'Siemens ProductCERT Advisories', layer: 1, weight_boost: 20, categories: ['OT/ICS'] },
+    { url: 'https://productcert.siemens.com/productcert/rss/alerts.atom', source: 'Siemens ProductCERT Alerts', layer: 1, weight_boost: 15, categories: ['OT/ICS'] },
     { url: 'https://objective-see.org/rss.xml', source: 'Objective-See', layer: 3, weight_boost: 8 },
     // Sophos removida: as duas URLs travam a renegociação TLS e nunca respondem
     // pra um cliente sem navegador (bot mitigation), confirmado em 2026-09-15

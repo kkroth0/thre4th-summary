@@ -60,7 +60,7 @@ export const VENDOR_CATALOG = [
         ['Orca Security'], ['Aqua Security', 'Aqua Security', 'Aquasecurity'], ['Sysdig'], ['Snyk'],
         ['Sonatype'], ['Veracode'], ['Checkmarx'], ['SonarSource', 'SonarSource', 'SonarQube'],
         ['Imperva'], ['Radware'], ['Arbor Networks'], ['NETSCOUT'], ['Wallarm'], ['Salt Security'],
-        ['Claroty'], ['Nozomi Networks'], ['Dragos'], ['Armis'], ['Forescout'], ['Tanium'],
+        ['Armis'], ['Forescout'], ['Tanium'],
         ['Illumio'], ['Guardicore'], ['AhnLab'], ['Sangfor'], ['NSFOCUS'], ['Hillstone Networks'],
         ['Venustech'], ['Qi-Anxin', 'Qi-Anxin', 'Qi An Xin'], ['Positive Technologies'],
         ['Stormshield'], ['Eviden'], ['G DATA', 'G DATA', 'GData'],
@@ -174,6 +174,7 @@ export const VENDOR_CATALOG = [
         ['Vivotek'], ['Uniview'], ['Amcrest'], ['Reolink'], ['GeoVision'], ['Digiever'], ['NUUO'], ['ZKTeco'],
     ]),
     ...group('ot-ics', [
+        ['Claroty', 'Claroty', 'Team82', 'Team 82'], ['Nozomi Networks'], ['Dragos'],
         ['Siemens', 'Siemens', 'SIMATIC', 'Siemens S7', 'SINUMERIK', 'SIPROTEC'],
         ['Schneider Electric', 'Schneider Electric', 'EcoStruxure', 'Modicon'],
         ['Rockwell Automation', 'Rockwell', 'Rockwell Automation', 'Allen-Bradley', 'Allen Bradley', 'FactoryTalk'],

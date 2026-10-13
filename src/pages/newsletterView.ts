@@ -104,6 +104,7 @@ export interface StorySource {
   source: string;
   title: string;
   pubDate: string;
+  dateInferred?: boolean;
   storyId?: string | null;
   actors?: StoryActor[];
   malware?: StoryActor[];

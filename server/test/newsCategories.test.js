@@ -11,6 +11,11 @@ test('a ordem de precedência é a acordada', () => {
     ]);
 });
 
+test('curated OT channel metadata keeps white papers and advisories in OT/ICS without keyword guessing',()=>{
+    assert.ok(categorize(item({title:'Quarterly technical research report',sourceCategories:['OT/ICS']})).categories.includes('OT/ICS'));
+    assert.ok(!categorize(item({title:'Quarterly technical research report',sourceCategories:[]})).categories.includes('OT/ICS'));
+});
+
 test('uma história entra em todas as categorias que bateram', () => {
     const result = categorize(item({
         title: 'Cl0p exploits Oracle EBS zero-day',
