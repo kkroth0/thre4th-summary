@@ -375,7 +375,14 @@ const addUrl = (set, raw) => {
 // domains; bounded by the 40KB fetch cap. Restrict by file type only if it bites.
 // O que anuncia versão logo antes do número: a palavra, a notação da CISA
 // (`vers:intdot/`) e os comparadores que aparecem em "prior to <4.3.4.1".
-const RE_VERSION_BEFORE = /(?:vers(?:ion|ao|ão)?|vers:intdot\/|firmware|release|build|update|patch|prior to|earlier than|before|through)\s*[<>=]*\s*$|(?:<|>|&lt;|&gt;|≤|≥)\s*$/i;
+const RE_VERSION_BEFORE = /(?:vers(?:ions?|ao|ão)?|vers:intdot\/|firmware|release|build|update|patch|prior to|earlier than|before|through|バージョン|版本|版本号)\s*[:v<>=]*\s*$|(?:<|>|&lt;|&gt;|≤|≥)\s*$/i;
+export function isSoftwareVersionAt(text, index, value) {
+    const before = text.slice(Math.max(0, index - 80), index);
+    const after = text.slice(index + value.length, index + value.length + 40);
+    return RE_VERSION_BEFORE.test(before)
+        || /(?:AiCloud|FortiOS|FortiClient|PAN-OS|Windows|firmware|software|OpenSSL)\s+v?\s*$/i.test(before)
+        || /^\s*(?:以前|以降|未満|以上|のバージョン|版本|version\b)/i.test(after);
+}
 
 export function extractIOCs(text, { plaintext = false } = {}) {
     const t = String(text || '');
@@ -414,7 +421,7 @@ export function extractIOCs(text, { plaintext = false } = {}) {
         // guardas abaixo, um boletim da CISA sobre a Siemens saía com quatro
         // "IOCs" que são número de firmware.
         if (ip.split('.').some((o) => o.length > 1 && o.startsWith('0'))) continue;
-        if (RE_VERSION_BEFORE.test(refanged.slice(Math.max(0, m.index - 28), m.index))) continue;
+        if (isSoftwareVersionAt(refanged, m.index, ip)) continue;
         ips.add(ip);
     }
 

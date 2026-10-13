@@ -16,7 +16,7 @@ import { deleteKnowledge, fetchKnowledge, type KnowledgeItem } from "@/services/
 const LOCALE: Record<string, string> = { pt: "pt-BR", en: "en-US", es: "es-ES", fr: "fr-FR" };
 
 const shortDate = (value: string, language: string) =>
-    value ? new Date(value).toLocaleDateString(LOCALE[language] || "pt-BR", { day: "2-digit", month: "short" }) : "—";
+    value ? new Date(/^\d{4}-\d\d-\d\d$/.test(value) ? value + 'T12:00:00Z' : value).toLocaleDateString(LOCALE[language] || "pt-BR", { timeZone: 'America/Fortaleza', day: "2-digit", month: "short" }) : "—";
 
 const Knowledge = () => {
     const { language } = useLanguage();

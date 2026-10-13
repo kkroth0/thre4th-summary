@@ -24,7 +24,9 @@ export function buildWeeklyReport(inputs,{range,profile=null,now=Date.now(),sele
   const groups=new Map();
   for(const row of inputs.publications||[]) {
     const periodDate=row.publicationTimeKnown===false||row.repository?.dateBasis==='report-date'?row.pubDate?.slice(0,10)+'T12:00:00Z':row.pubDate;
-    if(!row.link||!inWeek(periodDate,range,now))continue;
+    // Unknown publication dates remain searchable in the archive, but cannot
+    // stand in for this week's news. Collection time is not publication time.
+    if(!row.link||row.dateInferred===true||row.securityRelevant===false||!inWeek(periodDate,range,now))continue;
     const key=row.storyId||row.link;
     const relevance=(Number(row.score)||0)+(row.kev?25:0)+(profile?.sectors?.some(sector=>(row.sectors||[]).includes(sector))?15:0);
     const existing=groups.get(key);

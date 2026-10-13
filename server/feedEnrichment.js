@@ -3,8 +3,9 @@ import { contentHash } from './articleCollector.js';
 import { analyzePhishing } from './phishingIntel.js';
 import { setImmediate as yieldLoop } from 'node:timers/promises';
 import { declaredRepositoryMalware } from './repositorySources.js';
+import { removeVersionIndicators, isRelevantNews } from './newsQuality.js';
 
-export const EXTRACTION_VERSION = 'feed-v8';
+export const EXTRACTION_VERSION = 'feed-v9';
 
 // Keep all mentioned CVEs for research/KEV, but use only the article's focus
 // to group coverage. A patch report often recounts older, unrelated flaws.
@@ -34,7 +35,7 @@ export function enrichFeedItems(items, { texts = new Map(), supplementalIocs = n
         const enriched = {
             ...item, ...scoreArticle(text, item.weight_boost),
             actors: actors(text), malware: [...new Map([...declaredRepositoryMalware(item),...malware(text)].map(family=>[family.name.toLowerCase(),family])).values()], campaigns: campaigns(text),
-            iocs: mergeIocEvidence(item.repositoryReport ? item.iocs : extractIOCs(text), supplementalIocs.get(item.link)), sellerHandle: seller(text),
+            iocs: removeVersionIndicators(mergeIocEvidence(item.repositoryReport ? item.iocs : extractIOCs(text), supplementalIocs.get(item.link)),text), sellerHandle: seller(text),
             contentHash: contentHash(text), extractionVersion: EXTRACTION_VERSION,
             topicCves: topicCvesOf(item.title, item.text || item.description || '', texts.get(item.link) || ''),
         };
@@ -48,7 +49,7 @@ export function enrichFeedItems(items, { texts = new Map(), supplementalIocs = n
         enriched.newsCategories = result.categories;
         enriched.primaryCategory = result.primary;
         return enriched;
-    }).filter((item) => !isPureNoise(item.categories));
+    }).filter((item) => !isPureNoise(item.categories) && isRelevantNews(item));
 }
 
 export function applyVulnerabilityContext(items, kevMap, epssMap) {

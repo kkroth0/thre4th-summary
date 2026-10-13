@@ -54,6 +54,19 @@ test('one IOC correlates news, OTX, ThreatFox and AbuseIPDB, surviving a restart
   store.close();
 });
 
+test('revised news removes stale indicators and entity links while preserving independent provider evidence',async()=>{
+  const store=createIocIntelligence({now});
+  const row={link:'https://lab.example/review',title:'ASUS AiCloud',pubDate:'2026-10-12',malware:[{id:'404',name:'404 Keylogger'}],iocs:{ips:['2.0.0.39','154.81.156.10']}};
+  await store.ingestNews([row]);
+  await store.ingest([{value:'2.0.0.39',provider:'ThreatFox',externalId:'external',malwares:[{id:'valid',name:'Reported family'}]}]);
+  await store.ingestNews([{...row,malware:[],iocs:{ips:['154.81.156.10']}}]);
+  assert.deepEqual(store.detail('2.0.0.39').evidence.map(item=>item.provider),['ThreatFox']);
+  assert.equal(store.detail('154.81.156.10').evidence[0].entities.length,0);
+  assert.equal(store.list({malware:'404'}).total,0);
+  await store.ingestNews([{...row,malware:[],iocs:{ips:[]}}]);assert.equal(store.detail('154.81.156.10'),null);
+  store.close();
+});
+
 test('private account observations and private OTX pulses never leak into shared results',async()=>{
   const store=createIocIntelligence({now});
   await store.ingest([{value:'secret.example.com',scope:'user1',provider:'OTX',externalId:'private'}]);

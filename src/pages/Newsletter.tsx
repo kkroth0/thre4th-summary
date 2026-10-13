@@ -545,7 +545,7 @@ const Newsletter = () => {
         title: card.title,
         url: item.link,
         source: item.source,
-        publishedAt: item.pubDate,
+        publishedAt: item.publicationTimeKnown===false||item.repository?.dateBasis==='report-date'?item.pubDate.slice(0,10):item.pubDate,
         cves: card.cves,
         // As técnicas que o coletor inferiu do artigo. Sem elas a coluna
         // Técnicas do Knowledge dependia do título citar "T1486", e ficava toda

@@ -58,11 +58,12 @@ export default function BulkEnrichment() {
         update(query, { state: 'running', result: { query, overallScore: 0, threatLevel: 'unknown', totalVendors: eligible.length, detections: 0, vendorData: eligible.map(name => ({ name, data: {}, isLoading: true })) } });
         try {
           update(query, { contextLoading: true });
-          const contextTask = fetchBulkContext(query).then(context => { update(query, { context, contextLoading: false }); return context; });
           const result = await fetchThreatDataProgressive(query, sources, data => {
             if (mounted.current) setRows(previous => previous.map(row => row.query === query && row.result ? { ...row, result: { ...row.result, vendorData: row.result.vendorData.map(vendor => vendor.name === data.name ? data : vendor) } } : row));
           }, { includeRaw: true });
-          const context = await contextTask;
+          // Provider responses are persisted before this resolves. Read once
+          // afterwards so the table and exports include this run's new links.
+          const context = await fetchBulkContext(query);
           const state = bulkResultState(result);
           update(query, { state: context.errors.length && state === 'complete' ? 'partial' : state, result, context, contextLoading: false, completedAt: new Date().toISOString() });
         } catch {

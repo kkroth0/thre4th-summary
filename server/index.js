@@ -33,6 +33,9 @@ import { createLookupCache } from './lookupCache.js';
 import { PUBLICATION_SOURCES, OT_PUBLICATION_SOURCES, createPublicationResolver } from './publicationSources.js';
 import { REPOSITORY_SOURCES, createRepositoryResolver } from './repositorySources.js';
 import { prepareFeedJobDocuments } from './feedJobDocuments.js';
+import { completeReportEvidence } from './reportEvidence.js';
+import { completeNewsFeed, reviewNewsEvidence } from './newsQuality.js';
+import { rebuildStoryCorrelations } from './newsStories.js';
 import { persistNewsEvidence } from './persistNewsEvidence.js';
 import { publishNewsSnapshot } from './publishNewsSnapshot.js';
 import { createIocIntelligence } from './iocIntelligence.js';
@@ -521,11 +524,11 @@ function withAbuseKey(req,load) {
     const personal=getUserApiKey(session?.sub,'abuseipdb');
     return personal?load(personal):withKeyRotation('ABUSEIPDB_API_KEY',load);
 }
-function persistProviderEvidence(req,provider,query,data) {
+async function persistProviderEvidence(req,provider,query,data) {
     const session=verifySession(getCookie(req,'ts_session'));
     if(!session||!sessionHasPremium(session))return;
-    void iocIntelligence.ingest(sourceObservations(provider,data,{scope:session.sub,query,
-        matchActors:text=>matchActors(text,actorIndex),matchMalware:text=>matchMalware(text,malwareIndex)}).map((row,index)=>({...row,...(index===0?{payload:data}:{})}))).catch(()=>console.warn('IOC lookup evidence could not be persisted'));
+    await iocIntelligence.ingest(sourceObservations(provider,data,{scope:session.sub,query,
+        matchActors:text=>matchActors(text,actorIndex),matchMalware:text=>matchMalware(text,malwareIndex)}).map((row,index)=>({...row,...(index===0?{payload:data}:{})})));
 }
 async function cachedProvider(req, res, provider, query, credentials, load) {
     const session = verifySession(getCookie(req, 'ts_session'));
@@ -539,9 +542,11 @@ async function cachedProvider(req, res, provider, query, credentials, load) {
     res.set('Cache-Control', 'private, no-store');
     res.set('X-Lookup-Cache', result.state);
     res.set('X-Lookup-Collected-At', result.collectedAt);
-    if (session && sessionHasPremium(session) && result.state === 'miss') {
+    const persistenceKey=session?'lookup-evidence:'+crypto.createHash('sha256').update(JSON.stringify([session.sub,provider,query,result.collectedAt])).digest('hex'):'';
+    if (session && sessionHasPremium(session) && !iocIntelligence.state(persistenceKey)) {
         const name = ({ abuseipdb:'AbuseIPDB', 'abuseipdb-block':'AbuseIPDB', threatfox:'ThreatFox', otx:'OTX', malwarebazaar:'MalwareBazaar',virustotal:'VirusTotal',shodan:'Shodan',urlhaus:'URLhaus',phishtank:'PhishTank',ipgeo:'IP Geolocation' })[provider] || provider;
-        persistProviderEvidence(req,name,provider==='urlhaus'?String(req.body.query||''):query,result.value.data);
+        await persistProviderEvidence(req,name,provider==='urlhaus'?String(req.body.query||''):query,result.value.data);
+        iocIntelligence.setState(persistenceKey,{persisted:true});
     }
     return result.value;
 }
@@ -1314,6 +1319,19 @@ const articleCollectionCache = createFeedCache({ directory: path.join(__dirname,
 // caches without issuing hundreds of historical requests on startup.
 if (process.env.NODE_ENV !== 'test') try {
     newsArchiveStore.reclassifyPhishing({ bodyFor: link => articleCollectionCache.get(link)?.text || '' });
+    if(!iocIntelligence.state('news-quality-v9')){
+        writeJsonAtomic(path.join(__dirname,'.news-quality-v9-backup.json'),{archive:newsArchiveStore.all(),stories:newsStoryStore.all()});
+        newsArchiveStore.add(newsArchiveStore.all().map(row=>({...reviewNewsEvidence(row,articleCollectionCache.get(row.link)?.text||'',text=>matchMalware(text,malwareIndex)),extractionVersion:EXTRACTION_VERSION})));
+        const revised=new Map(newsArchiveStore.all().map(row=>[row.link,row]));
+        const stories=newsStoryStore.all().map(story=>({...story,sources:story.sources.map(source=>({...source,...revised.get(source.link)})).filter(source=>source.securityRelevant!==false)})).filter(story=>story.sources.length);
+        const rebuilt=rebuildStoryCorrelations(stories,completeNewsFeed([],newsArchiveStore.all()));
+        newsStoryStore.save(rebuilt);
+        const identities=new Map(rebuilt.flatMap(story=>story.sources.map(source=>[source.link,story.id])));
+        newsArchiveStore.add(newsArchiveStore.all().map(row=>({...row,storyId:identities.get(row.link)||row.storyId})));
+        iocIntelligence.reviewSoftwareLinks();
+        await iocIntelligence.ingestNews(newsArchiveStore.all());
+        iocIntelligence.setState('news-quality-v9',{at:new Date().toISOString()});
+    }
 } catch (error) { console.error('phishing archive reclassification failed:', error.message); }
 const previousFeedSnapshot = rssCollectionCache.get('newsletter:snapshot');
 if ([EXTRACTION_VERSION, 'feed-v7'].includes(previousFeedSnapshot?.extractionVersion) && Array.isArray(previousFeedSnapshot.items)) {
@@ -1431,8 +1449,8 @@ app.get('/api/newsletter', requirePremium, async (req, res) => {
             // Cold start fallback
             void refreshNewsletterFeed();
         }
-        if (!memoryCache.newsletter.data) return res.status(503).set('Retry-After', '60').json({ error: 'News feed is not available yet' });
-        let data = filterMonitoredNews(memoryCache.newsletter.data || [], newsMonitoringStore.get(req.user.sub), newsStoryStore.all());
+        if (!memoryCache.newsletter.data && !newsArchiveStore.size()) return res.status(503).set('Retry-After', '60').json({ error: 'News feed is not available yet' });
+        let data = filterMonitoredNews(completeNewsFeed(memoryCache.newsletter.data || [],newsArchiveStore.all()), newsMonitoringStore.get(req.user.sub), newsStoryStore.all());
 
         const minScore = parseInt(req.query.minScore, 10);
         const severity = (req.query.severity || '').toString();
@@ -1522,7 +1540,7 @@ app.get('/api/news/export', requirePremium, (req, res) => {
     try {
         const options = newsExportQuery(req.query);
         // Export the permanent archive, without the live feed's retention or UI pagination.
-        const publications = filterMonitoredNews(newsArchiveStore.list(options), newsMonitoringStore.get(req.user.sub), newsStoryStore.all());
+        const publications = filterMonitoredNews(completeNewsFeed([],newsArchiveStore.list(options)), newsMonitoringStore.get(req.user.sub), newsStoryStore.all());
         const rows = newsExportRows(publications, options.dataset);
         const filename = `threatsumm4ry-${options.dataset}-${options.from.slice(0, 10)}-${options.to.slice(0, 10)}.${options.format}`;
         res.set('Cache-Control', 'private, no-store');
@@ -1915,6 +1933,8 @@ let knowledgeStore = loadKnowledgeStore();   // { userId: [ {id,title,url,host,s
 app.get('/api/knowledge', requirePremium, (req, res) => {
     const items = (knowledgeStore[req.user.sub] || []).map((item) => {
         const story = item.storyId ? newsStoryStore.get(item.storyId) : null;
+        const original = newsArchiveStore.all().find(row=>row.link===item.url);
+        if(original?.publicationTimeKnown===false||original?.repository?.dateBasis==='report-date')item={...item,publishedAt:original.pubDate.slice(0,10)};
         if (!story) return item;
         const sourceCount = new Set(story.sources.map((s) => s.source)).size;
         return {
@@ -2356,6 +2376,14 @@ function sweepDecks() {
 function loadJobs() { try { return JSON.parse(fs.readFileSync(JOBS_STORE_PATH, 'utf8')); } catch { return {}; } }
 function saveJobs() { try { writeJsonAtomic(JOBS_STORE_PATH, jobsStore); } catch (e) { console.error('jobs store write failed:', e.message); } }
 let jobsStore = loadJobs();   // { id: { id,url,type,title,status,json,error,createdAt,updatedAt } }
+if(process.env.NODE_ENV!=='test'){
+    let repaired=false;
+    for(const job of Object.values(jobsStore))if(job.status==='done'&&job.json){
+        const report=completeReportEvidence(job.json,job,{items:newsArchiveStore.all()});
+        if(JSON.stringify(report.iocs)!==JSON.stringify(job.json.iocs)){job.json=report;repaired=true;}
+    }
+    if(repaired)saveJobs();
+}
 
 // Boletim entregue não é lixo de fila: fica guardado por dono (ver feedJobs.js).
 // Só pending/error têm teto global.
@@ -2441,7 +2469,7 @@ app.post('/api/feed/generate', requirePremium, scanLimiter, async (req, res) => 
         }
         const id = crypto.randomUUID();
         const now = new Date().toISOString();
-        const documents = prepareFeedJobDocuments(urls, { items: memoryCache.newsletter.data || [], articleCache: articleCollectionCache, rssCache: rssCollectionCache });
+        const documents = prepareFeedJobDocuments(urls, { items: completeNewsFeed(memoryCache.newsletter.data || [],newsArchiveStore.all()), articleCache: articleCollectionCache, rssCache: rssCollectionCache });
         jobsStore[id] = { id, ownerSub: req.user.sub, url, urls, documents, type, template, subtype, title, status: 'pending', json: null, error: null, createdAt: now, updatedAt: now };
         pruneJobs();
         saveJobs();
@@ -2576,7 +2604,7 @@ app.post('/api/feed/job/result', (req, res) => {
     else if (req.body?.json && typeof req.body.json === 'object') {
         job.status = 'done';
         job.error = null;
-        job.json = req.body.json;
+        job.json = completeReportEvidence(req.body.json,job,{items:newsArchiveStore.all()});
         // O pedido pode ter sido 'auto' (motor decide depois de raspar a URL);
         // o JSON que volta sempre tem o tipo concreto que o motor escolheu
         // (deck_type), e é esse que o badge da lista deve mostrar -- não 'auto'.

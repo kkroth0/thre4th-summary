@@ -3,6 +3,7 @@ import crypto from 'node:crypto';
 import net from 'node:net';
 import { setImmediate as yieldLoop } from 'node:timers/promises';
 import { declaredRepositoryMalware } from './repositorySources.js';
+import { sanitizeStoredMalware } from './malwareMatch.js';
 
 const idFor = value => crypto.createHash('sha256').update(value).digest('hex');
 const refang = value => String(value || '').trim().replace(/^hxxp/i,'http').replace(/\[\.\]|\(\.\)|\{\.\}/g,'.').replace(/\[:\]/g,':');
@@ -35,6 +36,7 @@ export function createIocIntelligence({filePath=':memory:',now=()=>Date.now()}={
     CREATE INDEX IF NOT EXISTS observations_scope ON observations(scope,provider,published DESC);
     CREATE TABLE IF NOT EXISTS entity_links(observation TEXT NOT NULL,kind TEXT NOT NULL,entity TEXT NOT NULL,name TEXT NOT NULL,relation TEXT NOT NULL,PRIMARY KEY(observation,kind,entity));
     CREATE INDEX IF NOT EXISTS entity_lookup ON entity_links(kind,entity,observation);
+    CREATE TABLE IF NOT EXISTS observation_revisions(id INTEGER PRIMARY KEY,observation TEXT NOT NULL,at TEXT NOT NULL,payload TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS intelligence_state(id TEXT PRIMARY KEY,value TEXT NOT NULL);`);
   const putIoc=db.prepare('INSERT OR IGNORE INTO indicators VALUES(?,?,?)');
   const putObservation=db.prepare('INSERT INTO observations VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET published=excluded.published,collected=excluded.collected,details=excluded.details');
@@ -103,11 +105,38 @@ export function createIocIntelligence({filePath=':memory:',now=()=>Date.now()}={
   }
   async function ingestNews(rows) {
     rows=rows.map(row=>row.repository?{...row,malware:[...new Map([...declaredRepositoryMalware({...row,repositoryReport:true}),...(row.malware||[])].map(family=>[family.name.toLowerCase(),family])).values()]}:row);
-    const changed=rows.map(row=>({row,key:'news:'+idFor(row.link),hash:idFor(JSON.stringify([row.title,row.pubDate,row.iocs,row.actors,row.malware,row.cves,row.storyId]))}))
+    const changed=rows.map(row=>({row,key:'news:'+idFor(row.link),hash:idFor(JSON.stringify(['evidence-v9',row.title,row.pubDate,row.iocs,row.actors,row.malware,row.cves,row.storyId]))}))
       .filter(entry=>db.prepare('SELECT value FROM intelligence_state WHERE id=?').get(entry.key)?.value!==JSON.stringify(entry.hash));
-    await ingest(changed.flatMap(({row})=>iocValues(row).map(ioc=>({...ioc,provider:'news',source:row.source,externalId:row.link,title:row.title,link:row.link,published:row.pubDate,actors:row.actors,malwares:row.malware,cves:(row.cves||[]).map(id=>({id,name:id})),storyId:row.storyId,relation:'mentioned-with'}))));
-    db.transaction(()=>{for(const entry of changed)putState.run(entry.key,JSON.stringify(entry.hash));})();
+    const replace=db.transaction(entry=>{
+      const {row}=entry;
+      const existing=db.prepare("SELECT * FROM observations WHERE provider='news' AND scope='global' AND external_id=?").all(row.link);
+      const values=new Set(iocValues(row).map(ioc=>normalizeIndicator(ioc.value)?.value).filter(Boolean));
+      for(const old of existing){
+        const links=db.prepare('SELECT * FROM entity_links WHERE observation=?').all(old.id);
+        db.prepare('INSERT INTO observation_revisions(observation,at,payload) VALUES(?,?,?)').run(old.id,new Date(now()).toISOString(),JSON.stringify({...old,entities:links}));
+        const value=db.prepare('SELECT value FROM indicators WHERE id=?').get(old.indicator)?.value;
+        if(!values.has(value)){clearLinks.run(old.id);db.prepare('DELETE FROM observations WHERE id=?').run(old.id);}
+      }
+      chunk(iocValues(row).map(ioc=>({...ioc,provider:'news',source:row.source,externalId:row.link,title:row.title,link:row.link,published:row.pubDate,actors:row.actors,malwares:row.malware,cves:(row.cves||[]).map(id=>({id,name:id})),storyId:row.storyId,relation:'mentioned-with'})));
+      putState.run(entry.key,JSON.stringify(entry.hash));
+    });
+    const work=flight.then(async()=>{for(let i=0;i<changed.length;i++){replace(changed[i]);if(i%50===0)await yieldLoop();}});
+    flight=work.catch(()=>{});await work;
     putState.run('news-sync',JSON.stringify({lastSuccessfulAt:new Date(now()).toISOString(),publications:rows.length,changed:changed.length}));
+  }
+  // Correct previously inferred command/protocol labels without discarding
+  // provider observations or explicit family attribution.
+  function reviewSoftwareLinks(){
+    if(db.prepare("SELECT 1 FROM intelligence_state WHERE id='software-links-v9'").get())return;
+    db.transaction(()=>{
+      for(const link of db.prepare("SELECT * FROM entity_links WHERE kind='malware' AND relation='mentioned-by-source'").all()){
+        if(!sanitizeStoredMalware([{name:link.name}],link.name).length){
+          db.prepare('INSERT INTO observation_revisions(observation,at,payload) VALUES(?,?,?)').run(link.observation,new Date(now()).toISOString(),JSON.stringify({retiredLink:link}));
+          db.prepare('DELETE FROM entity_links WHERE observation=? AND kind=? AND entity=?').run(link.observation,link.kind,link.entity);
+        }
+      }
+      putState.run('software-links-v9',JSON.stringify(true));
+    })();
   }
   function entities(kind,owner='') {
     const scope=scopeSql(owner);
@@ -122,7 +151,7 @@ export function createIocIntelligence({filePath=':memory:',now=()=>Date.now()}={
           actors:entities.filter(entity=>entity.kind==='actor').map(entity=>entity.name),malware:entities.filter(entity=>entity.kind==='malware').map(entity=>entity.name),cves:entities.filter(entity=>entity.kind==='cve').map(entity=>entity.id)};
       });
     },
-    ingestNews,
+    ingestNews,reviewSoftwareLinks,
     families:owner=>entities('malware',owner),entities,
     state:key=>{const row=db.prepare('SELECT value FROM intelligence_state WHERE id=?').get(key);return row?JSON.parse(row.value):null;},
     setState:(key,value)=>putState.run(key,JSON.stringify(value)),

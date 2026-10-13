@@ -47,6 +47,7 @@ if(fs.existsSync(intelligenceFile)) {
   const {normalizeIndicator}=await import(pathToFileURL(path.join(root,'server/iocIntelligence.js')));
   const {declaredRepositoryMalware}=await import(pathToFileURL(path.join(root,'server/repositorySources.js')));
   const pools=[{name:'IP e atribuição',accept:row=>row.iocs?.ips?.length&&(row.actors?.length||row.malware?.length)},
+    {name:'Ator e indicadores',accept:row=>row.actors?.length&&hasIocs(row)},
     {name:'Hashes de malware',accept:row=>row.iocs?.hashes?.length},
     {name:'Vulnerabilidade',accept:row=>row.cves?.length},
     {name:'Sem indicadores declarados',accept:row=>!hasIocs(row)}];
@@ -63,7 +64,10 @@ if(fs.existsSync(intelligenceFile)) {
       rawIocs:Object.values(row.iocs||{}).flat().length,expectedPublicIocs:expected.length,persistedNewsIocs:stored.length,missingIocs:expected.filter(ioc=>!stored.some(record=>record.value===ioc.value)).map(ioc=>ioc.value),
       entities:expectedEntities.map(entity=>({...entity,linkedInIocBase:links.some(link=>link.kind===entity.kind&&link.id===entity.id)})),actorProfiles,crossSources};
   };
-  for(const pool of pools){const available=recent.filter(row=>!chosen.has(row.link)&&pool.accept(row));if(available.length){const row=available[crypto.randomInt(available.length)];chosen.add(row.link);flowSamples.push(auditRow(row,pool.name));}}
+  for(const pool of pools)for(let n=0;n<2;n++){const available=recent.filter(row=>row.securityRelevant!==false&&!chosen.has(row.link)&&pool.accept(row));if(available.length){const row=available[crypto.randomInt(available.length)];chosen.add(row.link);flowSamples.push(auditRow(row,pool.name));}}
+  for(const link of ['https://blog.nicter.jp/2026/01/aicloud_vulnerability/','https://blog.qualys.com/product-tech/2026/09/15/before-you-patch-why-patch-reliability-matters-for-confident-deployment','https://msrc.microsoft.com/update-guide/vulnerability/CVE-2026-83943']){
+    const row=archive.find(item=>item.link===link);if(row&&!chosen.has(link)){chosen.add(link);flowSamples.push(auditRow(row,'Regressão da auditoria anterior'));}
+  }
   if(c2&&!chosen.has(c2.link))flowSamples.push(auditRow(c2,'Controle C2Agent'));
   db.close();
   if(intelligence.collectors.some(source=>source.source==='MalwareBazaar'&&source.status==='error')) {
