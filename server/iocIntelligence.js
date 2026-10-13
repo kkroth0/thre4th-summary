@@ -86,12 +86,16 @@ export function createIocIntelligence({filePath=':memory:',now=()=>Date.now()}={
   function publications({owner='',kind,id}={}){
     const scope=scopeSql(owner),args=[...scope.args],clauses=[scope.sql];
     if(kind&&id){clauses.push('EXISTS(SELECT 1 FROM entity_links e WHERE e.observation=o.id AND e.kind=? AND e.entity=?)');args.push(kind,id);}
-    const records=db.prepare(`SELECT o.id,o.provider,o.external_id,o.published,o.details,i.type,i.value FROM observations o JOIN indicators i ON i.id=o.indicator WHERE ${clauses.join(' AND ')} AND o.provider<>'news' ORDER BY o.published DESC LIMIT 10000`).all(...args);
+    // Catalog correlation needs reference metadata, not full provider payloads.
+    // Iterate all matching evidence so older relationships survive growth beyond 10k.
+    const records=db.prepare(`SELECT o.provider,o.external_id,o.published,json_extract(o.details,'$.link') link,json_extract(o.details,'$.title') title,i.type,i.value,
+      (SELECT json_group_array(json_object('kind',e.kind,'id',e.entity,'name',e.name)) FROM entity_links e WHERE e.observation=o.id) entities
+      FROM observations o JOIN indicators i ON i.id=o.indicator WHERE ${clauses.join(' AND ')} AND o.provider<>'news' AND EXISTS(SELECT 1 FROM entity_links e WHERE e.observation=o.id) ORDER BY o.published DESC`).iterate(...args);
     const grouped=new Map();
-    for(const record of records){const info=JSON.parse(record.details),key=record.provider+':'+record.external_id;let row=grouped.get(key);
-      if(!row){row={link:info.link,title:info.title,source:record.provider,pubDate:record.published,actors:[],malware:[],cves:[],iocs:{ips:[],domains:[],hashes:[],urls:[]}};grouped.set(key,row);}
+    for(const record of records){const key=record.provider+':'+record.external_id;let row=grouped.get(key);
+      if(!row){row={link:record.link,title:record.title,source:record.provider,pubDate:record.published,actors:[],malware:[],cves:[],iocs:{ips:[],domains:[],hashes:[],urls:[]}};grouped.set(key,row);}
       row.iocs[{ip:'ips',domain:'domains',hash:'hashes',url:'urls'}[record.type]].push(record.value);
-      for(const link of db.prepare('SELECT kind,entity id,name FROM entity_links WHERE observation=?').all(record.id)) {
+      for(const link of JSON.parse(record.entities)) {
         const field={actor:'actors',malware:'malware',cve:'cves'}[link.kind];if(field&&!row[field].some(item=>item.id===link.id))row[field].push({id:link.id,name:link.name});
       }
     }

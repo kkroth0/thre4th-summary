@@ -482,6 +482,8 @@ const DailyBulletin: React.FC = () => {
         actions={<div className="flex items-center gap-3"><span className="hidden text-xs text-muted-foreground sm:inline">{jobs.filter((job) => job.status === "done").length} {pt ? "prontos" : "ready"}</span><Button size="sm" onClick={openComposer} aria-expanded={composerOpen} aria-controls="report-composer" className="gap-2"><Plus className="h-4 w-4" />{pt ? "Novo relatório" : "New report"}</Button></div>}
       />
 
+      <nav aria-label={pt ? 'Tipos de relatório' : 'Report types'} className="mb-5 flex gap-2"><Button variant="secondary" size="sm">{pt ? 'Relatórios por fonte' : 'Source reports'}</Button><Button asChild variant="outline" size="sm"><Link to="/relatorios?view=weekly">{pt ? 'Relatório semanal' : 'Weekly report'}</Link></Button></nav>
+
       {(composerOpen || !auth.authenticated) && <section id="report-composer" className="mb-5 rounded-md border bg-card p-4">
         {auth.authenticated ? (
           <div className="space-y-3">

@@ -134,7 +134,7 @@ export function createRepositoryResolver({ request, now = () => new Date(), maxR
         const title = unit.path.split('/').at(-1).replace(/^\d{4}-\d{2}-\d{2}-/, '').replace(/\.(txt|md)$/i,'').replace(/[-_]/g,' ');
         items.push({ title, description: `Published threat intelligence and indicators · ${feed.source}`, text: chunks.map(chunk => chunk.text).join('\n\n'),
           link: `https://github.com/${feed.repo}/${feed.prefix ? 'tree' : 'blob'}/main/${encodedPath(unit.path)}`, pubDate: new Date(date).toISOString(),
-          source: feed.source, layer: feed.layer, repositoryReport: true, iocs,
+          source: feed.source, layer: feed.layer, repositoryReport: true, publicationTimeKnown: !unit.date, iocs,
           repository: { repo: feed.repo, revision, path: unit.path, files: unit.files.map(row => row.path), dateBasis: unit.date ? 'report-date' : 'last-commit' } });
         completed[unit.path] = unit.signature;
       } catch { failed++; }

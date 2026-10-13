@@ -35,6 +35,9 @@ import { useAuth } from "@/contexts/AuthContext";
 import { newsMonitoringCacheKey } from "@/utils/newsVendorSelection";
 import { annotateOrg, type OrgMatch } from "@/utils/orgRelevance";
 
+import { NewsTimestamp } from "@/components/NewsTimestamp";
+import { formatPublicationDate } from "@/utils/publicationDate";
+
 interface IocSet {
   ips?: string[];
   domains?: string[];
@@ -54,6 +57,10 @@ interface Advisory {
   link: string;
   pubDate: string;
   dateInferred?: boolean;
+  publicationTimeKnown?: boolean;
+  publicationDateBasis?: string;
+  firstCollectedAt?: string;
+  repository?: { dateBasis?: string };
   description: string;
   source: string;
   weight_boost?: number; // confiança/prioridade da fonte (0-20), do catálogo CTI_FEEDS
@@ -133,18 +140,6 @@ const SEVERITY_ACCENT: Record<string, string> = {
   Low: "border-l-slate-400",
 };
 
-// Compact relative time: "agora"/"now", "12m", "3h", "5d", else short date.
-const relTime = (d: string | number | Date, lang = "pt"): string => {
-  const t = new Date(d).getTime();
-  if (isNaN(t)) return "";
-  const s = Math.max(0, (Date.now() - t) / 1000);
-  if (s < 60) return lang === "pt" ? "agora" : "now";
-  if (s < 3600) return `${Math.floor(s / 60)}m`;
-  if (s < 86400) return `${Math.floor(s / 3600)}h`;
-  if (s < 604800) return `${Math.floor(s / 86400)}d`;
-  return new Date(t).toLocaleDateString(lang === "pt" ? "pt-BR" : "en-US", { day: "2-digit", month: "short" });
-};
-
 interface EnrichData {
   available: boolean;
   source?: string; // openrouter | translate | rss
@@ -177,7 +172,8 @@ const buildShareText = (item: Advisory, e: EnrichData | undefined, lang: string)
   const ttps = mergedField(item, e, "ttps");
   const cves = mergedField(item, e, "cves");
   out.push(`Source: ${item.source}`);
-  out.push(`${item.dateInferred ? 'Collected' : 'Published'}: ${new Date(item.pubDate).toISOString().slice(0, 10)}`);
+  const publication = formatPublicationDate(item, isPt);
+  out.push(`${publication.label}: ${publication.text} (Fortaleza, UTC−3)`);
   if (assets.length) out.push(`Monitored Assets: ${assets.join(", ")}`);
   if (threats.length) out.push(`Threats: ${threats.join(", ")}`);
   if (sectors.length) out.push(`Targeted Sectors: ${sectors.join(", ")}`);
@@ -263,6 +259,10 @@ const Newsletter = () => {
             link: item.link as string,
             pubDate: item.pubDate as string,
             dateInferred: item.dateInferred === true,
+            publicationTimeKnown: typeof item.publicationTimeKnown === "boolean" ? item.publicationTimeKnown : undefined,
+            publicationDateBasis: typeof item.publicationDateBasis === "string" ? item.publicationDateBasis : undefined,
+            firstCollectedAt: typeof item.firstCollectedAt === "string" ? item.firstCollectedAt : undefined,
+            repository: item.repository as Advisory["repository"],
             description: item.description as string,
             source: item.source as string,
             weight_boost: typeof item.weight_boost === "number" ? item.weight_boost : undefined,
@@ -1100,13 +1100,7 @@ const Newsletter = () => {
                                 )}
                               </span>
                             )}
-                            <span className="font-mono text-xs text-muted-foreground" title={`${item.dateInferred ? (language === 'pt' ? 'Primeira coleta; data de publicação não informada. ' : 'First collected; publication date unavailable. ') : ''}${new Date(item.pubDate).toLocaleString()}`}>
-                              {item.dateInferred && <span className="mr-1">{language === 'pt' ? 'Coleta:' : 'Collected:'}</span>}
-                              {relTime(item.pubDate, language)}
-                              <span className="ml-1 opacity-70">
-                                ({new Date(item.pubDate).toLocaleDateString(language === "pt" ? "pt-BR" : "en-US", { day: "2-digit", month: "2-digit", year: "numeric" })})
-                              </span>
-                            </span>
+                            <NewsTimestamp item={item} pt={language === "pt"} className="font-mono text-xs text-muted-foreground" />
 
                             <div className="flex items-center gap-0.5 border-l border-border pl-1.5">
                               <Button
@@ -1303,9 +1297,7 @@ const Newsletter = () => {
                                         key={source.link}
                                         className="flex items-center gap-3 rounded py-1.5 text-xs transition-colors hover:bg-muted/40"
                                       >
-                                        <span className="w-10 shrink-0 font-mono tabular-nums text-muted-foreground/70">
-                                          {new Date(source.pubDate).toLocaleDateString(language === "pt" ? "pt-BR" : "en-US", { day: "2-digit", month: "2-digit" })}
-                                        </span>
+                                        <NewsTimestamp item={source} pt={language === "pt"} className="w-44 shrink-0 font-mono tabular-nums text-muted-foreground/70" />
                                         {/* Sem checkbox, a bolinha é o marcador da linha: fica
                                             maior e na cor da marca, com o fio em cinza de texto
                                             em vez da cor de borda — que no tema escuro quase

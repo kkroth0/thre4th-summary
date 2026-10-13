@@ -58,7 +58,9 @@ export function parseFeed(xmlText, sourceName, layer, { feedUrl, now = new Date(
         items.push({
             title, link, source: sourceName, layer,
             pubDate: dateInferred ? now.toISOString() : parsedDate.toISOString(),
-            dateInferred, updatedAt: Number.isFinite(new Date(updated).getTime()) ? new Date(updated).toISOString() : null,
+            publicationDateBasis: published ? 'published' : updated ? 'updated' : 'collected',
+            dateInferred, publicationTimeKnown: !dateInferred && /[T\s]\d{1,2}:\d{2}/.test(published || updated),
+            updatedAt: Number.isFinite(new Date(updated).getTime()) ? new Date(updated).toISOString() : null,
             description: description.slice(0, 300) + (description.length > 300 ? '...' : ''),
             text: (content.length > description.length ? content : description).slice(0, ANALYSIS_TEXT_CAP),
             feedGuid: value('guid', 'id') || null,

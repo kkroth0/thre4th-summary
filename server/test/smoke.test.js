@@ -410,3 +410,16 @@ test('gate premium não aceita sessão anônima', async () => {
     });
     assert.equal(r.status, 401);
 });
+
+
+test('weekly reports enforce account access, Sunday boundaries and profile ownership', async () => {
+    assert.equal((await fetch(`${BASE}/api/reports/weekly`)).status,401);
+    assert.equal((await fetch(`${BASE}/api/reports/weekly?week=2026-10-12`,{headers:AUTH_HEADERS})).status,400);
+    const historical=await fetch(`${BASE}/api/reports/weekly?week=2026-10-04`,{headers:AUTH_HEADERS});
+    assert.equal(historical.status,200);assert.equal(historical.headers.get('Cache-Control'),'private, no-store');
+    assert.equal((await historical.json()).report,null);
+    const response=await fetch(`${BASE}/api/reports/weekly`,{method:'PUT',headers:{...AUTH_HEADERS,'Content-Type':'application/json'},body:JSON.stringify({enabled:false,profileId:'private'})});
+    assert.equal(response.status,400);
+    const allowed=await fetch(`${BASE}/api/reports/weekly`,{method:'PUT',headers:{...AUTH_HEADERS,'Content-Type':'application/json'},body:JSON.stringify({enabled:false,profileId:'owned'})});
+    assert.equal(allowed.status,200);assert.equal((await allowed.json()).plan.profileId,'owned');
+});

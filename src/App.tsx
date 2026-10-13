@@ -25,7 +25,7 @@ const MalwareCatalog = lazy(() => import("./pages/MalwareCatalog"));
 const CveDashboard = lazy(() => import("./pages/CveDashboard"));
 const Actors = lazy(() => import("./pages/Actors"));
 const PhishingAnalyzer = lazy(() => import("./pages/PhishingAnalyzer"));
-const DailyBulletin = lazy(() => import("./pages/DailyBulletin"));
+const DailyBulletin = lazy(() => import("./pages/ReportsPage"));
 const Knowledge = lazy(() => import("./pages/Knowledge"));
 const PatchTuesday = lazy(() => import("./pages/PatchTuesday"));
 const SapPatch = lazy(() => import("./pages/SapPatch"));

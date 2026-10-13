@@ -37,6 +37,7 @@ import { persistNewsEvidence } from './persistNewsEvidence.js';
 import { publishNewsSnapshot } from './publishNewsSnapshot.js';
 import { createIocIntelligence } from './iocIntelligence.js';
 import { createIntelligenceCollector, sourceObservations } from './intelligenceSources.js';
+import { createWeeklyReports, weeklyWindow } from './weeklyReports.js';
 import { createPublicationRequest } from './publicationHttp.js';
 import { actorPublications, buildActorActivity, buildActorEvidence } from './actorEvidence.js';
 import { otxThrottled, OTX_TIMEOUT_MS } from './otxGate.js';
@@ -3041,6 +3042,46 @@ async function queryVulnerabilities(method, params) {
     if (data?.status) data.status = vulnerabilityCatalog.status();
     return data;
 }
+
+const weeklySourceCache=new Map();
+async function weeklyInputs(range){
+    const cached=weeklySourceCache.get(range.id);
+    if(cached&&cached.until>Date.now())return cached.task;
+    const task=(async()=>{
+        const coverage={};
+        let victims=[];try{victims=await getRecentRansomwareVictims();coverage.ransomware={status:'ready',checkedAt:new Date().toISOString()};}catch{coverage.ransomware={status:'error',message:'Ransomware.live indisponível nesta atualização.'};}
+        let vulnerabilities=[];try{const data=await queryVulnerabilities('weekly',range);vulnerabilities=data.rows;coverage.vulnerabilities=data.status;}catch{coverage.vulnerabilities={status:'error',message:'Catálogo de vulnerabilidades indisponível nesta atualização.'};}
+        coverage.news={publications:newsArchiveStore.size(),lastCollectedAt:rssCollectionCache.get('newsletter:snapshot')?.at||null};
+        return {publications:actorPublications(newsArchiveStore.all(),newsStoryStore.all()),victims,vulnerabilities,coverage};
+    })();weeklySourceCache.set(range.id,{task,until:Date.now()+5*60000});
+    if(weeklySourceCache.size>2)weeklySourceCache.delete(weeklySourceCache.keys().next().value);
+    return task;
+}
+const weeklyReports=createWeeklyReports({filePath:process.env.NODE_ENV==='test'?':memory:':path.join(__dirname,'.weekly-reports.sqlite'),
+    getProfile:(owner,id)=>orgProfileStore.get(owner,id),
+    getInputs:async(owner,range)=>({...await weeklyInputs(range),reports:Object.values(jobsStore).filter(job=>job.ownerSub===owner)}),
+});
+app.get('/api/reports/weekly',requirePremium,(req,res)=>{
+    try {
+        const week=req.query.week?weeklyWindow(new Date(),String(req.query.week)).id:undefined;
+        if(week&&week>weeklyWindow().id)return res.status(400).json({error:'Semana futura inválida.'});
+        const data=weeklyReports.get(req.user.sub,week);
+        if(!week&&data.plan.enabled&&(!data.report||!data.plan.lastAttemptedAt||Date.parse(data.plan.lastAttemptedAt)<Date.now()-15*60000)){void weeklyReports.refresh(req.user.sub).catch(()=>{});data.updating=true;}
+        res.set('Cache-Control','private, no-store').json(data);
+    }catch{res.status(400).json({error:'Informe o domingo inicial da semana.'});}
+});
+app.put('/api/reports/weekly',requirePremium,(req,res)=>{
+    try{if(typeof req.body?.enabled!=='boolean')return res.status(400).json({error:'Configuração inválida.'});weeklyReports.configure(req.user.sub,{enabled:req.body.enabled,profileId:String(req.body.profileId||'')});
+        if(req.body.enabled)void weeklyReports.refresh(req.user.sub,{force:true}).catch(()=>{});
+        res.set('Cache-Control','private, no-store').json(weeklyReports.get(req.user.sub));
+    }catch{res.status(400).json({error:'Perfil ou configuração inválida.'});}
+});
+app.post('/api/reports/weekly/refresh',requirePremium,(req,res)=>{void weeklyReports.refresh(req.user.sub,{force:true}).catch(()=>{});res.status(202).json({status:'updating'});});
+app.post('/api/reports/weekly/selection',requirePremium,(req,res)=>{
+    try{const week=weeklyWindow(new Date(),String(req.body?.week||'')).id;if(week>weeklyWindow().id)return res.status(400).json({error:'Semana futura inválida.'});
+        const report=weeklyReports.select(req.user.sub,week,{newsIds:req.body.newsIds,aiNewsIds:req.body.aiNewsIds});res.set('Cache-Control','private, no-store').json({report});
+    }catch{res.status(400).json({error:'Escolha até 10 notícias gerais e 5 de IA entre as sugestões desta semana.'});}
+});
 const catalogUnavailable = (res) => res.status(503).json({ error: 'O catálogo está ocupado. Tente novamente em alguns instantes.' });
 app.use('/api/vulnerabilities', (req, res, next) => { res.set('Cache-Control', 'no-store'); next(); });
 // Compatibility for older consumers; only imported source records, no synthetic fallback.
@@ -3783,6 +3824,7 @@ app.listen(PORT, () => {
     void iocIntelligence.ingestNews(newsArchiveStore.all()).catch(() => console.warn('IOC archive backfill failed'));
     setTimeout(() => { void runIntelligenceCollection(); }, 5000).unref();
     setInterval(() => { void runIntelligenceCollection(); }, 60000).unref();
+    setInterval(()=>{void weeklyReports.tick();},60000).unref();
     refreshNewsletterFeed();
     setInterval(refreshNewsletterFeed, memoryCache.newsletter.ttl);
 

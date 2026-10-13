@@ -23,6 +23,15 @@ test('evidence pagination preserves every record and excludes other accounts',as
   store.close();
 });
 
+test('catalog correlations retain older evidence after growing beyond 10000 provider observations',async()=>{
+  const store=createIocIntelligence({now});
+  await store.ingest(Array.from({length:10005},(_,i)=>({value:'46.101.130.1',provider:'OTX',externalId:String(i),published:new Date(now()+i).toISOString(),link:'https://otx.alienvault.com/pulse/'+i,actors:[actor],payload:i===0?{largePayload:'not needed by catalogs'}:undefined})));
+  const rows=store.publications({kind:'actor',id:actor.id});assert.equal(rows.length,10005);assert.ok(rows.some(row=>row.link.endsWith('/0')));
+  assert.ok(!JSON.stringify(rows).includes('largePayload'));
+  await store.ingest([{value:'46.101.130.2',scope:'other',provider:'OTX',externalId:'private',link:'https://otx.alienvault.com/pulse/private',actors:[actor]}]);
+  assert.equal(store.publications({owner:'me'}).length,10005);store.close();
+});
+
 test('one IOC correlates news, OTX, ThreatFox and AbuseIPDB, surviving a restart',async()=>{
   const filePath=path.join(fs.mkdtempSync(path.join(os.tmpdir(),'ioc-store-test-')),'iocs.sqlite');
   let store=createIocIntelligence({filePath,now});

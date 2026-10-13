@@ -2,7 +2,7 @@ const validDate = value => Number.isFinite(Date.parse(value));
 export function actorPublications(archive, stories) {
     const rows = new Map();
     for (const row of archive || []) if (row.link) rows.set(row.link, row);
-    for (const story of stories || []) for (const source of story.sources || []) if (source.link) rows.set(source.link, { ...source, storyId: story.id });
+    for (const story of stories || []) for (const source of story.sources || []) if (source.link) rows.set(source.link, { ...rows.get(source.link), ...Object.fromEntries(Object.entries(source).filter(([,value])=>value!==undefined)), storyId: story.id });
     return [...rows.values()];
 }
 export function buildActorActivity(rows, { days = 180, now = Date.now() } = {}) {

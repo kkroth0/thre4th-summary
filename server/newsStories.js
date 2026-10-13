@@ -336,7 +336,9 @@ const newStory = (item) => ({
     score: item.score || 0,
     sources: [{
         source: item.source, link: item.link, title: item.title,
-        pubDate: item.pubDate, score: item.score || 0, severity: item.severity || null,
+        pubDate: item.pubDate, dateInferred: item.dateInferred === true,
+        publicationTimeKnown: item.publicationTimeKnown, publicationDateBasis: item.publicationDateBasis, firstCollectedAt: item.firstCollectedAt,
+        repository: item.repository, score: item.score || 0, severity: item.severity || null,
         actors: [...(item.actors || [])], malware: [...(item.malware || [])],
         newsCategories: [...(item.newsCategories || [])],
         vendors: [...(item.vendors || [])], assets: [...(item.assets || [])],

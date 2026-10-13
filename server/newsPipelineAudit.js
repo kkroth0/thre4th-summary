@@ -56,6 +56,19 @@ if(fs.existsSync(intelligenceFile)) {
     }
   }
 }
+let weekly={status:'module not deployed'};
+if(fs.existsSync(path.join(root,'server/weeklyReports.js'))){
+  const {weeklyWindow,buildWeeklyReport}=await import(pathToFileURL(path.join(root,'server/weeklyReports.js')));
+  const {default:Database}=await import(pathToFileURL(path.join(root,'server/node_modules/better-sqlite3/lib/index.js')));
+  const range=weeklyWindow();let vulnerabilities=[];
+  const catalog=path.join(root,'server/.vulnerability-catalog.sqlite');
+  if(fs.existsSync(catalog)){const db=new Database(catalog,{readonly:true,fileMustExist:true});db.pragma('query_only = ON');
+    vulnerabilities=db.prepare(`SELECT v.id,v.description,v.published,v.vendor,v.product,v.cvss,v.severity,k.cve kev,k.date_added dateAdded,e.score epss FROM vulnerabilities v LEFT JOIN kev k ON k.cve=v.id LEFT JOIN epss e ON e.cve=v.id WHERE v.rejected=0 AND ((v.published>=? AND v.published<?) OR (k.date_added>=? AND k.date_added<?))`).all(range.from.replace(/Z$/,''),range.to.replace(/Z$/,''),range.id,range.to.slice(0,10)).map(row=>({...row,kev:!!row.kev,published:/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?$/.test(row.published)?row.published+'Z':row.published}));db.close();}
+  const report=buildWeeklyReport({publications:rows,vulnerabilities},{range});
+  weekly={status:'read-only source validation',week:range.id,generalCandidates:report.candidates.news.length,aiCandidates:report.candidates.aiNews.length,newCves:report.vulnerabilities.total,newKev:report.vulnerabilities.kevCount,aiCves:report.vulnerabilities.ai.total,publicationTimesDeclared:rows.filter(row=>row.publicationTimeKnown===true).length};
+  const file=path.join(root,'server/.weekly-reports.sqlite');
+  if(fs.existsSync(file)){const db=new Database(file,{readonly:true,fileMustExist:true});db.pragma('query_only = ON');weekly.persistedDrafts=db.prepare('SELECT COUNT(*) count FROM weekly_reports').get().count;weekly.editorialSelections=db.prepare('SELECT COUNT(*) count FROM weekly_selections').get().count;db.close();}
+}
 console.log(JSON.stringify({
   checkedAt:new Date().toISOString(), archivePublications:archive.length,storedStories:stories.length,
   publicationsWithIocs:archive.filter(hasIocs).length,uniqueIocs:counts,
@@ -66,7 +79,7 @@ console.log(JSON.stringify({
   recentArchivePublications:recent.length,recentWithIocs:recent.filter(hasIocs).length,
   recentWithStoryEvidence:recent.filter(row=>indexed.has(row.link)).length,
   extractionVersion:snapshot?.extractionVersion,bodyCollection:bodyStats,
-  intelligence,correlationCheck,
+  intelligence,correlationCheck,weekly,
   c2agent:c2 ? {link:c2.link,archivedAt:c2.archivedAt,hashes:c2.iocs?.hashes?.length||0,missingExpectedHashes:expected.filter(hash=>!c2.iocs?.hashes?.includes(hash)).length,
     storyHashes:indexed.get(c2.link)?.iocs?.hashes?.length||0,storyId:c2.storyId} : {status:'not archived yet'},
 },null,2));

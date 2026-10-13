@@ -21,6 +21,14 @@ test('um item com data inválida não derruba os outros itens', () => {
     assert.equal(items[1].dateInferred, false);
 });
 
+test('date-only feeds preserve unknown publication time; RSS and Atom clocks are declared', () => {
+    const xml = '<rss><channel>' + ['2026-10-08', 'Thu, 08 Oct 2026 12:35:00 GMT', '2026-10-08T12:35:00Z'].map((value,index)=>`<item><title>Report ${index}</title><link>https://v.example/${index}</link><pubDate>${value}</pubDate></item>`).join('') + '</channel></rss>';
+    const rows = parseFeed(xml, 'V', 1, { now: new Date('2026-10-09') });
+    assert.equal(rows.find(row=>row.title==='Report 0').publicationTimeKnown, false);
+    assert.equal(rows.find(row=>row.title==='Report 1').publicationTimeKnown, true);
+    assert.equal(rows.find(row=>row.title==='Report 2').publicationTimeKnown, true);
+});
+
 test('links inseguros e itens sem link não entram como notícias', () => {
     const xml = '<rss><channel><item><title>No link</title></item><item><title>Unsafe</title><link>javascript:alert(1)</link></item></channel></rss>';
     assert.equal(parseFeed(xml, 'V', 1, { feedUrl: 'https://v.example/rss' }).length, 0);

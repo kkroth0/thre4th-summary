@@ -75,10 +75,14 @@ export function parseListing(html, source) {
 
 /** Data de publicação declarada pela própria página, ou null. */
 export function publishedTime(html) {
+    return publishedMetadata(html)?.pubDate || null;
+}
+
+export function publishedMetadata(html) {
     const match = String(html || '').match(/<meta[^>]+property=["']article:published_time["'][^>]+content=["']([^"']+)["']/i);
     if (!match) return null;
     const parsed = new Date(match[1]);
-    return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+    return Number.isNaN(parsed.getTime()) ? null : { pubDate: parsed.toISOString(), publicationTimeKnown: /[T\s]\d{1,2}:\d{2}/.test(match[1]) };
 }
 
 /**
@@ -115,17 +119,19 @@ export async function collectScraped({ sources, fetchText, seen = {}, now = new 
 
                 let pubDate = now.toISOString();
                 let dateInferred = true;
+                let publicationTimeKnown = false;
                 if (source.datedItems) {
                     try {
-                        const declared = publishedTime(await fetchText(item.link));
-                        if (declared && new Date(declared).getTime() <= now.getTime() + 86400000) {
-                            pubDate = declared;
+                        const declared = publishedMetadata(await fetchText(item.link));
+                        if (declared && new Date(declared.pubDate).getTime() <= now.getTime() + 86400000) {
+                            pubDate = declared.pubDate;
                             dateInferred = false;
+                            publicationTimeKnown = declared.publicationTimeKnown;
                         }
                     } catch { /* sem a data real, vale a primeira aparição */ }
                 }
                 nextSeen[item.link] = pubDate;
-                items.push({ ...item, pubDate, dateInferred, firstCollectedAt: now.toISOString(), collectedAt: now.toISOString() });
+                items.push({ ...item, pubDate, dateInferred, publicationTimeKnown, firstCollectedAt: now.toISOString(), collectedAt: now.toISOString() });
             }
         } catch (error) {
             errors.push({ source: source.source, message: error.message });

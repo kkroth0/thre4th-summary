@@ -10,6 +10,12 @@ test('actor evidence uses article attribution and deduplicates indicators and pu
     assert.equal(buildActorEvidence(publications, 'G2', { now }).publications.length, 0, 'does not inherit the story actor into another source');
     assert.deepEqual(buildActorActivity(publications, { now }).G1, { ips: 1, domains: 1, hashes: 1, posts: 1, latest: row().pubDate });
 });
+
+test('story overlays preserve archived summaries, publication precision and relevance context',()=>{
+    const archived=row({description:'Archived summary',publicationTimeKnown:false,kev:true,sectors:['Energy']});
+    const [merged]=actorPublications([archived],[{id:'story',sources:[{link:archived.link,title:'Updated title',score:90,publicationTimeKnown:undefined,actors:[]}]}]);
+    assert.equal(merged.description,'Archived summary');assert.equal(merged.publicationTimeKnown,false);assert.equal(merged.kev,true);assert.deepEqual(merged.sectors,['Energy']);assert.deepEqual(merged.actors,[]);assert.equal(merged.title,'Updated title');
+});
 test('time range excludes old, invalid and future publications; entire archive is explicit', () => {
     const rows = [row({ pubDate: '2025-01-01' }), row({ pubDate: 'invalid' }), row({ pubDate: '2027-01-01' })];
     assert.equal(buildActorEvidence(rows, 'G1', { now }).counts.posts, 0);

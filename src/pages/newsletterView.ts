@@ -105,6 +105,10 @@ export interface StorySource {
   title: string;
   pubDate: string;
   dateInferred?: boolean;
+  publicationTimeKnown?: boolean;
+  publicationDateBasis?: string;
+  firstCollectedAt?: string;
+  repository?: { dateBasis?: string };
   storyId?: string | null;
   actors?: StoryActor[];
   malware?: StoryActor[];
