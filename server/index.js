@@ -1453,7 +1453,6 @@ app.put('/api/news/monitoring', requireAuth, (req, res) => {
 // category (substring of a category label), layer (1-4), sort (relevance|date).
 app.get('/api/newsletter', requirePremium, async (req, res) => {
     try {
-        await newsQualityReady;
         if (!memoryCache.newsletter.data) {
             // Cold start fallback
             void refreshNewsletterFeed();
