@@ -1,749 +1,94 @@
-import { VulnerabilityTable } from '@/components/workbench/VulnerabilityTable';
-import React, { useState, useEffect, useMemo } from "react";
-import { Link } from "react-router-dom";
-import { ArrowLeft, Globe, Shield, AlertTriangle, Search, Eye, BarChart2, RefreshCw, ExternalLink, X, ChevronLeft, Calendar } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { PageLayout } from "@/components/PageLayout";
-import { EmptyState } from "@/components/EmptyState";
-import { useLanguage } from "@/contexts/LanguageContext";
-import { toast } from "sonner";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { useEffect, useState } from 'react';
+import { useQuery, keepPreviousData } from '@tanstack/react-query';
+import { Link, useSearchParams } from 'react-router-dom';
+import { AlertTriangle, ArrowRight, Bug, ChevronDown, ExternalLink, RefreshCw, Search, ShieldCheck } from 'lucide-react';
+import { PageLayout } from '@/components/PageLayout';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { DataPager } from '@/components/workbench/DataPager';
+import { RecordDrawer } from '@/components/workbench/RecordDrawer';
+import { SourceIdentity } from '@/components/SourceIdentity';
+import { LoadingRows } from '@/components/LoadingState';
+import { useLanguage } from '@/contexts/LanguageContext';
+import { useAuth } from '@/contexts/AuthContext';
+import { vulnerabilityRequest, type VulnerabilityOverview, type VulnerabilityPage, type VulnerabilityRecord, type VulnerabilityView } from '@/services/vulnerabilityCatalog';
+import { toast } from 'sonner';
 
-interface CveItem {
-  id: string;
-  cvss: number | null;
-  summary: string;
-  Published: string;
-  Modified?: string;
-  source?: string;
-  vectorString?: string;
-  mitigation?: string;
-  references?: string[];
+const severityStyle: Record<string, string> = { CRITICAL: 'border-red-500/30 bg-red-500/10 text-red-500', HIGH: 'border-orange-500/30 bg-orange-500/10 text-orange-500', MEDIUM: 'border-amber-500/30 bg-amber-500/10 text-amber-500', LOW: 'border-blue-500/25 bg-blue-500/10 text-blue-400' };
+const severityPill = (value: string) => <span className={`inline-flex rounded-full border px-2.5 py-1 text-[10px] font-medium ${severityStyle[value] || 'border-border bg-muted/30 text-muted-foreground'}`}>{value}</span>;
+const percent = (value: number | null | undefined) => value == null ? '—' : value > 0 && value < 0.0001 ? `<${(0.01).toLocaleString()}%` : `${(value * 100).toLocaleString(undefined, { maximumFractionDigits: 2 })}%`;
+
+export default function CveDashboard() {
+  const { language } = useLanguage(); const pt = language === 'pt'; const l = (a: string, b: string) => pt ? a : b;
+  const { auth } = useAuth();
+  const [params, setParams] = useSearchParams();
+  const view = (['overview', 'top', 'weaponized', 'listing'].includes(params.get('view') || '') ? params.get('view') : 'overview') as VulnerabilityView;
+  const selected = params.get('cve');
+  const [query, setQuery] = useState(''); const [debounced, setDebounced] = useState('');
+  const [severity, setSeverity] = useState('all'); const [vendor, setVendor] = useState('all'); const [signal, setSignal] = useState('all');
+  const [page, setPage] = useState(1); const [size, setSize] = useState(25); const [refreshing, setRefreshing] = useState(false);
+  useEffect(() => { const timer = setTimeout(() => { setDebounced(query); setPage(1); }, 300); return () => clearTimeout(timer); }, [query]);
+  useEffect(() => setPage(1), [view, severity, vendor, signal, size]);
+  const setView = (value: string) => setParams(previous => { const next = new URLSearchParams(previous); next.set('view', value); next.delete('cve'); return next; });
+  const open = (id: string) => setParams(previous => { const next = new URLSearchParams(previous); next.set('cve', id); return next; });
+  const close = () => setParams(previous => { const next = new URLSearchParams(previous); next.delete('cve'); return next; }, { replace: true });
+  const overview = useQuery({ queryKey: ['vulnerability-overview'], queryFn: ({ signal }) => vulnerabilityRequest<VulnerabilityOverview>('/api/vulnerabilities/overview', signal), staleTime: 60000, refetchInterval: query => query.state.data?.status.syncing ? 10000 : false });
+  const listing = useQuery({ queryKey: ['vulnerabilities', view, debounced, severity, vendor, signal, page, size], enabled: view !== 'overview', placeholderData: keepPreviousData, queryFn: ({ signal: abort }) => vulnerabilityRequest<VulnerabilityPage>(`/api/vulnerabilities?${new URLSearchParams({ view, q: debounced, severity, vendor, signal, page: String(page), size: String(size) })}`, abort), staleTime: 60000, refetchInterval: query => query.state.data?.status.syncing ? 10000 : false });
+  const details = useQuery({ queryKey: ['vulnerability-detail', selected], enabled: Boolean(selected), queryFn: ({ signal }) => vulnerabilityRequest<VulnerabilityRecord>(`/api/vulnerabilities/${encodeURIComponent(selected!)}`, signal), staleTime: 60000 });
+  const status = listing.data?.status || overview.data?.status;
+  const views = [['overview', l('Visão geral', 'Overview')], ['top', 'Top Threats'], ['weaponized', 'Weaponized'], ['listing', l('Listagem', 'Listing')]];
+  const title = views.find(([key]) => key === view)?.[1] || '';
+  const refresh = async () => {
+    setRefreshing(true);
+    try { if (auth.authenticated) await vulnerabilityRequest('/api/vulnerabilities/refresh', undefined, 'POST'); await Promise.all([overview.refetch(), view !== 'overview' ? listing.refetch() : Promise.resolve()]); }
+    catch { toast.error(l('Não foi possível atualizar o catálogo.', 'Could not refresh the catalog.')); }
+    finally { setRefreshing(false); }
+  };
+  const rowButton = (row: VulnerabilityRecord) => <button type="button" onClick={() => open(row.id)} className="whitespace-nowrap font-mono text-xs font-semibold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">{row.id}</button>;
+  const quickRows = (rows: VulnerabilityRecord[]) => <div className="mt-4 divide-y">{rows.map(row => <div key={row.id} className="flex items-start gap-3 py-3"><div className="min-w-0 flex-1">{rowButton(row)}<p className="mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground">{row.kevName || row.description || l('Descrição pendente no NVD.', 'NVD description pending.')}</p></div><span className="rounded-md bg-muted px-2 py-1 font-mono text-xs">{row.cvss ?? '—'}</span></div>)}</div>;
+  const selectedData = details.data;
+  return <PageLayout width="max-w-[1600px]" breadcrumbItems={[{ label: title, ...(selected ? { to: `/cves?view=${view}` } : {}) }, ...(selected ? [{ label: selected }] : [])]}>
+    <Tabs value={view} onValueChange={setView}><TabsList variant="underline" className="mb-5 gap-4" aria-label={l('Visões de vulnerabilidades', 'Vulnerability views')}>{views.map(([key, label]) => <TabsTrigger key={key} value={key}>{label}</TabsTrigger>)}</TabsList></Tabs>
+    {status?.syncing && <div role="status" className="mb-5 flex flex-wrap items-center gap-3 rounded-xl border border-primary/20 bg-primary/5 px-4 py-3 text-xs"><RefreshCw className="h-3.5 w-3.5 animate-spin text-primary" /><span>{l('Atualizando fontes e catálogo NVD', 'Updating sources and NVD catalog')} · {status.yearsImported}/{status.yearsTotal} {l('anos importados', 'years imported')}{status.sources.nvd.currentYear ? ` · ${status.sources.nvd.currentYear}` : ''}</span><progress aria-label={l('Importação do NVD', 'NVD import')} value={status.yearsImported} max={status.yearsTotal || 1} className="ml-auto h-1.5 w-28 accent-blue-500" /></div>}
+    {status && !status.syncing && status.yearsImported < status.yearsTotal && <p role="status" className="mb-4 text-xs text-muted-foreground">{l('Catálogo parcial', 'Partial catalog')}: {status.yearsImported}/{status.yearsTotal} {l('anos importados. Consulte o status das fontes abaixo.', 'years imported. Check source status below.')}</p>}
+    {view === 'overview' ? <div className="space-y-5">
+      <section className="actor-surface p-5 sm:p-6"><div className="flex items-start justify-between gap-4"><div><h1 className="text-xl font-semibold">{l('Vulnerabilidades', 'Vulnerabilities')}</h1><p className="mt-2 text-sm text-muted-foreground">{l('Explore CVEs, criticidade técnica, exploração conhecida e referências públicas de PoC.', 'Explore CVEs, technical severity, known exploitation and public PoC references.')}</p></div><Button variant="outline" size="sm" onClick={() => void refresh()} disabled={refreshing || status?.syncing}><RefreshCw className={`mr-2 h-3.5 w-3.5 ${refreshing ? 'animate-spin' : ''}`} />{l('Atualizar', 'Refresh')}</Button></div>
+        {overview.isPending ? <div className="mt-5"><LoadingRows rows={3} /></div> : overview.isError ? <p role="alert" className="mt-5 text-sm text-destructive">{l('Catálogo indisponível. Tente atualizar.', 'Catalog unavailable. Try refreshing.')}</p> : <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{[
+          { label: l('CVEs no catálogo', 'Catalog CVEs'), value: overview.data.stats.total, note: l('Registros importados, sem rejeitados', 'Imported records, excluding rejected'), icon: Bug, view: 'listing' },
+          { label: l('Críticas', 'Critical'), value: overview.data.stats.critical, note: l('Classificação técnica nas fontes', 'Source technical classification'), icon: AlertTriangle, view: 'top', severity: 'CRITICAL' },
+          { label: 'CISA KEV', value: overview.data.stats.kev, note: l('Exploração conhecida na fonte', 'Known exploitation reported by source'), icon: ShieldCheck, view: 'listing', signal: 'kev' },
+          { label: 'Weaponized', value: overview.data.stats.weaponized, note: l('No KEV e com PoC público catalogado', 'In KEV with indexed public PoC'), icon: Bug, view: 'weaponized' },
+        ].map(item => <button key={item.label} onClick={() => { setSeverity(item.severity || 'all'); setVendor('all'); setSignal(item.signal || 'all'); setQuery(''); setView(item.view); }} className="rounded-xl border bg-background/40 p-4 text-left hover:border-primary/50 focus-visible:ring-2 focus-visible:ring-ring"><div className="flex items-center justify-between gap-2 text-xs text-muted-foreground"><span>{item.label}</span><item.icon className="h-4 w-4" /></div><p className="mt-3 text-3xl font-semibold tabular-nums">{Number(item.value || 0).toLocaleString()}</p><p className="mt-2 text-[11px] text-muted-foreground">{item.note}</p></button>)}</div>}
+      </section>
+      {overview.data && <><div className="grid gap-5 lg:grid-cols-2"><section className="actor-surface p-5"><div className="flex items-center justify-between"><h2 className="text-sm font-semibold">Top Threats</h2><button className="text-xs text-primary hover:underline" onClick={() => { setSeverity('all'); setView('top'); }}>{l('Ver ranking', 'View ranking')} <ArrowRight className="ml-1 inline h-3.5 w-3.5" /></button></div><p className="mt-1 text-xs text-muted-foreground">{l('CVSS decrescente; desempate por KEV e EPSS.', 'CVSS descending; ties resolved by KEV and EPSS.')}</p>{quickRows(overview.data.top)}</section><section className="actor-surface p-5"><div className="flex items-center justify-between"><h2 className="text-sm font-semibold">{l('Publicadas recentemente', 'Recently published')}</h2><button className="text-xs text-primary hover:underline" onClick={() => setView('listing')}>{l('Ver lista', 'View listing')} <ArrowRight className="ml-1 inline h-3.5 w-3.5" /></button></div>{quickRows(overview.data.recent)}</section></div>
+      <div className="grid gap-5 lg:grid-cols-2"><section className="actor-surface p-5"><h2 className="text-sm font-semibold">{l('Criticidade técnica', 'Technical severity')}</h2><div className="mt-5 space-y-3">{['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'NONE', 'UNKNOWN'].map(label => { const count = overview.data.severities.find(row => row.label === label)?.count || 0; return <button key={label} onClick={() => { setSeverity(label); setView('listing'); }} className="grid w-full grid-cols-[90px_minmax(0,1fr)_60px] items-center gap-3 text-left text-xs focus-visible:ring-2 focus-visible:ring-ring">{severityPill(label)}<span className="h-1.5 overflow-hidden rounded-full bg-muted"><span className="block h-full rounded-full bg-primary/70" style={{ width: `${overview.data.stats.total ? count / overview.data.stats.total * 100 : 0}%` }} /></span><span className="text-right font-mono text-muted-foreground">{count.toLocaleString()}</span></button>; })}</div><p className="mt-4 text-[11px] text-muted-foreground">{l('Sem CVSS significa que a fonte ainda não informou uma nota.', 'No CVSS means the source has not provided a score.')}</p></section><section className="actor-surface p-5"><h2 className="text-sm font-semibold">{l('Fornecedores no catálogo', 'Catalog vendors')}</h2><div className="mt-4 grid gap-x-4 sm:grid-cols-2">{overview.data.vendors.slice(0, 10).map(row => <button key={row.label} onClick={() => { setVendor(row.label); setView('listing'); }} className="flex min-w-0 items-center justify-between gap-3 border-b py-3 text-left text-xs hover:text-primary focus-visible:ring-2 focus-visible:ring-ring"><span className="truncate">{row.label}</span><span className="font-mono text-muted-foreground">{row.count.toLocaleString()}</span></button>)}</div></section></div></>}
+    </div> : <section className="actor-surface actor-catalog overflow-hidden">
+      <header className="flex flex-wrap items-start justify-between gap-4 px-5 pt-6 sm:px-7"><div><h1 className="text-xl font-semibold">{view === 'listing' ? l('Lista de vulnerabilidades', 'Vulnerability listing') : title}</h1><p className="mt-2 text-sm text-muted-foreground">{view === 'top' ? l('Ranking de todas as CVEs importadas por CVSS, com KEV e EPSS como desempate.', 'Rank all imported CVEs by CVSS, with KEV and EPSS as tie-breakers.') : view === 'weaponized' ? l('CVEs no KEV com referências de PoC público no GitHub. Código não validado.', 'KEV CVEs with public GitHub PoC references. Code is not validated.') : l('Catálogo NVD completo, com busca, fornecedores e sinais de exploração.', 'Full NVD catalog, with search, vendors and exploitation signals.')}</p></div><Button variant="outline" size="sm" disabled={refreshing || status?.syncing} onClick={() => void refresh()}><RefreshCw className="mr-2 h-3.5 w-3.5" />{l('Atualizar', 'Refresh')}</Button></header>
+      {(query || severity !== 'all' || vendor !== 'all' || signal !== 'all') && <div className="px-5 pt-3 sm:px-7"><Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => { setQuery(''); setSeverity('all'); setVendor('all'); setSignal('all'); }}>{l('Limpar filtros', 'Clear filters')}</Button></div>}
+      <div className="actor-filters vulnerability-filters px-5 py-5 sm:px-7"><div className="actor-filter-search relative"><Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" /><Input aria-label={l('Buscar CVE, fornecedor ou descrição', 'Search CVE, vendor or description')} placeholder={l('CVE, fornecedor ou descrição…', 'CVE, vendor or description…')} value={query} onChange={event => setQuery(event.target.value)} className="h-9 rounded-lg bg-muted/30 pl-9 text-xs" /></div>{[
+        { name: l('Criticidade', 'Severity'), value: severity, change: setSeverity, options: ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'NONE', 'UNKNOWN'].map(value => ({ value, label: value })) },
+        { name: l('Fornecedor', 'Vendor'), value: vendor, change: setVendor, options: (overview.data?.vendors || []).map(row => ({ value: row.label, label: row.label })) },
+        { name: l('Sinais', 'Signals'), value: signal, change: setSignal, options: [{ value: 'kev', label: 'CISA KEV' }, { value: 'poc', label: l('PoC público', 'Public PoC') }, { value: 'ransomware', label: 'Ransomware (KEV)' }, { value: 'epss', label: 'EPSS ≥ 50%' }] },
+      ].map(filter => <label key={filter.name} className="actor-filter relative flex min-w-0 items-center focus-within:ring-2 focus-within:ring-ring"><select aria-label={filter.name} value={filter.value} onChange={event => filter.change(event.target.value)} className="w-full min-w-0 appearance-none truncate bg-transparent py-2 pr-5 text-xs outline-none"><option value="all">{filter.name}</option>{filter.options.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}</select><ChevronDown className="pointer-events-none absolute right-3 h-3.5 w-3.5 text-muted-foreground" /></label>)}</div>
+      {listing.isPending ? <div className="p-5"><LoadingRows rows={8} /></div> : listing.isError ? <p role="alert" className="p-6 text-sm text-destructive">{l('Não foi possível consultar o catálogo. Tente atualizar.', 'Could not query the catalog. Try refreshing.')}</p> : listing.data && <>
+        <DataPager pt={pt} total={listing.data.total} page={listing.data.page} pageSize={size} onPage={setPage} onPageSize={value => { setSize(value); setPage(1); }} pageSizes={[25, 50, 100]} />
+        <div className="overflow-x-auto" aria-busy={listing.isFetching}><table className="actor-table w-full min-w-[900px] text-left text-[13px]"><thead><tr>{view === 'top' && <th>#</th>}<th>CVE</th><th>{view === 'weaponized' ? l('Adicionada ao KEV', 'Added to KEV') : l('Publicada', 'Published')}</th><th className="w-[32%]">{l('Descrição', 'Description')}</th><th>{l('Fornecedor', 'Vendor')}</th><th>{l('Criticidade', 'Severity')}</th><th>CVSS</th><th>EPSS</th><th>{l('Sinais', 'Signals')}</th></tr></thead><tbody>{listing.data.rows.map((row, index) => <tr key={row.id}>{view === 'top' && <td className="font-mono text-xs text-muted-foreground">{(listing.data.page - 1) * size + index + 1}</td>}<td>{rowButton(row)}</td><td className="whitespace-nowrap font-mono text-xs text-muted-foreground">{(view === 'weaponized' ? row.dateAdded : row.published)?.slice(0, 10) || '—'}</td><td><p className="line-clamp-2 leading-6" title={row.description}>{row.kevName || row.description || l('Descrição pendente', 'Description pending')}</p></td><td><span className="line-clamp-2 text-xs text-muted-foreground">{row.vendor || l('Não informado', 'Unknown')}</span></td><td>{severityPill(row.severity)}</td><td className="font-mono text-xs">{row.cvss ?? '—'}</td><td className="font-mono text-xs" title={row.epssDate || ''}>{percent(row.epss)}</td><td><div className="flex flex-wrap gap-1">{row.kev && <span className="rounded border border-red-500/25 bg-red-500/5 px-2 py-0.5 text-[10px] text-red-500">KEV</span>}{row.exploitCount > 0 && <button onClick={() => open(row.id)} className="rounded border border-primary/25 bg-primary/5 px-2 py-0.5 text-[10px] text-primary hover:bg-primary/10">{row.exploitCount} PoC</button>}{row.ransomware && <span className="rounded border px-2 py-0.5 text-[10px]">Ransomware</span>}{!row.kev && !row.exploitCount && <span className="text-muted-foreground">—</span>}</div></td></tr>)}</tbody></table></div>
+        {!listing.data.rows.length && <p className="p-10 text-center text-sm text-muted-foreground">{status?.syncing ? l('Importação em andamento. Os resultados aparecerão conforme os registros forem processados.', 'Import in progress. Results appear as records are processed.') : l('Nenhuma CVE corresponde a estes filtros.', 'No CVEs match these filters.')}</p>}
+        <DataPager pt={pt} total={listing.data.total} page={listing.data.page} pageSize={size} onPage={setPage} onPageSize={setSize} pageSizes={[25, 50, 100]} />
+      </>}
+    </section>}
+    {status && <section className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label={l('Fontes de vulnerabilidades', 'Vulnerability sources')}>{Object.entries(status.sources).map(([key, source]) => <article key={key} className="rounded-xl border bg-card px-4 py-3"><div className="flex items-center justify-between gap-2"><SourceIdentity name={key === 'nvd' ? 'NIST NVD' : key === 'kev' ? 'CISA KEV' : key === 'epss' ? 'FIRST EPSS' : 'GitHub · PoC index'} url={source.url} className="text-xs" /><span className={`text-[10px] ${source.status === 'ready' ? 'text-emerald-500' : source.status === 'error' ? 'text-destructive' : 'text-muted-foreground'}`}>{({ ready: l('Atualizada', 'Current'), syncing: l('Sincronizando', 'Syncing'), pending: l('Aguardando', 'Pending'), stale: l('Desatualizada', 'Stale'), error: l('Indisponível', 'Unavailable') })[source.status]}</span></div><p className="mt-2 text-[11px] text-muted-foreground">{source.at ? `${l('Atualização', 'Updated')}: ${new Date(source.at).toLocaleDateString(pt ? 'pt-BR' : 'en-US')}` : l('Aguardando primeira importação', 'Waiting for initial import')}{source.error ? ` · ${source.error}` : ''}</p></article>)}</section>}
+    <RecordDrawer open={Boolean(selected)} onClose={close} title={selected || ''} description={l('Vulnerabilidade · dados e evidências das fontes', 'Vulnerability · source data and evidence')}>
+      {details.isPending ? <LoadingRows rows={5} /> : details.isError ? <p role="alert" className="text-sm text-muted-foreground">{l('CVE indisponível no catálogo importado.', 'CVE unavailable in the imported catalog.')}</p> : selectedData && <div className="space-y-6">
+        <div className="flex flex-wrap items-center gap-2">{severityPill(selectedData.severity)}{selectedData.kev && <span className="rounded border border-red-500/30 px-2 py-1 text-xs text-red-500">CISA KEV</span>}{selectedData.ransomware && <span className="rounded border px-2 py-1 text-xs">Ransomware</span>}</div>
+        <div className="grid grid-cols-2 gap-4 text-xs">{[['CVSS', selectedData.cvss ?? '—'], ['EPSS', percent(selectedData.epss)], [l('Fornecedor', 'Vendor'), selectedData.vendor || '—'], [l('Produto', 'Product'), selectedData.product || '—'], [l('Publicado', 'Published'), selectedData.published?.slice(0, 10) || '—'], [l('Atualizado', 'Modified'), selectedData.modified?.slice(0, 10) || '—']].map(([label, value]) => <div key={String(label)}><p className="text-muted-foreground">{label}</p><p className="mt-2 break-words font-medium">{value}</p></div>)}</div>
+        <p className="text-sm leading-7 text-muted-foreground">{selectedData.description}</p>{selectedData.vector && <p className="break-all rounded-lg bg-muted/30 p-3 font-mono text-xs">{selectedData.vector}</p>}
+        {selectedData.kev && <section className="rounded-xl border border-red-500/20 p-4"><h3 className="text-sm font-semibold">CISA KEV</h3><p className="mt-3 text-xs leading-6">{selectedData.action}</p><p className="mt-3 text-xs text-muted-foreground">{l('Adicionada', 'Added')}: {selectedData.dateAdded} · {l('Prazo CISA', 'CISA due date')}: {selectedData.dueDate || '—'}</p></section>}
+        <section><h3 className="text-sm font-semibold">{l('PoCs públicos no GitHub', 'Public GitHub PoCs')} · {selectedData.exploits?.length || 0}</h3><p className="mt-2 text-xs leading-5 text-muted-foreground">{l('Referências do índice público e das tags Exploit do NVD. O código não foi validado pela plataforma.', 'References from the public index and NVD Exploit tags. Code has not been validated by the platform.')}</p><div className="mt-4 space-y-3">{selectedData.exploits?.map(exploit => <a key={exploit.url} href={exploit.url} target="_blank" rel="noopener noreferrer" className="block rounded-xl border p-3 text-xs hover:border-primary/50"><div className="flex items-center gap-2 font-medium text-primary"><span className="min-w-0 flex-1 truncate">{exploit.name}</span><ExternalLink className="h-3.5 w-3.5" /></div>{exploit.description && <p className="mt-2 line-clamp-2 leading-5 text-muted-foreground">{exploit.description}</p>}<p className="mt-2 text-[10px] text-muted-foreground">{exploit.source} · ★ {exploit.stars ?? '—'} · {exploit.updated?.slice(0, 10) || '—'}</p></a>)}</div></section>
+        <section><h3 className="text-sm font-semibold">{l('Referências', 'References')}</h3><div className="mt-3 space-y-2">{[...new Set([`https://nvd.nist.gov/vuln/detail/${selectedData.id}`, ...selectedData.references.map(ref => ref.url)])].filter(address => /^https?:\/\//i.test(address)).map(address => <a key={address} href={address} target="_blank" rel="noopener noreferrer" className="block break-all text-xs text-primary hover:underline">{address}</a>)}</div></section>
+        <Link to={`/analyzer?q=${encodeURIComponent(selectedData.id)}`} className="inline-flex items-center gap-2 text-sm text-primary hover:underline">{l('Investigar CVE', 'Investigate CVE')}<ArrowRight className="h-3.5 w-3.5" /></Link>
+      </div>}
+    </RecordDrawer>
+  </PageLayout>;
 }
-
-interface ExploitedCve {
-  cveID: string;
-  vendorProject: string;
-  product: string;
-  vulnerabilityName: string;
-  dateAdded: string;
-  shortDescription: string;
-  requiredAction: string;
-  dueDate: string;
-}
-
-const CveDashboard = () => {
-  const { t, language, tr } = useLanguage();
-  
-  // CVE Dashboard States
-  const [recentCves, setRecentCves] = useState<CveItem[]>([]);
-  const [exploitedCves, setExploitedCves] = useState<ExploitedCve[]>([]);
-  const [searchCveQuery, setSearchCveQuery] = useState("");
-  const [loadingCves, setLoadingCves] = useState(true);
-  const [loadingExploited, setLoadingExploited] = useState(true);
-  const [cveError, setCveError] = useState<string | null>(null);
-
-  // Filters State
-  const [selectedVendor, setSelectedVendor] = useState("all");
-  const [selectedSoftware, setSelectedSoftware] = useState("all");
-  const [selectedSeverity, setSelectedSeverity] = useState("all");
-
-  // Calendar Month Selector States
-  const [selectedMonth, setSelectedMonth] = useState<number>(new Date().getMonth());
-  const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
-
-  const monthNames = [
-    "January", "February", "March", "April", "May", "June", 
-    "July", "August", "September", "October", "November", "December"
-  ];
-  const monthNamesPt = [
-    "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
-    "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
-  ];
-
-  const handlePrevMonth = () => {
-    setSelectedMonth(prev => {
-      if (prev === 0) {
-        setSelectedYear(y => y - 1);
-        return 11;
-      }
-      return prev - 1;
-    });
-  };
-
-  const handleNextMonth = () => {
-    setSelectedMonth(prev => {
-      if (prev === 11) {
-        setSelectedYear(y => y + 1);
-        return 0;
-      }
-      return prev + 1;
-    });
-  };
-
-  // Background Polling / Last Updated States
-  const [lastUpdatedCves, setLastUpdatedCves] = useState<Date | null>(null);
-  const [isRefreshingCves, setIsRefreshingCves] = useState(false);
-
-  // Load from local storage cache on mount
-  useEffect(() => {
-    const cachedRecent = localStorage.getItem("cached_recent_cves");
-    const cachedExploited = localStorage.getItem("cached_exploited_cves");
-    
-    if (cachedRecent) {
-      try { setRecentCves(JSON.parse(cachedRecent)); } catch (e) { console.error(e); }
-    }
-    if (cachedExploited) {
-      try { setExploitedCves(JSON.parse(cachedExploited)); } catch (e) { console.error(e); }
-    }
-  }, []);
-
-  // Fetch CVE Dashboard Data
-  const loadCves = async (isBackground = false) => {
-    if (!isBackground) {
-      setLoadingCves(true);
-      setLoadingExploited(true);
-    } else {
-      setIsRefreshingCves(true);
-    }
-    setCveError(null);
-    try {
-      const [recentRes, exploitedRes] = await Promise.all([
-        fetch("/api/cves/recent"),
-        fetch("/api/cves/exploited")
-      ]);
-      
-      if (!recentRes.ok) throw new Error("Failed to fetch recent CVEs");
-      if (!exploitedRes.ok) throw new Error("Failed to fetch CISA KEV catalog");
-      
-      const recentData = await recentRes.json();
-      const exploitedData = await exploitedRes.json();
-      
-      setRecentCves(prev => {
-        const merged = [...prev];
-        const seenIds = new Set(merged.map(item => item.id));
-        recentData.forEach((item: CveItem) => {
-          if (!seenIds.has(item.id)) {
-            merged.push(item);
-            seenIds.add(item.id);
-          }
-        });
-        merged.sort((a, b) => new Date(b.Published).getTime() - new Date(a.Published).getTime());
-        localStorage.setItem("cached_recent_cves", JSON.stringify(merged));
-        return merged;
-      });
-
-      setExploitedCves(prev => {
-        const merged = [...prev];
-        const seenIds = new Set(merged.map(item => item.cveID));
-        exploitedData.forEach((item: ExploitedCve) => {
-          if (!seenIds.has(item.cveID)) {
-            merged.push(item);
-            seenIds.add(item.cveID);
-          }
-        });
-        merged.sort((a, b) => new Date(b.dateAdded).getTime() - new Date(a.dateAdded).getTime());
-        localStorage.setItem("cached_exploited_cves", JSON.stringify(merged));
-        return merged;
-      });
-
-      setLastUpdatedCves(new Date());
-    } catch (err: any) {
-      console.error(err);
-      if (!isBackground) {
-        setCveError(err.message);
-      } else {
-        toast.error(tr({ pt: "Erro ao atualizar CVEs em segundo plano", en: "Failed to background refresh CVEs", es: "Error al actualizar CVEs en segundo plano", fr: "Échec de l'actualisation des CVE en arrière-plan" }));
-      }
-    } finally {
-      setLoadingCves(false);
-      setLoadingExploited(false);
-      setIsRefreshingCves(false);
-    }
-  };
-
-  useEffect(() => {
-    loadCves();
-
-    // Polling interval: 10 min for CVEs (600000ms)
-    const cvesInterval = setInterval(() => {
-      loadCves(true);
-    }, 600000);
-
-    return () => {
-      clearInterval(cvesInterval);
-    };
-  }, []);
-
-  // Trigger Pivot Search on main dashboard
-  const handlePivotSearch = (cveId: string) => {
-    localStorage.setItem("pivotSearchQuery", cveId);
-    toast.success(tr({ pt: `Pesquisando ${cveId} no painel...`, en: `Searching ${cveId} on main dashboard...`, es: `Buscando ${cveId} en el panel...`, fr: `Recherche de ${cveId} dans le tableau de bord...` }));
-    window.location.href = "/analyzer";
-  };
-
-  // Parse CVSS severity class
-  const getCvssSeverity = (score: number | null): { label: string; color: string } => {
-    if (score === null) return { label: "N/A", color: "bg-slate-500/20 text-slate-400 border-slate-500/30" };
-    if (score >= 9.0) return { label: "Critical", color: "bg-red-500/20 text-red-500 border-red-500/30" };
-    if (score >= 7.0) return { label: "High", color: "bg-orange-500/20 text-orange-500 border-orange-500/30" };
-    if (score >= 4.0) return { label: "Medium", color: "bg-yellow-500/20 text-yellow-500 border-yellow-500/30" };
-    return { label: "Low", color: "bg-green-500/20 text-green-500 border-green-500/30" };
-  };
-
-  // Extract unique vendors from exploitedCves
-  const uniqueVendors = useMemo(() => {
-    const vendors = new Set<string>();
-    exploitedCves.forEach(cve => {
-      if (cve.vendorProject) {
-        vendors.add(cve.vendorProject);
-      }
-    });
-    return Array.from(vendors).sort();
-  }, [exploitedCves]);
-
-  // Extract unique products from exploitedCves (filtered by selectedVendor if active)
-  const uniqueSoftwares = useMemo(() => {
-    const products = new Set<string>();
-    exploitedCves.forEach(cve => {
-      if (selectedVendor !== "all" && cve.vendorProject !== selectedVendor) {
-        return;
-      }
-      if (cve.product) {
-        products.add(cve.product);
-      }
-    });
-    return Array.from(products).sort();
-  }, [exploitedCves, selectedVendor]);
-
-  // Reset selectedSoftware when selectedVendor changes if it's no longer in the list
-  useEffect(() => {
-    if (selectedSoftware !== "all" && !uniqueSoftwares.includes(selectedSoftware)) {
-      setSelectedSoftware("all");
-    }
-  }, [selectedVendor, uniqueSoftwares, selectedSoftware]);
-
-  // Filter CVEs
-  const filteredRecentCves = useMemo(() => {
-    return recentCves.filter(cve => {
-      // 0. Month/Year Filter
-      const d = new Date(cve.Published);
-      if (d.getMonth() !== selectedMonth || d.getFullYear() !== selectedYear) {
-        return false;
-      }
-
-      // 1. Text Search Filter
-      const queryMatch = 
-        (cve.id ?? '').toLowerCase().includes(searchCveQuery.toLowerCase()) ||
-        (cve.summary ?? '').toLowerCase().includes(searchCveQuery.toLowerCase());
-      
-      if (!queryMatch) return false;
-
-      // 2. Vendor Filter (matching summary since recentCves don't have structured vendor fields)
-      if (selectedVendor !== "all") {
-        const vendorLower = selectedVendor.toLowerCase();
-        if (!(cve.summary ?? '').toLowerCase().includes(vendorLower)) {
-          return false;
-        }
-      }
-
-      // 3. Software/Product Filter (matching summary)
-      if (selectedSoftware !== "all") {
-        const softwareLower = selectedSoftware.toLowerCase();
-        if (!(cve.summary ?? '').toLowerCase().includes(softwareLower)) {
-          return false;
-        }
-      }
-
-      // 4. Severity Filter
-      if (selectedSeverity !== "all") {
-        const sev = getCvssSeverity(cve.cvss);
-        if (sev.label !== selectedSeverity) {
-          return false;
-        }
-      }
-
-      return true;
-    });
-  }, [recentCves, searchCveQuery, selectedVendor, selectedSoftware, selectedSeverity, selectedMonth, selectedYear]);
-
-  const filteredExploitedCves = useMemo(() => {
-    return exploitedCves.filter(cve => {
-      // 0. Month/Year Filter
-      const d = new Date(cve.dateAdded);
-      if (d.getMonth() !== selectedMonth || d.getFullYear() !== selectedYear) {
-        return false;
-      }
-
-      // 1. Text Search Filter
-      const queryMatch = 
-        (cve.cveID ?? '').toLowerCase().includes(searchCveQuery.toLowerCase()) ||
-        (cve.vendorProject ?? '').toLowerCase().includes(searchCveQuery.toLowerCase()) ||
-        (cve.product ?? '').toLowerCase().includes(searchCveQuery.toLowerCase()) ||
-        (cve.vulnerabilityName ?? '').toLowerCase().includes(searchCveQuery.toLowerCase());
-
-      if (!queryMatch) return false;
-
-      // 2. Vendor Filter
-      if (selectedVendor !== "all" && cve.vendorProject !== selectedVendor) {
-        return false;
-      }
-
-      // 3. Software/Product Filter
-      if (selectedSoftware !== "all" && cve.product !== selectedSoftware) {
-        return false;
-      }
-
-      // 4. Severity Filter (cross-referencing with recentCves if possible)
-      if (selectedSeverity !== "all") {
-        const recentMatch = recentCves.find(r => r.id === cve.cveID);
-        const sevLabel = recentMatch ? getCvssSeverity(recentMatch.cvss).label : "Critical";
-        if (sevLabel !== selectedSeverity) {
-          return false;
-        }
-      }
-
-      return true;
-    });
-  }, [exploitedCves, recentCves, searchCveQuery, selectedVendor, selectedSoftware, selectedSeverity, selectedMonth, selectedYear]);
-
-  // Statistics calculation for CVEs
-  const totalCvesTracked = filteredRecentCves.length + filteredExploitedCves.length;
-  const validCvssList = filteredRecentCves
-    .map(c => c.cvss)
-    .filter((c): c is number => c !== null && c !== undefined && !isNaN(Number(c)))
-    .map(Number);
-  
-  const exploitedCvssList = filteredExploitedCves
-    .map(cve => {
-      const recentMatch = recentCves.find(r => r.id === cve.cveID);
-      return recentMatch ? recentMatch.cvss : null;
-    })
-    .filter((c): c is number => c !== null && c !== undefined && !isNaN(Number(c)))
-    .map(Number);
-
-  const combinedCvssList = [...validCvssList, ...exploitedCvssList];
-  const averageCvss = combinedCvssList.length > 0 ? (combinedCvssList.reduce((a, b) => a + b, 0) / combinedCvssList.length).toFixed(1) : "8.2";
-
-  // Detailed CVSS Severity counts
-  const cvssDistribution = useMemo(() => {
-    let critical = 0; // >= 9.0
-    let high = 0;     // 7.0 - 8.9
-    let medium = 0;   // 4.0 - 6.9
-    let low = 0;      // 0.1 - 3.9
-    let na = 0;       // null/NaN/0
-
-    filteredRecentCves.forEach(cve => {
-      const score = cve.cvss;
-      if (score === null || score === undefined || isNaN(Number(score))) {
-        na++;
-      } else {
-        const val = Number(score);
-        if (val >= 9.0) critical++;
-        else if (val >= 7.0) high++;
-        else if (val >= 4.0) medium++;
-        else if (val > 0) low++;
-        else na++;
-      }
-    });
-
-    filteredExploitedCves.forEach(cve => {
-      const recentMatch = recentCves.find(r => r.id === cve.cveID);
-      const val = recentMatch ? (recentMatch.cvss !== null && recentMatch.cvss !== undefined ? Number(recentMatch.cvss) : null) : null;
-      
-      if (val === null || isNaN(val)) {
-        critical++;
-      } else {
-        if (val >= 9.0) critical++;
-        else if (val >= 7.0) high++;
-        else if (val >= 4.0) medium++;
-        else if (val > 0) low++;
-        else critical++;
-      }
-    });
-
-    return { critical, high, medium, low, na };
-  }, [filteredRecentCves, filteredExploitedCves, recentCves]);
-
-  const criticalCount = cvssDistribution.critical;
-
-  // Top Targeted Vendors based on CISA KEV catalog (exploitedCves)
-  const topTargetedVendors = useMemo(() => {
-    const counts: Record<string, number> = {};
-    exploitedCves.forEach(cve => {
-      const vendor = cve.vendorProject || "Unknown";
-      counts[vendor] = (counts[vendor] || 0) + 1;
-    });
-
-    return Object.entries(counts)
-      .map(([name, count]) => ({ name, count }))
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 5);
-  }, [exploitedCves]);
-
-  return (
-    <PageLayout width="max-w-7xl">
-        <div className="space-y-6">
-          <div className="page-head">
-            <div>
-              <h1 className="page-title">
-                {language === "pt" ? "Vulnerabilidades" : "Vulnerabilities"}
-              </h1>
-              <p className="page-lede">
-                {tr({
-                  pt: "CVEs recentes com severidade, probabilidade de exploração (EPSS) e presença no catálogo KEV da CISA.",
-                  en: "Recent CVEs with severity, exploitation probability (EPSS) and presence in CISA's KEV catalog.",
-                  es: "CVEs recientes con severidad, probabilidad de explotación (EPSS) y presencia en el catálogo KEV de CISA.",
-                  fr: "CVE récentes avec sévérité, probabilité d'exploitation (EPSS) et présence au catalogue KEV de la CISA.",
-                })}
-              </p>
-            </div>
-            {/* Last updated and refresh controls */}
-            <div className="flex items-center gap-3 text-xs text-muted-foreground">
-              {isRefreshingCves && <span className="animate-pulse text-primary font-medium">{tr({ pt: "Atualizando...", en: "Refreshing...", es: "Actualizando...", fr: "Actualisation..." })}</span>}
-              <span>
-                {tr({ pt: "Última atualização: ", en: "Last updated: ", es: "Última actualización: ", fr: "Dernière mise à jour : " })}
-                {lastUpdatedCves ? lastUpdatedCves.toLocaleTimeString() : "Pending"}
-              </span>
-              <Button
-                variant="outline"
-                size="icon"
-                className="h-8 w-8 border-border/50 hover:bg-primary/5 shrink-0"
-                disabled={loadingCves || isRefreshingCves}
-                onClick={() => loadCves()}
-                title={tr({ pt: "Atualizar dados", en: "Refresh data", es: "Actualizar datos", fr: "Actualiser les données" })}
-              >
-                <RefreshCw className={`h-4 w-4 ${(loadingCves || isRefreshingCves) ? "animate-spin" : ""}`} />
-              </Button>
-            </div>
-          </div>
-
-          {/* Metrics row */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <Card className="border shadow-sm bg-muted/40 ">
-              <CardHeader className="py-4 flex flex-row items-center justify-between pb-2">
-                <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{tr({ pt: "Total de Ameaças", en: "Total Tracked", es: "Total Rastreado", fr: "Total Suivi" })}</span>
-                <BarChart2 className="h-4 w-4 text-primary" />
-              </CardHeader>
-              <CardContent className="pt-0">
-                <div className="text-2xl font-bold">{totalCvesTracked}</div>
-              </CardContent>
-            </Card>
-
-            <Card className="border shadow-sm bg-muted/40 ">
-              <CardHeader className="py-4 flex flex-row items-center justify-between pb-2">
-                <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{t("avgCvss") || "Avg CVSS"}</span>
-                <Shield className="h-4 w-4 text-amber-500" />
-              </CardHeader>
-              <CardContent className="pt-0">
-                <div className="text-2xl font-bold text-amber-500">{averageCvss}</div>
-              </CardContent>
-            </Card>
-
-            <Card className="border shadow-sm bg-muted/40 ">
-              <CardHeader className="py-4 flex flex-row items-center justify-between pb-2">
-                <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{t("criticalCves") || "Critical CVEs"}</span>
-                <AlertTriangle className="h-4 w-4 text-red-500" />
-              </CardHeader>
-              <CardContent className="pt-0">
-                <div className="text-2xl font-bold text-red-500">{criticalCount}</div>
-              </CardContent>
-            </Card>
-
-            <Card className="border shadow-sm bg-muted/40 ">
-              <CardHeader className="py-4 flex flex-row items-center justify-between pb-2">
-                <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{t("activeExploits") || "Active Exploits"}</span>
-                <Globe className="h-4 w-4 text-red-500 animate-pulse" />
-              </CardHeader>
-              <CardContent className="pt-0">
-                <div className="text-2xl font-bold text-red-500">{exploitedCves.length}</div>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Visual Analytics Section */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Card 1: CVSS Severity Distribution */}
-            <Card className="border shadow-sm bg-muted/40 ">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
-                  <BarChart2 className="h-4 w-4 text-primary" />
-                  {tr({ pt: "Distribuição de Severidade CVSS", en: "CVSS Severity Distribution", es: "Distribución de Severidad CVSS", fr: "Distribution de la Gravité CVSS" })}
-                </CardTitle>
-                <CardDescription className="text-xs">
-                  {tr({ pt: "Contagem baseada nos relatórios de vulnerabilidades recentes + KEV", en: "Breakdown of recent CVEs + active exploits by CVSS score bands", es: "Desglose de CVEs recientes + exploits activos por bandas de puntuación CVSS", fr: "Répartition des CVE récents + exploits actifs par tranches de score CVSS" })}
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="pt-4 flex flex-col justify-end min-h-[220px]">
-                {/* Dynamic Vertical Bar Chart */}
-                <div className="flex items-end justify-around h-36 border-b border-border/60 pb-1">
-                  {(() => {
-                    const distribution = [
-                      { label: "Critical (>=9.0)", count: cvssDistribution.critical, color: "bg-red-500/80 hover:bg-red-500", labelShort: "Crit" },
-                      { label: "High (7.0-8.9)", count: cvssDistribution.high, color: "bg-orange-500/80 hover:bg-orange-500", labelShort: "High" },
-                      { label: "Medium (4.0-6.9)", count: cvssDistribution.medium, color: "bg-yellow-500/80 hover:bg-yellow-500", labelShort: "Med" },
-                      { label: "Low (<4.0)", count: cvssDistribution.low, color: "bg-green-500/80 hover:bg-green-500", labelShort: "Low" },
-                      { label: "N/A", count: cvssDistribution.na, color: "bg-slate-500/80 hover:bg-slate-500", labelShort: "N/A" }
-                    ];
-                    const maxCount = Math.max(...distribution.map(d => d.count)) || 1;
-                    
-                    return distribution.map((item, idx) => {
-                      const heightPct = Math.max(8, (item.count / maxCount) * 100);
-                      return (
-                        <div key={idx} className="flex flex-col items-center group relative w-12 sm:w-16">
-                          {/* Tooltip on hover */}
-                          <div className="absolute -top-10 scale-0 group-hover:scale-100 transition-all bg-popover text-popover-foreground border shadow text-[10px] px-2 py-1 rounded font-bold z-10 whitespace-nowrap pointer-events-none">
-                            {item.label}: {item.count}
-                          </div>
-                          
-                          {/* Bar Wrapper Container with fixed height to allow percentage child height calculation */}
-                          <div className="h-24 w-full flex items-end justify-center">
-                            <div 
-                              style={{ height: `${heightPct}%` }}
-                              className={`w-8 sm:w-10 ${item.color} rounded-t-md transition-all duration-300 flex items-center justify-center`}
-                            >
-                              <span className="text-[10px] font-bold text-white mb-auto pt-1 font-mono group-hover:block hidden">
-                                {item.count}
-                              </span>
-                            </div>
-                          </div>
-                          
-                          {/* Label */}
-                          <span className="text-[10px] font-bold text-muted-foreground mt-2 truncate w-full text-center">
-                            {item.labelShort}
-                          </span>
-                          
-                          <span className="text-[10px] font-mono text-muted-foreground font-semibold mt-0.5">
-                            {item.count}
-                          </span>
-                        </div>
-                      );
-                    });
-                  })()}
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Card 2: Top Targeted Vendors (CISA KEV) */}
-            <Card className="border shadow-sm bg-muted/40  flex flex-col justify-between">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
-                  <Globe className="h-4 w-4 text-primary animate-pulse" />
-                  {tr({ pt: "Fabricantes Mais Visados (CISA KEV)", en: "Top Targeted Vendors (CISA KEV)", es: "Proveedores Más Atacados (CISA KEV)", fr: "Fournisseurs les Plus Ciblés (CISA KEV)" })}
-                </CardTitle>
-                <CardDescription className="text-xs">
-                  {tr({ pt: "Fabricantes com maior frequência no catálogo de exploração ativa", en: "Most targeted vendors in CISA's Known Exploited Vulnerabilities catalog", es: "Proveedores con mayor frecuencia en el catálogo de explotación activa de CISA", fr: "Fournisseurs les plus fréquents dans le catalogue d'exploitation active de la CISA" })}
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="pt-4 flex-1 flex flex-col justify-center space-y-3.5">
-                {topTargetedVendors.length === 0 ? (
-                  <EmptyState
-                    bare
-                    title={tr({ pt: "Sem fornecedor no recorte", en: "No vendor in this window", es: "Sin proveedor en este recorte", fr: "Aucun fournisseur sur la période" })}
-                    description={tr({
-                      pt: "Nenhuma CVE explorada tem fornecedor identificado no período. Amplie a janela de dias.",
-                      en: "No exploited CVE has an identified vendor in this window. Widen the day range.",
-                      es: "Ninguna CVE explotada tiene proveedor identificado en el periodo. Amplía el rango de días.",
-                      fr: "Aucune CVE exploitée n'a de fournisseur identifié sur la période. Élargissez la plage de jours.",
-                    })}
-                  />
-                ) : (
-                  (() => {
-                    const maxCount = Math.max(...topTargetedVendors.map(v => v.count)) || 1;
-                    return topTargetedVendors.map((vendor, idx) => {
-                      const pct = Math.round((vendor.count / exploitedCves.length) * 100);
-                      const widthPct = Math.max(5, (vendor.count / maxCount) * 100);
-                      return (
-                        <div key={idx} className="space-y-1.5">
-                          <div className="flex justify-between items-center text-xs">
-                            <span className="font-bold text-foreground truncate max-w-[200px]" title={vendor.name}>
-                              {idx + 1}. {vendor.name}
-                            </span>
-                            <span className="font-mono text-muted-foreground text-[11px]">
-                              <strong className="text-primary">{vendor.count}</strong> exploits ({pct}%)
-                            </span>
-                          </div>
-                          <div className="h-2 w-full bg-muted/40 rounded-full overflow-hidden border border-border/50 flex">
-                            <div 
-                              style={{ width: `${widthPct}%` }}
-                              className="bg-primary/80 hover:bg-primary transition-all duration-300 rounded-full"
-                            />
-                          </div>
-                        </div>
-                      );
-                    });
-                  })()
-                )}
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Search Bar */}
-          <div className="relative">
-            <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder={t("searchCves") || "Search CVEs..."}
-              value={searchCveQuery}
-              onChange={(e) => setSearchCveQuery(e.target.value)}
-              className="pl-9 bg-card h-11 rounded-lg"
-            />
-          </div>
-
-          {/* Filters Bar */}
-          <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 bg-muted/40  p-5 rounded-lg border border-border/50 ">
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 flex-1">
-              {/* Vendor Select */}
-              <div className="flex flex-col gap-1.5">
-                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider pl-1">
-                  {tr({ pt: "Fabricante", en: "Vendor", es: "Proveedor", fr: "Fournisseur" })}
-                </span>
-                <Select value={selectedVendor} onValueChange={setSelectedVendor}>
-                  <SelectTrigger className="h-10.5 bg-background/40 border-border/50 rounded-lg text-xs font-semibold focus:ring-primary/20 hover:bg-background/60 transition-all">
-                    <SelectValue placeholder={tr({ pt: "Todos Fabricantes", en: "All Vendors", es: "Todos los Proveedores", fr: "Tous les Fournisseurs" })} />
-                  </SelectTrigger>
-                  <SelectContent className="max-h-80 border-border/50 bg-popover/95  rounded-lg">
-                    <SelectItem value="all" className="text-xs font-semibold rounded-lg">
-                      {tr({ pt: "Todos Fabricantes", en: "All Vendors", es: "Todos los Proveedores", fr: "Tous les Fournisseurs" })}
-                    </SelectItem>
-                    {uniqueVendors.map(vendor => (
-                      <SelectItem key={vendor} value={vendor} className="text-xs rounded-lg">
-                        {vendor}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {/* Software Select */}
-              <div className="flex flex-col gap-1.5">
-                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider pl-1">
-                  {tr({ pt: "Software / Produto", en: "Software / Product", es: "Software / Producto", fr: "Logiciel / Produit" })}
-                </span>
-                <Select value={selectedSoftware} onValueChange={setSelectedSoftware}>
-                  <SelectTrigger className="h-10.5 bg-background/40 border-border/50 rounded-lg text-xs font-semibold focus:ring-primary/20 hover:bg-background/60 transition-all">
-                    <SelectValue placeholder={tr({ pt: "Todos Softwares", en: "All Softwares", es: "Todos los Software", fr: "Tous les Logiciels" })} />
-                  </SelectTrigger>
-                  <SelectContent className="max-h-80 border-border/50 bg-popover/95  rounded-lg">
-                    <SelectItem value="all" className="text-xs font-semibold rounded-lg">
-                      {tr({ pt: "Todos Softwares", en: "All Softwares", es: "Todos los Software", fr: "Tous les Logiciels" })}
-                    </SelectItem>
-                    {uniqueSoftwares.map(software => (
-                      <SelectItem key={software} value={software} className="text-xs rounded-lg">
-                        {software}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {/* Severity Select */}
-              <div className="flex flex-col gap-1.5">
-                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider pl-1">
-                  {tr({ pt: "Severidade", en: "Severity", es: "Severidad", fr: "Gravité" })}
-                </span>
-                <Select value={selectedSeverity} onValueChange={setSelectedSeverity}>
-                  <SelectTrigger className="h-10.5 bg-background/40 border-border/50 rounded-lg text-xs font-semibold focus:ring-primary/20 hover:bg-background/60 transition-all">
-                    <SelectValue placeholder={tr({ pt: "Todas Severidades", en: "All Severities", es: "Todas las Severidades", fr: "Toutes les Gravités" })} />
-                  </SelectTrigger>
-                  <SelectContent className="border-border/50 bg-popover/95  rounded-lg">
-                    <SelectItem value="all" className="text-xs font-semibold rounded-lg">
-                      {tr({ pt: "Todas Severidades", en: "All Severities", es: "Todas las Severidades", fr: "Toutes les Gravités" })}
-                    </SelectItem>
-                    <SelectItem value="Critical" className="text-xs rounded-lg text-red-500 font-medium">Critical</SelectItem>
-                    <SelectItem value="High" className="text-xs rounded-lg text-orange-500 font-medium">High</SelectItem>
-                    <SelectItem value="Medium" className="text-xs rounded-lg text-yellow-500 font-medium">Medium</SelectItem>
-                    <SelectItem value="Low" className="text-xs rounded-lg text-green-500 font-medium">Low</SelectItem>
-                    <SelectItem value="N/A" className="text-xs rounded-lg text-slate-400 font-medium">N/A</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            {/* Reset Filters Button */}
-            {(selectedVendor !== "all" || selectedSoftware !== "all" || selectedSeverity !== "all" || searchCveQuery !== "") ? (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  setSelectedVendor("all");
-                  setSelectedSoftware("all");
-                  setSelectedSeverity("all");
-                  setSearchCveQuery("");
-                }}
-                className="h-10 px-4 rounded-lg text-xs text-muted-foreground hover:text-foreground hover:bg-muted/50 gap-1.5 transition-all font-semibold shrink-0 self-start md:self-end"
-              >
-                <X className="h-4 w-4" />
-                {tr({ pt: "Limpar Filtros", en: "Clear Filters", es: "Limpiar Filtros", fr: "Effacer les Filtres" })}
-              </Button>
-            ) : null}
-          </div>
-
-          {/* Sub tabs: Recent vs Exploited */}
-          <Tabs defaultValue="exploited" className="w-full">
-            <TabsList variant="underline" className="overflow-x-auto">
-              <TabsTrigger value="exploited" className="bg-transparent border-b-2 rounded-none px-4 pb-2 pt-1 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent">
-                {t("exploitedCves") || "Exploited CVEs"}
-              </TabsTrigger>
-              <TabsTrigger value="recent" className="bg-transparent border-b-2 rounded-none px-4 pb-2 pt-1 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent">
-                {t("latestCves") || "Recent CVEs"}
-              </TabsTrigger>
-            </TabsList>
-
-            {/* Exploited CVEs list */}
-            <TabsContent value="exploited" className="pt-4">
-              {loadingExploited ? (
-                <div className="space-y-3 py-6">
-                  {[1, 2, 3].map(n => (
-                    <div key={n} className="h-16 w-full bg-muted/40 animate-pulse rounded-lg"></div>
-                  ))}
-                </div>
-              ) : filteredExploitedCves.length === 0 ? (
-                <div className="p-12 border border-dashed rounded-lg text-center bg-card">
-                  <AlertTriangle className="h-12 w-12 text-muted-foreground/50 mx-auto mb-3" />
-                  <p className="text-muted-foreground font-medium">{t("noCvesFound") || "No CVEs found"}</p>
-                </div>
-              ) : (
-                <VulnerabilityTable pt={language === 'pt'} onInvestigate={handlePivotSearch} rows={filteredExploitedCves.map(cve => ({ id: cve.cveID, name: cve.vulnerabilityName, description: cve.shortDescription, published: cve.dateAdded, vendor: cve.vendorProject, product: cve.product, cvss: recentCves.find(row => row.id === cve.cveID)?.cvss ?? null, kev: true, mitigation: cve.requiredAction, dueDate: cve.dueDate }))} />
-              )}
-            </TabsContent>
-
-            {/* Recent CVEs list */}
-            <TabsContent value="recent" className="pt-4">
-              {loadingCves ? (
-                <div className="space-y-3 py-6">
-                  {[1, 2, 3].map(n => (
-                    <div key={n} className="h-16 w-full bg-muted/40 animate-pulse rounded-lg"></div>
-                  ))}
-                </div>
-              ) : cveError ? (
-                <div className="p-8 border border-destructive/20 rounded-lg bg-destructive/5 text-center">
-                  <AlertTriangle className="h-10 w-10 text-destructive mx-auto mb-3" />
-                  <p className="text-destructive font-medium">{cveError}</p>
-                </div>
-              ) : filteredRecentCves.length === 0 ? (
-                <div className="p-12 border border-dashed rounded-lg text-center bg-card">
-                  <AlertTriangle className="h-12 w-12 text-muted-foreground/50 mx-auto mb-3" />
-                  <p className="text-muted-foreground font-medium">{t("noCvesFound") || "No CVEs found"}</p>
-                </div>
-              ) : (
-                <VulnerabilityTable pt={language === 'pt'} onInvestigate={handlePivotSearch} rows={filteredRecentCves.map(cve => ({ id: cve.id, description: cve.summary, published: cve.Published, cvss: cve.cvss, kev: exploitedCves.some(row => row.cveID === cve.id), source: cve.source, mitigation: cve.mitigation, vector: cve.vectorString, references: cve.references }))} />
-              )}
-            </TabsContent>
-          </Tabs>
-
-        </div>
-    </PageLayout>
-  );
-};
-
-export default CveDashboard;

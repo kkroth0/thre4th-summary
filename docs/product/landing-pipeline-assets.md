@@ -19,3 +19,9 @@ As imagens v1 permanecem intactas. A landing sobrepõe partículas e pulsos veto
 `src/lib/landingPipelineMotion.ts` compartilha trajetórias e tempos entre a animação SVG e o exportador offline. Os GIFs PT/EN em `public/images/etl-pipeline-{pt,en}-animated-v2.gif` têm 1440 × 600 px, 160 quadros a 20 fps, repetição contínua e paleta fixa; quadros transparentes preservam os pixels que não mudam para reduzir o arquivo e evitar cintilação. Estão disponíveis pelo link de download da landing. A animação foi programada; não usa novas gerações de imagem nem altera textos do diagrama.
 
 Para reproduzir os GIFs com Node 24, instale `@napi-rs/canvas` e `gifenc` em uma pasta separada de ferramentas e rode `node scripts/render-landing-pipeline-gif.mjs <pasta-das-ferramentas> [pasta-dos-quadros-de-verificação]`. Essas bibliotecas são usadas apenas na exportação, sem dependências adicionais na aplicação.
+
+## Animação v3 — reprodução automática
+
+A pedido do usuário, a ilustração passa a iniciar automaticamente quando entra na tela, inclusive com preferência do sistema por movimento reduzido. O botão discreto de pausa permanece disponível. A animação ganha trens de partículas, rastros de luz, realce dos cartões, varreduras de processamento, órbita na extração e distribuição das evidências para cada ferramenta. Continua suspensa fora da tela e em aba oculta. O ciclo é ilustrativo, sem representar atividade em tempo real.
+
+Os GIFs v3 PT/EN preservam a composição original e têm 200 quadros a 25 fps, em 1440 × 600 px, com duração de 8 segundos. A paleta fixa agora inclui amostras das etapas iluminadas. Os v2 são preservados como versões anteriores; o exportador gera os novos arquivos `etl-pipeline-{pt,en}-animated-v3.gif`.

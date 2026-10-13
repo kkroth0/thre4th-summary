@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
-import { ChevronRight, Crosshair, Database, Globe2, Search, Target, UsersRound, X } from 'lucide-react';
+import { ChevronDown, ChevronRight, Crosshair, Globe2, Search, Target, UsersRound, X } from 'lucide-react';
 import { PageLayout } from '@/components/PageLayout';
 import { LoadingRows } from '@/components/LoadingState';
 import { Button } from '@/components/ui/button';
@@ -41,11 +41,12 @@ function ActorFilter({ label, value, onChange, options, icon: Icon }: {
   label: string; value: string; onChange: (value: string) => void;
   options: { value: string; label: string }[]; icon: typeof Globe2;
 }) {
-  return <label className="actor-filter inline-flex items-center gap-2">
+  return <label className="actor-filter relative flex min-w-0 items-center gap-2 focus-within:ring-2 focus-within:ring-ring">
     <Icon className="pointer-events-none h-4 w-4 shrink-0 text-muted-foreground" />
-    <select aria-label={label} value={value} onChange={event => onChange(event.target.value)} className="min-w-0 max-w-48 bg-transparent text-[13px] font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring">
+    <select aria-label={label} title={options.find(option => option.value === value)?.label || label} value={value} onChange={event => onChange(event.target.value)} className="w-full min-w-0 appearance-none truncate bg-transparent py-2 pr-5 text-xs font-medium outline-none">
       <option value={ALL}>{label}</option>{options.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
     </select>
+    <ChevronDown className="pointer-events-none absolute right-3 h-3.5 w-3.5 text-muted-foreground" />
   </label>;
 }
 
@@ -59,7 +60,7 @@ export default function Actors() {
   const activity = useQuery({ queryKey: ['actor-activity', auth.login || ''], queryFn: ({ signal }) => fetchActorActivity(signal), enabled: auth.authenticated, staleTime: 300_000, retry: false });
   const [query, setQuery] = useState(''); const [country, setCountry] = useState(ALL);
   const [sector, setSector] = useState(ALL); const [target, setTarget] = useState(ALL);
-  const [motivation, setMotivation] = useState(ALL); const [source, setSource] = useState(ALL);
+  const [motivation, setMotivation] = useState(ALL);
   const [sort, setSort] = useState<Sort>('name');
   const [page, setPage] = useState(1); const [pageSize, setPageSize] = useState(25);
   const catalog = useQuery({ queryKey: ['actor-catalog'], queryFn: async ({ signal }) => {
@@ -71,7 +72,7 @@ export default function Actors() {
   const openActor = (id: string, section?: string) => { listScroll.current = window.scrollY; setParams(previous => { const next = new URLSearchParams(previous); next.set('actor', id); if (section) next.set('section', section); else next.delete('section'); return next; }); };
   const closeActor = () => setParams(previous => { const next = new URLSearchParams(previous); next.delete('actor'); next.delete('section'); return next; }, { replace: true });
   useEffect(() => { window.scrollTo({ top: actorId ? 0 : listScroll.current }); }, [actorId]);
-  useEffect(() => { setPage(1); }, [query, country, sector, target, motivation, source, sort]);
+  useEffect(() => { setPage(1); }, [query, country, sector, target, motivation, sort]);
   const filtered = useMemo(() => {
     const needle = query.trim().toLocaleLowerCase();
     return sortActors(actors.filter(actor => {
@@ -79,16 +80,13 @@ export default function Actors() {
       if (sector !== ALL && !actor.sectors?.includes(sector)) return false;
       if (target !== ALL && !actor.targets?.includes(target)) return false;
       if (motivation !== ALL && actor.motivation !== motivation) return false;
-      if (source === 'attack' && !actor.source?.includes('attack')) return false;
-      if (source === 'misp' && (!actor.source?.includes('misp') || actor.source.includes('attack'))) return false;
-      if (source === 'ransomware' && !actor.source?.includes('ransomware.live')) return false;
       return !needle || [actor.name, ...(actor.aliases || []), actor.country, actor.motivation, ...(actor.sectors || []), ...(actor.targets || []), actorSourceLabel(actor.source)].join(' ').toLocaleLowerCase().includes(needle);
     }), sort);
-  }, [actors, country, sector, target, motivation, source, query, sort]);
+  }, [actors, country, sector, target, motivation, query, sort]);
   const current = Math.min(page, Math.max(1, Math.ceil(filtered.length / pageSize)));
   const shown = filtered.slice((current - 1) * pageSize, current * pageSize);
-  const active = Boolean(query || [country, sector, target, motivation, source].some(value => value !== ALL));
-  const clear = () => { setQuery(''); setCountry(ALL); setSector(ALL); setTarget(ALL); setMotivation(ALL); setSource(ALL); };
+  const active = Boolean(query || [country, sector, target, motivation].some(value => value !== ALL));
+  const clear = () => { setQuery(''); setCountry(ALL); setSector(ALL); setTarget(ALL); setMotivation(ALL); };
   const choices = (values: string[]) => values.filter(Boolean).map(value => ({ value, label: value }));
   const facetFilter = (type: 'country' | 'sector' | 'motivation', value: string) => { clear(); ({ country: setCountry, sector: setSector, motivation: setMotivation })[type](value); setView('catalog'); };
   const pager = <DataPager pt={pt} total={filtered.length} page={current} pageSize={pageSize} pageSizes={[25, 50, 100]} onPage={setPage} onPageSize={size => { setPageSize(size); setPage(1); }} />;
@@ -107,18 +105,16 @@ export default function Actors() {
         <TabsContent value="overview">{catalog.isLoading ? <LoadingRows rows={6} /> : catalog.isError ? <p role="alert">{pt ? 'Catálogo indisponível.' : 'Catalog unavailable.'}</p> : <ActorsOverview actors={actors} activity={activity.data} pt={pt} onOpen={openActor} onView={setView} onFilter={facetFilter} />}</TabsContent>
         <TabsContent value="global">{catalog.isLoading ? <LoadingRows rows={6} /> : catalog.isError ? <p role="alert">{pt ? 'Catálogo indisponível.' : 'Catalog unavailable.'}</p> : <ActorsGlobal actors={actors} pt={pt} onFilter={facetFilter} />}</TabsContent>
         <TabsContent value="catalog">
-          <section className="actor-surface overflow-hidden">
+          <section className="actor-surface actor-catalog overflow-hidden">
             <header className="px-5 pt-6 sm:px-7 sm:pt-7"><h1 className="text-xl font-semibold tracking-tight">{actorPageCopy(language).title}</h1><p className="mt-1 text-sm text-muted-foreground">{pt ? 'Explore os atores e filtre por origem, alvos e metadados.' : 'Browse actors and filter by origin, targets and metadata.'}</p></header>
-            <div className="flex flex-wrap items-center gap-2 px-5 pb-5 pt-5 sm:px-7">
-              <div className="relative w-full sm:w-72"><Search className="pointer-events-none absolute left-3.5 top-3 h-4 w-4 text-muted-foreground" /><Input aria-label={pt ? 'Buscar ator' : 'Search actor'} value={query} onChange={event => setQuery(event.target.value)} placeholder={pt ? 'Buscar ator ou alias' : 'Search actor or alias'} className="h-10 rounded-full bg-muted/30 pl-10 text-sm" /></div>
+            <div className="actor-filters px-5 pb-4 pt-4 sm:px-7">
+              <div className="actor-filter-search relative min-w-0"><Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" /><Input aria-label={pt ? 'Buscar ator' : 'Search actor'} value={query} onChange={event => setQuery(event.target.value)} placeholder={pt ? 'Buscar ator ou alias' : 'Search actor or alias'} className="h-9 rounded-lg bg-muted/30 pl-9 text-xs" /></div>
               <ActorFilter label={pt ? 'Origem' : 'Origin'} value={country} onChange={setCountry} options={choices([...new Set(countries.map(actorOrigin))].sort())} icon={Globe2} />
               <ActorFilter label={pt ? 'Países alvo' : 'Target countries'} value={target} onChange={setTarget} options={choices(targets)} icon={UsersRound} />
               <ActorFilter label={pt ? 'Setores alvo' : 'Target sectors'} value={sector} onChange={setSector} options={choices(sectors)} icon={Target} />
               <ActorFilter label={pt ? 'Motivação' : 'Motivation'} value={motivation} onChange={setMotivation} options={choices([...new Set(actors.map(actor => actor.motivation))].sort())} icon={Crosshair} />
-              <ActorFilter label={pt ? 'Fonte' : 'Source'} value={source} onChange={setSource} options={[{ value: 'attack', label: 'MITRE ATT&CK' }, { value: 'misp', label: pt ? 'Só MISP' : 'MISP only' }, { value: 'ransomware', label: 'Ransomware.live' }]} icon={Database} />
-              {active && <Button variant="ghost" size="sm" className="rounded-full text-xs" onClick={clear}><X className="mr-1 h-3.5 w-3.5" />{pt ? 'Limpar filtros' : 'Clear filters'}</Button>}
             </div>
-            <div className="mx-5 flex items-center justify-end border-t pt-3 sm:mx-7"><select aria-label={pt ? 'Ordenar atores' : 'Sort actors'} value={sort} onChange={event => setSort(event.target.value as Sort)} className="rounded-md border bg-background px-2 py-1.5 text-xs text-muted-foreground"><option value="name">{pt ? 'Nome A–Z' : 'Name A–Z'}</option><option value="techniques">{pt ? 'Mais TTPs' : 'Most TTPs'}</option><option value="country">{pt ? 'Origem A–Z' : 'Origin A–Z'}</option></select></div>
+            <div className="mx-5 flex items-center justify-end gap-3 border-t pt-3 sm:mx-7">{active && <Button variant="ghost" size="sm" className="mr-auto h-8 px-2 text-xs" onClick={clear}><X className="mr-1 h-3.5 w-3.5" />{pt ? 'Limpar filtros' : 'Clear filters'}</Button>}<select aria-label={pt ? 'Ordenar atores' : 'Sort actors'} value={sort} onChange={event => setSort(event.target.value as Sort)} className="rounded-md border bg-background px-2 py-1.5 text-xs text-muted-foreground"><option value="name">{pt ? 'Nome A–Z' : 'Name A–Z'}</option><option value="techniques">{pt ? 'Mais TTPs' : 'Most TTPs'}</option><option value="country">{pt ? 'Origem A–Z' : 'Origin A–Z'}</option></select></div>
             {catalog.isLoading ? <div className="p-6"><LoadingRows rows={7} /></div> : catalog.isError ? <div className="m-5 rounded-xl border border-destructive/30 bg-destructive/5 p-5 text-sm" role="alert"><p>{pt ? 'Não foi possível carregar os atores.' : 'Could not load actors.'}</p><Button variant="outline" size="sm" className="mt-3" onClick={() => void catalog.refetch()}>{pt ? 'Tentar novamente' : 'Retry'}</Button></div> : <>
               {pager}
               <div className="overflow-x-auto"><table className="actor-table w-full min-w-[1050px] text-left text-[13px]">

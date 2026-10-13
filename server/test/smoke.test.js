@@ -128,12 +128,33 @@ test('GET /api/auth/me unauthenticated', async () => {
     assert.equal(body.authenticated, false);
 });
 
-test('GET /api/cves/recent returns CVE list (static fallback offline)', async () => {
+test('GET /api/cves/recent never fabricates CVEs before source import', async () => {
     const r = await fetch(`${BASE}/api/cves/recent`);
     assert.equal(r.status, 200);
     const body = await r.json();
-    assert.ok(Array.isArray(body) && body.length > 0, 'expected non-empty array');
-    assert.ok(body[0].id?.startsWith('CVE-'), 'entries look like CVEs');
+    assert.deepEqual(body, []);
+    assert.match(r.headers.get('cache-control'), /no-store/);
+});
+
+test('public vulnerability APIs expose an empty pending catalog until real records arrive', async () => {
+    for (const view of ['listing', 'top', 'weaponized']) {
+        const response = await fetch(`${BASE}/api/vulnerabilities?view=${view}&page=1&size=25`);
+        assert.equal(response.status, 200);
+        assert.match(response.headers.get('cache-control'), /no-store/);
+        const body = await response.json();
+        assert.deepEqual(body.rows, []); assert.equal(body.total, 0);
+        assert.equal(body.status.yearsImported, 0);
+        assert.equal(body.status.sources.nvd.status, 'pending');
+    }
+    const overview = await fetch(`${BASE}/api/vulnerabilities/overview`);
+    assert.equal(overview.status, 200); assert.equal((await overview.json()).stats.total, 0);
+});
+
+test('vulnerability refresh requires authentication and unknown CVEs return 404', async () => {
+    const refresh = await fetch(`${BASE}/api/vulnerabilities/refresh`, { method: 'POST' });
+    assert.equal(refresh.status, 401);
+    const missing = await fetch(`${BASE}/api/vulnerabilities/CVE-2026-99999`);
+    assert.equal(missing.status, 404);
 });
 
 test('unknown API route yields 404, not a crash', async () => {

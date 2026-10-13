@@ -69,7 +69,26 @@
   .intel-table tbody tr:last-child td { border-bottom: 0; }
   .intel-table tbody tr:hover { @apply bg-muted/30; }
   .actor-surface { @apply rounded-3xl border border-border bg-card; }
-  .actor-filter { @apply h-10 max-w-full rounded-full border border-border bg-muted/30 px-4; }
+  .actor-filter { @apply h-9 rounded-lg border border-border bg-muted/30 px-3; }
+  .actor-catalog { container: actor-catalog / inline-size; }
+  .actor-filters { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.5rem; }
+  .actor-filter-search { grid-column: 1 / -1; }
+  .malware-filters { display: grid; align-items: center; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.5rem; }
+  .malware-search { grid-column: 1 / -1; }
+  @container actor-catalog (min-width: 600px) {
+    .actor-filters { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .malware-filters { grid-template-columns: minmax(0, 1.5fr) repeat(2, minmax(0, 1fr)); }
+    .malware-search { grid-column: auto; }
+    .malware-ips { grid-column: span 2; }
+    .vulnerability-filters { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  }
+  @container actor-catalog (min-width: 900px) {
+    .actor-filters { grid-template-columns: minmax(220px, 1.5fr) repeat(4, minmax(0, 1fr)); }
+    .actor-filter-search { grid-column: auto; }
+    .malware-filters { grid-template-columns: minmax(220px, 1.5fr) minmax(110px, 1fr) minmax(140px, 1fr) auto auto; }
+    .malware-ips { grid-column: auto; }
+    .vulnerability-filters { grid-template-columns: minmax(240px, 1.8fr) repeat(3, minmax(0, 1fr)); }
+  }
   .actor-filter select option { @apply bg-background text-foreground; }
   .actor-table th { @apply border-y border-border bg-muted/25 px-5 py-3 text-xs font-medium text-muted-foreground; }
   .actor-table td { @apply border-b border-border px-5 py-4 align-middle; }
@@ -380,9 +399,4 @@ All colors MUST be HSL.
 .custom-red-dot {
   background: transparent !important;
   border: none !important;
-}
-@media (prefers-reduced-motion: reduce) {
-  .pipeline-motion:not([data-motion-enabled="true"]) {
-    display: none;
-  }
 }

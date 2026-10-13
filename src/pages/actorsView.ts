@@ -36,21 +36,36 @@ export type OrgProfile = {
 
 export type ActorMatch<A> = { actor: A; sectorHits: string[]; regionHits: string[]; score: number };
 
-const overlap = (a: string[] | undefined, b: string[]) => (a || []).filter((value) => b.includes(value));
+const normalizeContext = (value: string) => {
+  let text = value.trim();
+  if (/^[A-Z]{2}$/.test(text)) { try { text = new Intl.DisplayNames(['en'], { type: 'region' }).of(text) || text; } catch { /* keep the original */ } }
+  const normalized = text.normalize('NFKD').replace(/\p{Diacritic}/gu, '').toLocaleLowerCase().replace(/\s+/g, ' ');
+  const aliases: Record<string, string> = { financial: 'finance', 'financial services': 'finance', 'finance/banking': 'finance', banking: 'finance', 'russian federation': 'russia', 'united states of america': 'united states', 'iran (islamic republic of)': 'iran', brasil: 'brazil' };
+  return aliases[normalized] || normalized;
+};
+const overlap = (a: string[] | undefined, b: string[]) => {
+  const wanted = new Set(b.map(normalizeContext));
+  const seen = new Set<string>();
+  return (a || []).filter(value => {
+    const normalized = normalizeContext(value);
+    if (!wanted.has(normalized) || seen.has(normalized)) return false;
+    seen.add(normalized); return true;
+  });
+};
 
 /**
  * Atores que atacam o setor OU a região do perfil, do mais aderente ao menos.
  * Setor pesa o dobro da região: quem ataca o seu ramo é mais relevante que
  * quem só passa pelo seu continente.
  */
-export function matchActors<A extends Actor>(actors: A[], profile: OrgProfile): ActorMatch<A>[] {
+export function matchActors<A extends Actor>(actors: A[], profile: OrgProfile, mode: 'any' | 'all' = 'any'): ActorMatch<A>[] {
   return actors
     .map((actor) => {
       const sectorHits = overlap(actor.sectors, profile.sectors);
       const regionHits = overlap(actor.targets, profile.regions);
       return { actor, sectorHits, regionHits, score: sectorHits.length * 2 + regionHits.length };
     })
-    .filter((match) => match.score > 0)
+    .filter(match => match.score > 0 && (mode === 'any' || ((!profile.sectors.length || match.sectorHits.length > 0) && (!profile.regions.length || match.regionHits.length > 0))))
     .sort((a, b) =>
       b.score - a.score
       || b.actor.technique_count - a.actor.technique_count

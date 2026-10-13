@@ -27,6 +27,7 @@ import { createMalwareCatalog } from './malwareCatalog.js';
 import { createPhishingSources } from './phishingSources.js';
 import { createWhoisLookup } from './whoisLookup.js';
 import { createDomainIntelligence, domainTarget } from './domainIntelligence.js';
+import { createVulnerabilityCatalog } from './vulnerabilityCatalog.js';
 import { actorPublications, buildActorActivity, buildActorEvidence } from './actorEvidence.js';
 import { otxThrottled, OTX_TIMEOUT_MS } from './otxGate.js';
 import { findMentions, findDomainMentions } from './newsIocs.js';
@@ -2888,229 +2889,42 @@ const assertSafePublicUrl = async (raw) => {
 };
 
 
-// Latest CVEs from CIRCL
-// NIST NVD 2.0 — recently published CVEs (last 10 days). Sending NVD_API_KEY
-// raises the rate limit (50 req/30s vs 5); the endpoint also works keyless but
-// throttles harder. Mapped to the same shape the CIRCL/fallback paths return.
-async function fetchRecentNvdCves() {
-    const end = new Date();
-    const start = new Date(end.getTime() - 10 * 24 * 60 * 60 * 1000);
-    const iso = (d) => d.toISOString().slice(0, 23); // ISO-8601, no trailing Z
-    const headers = {};
-    const nvdKey = (process.env.NVD_API_KEY || '').trim();
-    if (nvdKey) headers.apiKey = nvdKey;
-
-    const resp = await axios.get('https://services.nvd.nist.gov/rest/json/cves/2.0', {
-        params: { pubStartDate: iso(start), pubEndDate: iso(end), resultsPerPage: 100 },
-        headers,
-        timeout: 15000,
-    });
-
-    const vulns = Array.isArray(resp.data?.vulnerabilities) ? resp.data.vulnerabilities : [];
-    return vulns
-        .map((entry) => entry.cve)
-        .filter((cve) => cve && typeof cve.id === 'string' && cve.id.startsWith('CVE-'))
-        .map((cve) => {
-            const metrics = cve.metrics || {};
-            const metric = (metrics.cvssMetricV31 || metrics.cvssMetricV30
-                || metrics.cvssMetricV40 || metrics.cvssMetricV2 || [])[0];
-            const cvssData = metric?.cvssData || {};
-            const refs = (cve.references || []).map((r) => r.url).filter(Boolean);
-            return {
-                id: cve.id,
-                cvss: typeof cvssData.baseScore === 'number' ? cvssData.baseScore : null,
-                summary: (cve.descriptions || []).find((d) => d.lang === 'en')?.value || 'No description available.',
-                Published: cve.published,
-                Modified: cve.lastModified || cve.published,
-                source: 'NIST NVD (National Vulnerability Database)',
-                vectorString: cvssData.vectorString || 'N/A',
-                mitigation: 'Patch update recommended. Review vendor security advisories and apply the latest available software packages.',
-                references: refs.length ? refs.slice(0, 6) : [`https://nvd.nist.gov/vuln/detail/${cve.id}`],
-            };
-        })
-        .sort((a, b) => new Date(b.Published || 0) - new Date(a.Published || 0));
-}
-
-app.get('/api/cves/recent', async (req, res) => {
-    const now = Date.now();
-    if (memoryCache.recentCves.data && memoryCache.recentCves.expiresAt > now) {
-        return res.json(memoryCache.recentCves.data);
-    }
-
-    const fallbacks = [
-        {
-            id: "CVE-2026-1082",
-            cvss: 9.8,
-            summary: "Critical remote code execution vulnerability in Apache HTTP Server when configured as a reverse proxy, allowing unauthenticated attackers to execute arbitrary code via a specifically crafted header.",
-            Published: new Date().toISOString(),
-            source: "NIST NVD (National Vulnerability Database)",
-            vectorString: "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
-            mitigation: "Upgrade to Apache HTTP Server version 2.4.60 or later. Apply vendor-provided patches immediately. Restrict reverse proxy configuration access from unauthorized external IP blocks.",
-            references: [
-                "https://nvd.nist.gov/vuln/detail/CVE-2026-1082",
-                "https://httpd.apache.org/security/vulnerabilities_24.html",
-                "https://github.com/apache/httpd/commit/a8d3e91d"
-            ]
-        },
-        {
-            id: "CVE-2026-2115",
-            cvss: 8.8,
-            summary: "Privilege escalation vulnerability in Microsoft Windows Win32k component allowing a local attacker to bypass access controls and run arbitrary commands as SYSTEM.",
-            Published: new Date(Date.now() - 3600000).toISOString(),
-            source: "NIST NVD (National Vulnerability Database)",
-            vectorString: "CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H",
-            mitigation: "Apply the May 2026 security updates from Microsoft. Enable Virtualization-Based Security (VBS) to mitigate kernel exploits. Monitor for LSASS process injection events.",
-            references: [
-                "https://nvd.nist.gov/vuln/detail/CVE-2026-2115",
-                "https://msrc.microsoft.com/update-guide/vulnerability/CVE-2026-2115",
-                "https://www.exploit-db.com/exploits/52998"
-            ]
-        },
-        {
-            id: "CVE-2026-3024",
-            cvss: 7.5,
-            summary: "Denial of service vulnerability in OpenSSL package due to an infinite loop in the certificate verification process triggered by a malformed certificate chain.",
-            Published: new Date(Date.now() - 7200000).toISOString(),
-            source: "NIST NVD (National Vulnerability Database)",
-            vectorString: "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H",
-            mitigation: "Apply the OpenSSL 3.3.1 patch update or compile with no-ssl3 configurations. Implement web application firewall (WAF) rule filters checking TLS client hello packet structures.",
-            references: [
-                "https://nvd.nist.gov/vuln/detail/CVE-2026-3024",
-                "https://www.openssl.org/news/secadv/20260522.txt",
-                "https://github.com/openssl/openssl/issues/23490"
-            ]
-        },
-        {
-            id: "CVE-2026-1492",
-            cvss: 6.5,
-            summary: "Cross-site scripting (XSS) vulnerability in WordPress core files when utilizing certain block components, enabling authenticated contributors to inject malicious JavaScript.",
-            Published: new Date(Date.now() - 14400000).toISOString(),
-            source: "NIST NVD (National Vulnerability Database)",
-            vectorString: "CVSS:3.1/AV:N/AC:L/PR:L/UI:R/S:C/C:L/I:L/A:N",
-            mitigation: "Upgrade WordPress installation to version 6.9.2 or apply the official security patch. Restrict contributor-level privileges or implement strict Content Security Policy (CSP) headers.",
-            references: [
-                "https://nvd.nist.gov/vuln/detail/CVE-2026-1492",
-                "https://wordpress.org/news/2026/05/wordpress-6-9-2-security-release/",
-                "https://wpscan.com/vulnerability/wp-692-xss"
-            ]
-        },
-        {
-            id: "CVE-2026-0518",
-            cvss: 9.9,
-            summary: "SQL Injection vulnerability in GitLab CE/EE allowing unauthorized remote attackers to retrieve database keys and configuration hashes via vulnerable REST API endpoints.",
-            Published: new Date(Date.now() - 86400000).toISOString(),
-            source: "NIST NVD (National Vulnerability Database)",
-            vectorString: "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:C/C:H/I:H/A:H",
-            mitigation: "Apply GitLab security releases 17.0.3, 16.11.5, or 16.10.8 immediately. Rotate GitLab secrets (`secrets.yml`) if database leak indicators are found. Disable unused REST API access paths.",
-            references: [
-                "https://nvd.nist.gov/vuln/detail/CVE-2026-0518",
-                "https://about.gitlab.com/releases/2026/05/security-release-gitlab-17-0-3-released/",
-                "https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2026-0518"
-            ]
-        }
-    ];
-
-    // Primary source: NIST NVD (authenticated via NVD_API_KEY). Falls through to
-    // CIRCL and then the static fallbacks below if it errors or returns too few.
-    try {
-        const nvd = await fetchRecentNvdCves();
-        if (nvd.length >= 5) {
-            const result = nvd.slice(0, 50);
-            memoryCache.recentCves.data = result;
-            memoryCache.recentCves.expiresAt = now + memoryCache.recentCves.ttl;
-            return res.json(result);
-        }
-    } catch (error) {
-        console.warn('NVD recent CVE fetch failed, falling back to CIRCL:', error.message);
-    }
-
-    try {
-        const response = await axios.get('https://cve.circl.lu/api/last', { timeout: 8000 });
-        if (Array.isArray(response.data)) {
-            const formatted = [];
-            response.data.forEach(item => {
-                if (item.id) {
-                    formatted.push({
-                        id: item.id,
-                        cvss: item.cvss,
-                        summary: item.summary,
-                        Published: item.Published,
-                        Modified: item.Modified,
-                        source: "NIST NVD (via CIRCL)",
-                        vectorString: item.cvss_vector || "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
-                        mitigation: "Patch update recommended. Review vendor security advisories and apply latest available software packages.",
-                        references: item.references || [`https://nvd.nist.gov/vuln/detail/${item.id}`]
-                    });
-                    return;
-                }
-                
-                const document = item.document || {};
-                const tracking = document.tracking || {};
-                const docId = tracking.id || 'Unknown-Advisory';
-                const docSummary = (document.notes?.find(n => n.category === 'summary' || n.category === 'general'))?.text || (document.title || 'No summary available.');
-                const publishedDate = tracking.initial_release_date || tracking.current_release_date || new Date().toISOString();
-                
-                if (item.vulnerabilities && item.vulnerabilities.length > 0) {
-                    item.vulnerabilities.forEach(vuln => {
-                        const cveId = vuln.cve || docId;
-                        
-                        let cvss = null;
-                        let vectorString = "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H";
-                        if (vuln.scores && vuln.scores.length > 0) {
-                            const scoreObj = vuln.scores[0];
-                            cvss = scoreObj.cvss_v3?.baseScore || scoreObj.cvss_v2?.baseScore || null;
-                            vectorString = scoreObj.cvss_v3?.vectorString || scoreObj.cvss_v2?.vectorString || vectorString;
-                        }
-                        
-                        const vulnNote = vuln.notes?.find(n => n.category === 'summary' || n.category === 'general');
-                        const summaryText = vulnNote ? vulnNote.text : (vuln.title || docSummary);
-                        
-                        formatted.push({
-                            id: cveId,
-                            cvss: cvss,
-                            summary: summaryText,
-                            Published: publishedDate,
-                            Modified: tracking.current_release_date || publishedDate,
-                            source: "NIST NVD (via CIRCL)",
-                            vectorString: vectorString,
-                            mitigation: "Patch update recommended. Review vendor security advisories and apply latest available software packages.",
-                            references: vuln.references?.map(r => r.url) || [`https://nvd.nist.gov/vuln/detail/${cveId}`]
-                        });
-                    });
-                } else {
-                    formatted.push({
-                        id: docId,
-                        cvss: null,
-                        summary: docSummary,
-                        Published: publishedDate,
-                        Modified: tracking.current_release_date || publishedDate,
-                        source: "NIST NVD (via CIRCL)",
-                        vectorString: "N/A",
-                        mitigation: "Patch update recommended. Review vendor security advisories and apply latest available software packages.",
-                        references: [`https://nvd.nist.gov/vuln/detail/${docId}`]
-                    });
-                }
-            });
-
-            let result = formatted.filter(item => item.id && item.id.startsWith("CVE-"));
-            if (result.length < 5) {
-                result = [...result, ...fallbacks].slice(0, 50);
-            } else {
-                result = result.slice(0, 50);
-            }
-
-            memoryCache.recentCves.data = result;
-            memoryCache.recentCves.expiresAt = now + memoryCache.recentCves.ttl;
-            return res.json(result);
-        }
-        throw new Error("Invalid response format from CIRCL");
-    } catch (error) {
-        console.error("CIRCL API Error, falling back to mock CVE data:", error.message);
-        res.json(fallbacks);
-    }
-});
-
 // Exploited CVEs from CISA KEV
+const vulnerabilityCatalog = createVulnerabilityCatalog({
+    filePath: process.env.NODE_ENV === 'test' ? ':memory:' : path.join(__dirname, '.vulnerability-catalog.sqlite'),
+    fetchKev: async () => {
+        const rows = await getKevCatalog();
+        if (memoryCache.kev.expiresAt <= Date.now() || !rows.length) throw new Error('KEV source is stale');
+        return rows;
+    },
+});
+app.use('/api/vulnerabilities', (req, res, next) => { res.set('Cache-Control', 'no-store'); next(); });
+// Compatibility for older consumers; only imported source records, no synthetic fallback.
+app.get('/api/cves/recent', (req, res) => {
+    res.set('Cache-Control', 'no-store');
+    res.json(vulnerabilityCatalog.list({ size: 50 }).rows.map(row => ({
+        id: row.id, cvss: row.cvss, summary: row.description, Published: row.published,
+        Modified: row.modified, source: row.source, vectorString: row.vector,
+        references: row.references.map(reference => reference.url),
+    })));
+});
+app.get('/api/vulnerabilities/overview', (req, res) => res.json(vulnerabilityCatalog.overview()));
+app.get('/api/vulnerabilities', (req, res) => res.json(vulnerabilityCatalog.list({
+    view: ['listing', 'top', 'weaponized'].includes(req.query.view) ? req.query.view : 'listing',
+    query: typeof req.query.q === 'string' ? req.query.q : '',
+    severity: typeof req.query.severity === 'string' ? req.query.severity : '',
+    vendor: typeof req.query.vendor === 'string' ? req.query.vendor : '',
+    signal: typeof req.query.signal === 'string' ? req.query.signal : '',
+    page: req.query.page, size: req.query.size,
+})));
+app.post('/api/vulnerabilities/refresh', requireAuth, (req, res) => {
+    void vulnerabilityCatalog.sync({ force: true });
+    res.status(202).json({ status: vulnerabilityCatalog.status() });
+});
+app.get('/api/vulnerabilities/:id', (req, res) => {
+    const data = vulnerabilityCatalog.detail(String(req.params.id).toUpperCase());
+    return data ? res.json(data) : res.status(404).json({ error: 'CVE not found in the imported catalog' });
+});
 app.get('/api/cves/exploited', async (req, res) => {
     const now = Date.now();
     if (memoryCache.exploitedCves.data && memoryCache.exploitedCves.expiresAt > now) {
@@ -3772,6 +3586,18 @@ app.listen(PORT, () => {
     // Booting a test server must not launch real scheduled collections.
     if (process.env.NODE_ENV === 'test') return;
     console.log(`Server running on port ${PORT}`);
+    let vulnerabilityRetries = 0;
+    const refreshVulnerabilities = async () => {
+        try {
+            await vulnerabilityCatalog.sync();
+            if (Object.values(vulnerabilityCatalog.status().sources).some(source => ['error', 'stale'].includes(source.status)) && vulnerabilityRetries < 3) {
+                vulnerabilityRetries++;
+                setTimeout(refreshVulnerabilities, 60_000).unref();
+            }
+        } catch (error) { console.warn('Vulnerability catalog refresh failed:', error.code || error.name); }
+    };
+    setTimeout(refreshVulnerabilities, 1000).unref();
+    setInterval(() => { vulnerabilityRetries = 0; void refreshVulnerabilities(); }, 6 * 60 * 60 * 1000).unref();
     // Prime the newsletter RSS feed cache and schedule background updates
     refreshNewsletterFeed();
     setInterval(refreshNewsletterFeed, memoryCache.newsletter.ttl);

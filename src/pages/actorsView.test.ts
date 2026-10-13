@@ -22,6 +22,19 @@ test("modelagem: setor pesa o dobro da região e ator sem interseção fica de f
   ]);
 });
 
+test('modelagem: combina aliases e normaliza sem contar o mesmo setor duas vezes', () => {
+  const matches = matchActors([{ id: 'a', name: 'Example', technique_count: 1, sectors: ['Financial', 'financial services', 'Financial'], targets: ['Brazil', 'Brazil'] }], { id: 'p', name: 'P', sectors: ['Finance'], regions: ['BR'] });
+  assert.equal(matches.length, 1); assert.equal(matches[0].score, 3);
+  assert.deepEqual(matches[0].sectorHits, ['Financial']); assert.deepEqual(matches[0].regionHits, ['Brazil']);
+});
+
+test('modelagem: exigir setor e região exclui correspondências parciais, sem exigir dimensão vazia', () => {
+  const actors = [{ id: 'both', name: 'Both', technique_count: 1, sectors: ['Finance'], targets: ['Brazil'] }, { id: 'sector', name: 'Sector', technique_count: 2, sectors: ['Finance'], targets: ['Japan'] }];
+  const profile = { id: 'p', name: 'P', sectors: ['Finance'], regions: ['Brazil'] };
+  assert.deepEqual(matchActors(actors, profile, 'all').map(match => match.actor.id), ['both']);
+  assert.equal(matchActors(actors, { ...profile, regions: [] }, 'all').length, 2);
+});
+
 test("a página se chama Atores de Ameaça em PT e ES", () => {
   assert.equal(actorPageCopy("pt").title, "Atores de Ameaça");
   assert.equal(actorPageCopy("es").title, "Actores de Amenaza");

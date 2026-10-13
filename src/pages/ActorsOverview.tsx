@@ -1,8 +1,9 @@
 import { useQuery } from '@tanstack/react-query';
+import { useState } from 'react';
 import { ArrowRight, Globe2, List, Target } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ActorAvatar } from '@/components/ActorAvatar';
-import { actorFacets, countryPaths } from './actorOverview';
+import { actorFacets, actorOrigin, countryPaths } from './actorOverview';
 import type { ActorListItem } from './actorsTypes';
 import type { ActorActivity } from '@/services/actorEvidence';
 
@@ -26,8 +27,33 @@ export function ActorsOverview({ actors, activity, pt, onOpen, onView, onFilter 
 }
 export function ActorsGlobal({ actors, pt, onFilter }: Pick<Props, 'actors' | 'pt' | 'onFilter'>) {
   const facets = actorFacets(actors);
+  const [hovered, setHovered] = useState<{ label: string; count: number } | null>(null);
   const map = useQuery({ queryKey: ['world-country-paths'], queryFn: async ({ signal }) => { const response = await fetch('/data/world-countries-110m.json', { signal }); if (!response.ok) throw new Error('Map unavailable'); return countryPaths(await response.json()); }, staleTime: Infinity, retry: false });
   const aliases: Record<string, string> = { 'United States of America': 'United States', 'Dem. Rep. Korea': 'North Korea', 'Korea': 'South Korea', 'Czechia': 'Czech Republic' };
   const max = Math.max(1, ...facets.countries.map(row => row.count));
-  return <section className="actor-surface p-6"><h1 className="text-xl font-semibold">{pt ? 'Atores · distribuição global' : 'Actors · global distribution'}</h1><p className="mt-2 text-sm text-muted-foreground">{pt ? 'Selecione um país para abrir a lista de atores com essa origem.' : 'Select a country to open its actor listing.'}</p><div className="mt-5 rounded-xl border bg-background p-4">{map.isError ? <p role="alert">{pt ? 'Mapa indisponível.' : 'Map unavailable.'}</p> : map.isPending ? <p role="status">{pt ? 'Carregando mapa…' : 'Loading map…'}</p> : <svg viewBox="0 0 900 450" className="w-full" aria-label={pt ? 'Mapa de países de origem' : 'Map of origin countries'} role="group">{map.data.map(country => { const label = aliases[country.name] || country.name; const count = facets.countries.find(row => row.label === label)?.count || 0; return <path key={country.name} d={country.path} stroke="hsl(var(--background))" strokeWidth="0.7" fill={count ? 'hsl(var(--primary))' : 'hsl(var(--muted))'} fillOpacity={count ? 0.25 + count / max * 0.75 : 1} role={count ? 'button' : undefined} tabIndex={count ? 0 : undefined} aria-label={`${label}: ${count}`} onClick={() => { if (count) onFilter('country', label); }} onKeyDown={event => { if (count && ['Enter', ' '].includes(event.key)) { event.preventDefault(); onFilter('country', label); } }} className={count ? 'cursor-pointer outline-none hover:stroke-primary focus:stroke-foreground' : ''}><title>{label}: {count}</title></path>; })}</svg>}</div><p className="mt-4 text-xs text-muted-foreground">{facets.unknown} {pt ? 'perfis sem país de origem informado' : 'profiles with unknown origin'}</p><div className="mt-5 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">{facets.countries.map(row => <button key={row.label} className="flex items-center justify-between rounded-lg border p-3 text-left text-sm hover:border-primary focus-visible:ring-2 focus-visible:ring-ring" onClick={() => onFilter('country', row.label)}><span>{row.label}</span><span className="font-mono text-primary">{row.count}</span></button>)}</div></section>;
+  const focus = hovered || facets.countries[0];
+  const countryButton = (row: { label: string; count: number }) => <button key={row.label} className="group relative flex w-full items-center justify-between gap-3 overflow-hidden rounded-lg px-3 py-2.5 text-left text-xs transition-colors hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" onClick={() => onFilter('country', row.label)}>
+    <span className="relative z-10">{row.label}</span><span className="relative z-10 font-mono text-primary">{row.count}</span>
+    <span aria-hidden="true" className="absolute bottom-0 left-3 h-px bg-primary/30" style={{ width: `${Math.max(3, row.count / max * 88)}%` }} />
+  </button>;
+  return <section className="actor-surface overflow-hidden">
+    <header className="flex flex-wrap items-start justify-between gap-4 border-b p-5 sm:p-6">
+      <div><h1 className="text-xl font-semibold">{pt ? 'Distribuição global' : 'Global distribution'}</h1><p className="mt-2 text-sm text-muted-foreground">{pt ? 'Explore os países de origem e abra os perfis associados.' : 'Explore countries of origin and open associated profiles.'}</p></div>
+      <div className="flex gap-5 text-xs text-muted-foreground"><span><strong className="mr-1 font-mono text-foreground">{facets.countries.length}</strong>{pt ? 'países' : 'countries'}</span><span><strong className="mr-1 font-mono text-foreground">{actors.length - facets.unknown}</strong>{pt ? 'perfis com origem' : 'profiles with origin'}</span></div>
+    </header>
+    <div className="grid lg:grid-cols-[minmax(0,1fr)_230px]">
+      <div className="min-w-0 bg-muted/10 p-4 sm:p-5">
+        <div className="mb-2 flex items-center justify-between gap-3 text-xs"><span className="font-medium">{focus?.label || (pt ? 'País de origem' : 'Country of origin')} <span className="ml-2 font-mono text-primary">{focus?.count || 0} {pt ? 'atores' : 'actors'}</span></span><span className="hidden text-muted-foreground sm:inline">{pt ? 'Clique para explorar' : 'Click to explore'}</span></div>
+        {map.isError ? <p role="alert" className="py-20 text-center text-sm text-muted-foreground">{pt ? 'Mapa indisponível.' : 'Map unavailable.'}</p> : map.isPending ? <p role="status" className="py-20 text-center text-sm text-muted-foreground">{pt ? 'Carregando mapa…' : 'Loading map…'}</p> : <svg viewBox="0 0 900 450" className="block w-full" aria-label={pt ? 'Mapa de países de origem' : 'Map of origin countries'} role="group" onMouseLeave={() => setHovered(null)}>{map.data.map(country => {
+          const label = actorOrigin(aliases[country.name] || country.name);
+          const count = facets.countries.find(row => row.label === label)?.count || 0;
+          const highlighted = hovered?.label === label;
+          return <path key={country.name} d={country.path} stroke={highlighted ? 'hsl(var(--foreground))' : 'hsl(var(--background))'} strokeWidth={highlighted ? 1.2 : 0.55} vectorEffect="non-scaling-stroke" fill={count ? 'hsl(var(--primary))' : 'hsl(var(--muted-foreground))'} fillOpacity={highlighted ? 0.95 : count ? 0.35 + Math.sqrt(count / max) * 0.65 : 0.17} role={count ? 'button' : undefined} tabIndex={count ? 0 : undefined} aria-label={`${label}: ${count}`} onMouseEnter={() => setHovered({ label, count })} onFocus={() => setHovered({ label, count })} onBlur={() => setHovered(null)} onClick={() => { if (count) onFilter('country', label); }} onKeyDown={event => { if (count && ['Enter', ' '].includes(event.key)) { event.preventDefault(); onFilter('country', label); } }} className={count ? 'cursor-pointer outline-none transition-colors focus:stroke-foreground' : ''}><title>{label}: {count}</title></path>;
+        })}</svg>}
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-[11px] text-muted-foreground"><span>{pt ? 'Origem atribuída nos perfis do catálogo' : 'Origin attributed in catalog profiles'}</span><div className="flex items-center gap-2"><span>{pt ? 'Menos' : 'Fewer'}</span>{[0.35, 0.55, 0.75, 1].map(opacity => <span key={opacity} aria-hidden="true" className="h-2.5 w-5 rounded-sm bg-primary" style={{ opacity }} />)}<span>{pt ? 'Mais atores' : 'More actors'}</span></div></div>
+      </div>
+      <aside className="border-t p-4 lg:border-l lg:border-t-0"><h2 className="mb-3 px-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{pt ? 'Principais origens' : 'Top origins'}</h2><div className="grid gap-1 sm:grid-cols-2 lg:grid-cols-1">{facets.countries.slice(0, 8).map(countryButton)}</div><p className="mt-4 rounded-lg bg-muted/30 px-3 py-3 text-xs leading-5 text-muted-foreground"><strong className="font-mono text-foreground">{facets.unknown}</strong> {pt ? 'perfis sem país de origem informado' : 'profiles with unknown origin'}</p></aside>
+    </div>
+    <details className="border-t px-5 py-4"><summary className="cursor-pointer text-xs font-medium text-muted-foreground hover:text-foreground">{pt ? 'Todos os países de origem' : 'All countries of origin'} · {facets.countries.length}</summary><div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">{facets.countries.map(countryButton)}</div></details>
+  </section>;
 }

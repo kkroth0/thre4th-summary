@@ -1,5 +1,6 @@
 // Coordinates follow the original 1942 × 809 illustration. Shared by SVG and GIF.
 export const PIPELINE_CYCLE = 8;
+export const PIPELINE_PACKET_OFFSETS = [0, 0.12, 0.24];
 type Point = [number, number];
 type Curve = [Point, Point, Point, Point];
 export type PipelineFlow = { id: string; curves: Curve[]; start: number; duration: number };
@@ -24,13 +25,26 @@ export const pipelineFlows: PipelineFlow[] = [
   { id: 'ttp', curves: [line([1139, 478], [1201, 519])], start: 3.9, duration: 0.65 },
   { id: 'reference', curves: [line([1079, 483], [1079, 562])], start: 4, duration: 0.65 },
   { id: 'investigation', curves: [line([1247, 426], [1485, 426])], start: 5.1, duration: 1.1 },
+  ...[227, 330, 436, 545, 652].map((y, i) => ({
+    id: `delivery-${i}`, start: 6.1 + i * 0.12, duration: 0.55,
+    curves: [[[1485, 426], [1506, 426], [1497, y], [1525, y]]] as Curve[],
+  })),
 ];
 
 export const pipelinePulses = [
+  ...[168, 258, 346, 438, 531, 621].map((y, i) => ({
+    id: `source-${i}`, x: 81, y, width: 204, height: 70, start: 0.07 + i * 0.09, duration: 1,
+  })),
   { id: 'extraction', x: 423, y: 378, width: 307, height: 96, start: 1.8, duration: 1.2 },
   { id: 'event', x: 977, y: 369, width: 207, height: 109, start: 3.1, duration: 1.6 },
+  ...[
+    [1001, 182, 157, 95], [815, 258, 140, 100], [1202, 259, 142, 100],
+    [811, 492, 143, 100], [1206, 491, 143, 100], [989, 568, 184, 106],
+  ].map(([x, y, width, height], i) => ({
+    id: `entity-${i}`, x, y, width, height, start: 4 + i * 0.1, duration: 0.85,
+  })),
   ...[182, 285, 391, 500, 607].map((y, i) => ({
-    id: `tool-${i}`, x: 1525, y, width: 341, height: 90, start: 6.1 + i * 0.12, duration: 1,
+    id: `tool-${i}`, x: 1525, y, width: 341, height: 90, start: 6.65 + i * 0.12, duration: 0.75,
   })),
 ];
 
