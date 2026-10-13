@@ -3,6 +3,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { LayoutGrid, List } from 'lucide-react';
 import { StoryTable } from '@/components/workbench/StoryTable';
 import { NewsIocTable } from '@/components/workbench/NewsIocTable';
+import { NewsExportDialog } from '@/components/workbench/NewsExportDialog';
 
 import { SourceIdentity } from '@/components/SourceIdentity';
 import { ArrowLeft, Globe, BookOpen, AlertTriangle, Search, Mail, Eye, Filter, ChevronDown, RefreshCw, Share2, Loader2, Bookmark, X, PencilLine, ExternalLink, CheckCircle2, Settings2 } from "lucide-react";
@@ -710,6 +711,7 @@ const Newsletter = () => {
               </div>
 
               <div className="flex flex-wrap items-center gap-2 lg:shrink-0">
+                <NewsExportDialog pt={language === 'pt'} view={newsView} />
                 <Button asChild variant="outline" size="sm" className="h-9 gap-1.5 px-3 text-xs">
                   <Link
                     to="/settings?section=monitoring&from=/newsletter#news-vendors"

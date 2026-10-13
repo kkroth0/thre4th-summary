@@ -73,6 +73,7 @@ import { collectArticleTexts } from './articleCollector.js';
 import { enrichFeedItems, applyVulnerabilityContext, EXTRACTION_VERSION } from './feedEnrichment.js';
 import { createStoryStore } from './newsStoryStore.js';
 import { createNewsArchiveStore } from './newsArchiveStore.js';
+import { newsExportQuery, newsExportRows, newsExportCsv } from './newsExport.js';
 import { buildPhishingDataset, phishingQuery } from './phishingDataset.js';
 import { VENDOR_CATALOG } from './vendorCatalog.js';
 import { createNewsMonitoringStore, filterMonitoredNews, filterMonitoredStories } from './newsMonitoring.js';
@@ -1432,6 +1433,22 @@ app.get('/api/news/archive', requirePremium, (req, res) => {
     }
 });
 
+app.get('/api/news/export', requirePremium, (req, res) => {
+    try {
+        const options = newsExportQuery(req.query);
+        // Export the permanent archive, without the live feed's retention or UI pagination.
+        const publications = filterMonitoredNews(newsArchiveStore.list(options), newsMonitoringStore.get(req.user.sub), newsStoryStore.all());
+        const rows = newsExportRows(publications, options.dataset);
+        const filename = `threatsumm4ry-${options.dataset}-${options.from.slice(0, 10)}-${options.to.slice(0, 10)}.${options.format}`;
+        res.set('Cache-Control', 'private, no-store');
+        res.set('Content-Disposition', `attachment; filename="${filename}"`);
+        if (options.format === 'csv') return res.type('text/csv; charset=utf-8').send(newsExportCsv(rows, options.dataset));
+        res.json({ generatedAt: new Date().toISOString(), range: { from: options.from, to: options.to }, dataset: options.dataset, publications: publications.length, count: rows.length, rows });
+    } catch (error) {
+        res.status(error.status || 500).json({ error: error.status === 400 ? error.message : 'Não foi possível exportar o histórico.' });
+    }
+});
+
 // Quem já mencionou este indicador. Alimenta o Enriquecimento: o achado que
 // interessa não é "o IP existe", é "saiu no Unit 42, atribuído ao FunkSec".
 // requirePremium igual às outras rotas de notícia — é o mesmo acervo.
@@ -2224,7 +2241,7 @@ async function runExposureSchedulerTick() {
 // (saida-so, porta fechada) faz poll dos pendentes (GET jobs/pending), roda
 // o motor pesado, e devolve o JSON (POST job/result, 🔒). O front faz poll do
 // job (GET job) e baixa o JSON quando pronto; o PPT é preenchido localmente.
-const JOBS_STORE_PATH = path.join(__dirname, '.feed-jobs.json');
+const JOBS_STORE_PATH = process.env.FEED_JOBS_PATH || path.join(__dirname, '.feed-jobs.json');
 
 // Anexos entregues pelo worker: o deck no template SRR e o PDF dele convertido.
 // Vão pro DISCO, não pro store: juntos passam de 4 MB e o store é reescrito
@@ -2446,6 +2463,7 @@ app.get('/api/feed/jobs/pending', (req, res) => {
         .map((j) => ({
             id: j.id,
             url: j.url,
+            urls: Array.isArray(j.urls) && j.urls.length ? j.urls : [j.url],
             type: j.type,
             // Job anterior ao campo sai no padrão do motor (SRR_TEMPLATE do worker).
             ...(j.template ? { template: j.template } : {}),

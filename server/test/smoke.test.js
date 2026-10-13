@@ -17,6 +17,7 @@ const PREMIUM_OPEN_PATH = path.join(tmpdir(), `threatsumm4ry-smoke-premium-${POR
 const NEWS_MONITORING_PATH = path.join(tmpdir(), `threatsumm4ry-smoke-monitoring-${PORT}.json`);
 const USERS_STORE_PATH = path.join(tmpdir(), `threatsumm4ry-smoke-users-${PORT}.json`);
 const NEWS_ARCHIVE_PATH = path.join(tmpdir(), `threatsumm4ry-smoke-archive-${PORT}.json`);
+const FEED_JOBS_PATH = path.join(tmpdir(), `threatsumm4ry-smoke-jobs-${PORT}.json`);
 const ORG_PROFILES_PATH = path.join(tmpdir(), `threatsumm4ry-smoke-profiles-${PORT}.json`);
 const SECRETS_ENCRYPTION_KEY = 'smoke-only-encryption-secret';
 const SESSION_SECRET = 'test-secret';
@@ -54,8 +55,9 @@ test('domain investigation and actor archive endpoints enforce premium access an
 });
 
 before(async () => {
+    writeFileSync(FEED_JOBS_PATH, JSON.stringify({ 'smoke-multi-source': { id: 'smoke-multi-source', url: 'https://example.com/a', urls: ['https://example.com/a', 'https://example.com/b'], status: 'pending', createdAt: new Date().toISOString() } }));
     writeFileSync(NEWS_ARCHIVE_PATH, JSON.stringify([
-        { link: 'https://example.com/a', title: 'ClickFix phishing targets banks in Brazil', source: 'Research', pubDate: '2026-10-08T23:59:59.999Z', storyId: 'same' },
+        { link: 'https://example.com/a', title: 'ClickFix phishing targets banks in Brazil', source: 'Research', pubDate: '2026-10-08T23:59:59.999Z', storyId: 'same', iocs: { ips: ['9.9.9.10'], domains: ['example.net'] } },
         { link: 'https://example.com/b', title: 'ClickFix phishing campaign', source: 'News', pubDate: '2026-10-09T00:00:00Z', storyId: 'same' },
     ]));
     writeFileSync(ORG_PROFILES_PATH, JSON.stringify([
@@ -69,6 +71,7 @@ before(async () => {
             PORT: String(PORT), NODE_ENV: 'test', SESSION_SECRET,
             GITHUB_ALLOWED_LOGINS: 'tester', PREMIUM_OPEN_PATH, NEWS_MONITORING_PATH,
             USERS_STORE_PATH, NEWS_ARCHIVE_PATH, ORG_PROFILES_PATH, SECRETS_ENCRYPTION_KEY, URLSCAN_API_KEY: '',
+            FEED_JOBS_PATH, FEED_AGENT_SECRET: 'smoke-worker-secret',
         },
         stdio: 'ignore',
     });
@@ -83,7 +86,32 @@ after(() => {
     rmSync(`${NEWS_MONITORING_PATH}.tmp`, { force: true });
     rmSync(USERS_STORE_PATH, { force: true });
     rmSync(`${USERS_STORE_PATH}.tmp`, { force: true });
-    for (const target of [NEWS_ARCHIVE_PATH, ORG_PROFILES_PATH]) { rmSync(target, { force: true }); rmSync(`${target}.tmp`, { force: true }); }
+    for (const target of [NEWS_ARCHIVE_PATH, ORG_PROFILES_PATH, FEED_JOBS_PATH]) { rmSync(target, { force: true }); rmSync(`${target}.tmp`, { force: true }); }
+});
+
+test('the worker receives all selected sources and requires its dedicated secret', async () => {
+    assert.equal((await fetch(`${BASE}/api/feed/jobs/pending`)).status, 401);
+    const result = await fetch(`${BASE}/api/feed/jobs/pending`, { headers: { 'X-Feed-Secret': 'smoke-worker-secret' } }).then(res => res.json());
+    assert.deepEqual(result.pending[0].urls, ['https://example.com/a', 'https://example.com/b']);
+    assert.ok(!JSON.stringify(result).includes('smoke-worker-secret'));
+});
+
+test('archive export enforces authentication, applies monitoring and includes final-day IOC evidence', async () => {
+    const route = '/api/news/export?from=2026-10-08&to=2026-10-08&dataset=iocs&format=json';
+    assert.equal((await fetch(BASE + route)).status, 401);
+    const response = await fetch(BASE + route, { headers: AUTH_HEADERS });
+    assert.equal(response.status, 200); assert.equal(response.headers.get('cache-control'), 'private, no-store');
+    assert.match(response.headers.get('content-disposition'), /attachment/);
+    const result = await response.json(); assert.equal(result.publications, 1); assert.equal(result.count, 2);
+    assert.equal(result.rows[0].url, 'https://example.com/a');
+    assert.equal((await fetch(`${BASE}/api/news/export?from=2026-02-30&to=2026-10-08`, { headers: AUTH_HEADERS })).status, 400);
+    const csv = await fetch(`${BASE}/api/news/export?from=2026-10-08&to=2026-10-09`, { headers: AUTH_HEADERS }).then(res => res.text());
+    assert.ok(csv.includes('ClickFix phishing campaign'));
+    assert.equal((await fetch(BASE + route, { headers: OUTSIDER_HEADERS })).status, 403);
+    await fetch(`${BASE}/api/news/monitoring`, { method: 'PUT', headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: 'selected', vendorIds: [] }) });
+    const empty = await fetch(BASE + route, { headers: AUTH_HEADERS }).then(res => res.json());
+    assert.equal(empty.count, 0);
+    await fetch(`${BASE}/api/news/monitoring`, { method: 'PUT', headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: 'all', vendorIds: [] }) });
 });
 
 test('phishing report API enforces owner isolation, strict dates and includes the last day', async () => {
