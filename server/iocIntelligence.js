@@ -2,6 +2,7 @@ import Database from 'better-sqlite3';
 import crypto from 'node:crypto';
 import net from 'node:net';
 import { setImmediate as yieldLoop } from 'node:timers/promises';
+import { declaredRepositoryMalware } from './repositorySources.js';
 
 const idFor = value => crypto.createHash('sha256').update(value).digest('hex');
 const refang = value => String(value || '').trim().replace(/^hxxp/i,'http').replace(/\[\.\]|\(\.\)|\{\.\}/g,'.').replace(/\[:\]/g,':');
@@ -97,6 +98,7 @@ export function createIocIntelligence({filePath=':memory:',now=()=>Date.now()}={
     return [...grouped.values()].filter(row=>row.link);
   }
   async function ingestNews(rows) {
+    rows=rows.map(row=>row.repository?{...row,malware:[...new Map([...declaredRepositoryMalware({...row,repositoryReport:true}),...(row.malware||[])].map(family=>[family.name.toLowerCase(),family])).values()]}:row);
     const changed=rows.map(row=>({row,key:'news:'+idFor(row.link),hash:idFor(JSON.stringify([row.title,row.pubDate,row.iocs,row.actors,row.malware,row.cves,row.storyId]))}))
       .filter(entry=>db.prepare('SELECT value FROM intelligence_state WHERE id=?').get(entry.key)?.value!==JSON.stringify(entry.hash));
     await ingest(changed.flatMap(({row})=>iocValues(row).map(ioc=>({...ioc,provider:'news',source:row.source,externalId:row.link,title:row.title,link:row.link,published:row.pubDate,actors:row.actors,malwares:row.malware,cves:(row.cves||[]).map(id=>({id,name:id})),storyId:row.storyId,relation:'mentioned-with'}))));

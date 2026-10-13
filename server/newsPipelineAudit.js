@@ -47,7 +47,7 @@ if(fs.existsSync(intelligenceFile)) {
   if(intelligence.collectors.some(source=>source.source==='MalwareBazaar'&&source.status==='error')) {
     const {default:dotenv}=await import(pathToFileURL(path.join(root,'server/node_modules/dotenv/lib/main.js')));
     const {default:axios}=await import(pathToFileURL(path.join(root,'server/node_modules/axios/index.js')));
-    const config=dotenv.parse(fs.readFileSync(path.join(root,'server/.env')));
+    const config=dotenv.parse(fs.readFileSync(path.join(root,'.env')));
     const key=config.ABUSE_CH_API_KEY||config.THREATFOX_API_KEY||config.URLHAUS_API_KEY||config.MALWAREBAZAAR_API_KEY;
     if(key) {
       try { const response=await axios.post('https://mb-api.abuse.ch/api/v1/','query=get_recent&selector=time',{headers:{'Auth-Key':key,'Content-Type':'application/x-www-form-urlencoded'},timeout:15000,family:4,maxContentLength:8000000,maxRedirects:0});

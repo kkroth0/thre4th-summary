@@ -73,6 +73,12 @@ test('URLhaus lookup preserves the queried indicator and family evidence',()=>{
   assert.equal(rows[0].value,'evil.example.org');assert.equal(rows[0].malwares[0].id,'win.vidar');
 });
 
+test('archived official repository declarations backfill malware relationships without refetching a report',async()=>{
+ const store=createIocIntelligence({now});
+ await store.ingestNews([{link:'https://github.com/PaloAltoNetworks/Unit42-timely-threat-intel/blob/main/report.txt',title:'C2Agent',text:"A malware family we've named C2Agent.",repository:{repo:'PaloAltoNetworks/Unit42-timely-threat-intel'},pubDate:'2026-10-12',iocs:{hashes:['a'.repeat(64)]},malware:[]}]);
+ assert.equal(store.families()[0].name,'C2Agent');assert.equal(store.list({malware:'reported:c2agent'}).total,1);store.close();
+});
+
 test('explicit OTX adversaries and family labels retain source provenance even before catalogue registration',()=>{
   const rows=sourceObservations('OTX',{results:[{id:'p1',public:true,adversary:'UNC999999',malware_families:['UnknownAgent'],indicators:[{indicator:'46.101.130.1',type:'IPv4'}]}]});
   assert.equal(rows[0].actors[0].name,'UNC999999');assert.equal(rows[0].malwares[0].name,'UnknownAgent');
