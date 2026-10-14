@@ -198,8 +198,11 @@ jobs:
           sleep 3
 
           ok=0
-          for i in $(seq 1 6); do
+          # Cold starts can outlast the old ~15s window on the production VPS.
+          # Require the same healthy response, allowing bounded startup time.
+          for i in $(seq 1 30); do
             if curl -fsS --max-time 5 http://localhost:3001/api/vendors/status >/dev/null 2>&1; then ok=1; break; fi
+            if sudo systemctl is-failed --quiet "$SVC"; then break; fi
             sleep 2
           done
           [ "$ok" = 1 ] || rollback
