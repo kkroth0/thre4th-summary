@@ -50,7 +50,7 @@ export function normalizeDnsHistory(raw, domain) {
 
 // Passive lookups only. Cached per upstream credential; no browser challenges,
 // certificate probing, downloads, paid live refresh or automatic page crawling.
-export function createDomainIntelligence({ http, getWhoisKey, now = () => Date.now(), readObservations = () => ({}), saveObservations = () => {} }) {
+export function createDomainIntelligence({ http, getWhoisKey, onQuota = () => {}, now = () => Date.now(), readObservations = () => ({}), saveObservations = () => {} }) {
     const cache = new Map(); const pending = new Map(); let observations; let cacheBytes = 0;
     try { observations = readObservations() || {}; } catch { observations = {}; }
     async function cached(key, ttl, run) {
@@ -109,8 +109,9 @@ export function createDomainIntelligence({ http, getWhoisKey, now = () => Date.n
                 if (!key) return { source: 'Who.is', status: 'unavailable', error: 'key_missing', changes: [] };
                 try {
                     const response = await http.get(`https://api.who.is/v1/dns/${encodeURIComponent(hostname)}/changes`, { ...options, headers: { Authorization: `Bearer ${key}` }, params: { limit: 100, ...(cursor ? { cursor } : {}) } });
+                    onQuota(response.headers, key);
                     return { source: 'Who.is', status: 'available', ...normalizeDnsHistory(response.data, hostname) };
-                } catch (error) { return { ...unavailable('Who.is', error), changes: [] }; }
+                } catch (error) { if (error.response?.headers) onQuota(error.response.headers, key); return { ...unavailable('Who.is', error), changes: [] }; }
             });
             const local = (observations[hostname] || []).map((row, index, rows) => ({ hostname, firstSeen: row.firstSeen, lastSeen: row.lastSeen, records: row.records, current: index === rows.length - 1, provider: '', source: 'ThreatSumm4ry' }));
             return { ...remote, local, externalUrl: `https://dnshistory.org/`, fetchedAt: new Date(now()).toISOString() };

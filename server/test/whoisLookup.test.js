@@ -39,3 +39,12 @@ test('manual refresh and credential rotation cannot reuse an older WHOIS snapsho
     await lookup('example.com', { fresh: true }); assert.equal(calls, 2);
     key = 'rotated-test-key'; await lookup('example.com'); assert.equal(calls, 3);
 });
+
+test('WHOIS quota is observed only on real requests, never replayed from cached snapshots', async () => {
+    const observed = [];
+    const lookup = createWhoisLookup({ getKey: () => 'test-key', onQuota: (headers, key) => observed.push([headers, key]),
+        http: { get: async () => ({ data: record, headers: { 'x-ratelimit-remaining': '490' } }) },
+    });
+    await lookup('example.com'); await lookup('example.com');
+    assert.deepEqual(observed, [[{ 'x-ratelimit-remaining': '490' }, 'test-key']]);
+});

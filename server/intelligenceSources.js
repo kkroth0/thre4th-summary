@@ -76,7 +76,7 @@ export function sourceObservations(provider,payload,{scope='global',query,matchA
   return [{...value,scope,provider,externalId:value.value,title:`${provider} lookup`,link:'',relation:'lookup',actors:[],malwares:[]}];
 }
 
-export function createIntelligenceCollector({store,http,getKeys,matchActors,matchMalware,scope='global',now=()=>Date.now()}={}) {
+export function createIntelligenceCollector({store,http,getKeys,matchActors,matchMalware,onQuota=()=>{},scope='global',now=()=>Date.now()}={}) {
   let flight=null;
   const options=headers=>({headers:{Accept:'application/json',...headers},timeout:15000,maxContentLength:8000000,maxRedirects:0,family:4});
   const stateKey=id=>scope==='global'?'source:'+id:`source:${scope}:${id}`;
@@ -116,12 +116,14 @@ export function createIntelligenceCollector({store,http,getKeys,matchActors,matc
         if(definition.id==='OTX')progress=await collectOtx(key,previous);
         else{
           const response=await definition.load(key,previous);
+          if(definition.id==='AbuseIPDB')onQuota('AbuseIPDB',response.headers,key,'blacklist');
           if(response.data?.query_status&&!['ok','no_results','no_iocs'].includes(response.data.query_status))throw Error('Provider rejected query');
           progress={count:await record(definition.id,response.data)};
         }
         store.setState(stateKey(definition.id),{...previous,...progress,status:'ready',configured:true,failures:0,lastSuccessfulAt:new Date(now()).toISOString(),error:null,nextAt:new Date(now()+definition.interval).toISOString()});
       }catch(error){
         const status=error.response?.status;
+        if(definition.id==='AbuseIPDB'&&status===429)onQuota('AbuseIPDB',error.response.headers,key,'blacklist');
         const reset=Number(error.response?.headers?.['x-ratelimit-reset'])*1000;
         const retry=Number(error.response?.headers?.['retry-after'])*1000;
         const failures=(previous.failures||0)+1;

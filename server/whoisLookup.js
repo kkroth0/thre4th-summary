@@ -12,7 +12,7 @@ export function normalizeWhois(data) {
     } };
 }
 
-export function createWhoisLookup({ http, getKey, now = () => Date.now() }) {
+export function createWhoisLookup({ http, getKey, onQuota = () => {}, now = () => Date.now() }) {
     const cache = new Map(); const pending = new Map();
     return async (domain, { fresh = false } = {}) => {
         const key = getKey();
@@ -23,7 +23,8 @@ export function createWhoisLookup({ http, getKey, now = () => Date.now() }) {
         const request = (async () => {
             const response = await http.get(`https://api.who.is/v1/whois/${encodeURIComponent(domain)}`, {
                 headers: { Authorization: `Bearer ${key}` }, timeout: 10_000, maxContentLength: 2_000_000, maxRedirects: 0,
-            });
+            }).catch(error => { if (error.response?.headers) onQuota(error.response.headers, key); throw error; });
+            onQuota(response.headers, key);
             const data = normalizeWhois(response.data);
             cache.set(cacheKey, { at: now(), data }); if (cache.size > 1000) cache.delete(cache.keys().next().value);
             return data;

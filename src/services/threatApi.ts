@@ -1781,6 +1781,16 @@ export const runPhishWatch = (profileId: string): Promise<{ found: number; scann
     });
 
 /** Cota restante por base (faixa abaixo da barra de busca). Exige sessão. */
+export interface QuotaWindow {
+    state: 'ok' | 'pending';
+    used?: number | null;
+    limit?: number | null;
+    remaining?: number | null;
+    period?: 'minute' | 'hour' | 'day' | 'month' | 'credits';
+    resetAt?: string | null;
+    operation?: string;
+    at?: string;
+}
 export interface VendorQuota {
     name: string;
     /** ok = tem número · pending = só depois da primeira busca · none = base sem cota */
@@ -1788,12 +1798,16 @@ export interface VendorQuota {
     used?: number | null;
     limit?: number | null;
     remaining?: number | null;
-    period?: 'day' | 'month';
+    period?: 'day' | 'month' | 'credits';
     resetAt?: string | null;
     error?: string;
+    at?: string;
+    windows?: QuotaWindow[];
+    credential?: 'personal' | 'platform';
+    keyCount?: number;
 }
 
-export const fetchVendorQuotas = (): Promise<{ quotas: VendorQuota[] }> => orgJson('/api/vendors/quotas');
+export const fetchVendorQuotas = (fresh = false, signal?: AbortSignal): Promise<{ quotas: VendorQuota[] }> => orgJson('/api/vendors/quotas' + (fresh ? '?refresh=1' : ''), { signal });
 
 // Bases que o enriquecimento consulta: são as quatro que rotulam família,
 // campanha ou grupo. As outras dezessete respondem reputação, e reputação não

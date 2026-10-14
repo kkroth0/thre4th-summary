@@ -134,10 +134,11 @@ test('collector is single-flight, respects schedules, and resumes OTX pages with
 });
 
 test('rate limits keep collected data and delay retries until reset',async()=>{
-  const store=createIocIntelligence({now});let calls=0;
-  const collector=createIntelligenceCollector({store,now,getKeys:id=>id==='abuseipdb'?'test-key':'',http:{get:async()=>{calls++;throw {response:{status:429,headers:{'retry-after':'86400'}}};}}});
+  const store=createIocIntelligence({now});let calls=0;const observed=[];
+  const collector=createIntelligenceCollector({store,now,getKeys:id=>id==='abuseipdb'?'test-key':'',onQuota:(...args)=>observed.push(args),http:{get:async()=>{calls++;throw {response:{status:429,headers:{'retry-after':'86400'}}};}}});
   await store.ingest([{value:'46.101.130.1',provider:'AbuseIPDB'}]);await collector.run();await collector.run();
-  assert.equal(calls,1);assert.equal(store.list().total,1);assert.equal(collector.status().find(row=>row.id==='AbuseIPDB').status,'rate_limited');store.close();
+  assert.equal(calls,1);assert.equal(store.list().total,1);assert.equal(collector.status().find(row=>row.id==='AbuseIPDB').status,'rate_limited');
+  assert.deepEqual(observed,[['AbuseIPDB',{'retry-after':'86400'},'test-key','blacklist']]);store.close();
 });
 
 test('ThreatFox uses an overlapping incremental window, bounded backlog and capacity for initial backfill',async()=>{

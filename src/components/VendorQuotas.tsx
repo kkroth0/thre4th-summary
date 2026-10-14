@@ -54,7 +54,7 @@ export const VendorQuotas = ({ refreshKey = 0 }: { refreshKey?: number }) => {
     if (q.remaining === null || q.remaining === undefined) {
       return `${pt ? "teto" : "cap"} ${q.limit?.toLocaleString()}`;
     }
-    const per = q.period === "month" ? (pt ? "/mês" : "/mo") : (pt ? "/dia" : "/day");
+    const per = q.period === 'credits' ? (pt ? ' créditos' : ' credits') : q.period === "month" ? (pt ? "/mês" : "/mo") : (pt ? "/dia" : "/day");
     return q.limit ? `${q.remaining.toLocaleString()}/${q.limit.toLocaleString()}${per}` : `${q.remaining.toLocaleString()}${per}`;
   };
 
@@ -78,7 +78,7 @@ export const VendorQuotas = ({ refreshKey = 0 }: { refreshKey?: number }) => {
           className="text-[10px] text-muted-foreground/70"
           title={noQuota.map((q) => q.name).join(", ")}
         >
-          +{noQuota.length} {pt ? "fontes sem cota" : "sources without quota"}
+          +{noQuota.length} {pt ? "fontes sem saldo informado" : "sources without reported balance"}
         </span>
       )}
 

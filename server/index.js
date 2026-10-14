@@ -172,6 +172,7 @@ const NEWS_ARCHIVE_PATH = process.env.NEWS_ARCHIVE_PATH || path.join(__dirname, 
 const newsArchiveStore = createNewsArchiveStore({ filePath: NEWS_ARCHIVE_PATH, readFileSync: fs.readFileSync, writeJsonAtomic });
 const iocIntelligence = createIocIntelligence({ filePath: process.env.IOC_INTELLIGENCE_PATH || (process.env.NODE_ENV === 'test' ? ':memory:' : path.join(__dirname, '.ioc-intelligence.sqlite')) });
 const intelligenceCollector = createIntelligenceCollector({ store: iocIntelligence, http: axios,
+    onQuota: (name, headers, key, operation) => quotaReader.record(name, headers, { key, operation }),
     getKeys: source => source === 'abuse_ch' ? abuseChKey() : source === 'otx' ? getKeys('ALIENVAULT_API_KEY')[0] : getKeys('ABUSEIPDB_API_KEY')[0],
     matchActors: text => matchActors(text, actorIndex), matchMalware: text => matchMalware(text, malwareIndex) });
 const accountIntelligenceCollectors = new Map();
@@ -180,6 +181,7 @@ function accountIntelligenceCollector(owner) {
     if (!accountIntelligenceCollectors.has(owner)) {
         if (accountIntelligenceCollectors.size >= 50) accountIntelligenceCollectors.delete(accountIntelligenceCollectors.keys().next().value);
         accountIntelligenceCollectors.set(owner,createIntelligenceCollector({store:iocIntelligence,http:axios,scope:owner,
+            onQuota: (name, headers, key, operation) => quotaReader.record(name, headers, { key, operation }),
             getKeys:source=>{
                 const key=getUserApiKey(owner,source)||'';
                 if(source==='abuse_ch'&&key===abuseChKey())return '';
@@ -431,13 +433,11 @@ const sanitizeError = (error) => {
 
 
 // Helper to extract quota info
-const sendResponseWithQuota = (res, axiosResponse, vendor) => {
+const sendResponseWithQuota = (res, axiosResponse) => {
     const headers = axiosResponse.headers;
     const quota = {};
 
-    // A cota do AbuseIPDB só existe no header de uma consulta real: aproveitar a
-    // que já está passando evita gastar um crédito pra perguntar quantos sobraram.
-    if (vendor) quotaReader.record(vendor, headers);
+    // Quotas are recorded on actual upstream calls, never replayed cache hits.
 
     if (headers['x-ratelimit-remaining']) quota.remaining = headers['x-ratelimit-remaining'];
     if (headers['x-ratelimit-limit']) quota.limit = headers['x-ratelimit-limit'];
@@ -512,17 +512,27 @@ const withKeyRotation = async (envName, makeRequest) => {
     throw lastError; // all keys exhausted
 };
 
-const quotaReader = createQuotaReader({ getKeys });
+const quotaReader = createQuotaReader({ getKeys, loadState: key => iocIntelligence.state(key), saveState: (key, value) => iocIntelligence.setState(key, value) });
 const lookupCache = createLookupCache();
 function abuseKeys(req) {
     const session=verifySession(getCookie(req,'ts_session'));
     const personal=getUserApiKey(session?.sub,'abuseipdb');
     return personal?[personal]:getKeys('ABUSEIPDB_API_KEY');
 }
-function withAbuseKey(req,load) {
+function withAbuseKey(req,load,operation='check') {
     const session=verifySession(getCookie(req,'ts_session'));
     const personal=getUserApiKey(session?.sub,'abuseipdb');
-    return personal?load(personal):withKeyRotation('ABUSEIPDB_API_KEY',load);
+    const request = async key => {
+        try {
+            const response = await load(key);
+            quotaReader.record('AbuseIPDB', response.headers, { key, operation });
+            return response;
+        } catch (error) {
+            if (error.response?.status === 429) quotaReader.record('AbuseIPDB', error.response.headers, { key, operation });
+            throw error;
+        }
+    };
+    return personal?request(personal):withKeyRotation('ABUSEIPDB_API_KEY',request);
 }
 async function persistProviderEvidence(req,provider,query,data) {
     const session=verifySession(getCookie(req,'ts_session'));
@@ -602,7 +612,7 @@ app.post('/api/abuseipdb', scanLimiter, async (req, res) => {
                 headers: { "Key": key, "Accept": "application/json" }
             })
         ));
-        sendResponseWithQuota(res, response, 'AbuseIPDB');
+        sendResponseWithQuota(res, response);
     } catch (error) {
         if (error.noKey) return res.status(500).json({ error: "API Key missing" });
         const { status, message } = sanitizeError(error);
@@ -624,9 +634,9 @@ app.post('/api/abuseipdb/check-block', scanLimiter, async (req, res) => {
                     maxAgeInDays: 30
                 },
                 headers: { "Key": key, "Accept": "application/json" }
-            })
+            }), 'check-block'
         ));
-        sendResponseWithQuota(res, response, 'AbuseIPDB');
+        sendResponseWithQuota(res, response);
     } catch (error) {
         if (error.noKey) return res.status(500).json({ error: "API Key missing" });
         const { status, message } = sanitizeError(error);
@@ -1007,9 +1017,10 @@ app.get('/api/intel/latam-threats', async (req, res) => {
 });
 
 // WHOIS — Who.is snapshot lookup (no paid live refresh).
-const lookupWhois = createWhoisLookup({ http: axios, getKey: () => process.env.WHOIS_API_KEY });
+const lookupWhois = createWhoisLookup({ http: axios, getKey: () => process.env.WHOIS_API_KEY, onQuota: (headers, key) => quotaReader.record('WHOIS', headers, { key }) });
 const DOMAIN_DNS_HISTORY_PATH = path.join(__dirname, '.domain-dns-history.json');
 const domainIntelligence = createDomainIntelligence({ http: axios, getWhoisKey: () => process.env.WHOIS_API_KEY,
+    onQuota: (headers, key) => quotaReader.record('WHOIS', headers, { key }),
     readObservations: () => JSON.parse(fs.readFileSync(DOMAIN_DNS_HISTORY_PATH, 'utf8')),
     saveObservations: data => writeJsonAtomic(DOMAIN_DNS_HISTORY_PATH, data),
 });
@@ -3805,7 +3816,18 @@ app.post('/api/phishing-watch/run', requirePremium, scanLimiter, async (req, res
 // isenção do rate limiter — quem não tem limite é quem enxerga o teto real.
 app.get('/api/vendors/quotas', requireAuth, async (req, res) => {
     try {
-        res.json({ quotas: await quotaReader.read() });
+        const personalProviders = { SHODAN_API_KEY: 'shodan', URLSCAN_API_KEY: 'urlscan', ABUSEIPDB_API_KEY: 'abuseipdb' };
+        const keysFor = env => {
+            const personal = personalProviders[env] && getUserApiKey(req.user.sub, personalProviders[env]);
+            return personal ? [personal] : getKeys(env);
+        };
+        const quotas = await quotaReader.read({ keysFor, fresh: req.query.refresh === '1' });
+        const quotaEnv = { VirusTotal: 'VIRUSTOTAL_API_KEY', Shodan: 'SHODAN_API_KEY', 'urlscan.io': 'URLSCAN_API_KEY', AbuseIPDB: 'ABUSEIPDB_API_KEY', WHOIS: 'WHOIS_API_KEY' };
+        res.set('Cache-Control', 'private, no-store');
+        res.json({ quotas: quotas.map(item => ({ ...item, ...(quotaEnv[item.name] ? {
+            credential: personalProviders[quotaEnv[item.name]] && getUserApiKey(req.user.sub, personalProviders[quotaEnv[item.name]]) ? 'personal' : 'platform',
+            keyCount: keysFor(quotaEnv[item.name]).length,
+        } : {}) })) });
     } catch (error) {
         console.error('vendor quotas failed:', error.message);
         res.status(502).json({ error: 'falha ao ler cotas' });
