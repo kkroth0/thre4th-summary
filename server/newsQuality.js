@@ -29,7 +29,7 @@ export function isRelevantNews(row) {
 export function reviewNewsEvidence(row,body='',matchMalware) {
   const text=[row.title,row.text||row.description,body].filter(Boolean).join('\n');
   const iocs=removeVersionIndicators(row.iocs||extractIOCs(text),text);
-  const matches=body&&matchMalware?matchMalware(text):sanitizeStoredMalware(row.malware,text);
+  const matches=matchMalware?matchMalware(text):sanitizeStoredMalware(row.malware,text);
   const malware=[...new Map([...declaredRepositoryMalware({...row,repositoryReport:!!row.repository}),...matches].map(family=>[family.id,family])).values()];
   const next={...row,iocs,malware,securityRelevant:undefined};
   return {...next,securityRelevant:isRelevantNews(next)};

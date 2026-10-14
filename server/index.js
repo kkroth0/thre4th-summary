@@ -1331,11 +1331,11 @@ const articleCollectionCache = createFeedCache({ directory: path.join(__dirname,
 const newsQualityReady=(async()=>{if (process.env.NODE_ENV !== 'test') try {
     await new Promise(resolve=>setImmediate(resolve));
     newsArchiveStore.reclassifyPhishing({ bodyFor: link => articleCollectionCache.get(link)?.text || '' });
-    if(!iocIntelligence.state('news-quality-v13')){
-        writeJsonAtomic(path.join(__dirname,'.news-quality-v13.bak.json'),{archive:newsArchiveStore.all(),stories:newsStoryStore.all()});
+    if(!iocIntelligence.state('news-quality-v14')){
+        writeJsonAtomic(path.join(__dirname,'.news-quality-v14.bak.json'),{archive:newsArchiveStore.all(),stories:newsStoryStore.all()});
         const reviewed=[];let lastYield=performance.now();
         for(const row of actorPublications(newsArchiveStore.all(),newsStoryStore.all())){
-            reviewed.push({...reviewNewsEvidence(row,articleCollectionCache.get(row.link)?.text||'',text=>matchMalware(text,malwareIndex)),extractionVersion:EXTRACTION_VERSION});
+            reviewed.push({...reviewNewsEvidence(row,articleCollectionCache.get(row.link)?.text||'',text=>matchMalware(text,malwareIndex,{news:true})),extractionVersion:EXTRACTION_VERSION});
             if(performance.now()-lastYield>=8){await new Promise(resolve=>setImmediate(resolve));lastYield=performance.now();}
         }
         newsArchiveStore.add(reviewed);
@@ -1347,7 +1347,7 @@ const newsQualityReady=(async()=>{if (process.env.NODE_ENV !== 'test') try {
         newsArchiveStore.add(newsArchiveStore.all().map(row=>({...row,storyId:identities.get(row.link)||row.storyId})));
         iocIntelligence.reviewSoftwareLinks();
         await iocIntelligence.ingestNews(newsArchiveStore.all());
-        iocIntelligence.setState('news-quality-v13',{at:new Date().toISOString()});
+        iocIntelligence.setState('news-quality-v14',{at:new Date().toISOString()});
     }
     if(!iocIntelligence.state('news-version-v11')){
         const revised=[];let lastYield=performance.now();
@@ -1450,7 +1450,7 @@ const refreshNewsletterFeed = singleFlightRefresh(async () => {
         });
         let unifiedFeed = await enrichFeedItemsAsync(rawItems, {
             texts: bodies.texts, supplementalIocs: bodies.supplementalIocs, actors: (text) => matchActors(text, actorIndex),
-            malware: (text) => matchMalware(text, malwareIndex), campaigns: (text) => matchCampaigns(text, campaignIndex),
+            malware: (text) => matchMalware(text, malwareIndex, {news:true}), campaigns: (text) => matchCampaigns(text, campaignIndex),
             seller: extractSellerHandle, categorize,
         });
         const allCves = [...new Set(unifiedFeed.flatMap((item) => item.cves))];
@@ -3017,7 +3017,7 @@ app.post('/api/newsletter/enrich', requirePremium, scanLimiter, async (req, res)
         const sourceRows = await enrichFeedItemsAsync(items.map((source,n) => ({ ...source, text: fetched[n].text || source.description || '', artifactLinks: fetched[n].artifactLinks })), {
             supplementalIocs: new Map(items.map((source,n) => [source.link, source.repositoryReport ? source.iocs : mergeIocEvidence(source.iocs,
                 ...artifacts.filter(a => fetched[n].artifactLinks?.includes(a.origin)).map(a => extractIOCs(a.text, { plaintext: true })))])),
-            actors: text => matchActors(text, actorIndex), malware: text => matchMalware(text, malwareIndex),
+            actors: text => matchActors(text, actorIndex), malware: text => matchMalware(text, malwareIndex, {news:true}),
             campaigns: text => matchCampaigns(text, campaignIndex), seller: extractSellerHandle, categorize,
         });
         const persisted = await persistNewsEvidence(sourceRows, { archive: newsArchiveStore, stories: newsStoryStore, articleCache: articleCollectionCache,

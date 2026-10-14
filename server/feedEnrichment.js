@@ -5,7 +5,7 @@ import { setImmediate as yieldLoop } from 'node:timers/promises';
 import { declaredRepositoryMalware } from './repositorySources.js';
 import { removeVersionIndicators, isRelevantNews } from './newsQuality.js';
 
-export const EXTRACTION_VERSION = 'feed-v10';
+export const EXTRACTION_VERSION = 'feed-v11';
 
 // Keep all mentioned CVEs for research/KEV, but use only the article's focus
 // to group coverage. A patch report often recounts older, unrelated flaws.
