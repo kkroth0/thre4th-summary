@@ -67,6 +67,13 @@ const Index = () => {
   const { toast } = useToast();
   const { t, language } = useLanguage();
   const location = useLocation();
+  const routeSearch = useRef(handleRouteSearch);
+  const searchedRoute = useRef<string | null>(null);
+
+  function handleRouteSearch(value: string) {
+    setQuery(value);
+    void handleSearch(undefined, value);
+  }
 
   // Sem overflow-hidden: qualquer ancestral com overflow recortado desliga o
   // position: sticky da barra de busca.
@@ -303,6 +310,20 @@ const Index = () => {
       setSearchRun((n) => n + 1);   // revalida a faixa de créditos com o que o lote consumiu
     }
   };
+
+  useEffect(() => { routeSearch.current = handleRouteSearch; });
+
+  useEffect(() => {
+    const target = new URLSearchParams(location.search).get('query')?.trim();
+    if (!auth.authenticated || !target || searchedRoute.current === location.key) return;
+    // Start after saved source preferences have been applied. Cancel the first
+    // StrictMode setup rather than issuing the same provider calls twice.
+    const timer = window.setTimeout(() => {
+      searchedRoute.current = location.key;
+      routeSearch.current(target);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [location.key, location.search, auth.authenticated]);
 
   const onPivot = (artifact: string) => {
     setQuery(artifact);
