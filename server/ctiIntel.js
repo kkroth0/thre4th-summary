@@ -411,7 +411,7 @@ export function extractIOCs(text, { plaintext = false } = {}) {
 
     const ips = new Set();
     const refanged = refang(t);
-    for (const m of refanged.matchAll(/\b(?:\d{1,3}\.){3}\d{1,3}\b/g)) {
+    for (const m of refanged.matchAll(/\b(?:\d{1,3}\.){3}\d{1,3}(?![\d.])/g)) {
         const ip = m[0];
         if (ip.split('.').some((o) => Number(o) > 255)) continue;
         if (RE_PRIVATE_IP.test(ip)) continue;
@@ -772,7 +772,7 @@ export function extractReadableText(html) {
         root.find('p, li, td, th, pre, code').each((_, el) => {
             const node = $(el);
             if (el.tagName === 'code' && node.parents('pre').length) return;
-            const t = node.text().replace(/\s+/g, ' ').trim();
+            const t = node.contents().toArray().map(child => child.type === 'text' ? child.data : $(child).text()).join(' ').replace(/\s+/g, ' ').trim();
             const min = el.tagName === 'p' ? 45 : 3;
             if (t.length < min || t.length > 2000) return;
             if (ARTICLE_BOILERPLATE.test(t)) return;

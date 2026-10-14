@@ -11,6 +11,14 @@ export function removeVersionIndicators(iocs, text) {
     return !seen.has(ip)||valid.has(ip);
   })};
 }
+export function recoverJoinedTableIps(row,text='') {
+  // Older cached HTML collapsed an inline address and its next column label
+  // into e.g. "204.8.96.109Tor Exit". Recover only those affected bodies.
+  if(!/\b(?:\d{1,3}\.){3}\d{1,3}[A-Z][a-z]/.test(text))return row;
+  const ips=[...new Set([...(row.iocs?.ips||[]),...extractIOCs(text).ips])];
+  if(ips.length===(row.iocs?.ips||[]).length)return row;
+  return {...row,iocs:{...row.iocs,ips}};
+}
 export function isRelevantNews(row) {
   if(row.securityRelevant===false)return false;
   if(Number(row.layer)===1||row.repository||row.repositoryReport)return true;

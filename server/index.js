@@ -34,7 +34,7 @@ import { PUBLICATION_SOURCES, OT_PUBLICATION_SOURCES, createPublicationResolver 
 import { REPOSITORY_SOURCES, createRepositoryResolver } from './repositorySources.js';
 import { prepareFeedJobDocuments } from './feedJobDocuments.js';
 import { completeReportEvidence } from './reportEvidence.js';
-import { completeNewsFeed, reviewNewsEvidence, removeVersionIndicators } from './newsQuality.js';
+import { completeNewsFeed, reviewNewsEvidence, removeVersionIndicators, recoverJoinedTableIps } from './newsQuality.js';
 import { rebuildStoryCorrelationsAsync } from './newsStories.js';
 import { persistNewsEvidence } from './persistNewsEvidence.js';
 import { publishNewsSnapshot } from './publishNewsSnapshot.js';
@@ -1349,6 +1349,22 @@ const newsQualityReady=(async()=>{if (process.env.NODE_ENV !== 'test') try {
         newsStoryStore.save(newsStoryStore.all().map(story=>({...story,sources:story.sources.map(source=>({...source,iocs:byLink.get(source.link)?.iocs||source.iocs}))})));
         await iocIntelligence.ingestNews(revised);
         iocIntelligence.setState('news-version-v11',{at:new Date().toISOString()});
+    }
+    if(!iocIntelligence.state('news-table-v12')){
+        const changed=[];let lastYield=performance.now();
+        for(const row of newsArchiveStore.all()){
+            const next=recoverJoinedTableIps(row,[row.title,row.text||row.description,articleCollectionCache.get(row.link)?.text||''].join('\n'));
+            if(next!==row)changed.push(next);
+            if(performance.now()-lastYield>=8){await new Promise(resolve=>setImmediate(resolve));lastYield=performance.now();}
+        }
+        if(changed.length){
+            newsArchiveStore.add(changed);
+            const byLink=new Map(changed.map(row=>[row.link,row]));
+            const stories=newsStoryStore.all().map(story=>({...story,sources:story.sources.map(source=>byLink.has(source.link)?{...source,iocs:byLink.get(source.link).iocs}:source)}));
+            newsStoryStore.save(await rebuildStoryCorrelationsAsync(stories,completeNewsFeed([],newsArchiveStore.all())));
+            await iocIntelligence.ingestNews(changed);
+        }
+        iocIntelligence.setState('news-table-v12',{at:new Date().toISOString(),revised:changed.length});
     }
 } catch (error) { console.error('news evidence review failed:', error.message); throw error; }})();
 void newsQualityReady.catch(()=>{});

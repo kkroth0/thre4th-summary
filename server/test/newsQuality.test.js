@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { extractIOCs } from '../ctiIntel.js';
+import { extractIOCs, extractReadableText } from '../ctiIntel.js';
 import { buildMalwareIndex, matchMalware } from '../malwareMatch.js';
-import { completeNewsFeed, reviewNewsEvidence } from '../newsQuality.js';
+import { completeNewsFeed, reviewNewsEvidence, recoverJoinedTableIps } from '../newsQuality.js';
 import { buildWeeklyReport,weeklyWindow } from '../weeklyReports.js';
 import { completeReportEvidence } from '../reportEvidence.js';
 import { readFileSync } from 'node:fs';
@@ -21,6 +21,16 @@ test('software versions and HTTP/USB terms do not become threat infrastructure o
 });
 test('a true IP remains when also mentioned independently of a software version',()=>{
   assert.deepEqual(reviewNewsEvidence({title:'Version 2.0.0.39. IOC 2.0.0.39',iocs:{ips:['2.0.0.39']}}).iocs.ips,['2.0.0.39']);
+});
+
+test('inline table markup and old concatenated labels do not hide IPs or corrupt endpoints',()=>{
+  const text=extractReadableText('<article><table><tr><td><strong>204.8.96.109</strong>Tor exit</td><td><code>/fz/x.js</code>Browser-based payload</td></tr></table></article>');
+  assert.match(text,/204\.8\.96\.109 Tor exit/);assert.match(text,/\/fz\/x\.js Browser-based/);
+  assert.deepEqual(extractIOCs(text).ips,['204.8.96.109']);
+  const row={iocs:{ips:['147.90.235.22'],hashes:['a'.repeat(64)]}};
+  const recovered=recoverJoinedTableIps(row,'147.90.235.22\n204.8.96.109Tor Exit\nVersion 2.0.0.39Beta');
+  assert.deepEqual(recovered.iocs.ips,['147.90.235.22','204.8.96.109']);assert.deepEqual(recovered.iocs.hashes,row.iocs.hashes);
+  assert.equal(recoverJoinedTableIps(recovered,'204.8.96.109Tor Exit'),recovered);
 });
 test('archived CVE publications remain searchable and broad-source tutorials stay out of the security feed',()=>{
   const archived={link:'https://msrc.microsoft.com/cve',title:'CVE-2026-83943 Azure API Center',pubDate:'2026-10-08',cves:['CVE-2026-83943']};
