@@ -125,8 +125,16 @@ export function createIocIntelligence({filePath=':memory:',now=()=>Date.now()}={
     putState.run('news-sync',JSON.stringify({lastSuccessfulAt:new Date(now()).toISOString(),publications:rows.length,changed:changed.length}));
   }
   async function replayProviderPayloads(convert) {
-    const revision='provider-matches-v11';
+    const revision='provider-matches-v12';
     if(db.prepare('SELECT 1 FROM intelligence_state WHERE id=?').get(revision))return 0;
+    db.transaction(()=>{
+      const stale=db.prepare(`SELECT e.* FROM entity_links e JOIN observations o ON o.id=e.observation WHERE o.provider='MalwareBazaar' AND e.kind='actor'
+        AND EXISTS(SELECT 1 FROM entity_links m WHERE m.observation=e.observation AND m.kind='malware' AND lower(m.name)=lower(e.name))`).all();
+      for(const link of stale){
+        db.prepare('INSERT INTO observation_revisions(observation,at,payload) VALUES(?,?,?)').run(link.observation,new Date(now()).toISOString(),JSON.stringify({retiredSignatureActor:link}));
+        db.prepare('DELETE FROM entity_links WHERE observation=? AND kind=? AND entity=?').run(link.observation,link.kind,link.entity);
+      }
+    })();
     let count=0;
     // Snapshot IDs only; load one saved JSON at a time, with no API calls.
     const ids=db.prepare(`SELECT id FROM observations WHERE provider IN ('OTX','ThreatFox','URLhaus','MalwareBazaar') AND json_type(details,'$.payload')='object'`).all();

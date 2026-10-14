@@ -26,7 +26,7 @@ export async function auditProviderMatches(root){
   db.pragma('query_only = ON');
   const stored=db.prepare(`SELECT o.provider,COUNT(DISTINCT o.id) observations,COUNT(DISTINCT CASE WHEN e.kind='malware' THEN e.entity END) families,COUNT(DISTINCT CASE WHEN e.kind='actor' THEN e.entity END) actors
     FROM observations o LEFT JOIN entity_links e ON e.observation=o.id WHERE o.provider IN ('OTX','ThreatFox','URLhaus','MalwareBazaar') GROUP BY o.provider`).all();
-  const replay=db.prepare("SELECT value FROM intelligence_state WHERE id='provider-matches-v11'").get();
+  const replay=db.prepare("SELECT value FROM intelligence_state WHERE id='provider-matches-v12'").get();
   const key=String(process.env.ABUSE_CH_API_KEY||process.env.THREATFOX_API_KEY||process.env.MALWAREBAZAAR_API_KEY||'').split(',')[0].trim();
   const otxKey=String(process.env.ALIENVAULT_API_KEY||'').split(',')[0].trim();
   const cfg=headers=>({headers,timeout:15000,maxContentLength:8000000,maxRedirects:0,family:4});

@@ -53,6 +53,11 @@ export function sourceObservations(provider,payload,{scope='global',query,matchA
   if(provider==='MalwareBazaar')return (Array.isArray(payload?.data)?payload.data:[]).flatMap(row=>{
     const labels=[row.signature,...strings(row.tags)].filter(Boolean).join(' '),attribution=entities(labels,strings(row.tags));
     if(typeof row.signature==='string'&&row.signature.trim())attribution.malwares=signature(row.signature,'bazaar:');
+    // A sample's signature names malware, not its operator. Only separate
+    // actor tags may contribute actor evidence (e.g. Lazarus, not WannaCry).
+    const familyIds=new Set(attribution.malwares.map(family=>family.id));
+    const actorTags=strings(row.tags).filter(tag=>tag.trim().toLowerCase()!==String(row.signature||'').trim().toLowerCase()&&!matchMalware(tag,{structured:true}).some(family=>familyIds.has(family.id)));
+    attribution.actors=matchActors('Threat actors: '+actorTags.join('\n'));
     return [row.sha256_hash,row.sha1_hash,row.md5_hash].filter(Boolean).flatMap(hash=>{const value=normalizeIndicator(hash);return value?.type==='hash'?[{value:value.value,type:'hash',scope,provider,externalId:row.sha256_hash||hash,published:utc(row.last_seen||row.first_seen),title:`${row.signature||'Malware sample'} · MalwareBazaar`,link:`https://bazaar.abuse.ch/sample/${encodeURIComponent(row.sha256_hash||hash)}/`,tags:strings(row.tags),...attribution,relation:'attributed-by-source'}]:[];});
   });
   if(provider==='URLhaus') {

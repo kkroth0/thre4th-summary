@@ -552,7 +552,7 @@ async function cachedProvider(req, res, provider, query, credentials, load) {
     res.set('Cache-Control', 'private, no-store');
     res.set('X-Lookup-Cache', result.state);
     res.set('X-Lookup-Collected-At', result.collectedAt);
-    const persistenceKey=session?'lookup-evidence:'+crypto.createHash('sha256').update(JSON.stringify(['matches-v11',session.sub,provider,query,result.collectedAt])).digest('hex'):'';
+    const persistenceKey=session?'lookup-evidence:'+crypto.createHash('sha256').update(JSON.stringify(['matches-v12',session.sub,provider,query,result.collectedAt])).digest('hex'):'';
     if (session && sessionHasPremium(session) && !iocIntelligence.state(persistenceKey)) {
         const name = ({ abuseipdb:'AbuseIPDB', 'abuseipdb-block':'AbuseIPDB', threatfox:'ThreatFox', otx:'OTX', malwarebazaar:'MalwareBazaar',virustotal:'VirusTotal',shodan:'Shodan',urlhaus:'URLhaus',phishtank:'PhishTank',ipgeo:'IP Geolocation' })[provider] || provider;
         await persistProviderEvidence(req,name,provider==='urlhaus'?String(req.body.query||''):query,result.value.data);
@@ -1331,8 +1331,8 @@ const articleCollectionCache = createFeedCache({ directory: path.join(__dirname,
 const newsQualityReady=(async()=>{if (process.env.NODE_ENV !== 'test') try {
     await new Promise(resolve=>setImmediate(resolve));
     newsArchiveStore.reclassifyPhishing({ bodyFor: link => articleCollectionCache.get(link)?.text || '' });
-    if(!iocIntelligence.state('news-quality-v10')){
-        writeJsonAtomic(path.join(__dirname,'.news-quality-v10-backup.json'),{archive:newsArchiveStore.all(),stories:newsStoryStore.all()});
+    if(!iocIntelligence.state('news-quality-v13')){
+        writeJsonAtomic(path.join(__dirname,'.news-quality-v13.bak.json'),{archive:newsArchiveStore.all(),stories:newsStoryStore.all()});
         const reviewed=[];let lastYield=performance.now();
         for(const row of actorPublications(newsArchiveStore.all(),newsStoryStore.all())){
             reviewed.push({...reviewNewsEvidence(row,articleCollectionCache.get(row.link)?.text||'',text=>matchMalware(text,malwareIndex)),extractionVersion:EXTRACTION_VERSION});
@@ -1347,7 +1347,7 @@ const newsQualityReady=(async()=>{if (process.env.NODE_ENV !== 'test') try {
         newsArchiveStore.add(newsArchiveStore.all().map(row=>({...row,storyId:identities.get(row.link)||row.storyId})));
         iocIntelligence.reviewSoftwareLinks();
         await iocIntelligence.ingestNews(newsArchiveStore.all());
-        iocIntelligence.setState('news-quality-v10',{at:new Date().toISOString()});
+        iocIntelligence.setState('news-quality-v13',{at:new Date().toISOString()});
     }
     if(!iocIntelligence.state('news-version-v11')){
         const revised=[];let lastYield=performance.now();
@@ -2330,7 +2330,7 @@ function buildExposureScanDeps(ownerId) {
 const malwareCatalog = createMalwareCatalog({
     http: axios,
     getKey: ownerId => getUserApiKey(ownerId, 'abuse_ch') || abuseChKey(),
-    getPublications: owner => [...newsArchiveStore.list().map(row => ({ ...row, evidenceKind: 'news' })),...iocIntelligence.publications({owner}).map(row => ({ ...row, evidenceKind: 'api' }))],
+    getPublications: (owner, { newsOnly = false } = {}) => [...newsArchiveStore.list().map(row => ({ ...row, evidenceKind: 'news' })),...(newsOnly ? [] : iocIntelligence.publications({owner}).map(row => ({ ...row, evidenceKind: 'api' })))],
     getIntelligenceFamilies: owner => iocIntelligence.families(owner),
     onSamples:(owner,data)=>iocIntelligence.ingest(sourceObservations('MalwareBazaar',data,{scope:owner,matchActors:text=>matchActors(text,actorIndex),matchMalware:(text,options)=>matchMalware(text,malwareIndex,options)})),
     cacheFile: process.env.MALPEDIA_CACHE_PATH || path.join(__dirname, '.malpedia-cache.json'),
