@@ -3,6 +3,7 @@ import collections
 import hashlib
 import json
 import re
+import sqlite3
 import subprocess
 import sys
 from pathlib import Path
@@ -47,6 +48,31 @@ except (OSError, ValueError):
     jobs = {}
 latest = sorted(jobs.values(), key=lambda row: row.get('updatedAt', ''), reverse=True)[:12]
 worker_log = command('journalctl', '-u', 'bdppt-worker', '-n', '100', '--no-pager', '-o', 'cat')
+quality = {}
+try:
+    with sqlite3.connect(f'file:{app / "server/.ioc-intelligence.sqlite"}?mode=ro', uri=True) as db:
+        quality['reviews'] = {name: json.loads(value) for name, value in db.execute("SELECT id,value FROM intelligence_state WHERE id LIKE 'news-%'")}
+        quality['collectors'] = []
+        for name, value in db.execute("SELECT id,value FROM intelligence_state WHERE id LIKE 'source:%'"):
+            state = json.loads(value)
+            quality['collectors'].append({'provider': name.split(':')[-1], 'scope': 'platform' if name.count(':') == 1 else 'account',
+                                         'status': state.get('status'), 'lastSuccessfulAt': state.get('lastSuccessfulAt'),
+                                         'error': redact(state.get('error') or '')})
+except (OSError, ValueError, sqlite3.Error):
+    quality['database'] = 'unavailable'
+try:
+    archived = json.loads((app / 'server/.news-archive.json').read_text())
+    paper = next(row for row in archived if '/four-ways-back-in-the-wordpress-xss' in row.get('link', ''))
+    body_file = app / 'server/.feed-cache/articles' / (hashlib.sha256(paper['link'].encode()).hexdigest() + '.json')
+    body = json.loads(body_file.read_text()) if body_file.exists() else {}
+    texts = [('archive', paper.get('text') or paper.get('description') or ''), ('article cache', body.get('text') or '')]
+    quality['tableArticle'] = {'storedIps': (paper.get('iocs') or {}).get('ips', []), 'textSources': []}
+    for kind, text in texts:
+        index = text.find('204.8.96.109')
+        quality['tableArticle']['textSources'].append({'kind': kind, 'characters': len(text), 'containsMissingIp': index >= 0,
+            'context': text[max(0, index - 80):index + 100] if index >= 0 else ''})
+except (OSError, ValueError, StopIteration):
+    quality['tableArticle'] = 'unavailable'
 patterns = ['timeout', '401', '402', '403', '429', 'No module named', 'Traceback', 'OPENROUTER', 'poll erro', 'ERRO', ' OK']
 repository_status = []
 for url in ['https://github.com/paloaltonetworks/unit42-timely-threat-intel', 'https://github.com/rtkwlf/wolf-tools/tree/main/threat-intelligence']:
@@ -67,6 +93,7 @@ print(json.dumps({
         'secretsMatch': bool(site_config.get('FEED_AGENT_SECRET')) and site_config.get('FEED_AGENT_SECRET') == engine_config.get('FEED_AGENT_SECRET'),
         'workerOpenrouter': bool(engine_config.get('OPENROUTER_API_KEY')),
     },
+    'newsQuality': quality,
     'workerService': command('systemctl', 'show', 'bdppt-worker', '--property=ActiveState,SubState,NRestarts,ExecMainStatus'),
     'siteService': command('systemctl', 'show', 'bdppt-site', '--property=ActiveState,SubState,NRestarts,ExecMainStatus'),
     'siteStartupSignals': [redact(line) for line in command('journalctl', '-u', 'bdppt-site', '-n', '100', '--no-pager', '-o', 'cat').splitlines() if re.search(r'Error|ReferenceError|TypeError|heap|Server running|news evidence review', line)][-15:],
