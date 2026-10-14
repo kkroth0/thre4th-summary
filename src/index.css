@@ -77,15 +77,15 @@
   .malware-search { grid-column: 1 / -1; }
   @container actor-catalog (min-width: 600px) {
     .actor-filters { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-    .malware-filters { grid-template-columns: minmax(0, 1.5fr) repeat(2, minmax(0, 1fr)); }
+    .malware-filters { grid-template-columns: minmax(0, 1.5fr) repeat(3, minmax(0, 1fr)); }
     .malware-search { grid-column: auto; }
-    .malware-ips { grid-column: span 2; }
+    .malware-ips { grid-column: span 3; }
     .vulnerability-filters { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   }
   @container actor-catalog (min-width: 900px) {
     .actor-filters { grid-template-columns: minmax(220px, 1.5fr) repeat(4, minmax(0, 1fr)); }
     .actor-filter-search { grid-column: auto; }
-    .malware-filters { grid-template-columns: minmax(220px, 1.5fr) minmax(110px, 1fr) minmax(140px, 1fr) auto auto; }
+    .malware-filters { grid-template-columns: minmax(180px, 1.5fr) repeat(3, minmax(110px, 0.8fr)) auto auto; }
     .malware-ips { grid-column: auto; }
     .vulnerability-filters { grid-template-columns: minmax(240px, 1.8fr) repeat(3, minmax(0, 1fr)); }
   }

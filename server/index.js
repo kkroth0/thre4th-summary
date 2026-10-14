@@ -2330,10 +2330,15 @@ function buildExposureScanDeps(ownerId) {
 const malwareCatalog = createMalwareCatalog({
     http: axios,
     getKey: ownerId => getUserApiKey(ownerId, 'abuse_ch') || abuseChKey(),
-    getPublications: owner => [...newsArchiveStore.list(),...iocIntelligence.publications({owner})],
+    getPublications: owner => [...newsArchiveStore.list().map(row => ({ ...row, evidenceKind: 'news' })),...iocIntelligence.publications({owner}).map(row => ({ ...row, evidenceKind: 'api' }))],
     getIntelligenceFamilies: owner => iocIntelligence.families(owner),
     onSamples:(owner,data)=>{void iocIntelligence.ingest(sourceObservations('MalwareBazaar',data,{scope:owner,matchActors:text=>matchActors(text,actorIndex),matchMalware:text=>matchMalware(text,malwareIndex)})).catch(()=>console.warn('Malware evidence could not be persisted'));},
     cacheFile: process.env.MALPEDIA_CACHE_PATH || path.join(__dirname, '.malpedia-cache.json'),
+});
+app.get('/api/malware/overview', requirePremium, scanLimiter, async (req, res) => {
+    res.set('Cache-Control', 'private, no-store');
+    try { res.json(await malwareCatalog.overview(req.user.sub, { days: Number(req.query.days || 30), type: String(req.query.type || 'all'), fresh: req.query.refresh === '1' })); }
+    catch (error) { res.status(error.status === 400 ? 400 : 502).json({ error: error.status === 400 ? 'Invalid malware filters' : 'Malware overview unavailable' }); }
 });
 app.get('/api/malware/families', requirePremium, scanLimiter, async (req, res) => {
     res.set('Cache-Control', 'private, no-store');
