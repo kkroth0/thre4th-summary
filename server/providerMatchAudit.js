@@ -57,7 +57,10 @@ export async function auditProviderMatches(root){
   });
   await check('MalwareBazaar',key,async()=>({payload:(await form('https://mb-api.abuse.ch/api/v1/',{query:'get_recent',selector:'100'})).data}));
   await check('OTX',otxKey,async()=>{
-    const row=db.prepare("SELECT o.external_id FROM observations o JOIN entity_links e ON e.observation=o.id WHERE o.scope='global' AND o.provider='OTX' AND e.kind='malware' ORDER BY o.published DESC LIMIT 1").get();
+    const candidates=db.prepare("SELECT o.external_id,o.details,MAX(o.published) published FROM observations o JOIN entity_links e ON e.observation=o.id WHERE o.scope='global' AND o.provider='OTX' AND e.kind='malware' GROUP BY o.external_id ORDER BY published DESC LIMIT 200").all();
+    // Select a positive control from a distinctive family tag/title, rather
+    // than trusting a legacy link inferred from a common word in pulse prose.
+    const row=candidates.find(row=>{const data=JSON.parse(row.details);return (data.tags||[]).some(tag=>options.matchMalware(tag).length)||options.matchMalware(data.title).length;});
     if(!row)throw Error('No stored OTX control');
     const response=await http.get('https://otx.alienvault.com/api/v1/pulses/'+encodeURIComponent(row.external_id),cfg({'X-OTX-API-KEY':otxKey}));return {payload:{results:[response.data]}};
   });
