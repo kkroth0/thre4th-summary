@@ -95,7 +95,9 @@ if(fs.existsSync(path.join(root,'server/weeklyReports.js'))){
   const file=path.join(root,'server/.weekly-reports.sqlite');
   if(fs.existsSync(file)){const db=new Database(file,{readonly:true,fileMustExist:true});db.pragma('query_only = ON');weekly.persistedDrafts=db.prepare('SELECT COUNT(*) count FROM weekly_reports').get().count;weekly.editorialSelections=db.prepare('SELECT COUNT(*) count FROM weekly_selections').get().count;db.close();}
 }
-console.log(JSON.stringify({
+const {auditProviderMatches}=await import(pathToFileURL(path.join(root,'server/providerMatchAudit.js')));
+const providerMatches=await auditProviderMatches(root);
+console.log(JSON.stringify({providerMatches,
   checkedAt:new Date().toISOString(), archivePublications:archive.length,storedStories:stories.length,
   publicationsWithIocs:archive.filter(hasIocs).length,uniqueIocs:counts,
   publicationsWithActors:archive.filter(row=>row.actors?.length).length,
