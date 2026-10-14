@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { createIocIntelligence,normalizeIndicator } from '../iocIntelligence.js';
-import { createIntelligenceCollector,sourceObservations } from '../intelligenceSources.js';
+import { createIntelligenceCollector,sourceObservations,threatFoxDays } from '../intelligenceSources.js';
 import { buildActorEvidence } from '../actorEvidence.js';
 import { correlateMalware } from '../malwareCatalog.js';
 const now=()=>Date.parse('2026-10-13T12:00:00Z');
@@ -138,4 +138,27 @@ test('rate limits keep collected data and delay retries until reset',async()=>{
   const collector=createIntelligenceCollector({store,now,getKeys:id=>id==='abuseipdb'?'test-key':'',http:{get:async()=>{calls++;throw {response:{status:429,headers:{'retry-after':'86400'}}};}}});
   await store.ingest([{value:'46.101.130.1',provider:'AbuseIPDB'}]);await collector.run();await collector.run();
   assert.equal(calls,1);assert.equal(store.list().total,1);assert.equal(collector.status().find(row=>row.id==='AbuseIPDB').status,'rate_limited');store.close();
+});
+
+test('ThreatFox uses an overlapping incremental window, bounded backlog and capacity for initial backfill',async()=>{
+  assert.equal(threatFoxDays({},now()),7);
+  assert.equal(threatFoxDays({lastSuccessfulAt:new Date(now()-3600000).toISOString()},now()),1);
+  assert.equal(threatFoxDays({lastSuccessfulAt:new Date(now()-2*86400000).toISOString()},now()),3);
+  assert.equal(threatFoxDays({lastSuccessfulAt:'2020-01-01'},now()),7);
+  const store=createIocIntelligence({now});let days=[],caps=[];
+  const collector=createIntelligenceCollector({store,now,getKeys:id=>id==='abuse_ch'?'test-key':'',http:{post:async(url,body,options)=>{
+    if(url.includes('threatfox')){days.push(body.days);caps.push(options.maxContentLength);}return {data:tf};
+  }}});
+  await collector.run();store.setState('source:ThreatFox',{...store.state('source:ThreatFox'),nextAt:null});await collector.run();
+  assert.deepEqual(days,[7,1]);assert.deepEqual(caps,[32000000,32000000]);store.close();
+});
+
+test('transient collector failure preserves evidence and retries with backoff before the normal interval',async()=>{
+  let at=now(),calls=0;const store=createIocIntelligence({now:()=>at});
+  await store.ingest([{value:'46.101.130.1',provider:'MalwareBazaar'}]);
+  const collector=createIntelligenceCollector({store,now:()=>at,getKeys:id=>id==='abuse_ch'?'test-key':'',http:{post:async url=>{
+    if(url.includes('mb-api')){calls++;if(calls===1)throw {response:{status:502,headers:{}}};}return {data:{query_status:'ok',data:[]}};
+  }}});
+  await collector.run();assert.equal(store.list().total,1);assert.equal(Date.parse(store.state('source:MalwareBazaar').nextAt),at+60000);
+  await collector.run();assert.equal(calls,1);at+=60000;await collector.run();assert.equal(calls,2);assert.equal(store.state('source:MalwareBazaar').status,'ready');store.close();
 });

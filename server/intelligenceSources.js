@@ -6,6 +6,10 @@ const strings=value=>Array.isArray(value)?value.filter(item=>typeof item==='stri
 const cves=text=>(String(text||'').match(/\bCVE-\d{4}-\d{4,}\b/gi)||[]).map(id=>({id:id.toUpperCase(),name:id.toUpperCase()}));
 const publicPulse=pulse=>pulse.public!==false&&pulse.public!==0&&(pulse.public===true||pulse.public===1||/^(?:white|clear|tlp:clear|tlp:white)$/i.test(pulse.tlp||''))&&(!pulse.tlp||/^(?:white|clear|tlp:clear|tlp:white)$/i.test(pulse.tlp));
 const sourceEntityId=(prefix,name)=>prefix+createHash('sha256').update(name.trim().normalize('NFC').toLowerCase()).digest('hex').slice(0,24);
+export function threatFoxDays(previous,at){
+  const last=Date.parse(previous.lastSuccessfulAt||'');
+  return Number.isFinite(last)?Math.min(7,Math.max(1,Math.ceil((at-last+3600000)/86400000))):7;
+}
 
 export function sourceObservations(provider,payload,{scope='global',query,matchActors=()=>[],matchMalware=()=>[]}={}) {
   const entities=text=>({actors:matchActors('Threat actors: '+text),malwares:matchMalware(text),cves:cves(text)});
@@ -78,7 +82,7 @@ export function createIntelligenceCollector({store,http,getKeys,matchActors,matc
   const stateKey=id=>scope==='global'?'source:'+id:`source:${scope}:${id}`;
   const record=(provider,data)=>store.ingest(sourceObservations(provider,data,{scope,matchActors,matchMalware}));
   const definitions=[
-    {id:'ThreatFox',interval:3600000,key:()=>getKeys('abuse_ch'),load:key=>http.post('https://threatfox-api.abuse.ch/api/v1/',{query:'get_iocs',days:7},options({'Auth-Key':key}))},
+    {id:'ThreatFox',interval:3600000,key:()=>getKeys('abuse_ch'),load:(key,previous)=>http.post('https://threatfox-api.abuse.ch/api/v1/',{query:'get_iocs',days:threatFoxDays(previous,now())},{...options({'Auth-Key':key}),maxContentLength:32000000})},
     {id:'MalwareBazaar',interval:1800000,key:()=>getKeys('abuse_ch'),load:key=>http.post('https://mb-api.abuse.ch/api/v1/','query=get_recent&selector=time',options({'Auth-Key':key,'Content-Type':'application/x-www-form-urlencoded'}))},
     {id:'AbuseIPDB',interval:6*3600000,key:()=>getKeys('abuseipdb'),load:key=>http.get('https://api.abuseipdb.com/api/v2/blacklist',{...options({Key:key}),params:{confidenceMinimum:90,limit:1000}})},
     {id:'OTX',interval:15*60000,key:()=>getKeys('otx')},
@@ -105,22 +109,25 @@ export function createIntelligenceCollector({store,http,getKeys,matchActors,matc
       if(!key){store.setState(stateKey(definition.id),{...previous,status:'missing_key',configured:false});continue;}
       const credentialRevision=createHash('sha256').update(key).digest('hex');
       if(previous.credentialRevision!==credentialRevision||previous.status==='missing_key')previous={credentialRevision};
+      if(previous.collectorVersion!==2){previous={...previous,collectorVersion:2,nextAt:previous.status==='error'?null:previous.nextAt};}
       if(previous.nextAt&&Date.parse(previous.nextAt)>now())continue;
       try{
         let progress;
         if(definition.id==='OTX')progress=await collectOtx(key,previous);
         else{
-          const response=await definition.load(key);
+          const response=await definition.load(key,previous);
           if(response.data?.query_status&&!['ok','no_results','no_iocs'].includes(response.data.query_status))throw Error('Provider rejected query');
           progress={count:await record(definition.id,response.data)};
         }
-        store.setState(stateKey(definition.id),{...previous,...progress,status:'ready',configured:true,lastSuccessfulAt:new Date(now()).toISOString(),error:null,nextAt:new Date(now()+definition.interval).toISOString()});
+        store.setState(stateKey(definition.id),{...previous,...progress,status:'ready',configured:true,failures:0,lastSuccessfulAt:new Date(now()).toISOString(),error:null,nextAt:new Date(now()+definition.interval).toISOString()});
       }catch(error){
         const status=error.response?.status;
         const reset=Number(error.response?.headers?.['x-ratelimit-reset'])*1000;
         const retry=Number(error.response?.headers?.['retry-after'])*1000;
-        const delay=status===429?Math.max(definition.interval,Number.isFinite(reset)?reset-now():0,Number.isFinite(retry)?retry:0):definition.interval;
-        store.setState(stateKey(definition.id),{...previous,configured:true,status:status===429?'rate_limited':[401,403].includes(status)?'auth_error':'error',error:status?`HTTP ${status}`:'Provider unavailable',nextAt:new Date(now()+delay).toISOString()});
+        const failures=(previous.failures||0)+1;
+        const transient=status>=500||['ECONNABORTED','ETIMEDOUT','ECONNRESET','EAI_AGAIN'].includes(error.code);
+        const delay=status===429?Math.max(definition.interval,Number.isFinite(reset)?reset-now():0,Number.isFinite(retry)?retry:0):transient?Math.min(definition.interval,300000,60000*2**Math.min(failures-1,3)):definition.interval;
+        store.setState(stateKey(definition.id),{...previous,configured:true,failures,status:status===429?'rate_limited':[401,403].includes(status)?'auth_error':'error',error:status?`HTTP ${status}`:/maxContentLength/.test(error.message||'')?'Response exceeds size limit':'Provider unavailable',nextAt:new Date(now()+delay).toISOString()});
       }
     }
   }
