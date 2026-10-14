@@ -380,7 +380,8 @@ export function isSoftwareVersionAt(text, index, value) {
     const before = text.slice(Math.max(0, index - 80), index);
     const after = text.slice(index + value.length, index + value.length + 40);
     return RE_VERSION_BEFORE.test(before)
-        || /(?:AiCloud|FortiOS|FortiClient|PAN-OS|Windows|firmware|software|OpenSSL|Rails|Ruby|\.NET|Java|JDK|Tomcat|Python|Django|Spring|Ubuntu|Debian|Android|iOS|Apache|OpenSSH|PHP|Jenkins|GitLab)\s+v?\s*$/i.test(before)
+        || /\bv\s*$/i.test(before)
+        || /(?:AiCloud|FortiOS|FortiClient|PAN-OS|Windows|firmware|software|OpenSSL|Rails|Ruby|\.NET|Java|JDK|Tomcat|Python|Django|Spring|Ubuntu|Debian|Android|iOS|Apache|OpenSSH|PHP|Jenkins|GitLab|Chrome|Firefox|Edge|Safari|Opera)\s+v?\s*$/i.test(before)
         || /^\s*(?:以前|以降|未満|以上|のバージョン|版本|version\b)/i.test(after);
 }
 
@@ -410,7 +411,7 @@ export function extractIOCs(text, { plaintext = false } = {}) {
     }
 
     const ips = new Set();
-    const refanged = refang(t);
+    const refanged = refang(t).replace(/(?<=[A-Za-z])(?=(?:\d{1,3}\.){3}\d{1,3})/g,' ');
     for (const m of refanged.matchAll(/(?<![\d.])\b(?:\d{1,3}\.){3}\d{1,3}(?!\d|\.\d)/g)) {
         const ip = m[0];
         if (ip.split('.').some((o) => Number(o) > 255)) continue;

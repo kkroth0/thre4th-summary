@@ -8,6 +8,7 @@ const plainText = (value) => {
     $('script, style, noscript').remove();
     $('br').replaceWith('\n');
     $('p, div, li, tr, h1, h2, h3').append('\n');
+    $('td, th, code').append(' ');
     return $.root().text().replace(/[ \t]+/g, ' ').replace(/\n\s*\n/g, '\n').trim();
 };
 const localName = (element) => String(element.name || '').split(':').pop().toLowerCase();

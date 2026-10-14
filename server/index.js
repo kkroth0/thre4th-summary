@@ -1350,7 +1350,7 @@ const newsQualityReady=(async()=>{if (process.env.NODE_ENV !== 'test') try {
         await iocIntelligence.ingestNews(revised);
         iocIntelligence.setState('news-version-v11',{at:new Date().toISOString()});
     }
-    if(!iocIntelligence.state('news-table-v12')){
+    if(!iocIntelligence.state('news-table-v13')){
         const changed=[];let lastYield=performance.now();
         for(const row of newsArchiveStore.all()){
             const next=recoverJoinedTableIps(row,[row.title,row.text||row.description,articleCollectionCache.get(row.link)?.text||''].join('\n'));
@@ -1364,7 +1364,7 @@ const newsQualityReady=(async()=>{if (process.env.NODE_ENV !== 'test') try {
             newsStoryStore.save(await rebuildStoryCorrelationsAsync(stories,completeNewsFeed([],newsArchiveStore.all())));
             await iocIntelligence.ingestNews(changed);
         }
-        iocIntelligence.setState('news-table-v12',{at:new Date().toISOString(),revised:changed.length});
+        iocIntelligence.setState('news-table-v13',{at:new Date().toISOString(),revised:changed.length});
     }
 } catch (error) { console.error('news evidence review failed:', error.message); throw error; }})();
 void newsQualityReady.catch(()=>{});

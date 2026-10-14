@@ -2,6 +2,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { parseFeed } from '../feedParse.js';
 
+test('RSS tables preserve cell and inline-code boundaries for IOC extraction',()=>{
+    const xml='<rss><channel><item><title>Campaign</title><link>https://vendor.example/report</link><description><![CDATA[<table><tr><td>Product Bundles</td><td>204.8.96.109</td><td><code>/fz/x.js</code>Browser-based payload</td></tr></table>]]></description></item></channel></rss>';
+    const [row]=parseFeed(xml,'Vendor',3);
+    assert.match(row.text,/Bundles 204\.8\.96\.109/);assert.match(row.text,/\/fz\/x\.js Browser-based/);
+});
+
 test('Atom com atributos escolhe o link alternate e a data published, preservando o content', () => {
     const atom = '<feed xmlns="http://www.w3.org/2005/Atom"><entry xml:lang="en"><title>A &amp; B</title><link rel="self" href="https://vendor.example/api/1"/><link rel="alternate" type="text/html" href="/Article?utm_source=rss&amp;id=A"/><published>2026-10-01T10:00:00Z</published><updated>2026-10-08T10:00:00Z</updated><summary>Short summary</summary><content><![CDATA[<p>Longer body: CVE-2026-12345 &#8212; evidence</p>]]></content></entry></feed>';
     const [item] = parseFeed(atom, 'Vendor', 3, { feedUrl: 'https://vendor.example/rss', now: new Date('2026-10-09') });

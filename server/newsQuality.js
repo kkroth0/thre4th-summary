@@ -14,7 +14,7 @@ export function removeVersionIndicators(iocs, text) {
 export function recoverJoinedTableIps(row,text='') {
   // Older cached HTML collapsed an inline address and its next column label
   // into e.g. "204.8.96.109Tor Exit". Recover only those affected bodies.
-  if(!/\b(?:\d{1,3}\.){3}\d{1,3}[A-Z][a-z]/.test(text))return row;
+  if(!/(?:\b(?:\d{1,3}\.){3}\d{1,3}[A-Z][a-z]|[A-Za-z](?:\d{1,3}\.){3}\d{1,3})/.test(text))return row;
   const ips=[...new Set([...(row.iocs?.ips||[]),...extractIOCs(text).ips])];
   if(ips.length===(row.iocs?.ips||[]).length)return row;
   return {...row,iocs:{...row.iocs,ips}};
