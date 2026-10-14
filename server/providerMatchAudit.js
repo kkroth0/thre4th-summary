@@ -14,12 +14,12 @@ export async function auditProviderMatches(root){
   const {buildActorIndex,matchActors}=await load('actorMatch.js');
   const {sourceObservations}=await load('intelligenceSources.js');
   const {createIocIntelligence}=await load('iocIntelligence.js');
-  const {correlateMalware,normalizeFamilies,malwareNameKey}=await load('malwareCatalog.js');
+  const {createMalwareCatalog}=await load('malwareCatalog.js');
   const read=name=>JSON.parse(fs.readFileSync(path.join(root,'server/data',name),'utf8'));
   const raw=read('malware.json'),families=(Array.isArray(raw)?raw:raw.malware).map(row=>({...row,aliases:row.aliases||[],references:row.references||[]}));
   const malwareIndex=buildMalwareIndex(families),actorData=read('actors.json');
-  let catalog=families;
-  try{catalog=normalizeFamilies(JSON.parse(fs.readFileSync(path.join(root,'server/.malpedia-cache.json'),'utf8')).data);}catch{/* static catalogue fallback */}
+  let cachedFamilies={};
+  try{cachedFamilies=JSON.parse(fs.readFileSync(path.join(root,'server/.malpedia-cache.json'),'utf8')).data;}catch{/* source-reported families remain available */}
   const actorIndex=buildActorIndex(Array.isArray(actorData)?actorData:actorData.actors);
   const options={matchActors:text=>matchActors(text,actorIndex),matchMalware:(text,settings)=>matchMalware(text,malwareIndex,settings)};
   const db=new Database(path.join(root,'server/.ioc-intelligence.sqlite'),{readonly:true,fileMustExist:true});
@@ -39,13 +39,14 @@ export async function auditProviderMatches(root){
       const {payload,query}=await get();
       const observations=sourceObservations(provider,payload,{...options,query});
       memory=createIocIntelligence();await memory.ingest(observations);
-      const found=memory.families(),known=new Set(catalog.flatMap(row=>[row.name,...row.aliases].map(malwareNameKey)));
-      const records=correlateMalware([...catalog,...found.filter(row=>!known.has(malwareNameKey(row.name))).map(row=>({...row,aliases:[],references:[]}))],memory.publications());
+      const found=memory.families();let profiles=0;
+      if(found.length){const client=createMalwareCatalog({getKey:()=>'',http:{get:async()=>({data:cachedFamilies})},getIntelligenceFamilies:()=>memory.families(),getPublications:()=>memory.publications()});
+        profiles=(await client.list('')).families.filter(row=>row.counts.posts>0).length;}
       const linked=observations.some(row=>row.malwares?.length||row.actors?.length);
       checks.push({provider,status:linked?'matched':observations.length?'observed_without_family':'no_results',observations:observations.length,
         malwareMatches:[...new Set(observations.flatMap(row=>row.malwares||[]).map(row=>row.name))].slice(0,10),
         actorMatches:[...new Set(observations.flatMap(row=>row.actors||[]).map(row=>row.name))].slice(0,10),
-        persistedIndicators:memory.list().total,profilesWithEvidence:[...records.values()].filter(row=>row.posts.length).length,
+        persistedIndicators:memory.list().total,profilesWithEvidence:profiles,
         reference:observations[0]?.link||'',exampleIndicator:observations[0]?.value||'',elapsedMs:Math.round(performance.now()-start),isolatedPersistence:true});
     }catch(error){checks.push({provider,status:'error',httpStatus:error.response?.status||null,code:error.code||error.name});}
     finally{memory?.close();}
