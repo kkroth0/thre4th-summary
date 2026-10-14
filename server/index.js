@@ -664,7 +664,7 @@ app.post('/api/alienvault', scanLimiter, async (req, res) => {
 
         // A OTX morre por concorrência sem devolver 429: o gate segura o lote
         // em 4 chamadas em voo e o timeout impede que uma travada ocupe a vaga.
-        const response = await cachedProvider(req, res, 'otx', sanitized, otxKey, () => otxThrottled(() => axios.get(endpoint, { headers, timeout: OTX_TIMEOUT_MS })));
+        const response = await cachedProvider(req, res, 'otx', sanitized, otxKey, () => otxThrottled(() => axios.get(endpoint, { headers, timeout: OTX_TIMEOUT_MS, family: 4, maxContentLength: 8_000_000, maxRedirects: 0 })));
         sendResponseWithQuota(res, response);
     } catch (error) {
         const { status, message } = sanitizeError(error);
@@ -738,7 +738,7 @@ app.post('/api/urlhaus', scanLimiter, async (req, res) => {
         const abKey = abuseChKey(req);
         if (abKey) headers['Auth-Key'] = abKey;
 
-        const response = await cachedProvider(req, res, 'urlhaus', params.toString(), abKey, () => axios.post(endpoint, params.toString(), { headers }));
+        const response = await cachedProvider(req, res, 'urlhaus', params.toString(), abKey, () => axios.post(endpoint, params.toString(), { headers, timeout: 15000, family: 4, maxContentLength: 8_000_000, maxRedirects: 0 }));
         res.json(response.data);
     } catch (error) {
         const { status, message } = sanitizeError(error);
@@ -767,7 +767,7 @@ app.post('/api/malwarebazaar', scanLimiter, async (req, res) => {
 
         const response = await cachedProvider(req, res, 'malwarebazaar', sanitized, abKey, () => axios.post(`https://mb-api.abuse.ch/api/v1/`,
             params.toString(),
-            { headers }
+            { headers, timeout: 15000, family: 4, maxContentLength: 8_000_000, maxRedirects: 0 }
         ));
         res.json(response.data);
     } catch (error) {
@@ -794,7 +794,7 @@ app.post('/api/threatfox', scanLimiter, async (req, res) => {
         const response = await cachedProvider(req, res, 'threatfox', sanitized, abKey, () => axios.post(
             `https://threatfox-api.abuse.ch/api/v1/`,
             { query: "search_ioc", search_term: sanitized },
-            { headers }
+            { headers, timeout: 15000, family: 4, maxContentLength: 8_000_000, maxRedirects: 0 }
         ));
         // A busca segue por curinga (é o que casa `ip:porta` e URL do host),
         // mas o que não é o indicador consultado não sai daqui.
