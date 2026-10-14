@@ -27,6 +27,7 @@ test('inline table markup and old concatenated labels do not hide IPs or corrupt
   const text=extractReadableText('<article><table><tr><td><strong>204.8.96.109</strong>Tor exit</td><td><code>/fz/x.js</code>Browser-based payload</td></tr></table></article>');
   assert.match(text,/204\.8\.96\.109 Tor exit/);assert.match(text,/\/fz\/x\.js Browser-based/);
   assert.deepEqual(extractIOCs(text).ips,['204.8.96.109']);
+  assert.deepEqual(extractIOCs('IOC: 9.9.9.10. Not a five-part address: 5.4.3.2.1').ips,['9.9.9.10']);
   const row={iocs:{ips:['147.90.235.22'],hashes:['a'.repeat(64)]}};
   const recovered=recoverJoinedTableIps(row,'147.90.235.22\n204.8.96.109Tor Exit\nVersion 2.0.0.39Beta');
   assert.deepEqual(recovered.iocs.ips,['147.90.235.22','204.8.96.109']);assert.deepEqual(recovered.iocs.hashes,row.iocs.hashes);

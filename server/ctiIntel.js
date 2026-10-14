@@ -411,7 +411,7 @@ export function extractIOCs(text, { plaintext = false } = {}) {
 
     const ips = new Set();
     const refanged = refang(t);
-    for (const m of refanged.matchAll(/\b(?:\d{1,3}\.){3}\d{1,3}(?![\d.])/g)) {
+    for (const m of refanged.matchAll(/(?<![\d.])\b(?:\d{1,3}\.){3}\d{1,3}(?!\d|\.\d)/g)) {
         const ip = m[0];
         if (ip.split('.').some((o) => Number(o) > 255)) continue;
         if (RE_PRIVATE_IP.test(ip)) continue;
