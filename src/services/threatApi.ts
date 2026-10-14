@@ -27,7 +27,7 @@ export const VENDOR_IOC_SUPPORT: Record<string, ('ip' | 'domain' | 'hash' | 'url
     "AbuseIPDB": ['ip'],
     "AlienVault OTX": ['ip', 'domain', 'hash', 'url'],
     "Shodan": ['ip', 'domain'],
-    "URLhaus": ['url', 'domain', 'hash'],
+    "URLhaus": ['ip', 'url', 'domain', 'hash'],
     "MalwareBazaar": ['hash'],
     "ThreatFox": ['ip', 'domain', 'url', 'hash'],
     "PhishTank": ['url'],
@@ -224,11 +224,19 @@ export const formatVendorData = (vendorName: string, data: any, query: string): 
                         "First Seen": data.firstseen || "Unknown",
                     };
                 }
-                // Host lookup (url/domain query).
+                // URL lookup carries tags/payloads at the top level; host
+                // lookups carry them on each URL. Keep every returned label.
+                const urls = Array.isArray(data.urls) ? data.urls : [];
+                const payloads = Array.isArray(data.payloads) ? data.payloads : [];
+                const tags = [...new Set([...(Array.isArray(data.tags) ? data.tags : []), ...urls.flatMap((row: any) => Array.isArray(row.tags) ? row.tags : [])])];
+                const families = [...new Set([data.signature, ...payloads.map((row: any) => row.signature), ...urls.flatMap((row: any) => (Array.isArray(row.payloads) ? row.payloads : []).map((sample: any) => sample.signature))].filter((value): value is string => typeof value === 'string' && !!value))];
                 return {
-                    "Status": data.urls?.length > 0 ? "Malicious URLs Found" : "Clean",
-                    "URL Count": data.urls?.length || 0,
-                    "Tags": data.urls?.[0]?.tags || [],
+                    "Status": data.url || data.id || urls.length > 0 ? "Malicious URLs Found" : "No data",
+                    "URL Count": urls.length || (data.url || data.id ? 1 : 0),
+                    "Tags": tags,
+                    "All Malware": families,
+                    "Signature": families[0] || "Unknown",
+                    "Payload Count": payloads.length,
                 };
             }
             return { "Status": "No data" };

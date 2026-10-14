@@ -190,6 +190,7 @@ const collectSignals = (result: ThreatIntelligenceResult): Signals => {
             ...asList(virustotal?.["Threat Names"]),
             clean(bazaar?.["Signature"]),
             clean(urlhaus?.["Signature"]),
+            ...asList(urlhaus?.["All Malware"]),
         ]),
         campaigns: unique(pulses.filter(isCampaignPulse).map((p) => p.name)),
         attackIds: unique(pulses.flatMap((p) => p.attackIds || [])),

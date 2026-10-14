@@ -3,8 +3,9 @@ import { createHash } from 'node:crypto';
 
 const utc=value=>typeof value==='string'&&/^\d{4}-\d\d-\d\d \d\d:\d\d:\d\d(?: UTC)?$/.test(value)?value.replace(' ','T').replace(' UTC','')+'Z':value;
 const strings=value=>Array.isArray(value)?value.filter(item=>typeof item==='string'):typeof value==='string'?[value]:[];
+const familyLabels=value=>(Array.isArray(value)?value:[]).flatMap(item=>typeof item==='string'?[item]:typeof item?.display_name==='string'?[item.display_name]:typeof item?.id==='string'?[item.id]:[]);
 const cves=text=>(String(text||'').match(/\bCVE-\d{4}-\d{4,}\b/gi)||[]).map(id=>({id:id.toUpperCase(),name:id.toUpperCase()}));
-const publicPulse=pulse=>pulse.public!==false&&pulse.public!==0&&(pulse.public===true||pulse.public===1||/^(?:white|clear|tlp:clear|tlp:white)$/i.test(pulse.tlp||''))&&(!pulse.tlp||/^(?:white|clear|tlp:clear|tlp:white)$/i.test(pulse.tlp));
+const publicPulse=pulse=>{const tlp=pulse.TLP||pulse.tlp||'';return pulse.public!==false&&pulse.public!==0&&(pulse.public===true||pulse.public===1||/^(?:white|clear|tlp:clear|tlp:white)$/i.test(tlp))&&(!tlp||/^(?:white|clear|tlp:clear|tlp:white)$/i.test(tlp));};
 const sourceEntityId=(prefix,name)=>prefix+createHash('sha256').update(name.trim().normalize('NFC').toLowerCase()).digest('hex').slice(0,24);
 export function threatFoxDays(previous,at){
   const last=Date.parse(previous.lastSuccessfulAt||'');
@@ -12,12 +13,14 @@ export function threatFoxDays(previous,at){
 }
 
 export function sourceObservations(provider,payload,{scope='global',query,matchActors=()=>[],matchMalware=()=>[]}={}) {
-  const entities=text=>({actors:matchActors('Threat actors: '+text),malwares:matchMalware(text),cves:cves(text)});
+  const entities=(text,labels=[])=>({actors:matchActors('Threat actors: '+text),malwares:[...new Map([...matchMalware(text),...labels.flatMap(label=>matchMalware(label,{structured:true}))].map(row=>[row.id,row])).values()],cves:cves(text)});
+  const signature=(name,prefix)=>typeof name==='string'&&name.trim()?matchMalware(name,{structured:true}).length?matchMalware(name,{structured:true}):[{id:sourceEntityId(prefix,name),name:name.trim().slice(0,120)}]:[];
+  if(['ThreatFox','MalwareBazaar','URLhaus'].includes(provider)&&payload?.query_status&&payload.query_status!=='ok')return [];
   if(provider==='ThreatFox')return (Array.isArray(payload?.data)?payload.data:[]).flatMap(row=>{
     const value=normalizeIndicator(row.ioc,row.ioc_type);if(!value)return [];
     if(query&&normalizeIndicator(query)?.value!==value.value)return [];
     const labels=[...strings(row.tags),row.malware_printable,row.malware_alias].filter(Boolean).join(' ');
-    const attribution=entities(labels);
+    const attribution=entities(labels,strings(row.tags));
     if(row.malware&&row.malware_printable)attribution.malwares=[{id:row.malware,name:row.malware_printable}];
     return [{value:value.value,type:value.type,scope,provider,externalId:String(row.id||value.value),published:utc(row.last_seen||row.first_seen),
       title:row.malware_printable?`${row.malware_printable} · ThreatFox`:'ThreatFox IOC',link:`https://threatfox.abuse.ch/ioc/${encodeURIComponent(row.id||'')}/`,
@@ -28,10 +31,11 @@ export function sourceObservations(provider,payload,{scope='global',query,matchA
     return (Array.isArray(pulses)?pulses:[]).flatMap(pulse=>{
       if (!pulse.id) return [];
       if(scope==='global'&&!publicPulse(pulse))return [];
-      const labels=[pulse.adversary,...strings(pulse.tags),...strings(pulse.malware_families),pulse.name].filter(Boolean).join(' ');
-      const attribution=entities(labels);
+      const families=familyLabels(pulse.malware_families);
+      const labels=[pulse.adversary,...strings(pulse.tags),...families,pulse.name,pulse.description].filter(Boolean).join('\n');
+      const attribution=entities(labels,[...strings(pulse.tags),...families]);
       if(typeof pulse.adversary==='string'&&pulse.adversary.trim()&&!attribution.actors.length)attribution.actors=[{id:sourceEntityId('otx:',pulse.adversary),name:pulse.adversary.trim().slice(0,120)}];
-      for(const name of strings(pulse.malware_families))if(!attribution.malwares.some(family=>family.name.toLowerCase()===name.toLowerCase()))attribution.malwares.push({id:sourceEntityId('otx-malware:',name),name:name.slice(0,120)});
+      for(const name of families)for(const family of signature(name,'otx-malware:'))if(!attribution.malwares.some(row=>row.id===family.id))attribution.malwares.push(family);
       const metadata={scope,provider,externalId:String(pulse.id),published:utc(pulse.modified||pulse.created),title:String(pulse.name||'OTX pulse'),
         link:`https://otx.alienvault.com/pulse/${encodeURIComponent(pulse.id)}`,tags:strings(pulse.tags),...attribution,relation:'mentioned-by-source'};
       const indicators=Array.isArray(pulse.indicators)?pulse.indicators:query?[{indicator:query}]:[];
@@ -47,14 +51,38 @@ export function sourceObservations(provider,payload,{scope='global',query,matchA
     });
   }
   if(provider==='MalwareBazaar')return (Array.isArray(payload?.data)?payload.data:[]).flatMap(row=>{
-    const labels=[row.signature,...strings(row.tags)].filter(Boolean).join(' '),attribution=entities(labels);
-    if(row.signature&&!attribution.malwares.length)attribution.malwares=[{id:'bazaar:'+row.signature.toLowerCase().replace(/[^a-z0-9]+/g,'-'),name:row.signature}];
+    const labels=[row.signature,...strings(row.tags)].filter(Boolean).join(' '),attribution=entities(labels,strings(row.tags));
+    if(typeof row.signature==='string'&&row.signature.trim())attribution.malwares=signature(row.signature,'bazaar:');
     return [row.sha256_hash,row.sha1_hash,row.md5_hash].filter(Boolean).flatMap(hash=>{const value=normalizeIndicator(hash);return value?.type==='hash'?[{value:value.value,type:'hash',scope,provider,externalId:row.sha256_hash||hash,published:utc(row.last_seen||row.first_seen),title:`${row.signature||'Malware sample'} · MalwareBazaar`,link:`https://bazaar.abuse.ch/sample/${encodeURIComponent(row.sha256_hash||hash)}/`,tags:strings(row.tags),...attribution,relation:'attributed-by-source'}]:[];});
   });
   if(provider==='URLhaus') {
     const value=normalizeIndicator(query);if(!value)return [];
-    const labels=[payload?.signature,...(payload?.urls||[]).flatMap(row=>strings(row.tags))].filter(Boolean).join(' ');
-    return [{...value,scope,provider,externalId:value.value,title:'URLhaus indicator lookup',link:payload?.urlhaus_reference||'',published:utc(payload?.lastseen||payload?.firstseen),...entities(labels),relation:'reported-by-source'}];
+    const rows=[], urls=Array.isArray(payload?.urls)?payload.urls:[], payloads=Array.isArray(payload?.payloads)?payload.payloads:[];
+    const attribution=(row)=>{
+      const tags=strings(row?.tags),names=[...strings(row?.signature),...(row?.payloads||[]).flatMap(item=>strings(item.signature))];
+      const result=entities([...tags,...names].join(' '),tags);
+      for(const name of names)for(const family of signature(name,'urlhaus:'))if(!result.malwares.some(item=>item.id===family.id))result.malwares.push(family);
+      return result;
+    };
+    const add=(ioc,row,extra={},id)=>{if(!ioc)return;rows.push({...ioc,scope,provider,externalId:id||row.id||ioc.value,title:'URLhaus indicator lookup',link:row.urlhaus_reference||payload?.urlhaus_reference||`https://urlhaus.abuse.ch/browse/search/${encodeURIComponent(ioc.value)}/`,published:utc(row.lastseen||row.firstseen||row.date_added||payload?.lastseen||payload?.firstseen),tags:strings(row.tags),...attribution(row),...extra,relation:'reported-by-source'});};
+    // Preserve the queried indicator and each URL's own labels; do not spread
+    // one URL's family across other payloads merely sharing a host.
+    if(urls.length){
+      for(const row of urls){
+        const merged=value.type==='hash'?{...row,signature:payload.signature}:row;
+        add(value,merged,{},`lookup:${value.value}:${row.id||row.url||row.urlhaus_reference}`);
+        const url=normalizeIndicator(row.url);add(url,merged,{},`url:${row.id||row.url}`);
+        if(url)add(normalizeIndicator(new URL(url.value).hostname.replace(/^\[|\]$/g,'')),merged,{},`url:${row.id||row.url}`);
+      }
+    }else {
+      add(value,payload);
+      if(value.type==='url')add(normalizeIndicator(new URL(value.value).hostname.replace(/^\[|\]$/g,'')),payload,{},value.value);
+    }
+    for(const row of payloads){
+      const extra=typeof row.signature==='string'&&row.signature.trim()?{...attribution(row),malwares:signature(row.signature,'urlhaus:')}:{...attribution(row)};
+      for(const hash of [row.sha256_hash||row.response_sha256,row.md5_hash||row.response_md5])add(normalizeIndicator(hash),row,extra,`payload:${row.sha256_hash||row.response_sha256||hash}`);
+    }
+    return rows;
   }
   if(provider==='VirusTotal') {
     const attributes=payload?.data?.attributes;
@@ -109,7 +137,9 @@ export function createIntelligenceCollector({store,http,getKeys,matchActors,matc
       if(!key){store.setState(stateKey(definition.id),{...previous,status:'missing_key',configured:false});continue;}
       const credentialRevision=createHash('sha256').update(key).digest('hex');
       if(previous.credentialRevision!==credentialRevision||previous.status==='missing_key')previous={credentialRevision};
-      if(previous.collectorVersion!==2){previous={...previous,collectorVersion:2,nextAt:previous.status==='error'?null:previous.nextAt};}
+      if(previous.collectorVersion!==3){previous={...previous,collectorVersion:3,
+        nextAt:['rate_limited','auth_error'].includes(previous.status)?previous.nextAt:null,
+        ...(definition.id==='OTX'?{cursor:null,pendingWatermark:null,watermark:new Date(now()-7*86400000).toISOString()}:{} )};}
       if(previous.nextAt&&Date.parse(previous.nextAt)>now())continue;
       try{
         let progress;

@@ -124,6 +124,32 @@ export function createIocIntelligence({filePath=':memory:',now=()=>Date.now()}={
     flight=work.catch(()=>{});await work;
     putState.run('news-sync',JSON.stringify({lastSuccessfulAt:new Date(now()).toISOString(),publications:rows.length,changed:changed.length}));
   }
+  async function replayProviderPayloads(convert) {
+    const revision='provider-matches-v11';
+    if(db.prepare('SELECT 1 FROM intelligence_state WHERE id=?').get(revision))return 0;
+    let count=0;
+    // Snapshot IDs only; load one saved JSON at a time, with no API calls.
+    const ids=db.prepare(`SELECT id FROM observations WHERE provider IN ('OTX','ThreatFox','URLhaus','MalwareBazaar') AND json_type(details,'$.payload')='object'`).all();
+    for(const {id} of ids){
+      const row=db.prepare('SELECT o.*,i.value FROM observations o JOIN indicators i ON i.id=o.indicator WHERE o.id=?').get(id);
+      if(!row)continue;
+      const payload=JSON.parse(row.details).payload;
+      const replacements=convert(row.provider,payload,{scope:row.scope,query:row.value}).map((observation,index)=>({...observation,...(index===0?{payload}:{})}));
+      // Atomically replace this provider response; keep revisions and all
+      // independent news/provider evidence on the same indicators.
+      const work=flight.then(()=>db.transaction(()=>{
+        const previous=db.prepare('SELECT * FROM observations WHERE scope=? AND provider=? AND external_id=?').all(row.scope,row.provider,row.external_id);
+        for(const old of previous){
+          const entities=db.prepare('SELECT * FROM entity_links WHERE observation=?').all(old.id);
+          db.prepare('INSERT INTO observation_revisions(observation,at,payload) VALUES(?,?,?)').run(old.id,new Date(now()).toISOString(),JSON.stringify({...old,entities}));
+          clearLinks.run(old.id);db.prepare('DELETE FROM observations WHERE id=?').run(old.id);
+        }
+        chunk(replacements);
+      })());
+      flight=work.catch(()=>{});await work;count++;await yieldLoop();
+    }
+    putState.run(revision,JSON.stringify({at:new Date(now()).toISOString(),count}));return count;
+  }
   // Correct previously inferred command/protocol labels without discarding
   // provider observations or explicit family attribution.
   function reviewSoftwareLinks(){
@@ -142,7 +168,7 @@ export function createIocIntelligence({filePath=':memory:',now=()=>Date.now()}={
     const scope=scopeSql(owner);
     return db.prepare(`SELECT e.entity id,e.name,MAX(o.published) updated,GROUP_CONCAT(DISTINCT COALESCE(json_extract(o.details,'$.source'),o.provider)) source FROM entity_links e JOIN observations o ON o.id=e.observation WHERE e.kind=? AND ${scope.sql} GROUP BY e.entity,e.name LIMIT 10000`).all(kind,...scope.args).map(row=>({...row,references:[]}));
   }
-  return {ingest,list,detail,publications,
+  return {ingest,list,detail,publications,replayProviderPayloads,
     exportRows:({owner='',from,to})=>{
       const scope=scopeSql(owner);
       return db.prepare(`SELECT o.*,i.value,i.type FROM observations o JOIN indicators i ON i.id=o.indicator WHERE ${scope.sql} AND o.published>=? AND o.published<=? ORDER BY o.published DESC,o.id`).all(...scope.args,from,to).map(row=>{

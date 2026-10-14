@@ -174,7 +174,7 @@ const iocIntelligence = createIocIntelligence({ filePath: process.env.IOC_INTELL
 const intelligenceCollector = createIntelligenceCollector({ store: iocIntelligence, http: axios,
     onQuota: (name, headers, key, operation) => quotaReader.record(name, headers, { key, operation }),
     getKeys: source => source === 'abuse_ch' ? abuseChKey() : source === 'otx' ? getKeys('ALIENVAULT_API_KEY')[0] : getKeys('ABUSEIPDB_API_KEY')[0],
-    matchActors: text => matchActors(text, actorIndex), matchMalware: text => matchMalware(text, malwareIndex) });
+    matchActors: text => matchActors(text, actorIndex), matchMalware: (text, options) => matchMalware(text, malwareIndex, options) });
 const accountIntelligenceCollectors = new Map();
 function accountIntelligenceCollector(owner) {
     if (!['otx','abuse_ch','abuseipdb'].some(provider => getUserApiKey(owner,provider))) return null;
@@ -187,7 +187,7 @@ function accountIntelligenceCollector(owner) {
                 if(source==='abuse_ch'&&key===abuseChKey())return '';
                 if(source==='abuseipdb'&&getKeys('ABUSEIPDB_API_KEY').includes(key))return '';
                 return key;
-            },matchActors:text=>matchActors(text,actorIndex),matchMalware:text=>matchMalware(text,malwareIndex)}));
+            },matchActors:text=>matchActors(text,actorIndex),matchMalware:(text,options)=>matchMalware(text,malwareIndex,options)}));
     }
     return accountIntelligenceCollectors.get(owner);
 }
@@ -538,7 +538,7 @@ async function persistProviderEvidence(req,provider,query,data) {
     const session=verifySession(getCookie(req,'ts_session'));
     if(!session||!sessionHasPremium(session))return;
     await iocIntelligence.ingest(sourceObservations(provider,data,{scope:session.sub,query,
-        matchActors:text=>matchActors(text,actorIndex),matchMalware:text=>matchMalware(text,malwareIndex)}).map((row,index)=>({...row,...(index===0?{payload:data}:{})})));
+        matchActors:text=>matchActors(text,actorIndex),matchMalware:(text,options)=>matchMalware(text,malwareIndex,options)}).map((row,index)=>({...row,...(index===0?{payload:data}:{})})));
 }
 async function cachedProvider(req, res, provider, query, credentials, load) {
     const session = verifySession(getCookie(req, 'ts_session'));
@@ -552,7 +552,7 @@ async function cachedProvider(req, res, provider, query, credentials, load) {
     res.set('Cache-Control', 'private, no-store');
     res.set('X-Lookup-Cache', result.state);
     res.set('X-Lookup-Collected-At', result.collectedAt);
-    const persistenceKey=session?'lookup-evidence:'+crypto.createHash('sha256').update(JSON.stringify([session.sub,provider,query,result.collectedAt])).digest('hex'):'';
+    const persistenceKey=session?'lookup-evidence:'+crypto.createHash('sha256').update(JSON.stringify(['matches-v11',session.sub,provider,query,result.collectedAt])).digest('hex'):'';
     if (session && sessionHasPremium(session) && !iocIntelligence.state(persistenceKey)) {
         const name = ({ abuseipdb:'AbuseIPDB', 'abuseipdb-block':'AbuseIPDB', threatfox:'ThreatFox', otx:'OTX', malwarebazaar:'MalwareBazaar',virustotal:'VirusTotal',shodan:'Shodan',urlhaus:'URLhaus',phishtank:'PhishTank',ipgeo:'IP Geolocation' })[provider] || provider;
         await persistProviderEvidence(req,name,provider==='urlhaus'?String(req.body.query||''):query,result.value.data);
@@ -713,8 +713,8 @@ app.post('/api/urlhaus', scanLimiter, async (req, res) => {
     const { query } = req.body;
     try {
         const queryType = detectQueryType(query);
-        if (!["url", "domain", "hash"].includes(queryType)) {
-            return res.status(400).json({ error: "URL, Domain or Hash query required" });
+        if (!["url", "domain", "ip", "hash"].includes(queryType)) {
+            return res.status(400).json({ error: "URL, Domain, IP or Hash query required" });
         }
 
         // Safe x-www-form-urlencoded formatting (VULN-08)
@@ -729,8 +729,8 @@ app.post('/api/urlhaus', scanLimiter, async (req, res) => {
             endpoint = `https://urlhaus-api.abuse.ch/v1/payload/`;
         } else {
             const sanitized = sanitizeQuery(query, queryType);
-            params.append('host', sanitized);
-            endpoint = `https://urlhaus-api.abuse.ch/v1/host/`;
+            params.append(queryType === 'url' ? 'url' : 'host', sanitized);
+            endpoint = `https://urlhaus-api.abuse.ch/v1/${queryType === 'url' ? 'url' : 'host'}/`;
         }
 
         // abuse.ch now requires an Auth-Key header on all URLhaus API queries.
@@ -2332,7 +2332,7 @@ const malwareCatalog = createMalwareCatalog({
     getKey: ownerId => getUserApiKey(ownerId, 'abuse_ch') || abuseChKey(),
     getPublications: owner => [...newsArchiveStore.list().map(row => ({ ...row, evidenceKind: 'news' })),...iocIntelligence.publications({owner}).map(row => ({ ...row, evidenceKind: 'api' }))],
     getIntelligenceFamilies: owner => iocIntelligence.families(owner),
-    onSamples:(owner,data)=>{void iocIntelligence.ingest(sourceObservations('MalwareBazaar',data,{scope:owner,matchActors:text=>matchActors(text,actorIndex),matchMalware:text=>matchMalware(text,malwareIndex)})).catch(()=>console.warn('Malware evidence could not be persisted'));},
+    onSamples:(owner,data)=>iocIntelligence.ingest(sourceObservations('MalwareBazaar',data,{scope:owner,matchActors:text=>matchActors(text,actorIndex),matchMalware:(text,options)=>matchMalware(text,malwareIndex,options)})),
     cacheFile: process.env.MALPEDIA_CACHE_PATH || path.join(__dirname, '.malpedia-cache.json'),
 });
 app.get('/api/malware/overview', requirePremium, scanLimiter, async (req, res) => {
@@ -3898,6 +3898,8 @@ app.listen(PORT, () => {
     // Booting a test server must not launch real scheduled collections.
     if (process.env.NODE_ENV === 'test') return;
     console.log(`Server running on port ${PORT}`);
+    setTimeout(()=>{void iocIntelligence.replayProviderPayloads((provider,payload,options)=>sourceObservations(provider,payload,{...options,
+        matchActors:text=>matchActors(text,actorIndex),matchMalware:(text,matchOptions)=>matchMalware(text,malwareIndex,matchOptions)})).catch(()=>console.warn('Saved provider match review failed'));},2000).unref();
     let vulnerabilityRetries = 0;
     const refreshVulnerabilities = async () => {
         try {

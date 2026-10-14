@@ -89,3 +89,13 @@ test('missing PhishStats results and unverified PhishTank reports do not become 
   try { const result = await fetchThreatData('https://example.com/', ['PhishStats','PhishTank']); assert.equal(result.detections,0); assert.equal(result.reportingVendors,0); assert.equal(result.threatLevel,'unknown'); }
   finally { globalThis.fetch = original; }
 });
+
+test('URLhaus URL results expose all payload families and tags without becoming a clean vote', () => {
+  const result = formatVendorData('URLhaus', {query_status:'ok',id:'123',url:'https://evil.example.org/a',tags:['Vidar'],payloads:[{signature:'Vidar'},{signature:'Stealc'}]}, 'https://evil.example.org/a');
+  assert.equal(result.Status,'Malicious URLs Found');
+  assert.equal(result['URL Count'],1);
+  assert.deepEqual(result['All Malware'],['Vidar','Stealc']);
+  assert.deepEqual(result.Tags,['Vidar']);
+  assert.equal(formatVendorData('URLhaus',{query_status:'ok'},'evil.example.org').Status,'No data');
+  assert.deepEqual(resolveVendorsForQuery('46.101.130.1',['URLhaus']),['URLhaus']);
+});
