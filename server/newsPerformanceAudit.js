@@ -14,6 +14,7 @@ report.cycles = db.prepare('SELECT at,status,payload FROM phishing_collection_cy
     return { at: row.at, status: row.status, elapsedMs: value.elapsedMs, stages: value.stages, extraction: value.extraction, bodies: value.bodies };
 });
 report.generation = JSON.parse(db.prepare("SELECT payload FROM news_storage_state WHERE id='primary'").get()?.payload || 'null')?.generation;
+report.currentCycle = JSON.parse(db.prepare("SELECT value FROM intelligence_state WHERE id='news-current-cycle'").get()?.value || 'null');
 db.close();
 report.code = Object.fromEntries(['feedEnrichment.js','feedExtractionCache.js'].map(name => [name,createHash('sha256').update(fs.readFileSync(path.join(root,'server',name))).digest('hex')]));
 try {
