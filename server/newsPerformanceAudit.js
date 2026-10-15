@@ -15,6 +15,18 @@ report.cycles = db.prepare('SELECT at,status,payload FROM phishing_collection_cy
 });
 report.generation = JSON.parse(db.prepare("SELECT payload FROM news_storage_state WHERE id='primary'").get()?.payload || 'null')?.generation;
 report.currentCycle = JSON.parse(db.prepare("SELECT value FROM intelligence_state WHERE id='news-current-cycle'").get()?.value || 'null');
+report.versionRepair = JSON.parse(db.prepare("SELECT value FROM intelligence_state WHERE id='news-version-lists-v1'").get()?.value || 'null');
+report.versionSamples = db.prepare("SELECT payload FROM news_documents WHERE kind='archive' AND payload LIKE '%25.1.2.2%'").all().map(row=>JSON.parse(row.payload)).reduce((counts,row)=>{
+    counts.publications++;
+    counts.retainedIpMentions+=(row.iocs?.ips||[]).filter(ip=>['25.1.2.2','25.1.1.1','25.1.3.0','25.1.1.2','25.1.3.1'].includes(ip)).length;
+    counts.realIpMentions+=(row.iocs?.ips||[]).filter(ip=>ip==='108.165.147.64').length;
+    return counts;
+},{publications:0,retainedIpMentions:0,realIpMentions:0});
+report.c2Agent = db.prepare("SELECT kind,payload FROM news_documents WHERE payload LIKE '%C2Agent%'").all().flatMap(row=>{
+    const value=JSON.parse(row.payload);
+    const sources=row.kind==='archive'?[value]:(value.sources||[]);
+    return sources.filter(source=>/unit42\.paloaltonetworks\.com\/.*c2agent/i.test(source.link||'')).map(source=>({kind:row.kind,hashes:source.iocs?.hashes?.length||0}));
+});
 db.close();
 report.code = Object.fromEntries(['feedEnrichment.js','feedExtractionCache.js'].map(name => [name,createHash('sha256').update(fs.readFileSync(path.join(root,'server',name))).digest('hex')]));
 try {
