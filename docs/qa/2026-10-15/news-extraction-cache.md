@@ -48,4 +48,70 @@ e `bytes`, junto com os tempos já existentes. O primeiro ciclo após restart
 precisa preencher o cache; o benefício recorrente depende da proporção de
 conteúdo/catálogos inalterados. Rede e persistência continuam com custos próprios.
 
-Resultados de CI, deploy e auditoria de produção serão registrados abaixo.
+## Primeira publicação e replay real
+
+Release `1a35c5ec449626433e4e93d20fac31746ae02b02`:
+[CI 38786247221](https://github.com/kkroth0/thre4th-summary/actions/runs/38786247221)
+aprovado, 731 backend e 255 frontend/marca; lint sem erros (16 avisos existentes),
+TypeScript/build aprovados. Deploy
+[VPS 38786469709](https://github.com/kkroth0/thre4th-summary/actions/runs/38786469709)
+e [Cloudflare 38786469990](https://github.com/kkroth0/thre4th-summary/actions/runs/38786469990)
+aprovados. Nenhuma dependência alterada; o security scan continua apontando a
+dívida de dependências já existente (Gitleaks aprovado).
+
+[Replay 38786890588](https://github.com/kkroth0/thre4th-summary/actions/runs/38786890588):
+120 entradas amostradas de 3.267 disponíveis, 19 com corpo retido, 98 publicações
+relevantes. Extração fria 15.093 ms; reaproveitada 11 ms, evidência idêntica.
+17 menções a atores, 18 a malware, 35 a CVEs; 9 IPs, 49 domínios e 45 hashes.
+Sem suplementos de apêndice ou campanhas nessa amostra (cobertos pelos testes).
+120 hits, 120 misses, 147.780 bytes contabilizados e nenhuma expulsão.
+Esses tempos são do replay controlado, não da coleta inteira.
+
+[Integridade 38788045338](https://github.com/kkroth0/thre4th-summary/actions/runs/38788045338),
+18:45:30Z: geração 20, 7.563 publicações e 5.078 eventos; zero ausências,
+diferenças, fontes órfãs, aliases conflitantes e fontes duplicadas. Backup igual
+e confirmado na geração 20. A integridade estrutural não comprova a precisão
+semântica de cada agrupamento.
+
+Navegador autenticado: feed com 5.098 cards/eventos, busca de C2Agent e referência
+original Unit42 presentes. A explicação de vínculos no detalhe ficou pendente;
+este fluxo não foi considerado validado. Também foi observado um card de resumo
+trimestral com 91 publicações e muitas entidades: requer auditoria semântica
+própria, sem confundir integridade de armazenamento com identidade de incidente.
+
+## Limite de rede encontrado durante a conferência
+
+Até 18:52Z o processo novo permanecia ativo sem registrar um ciclo concluído;
+RSS teve última escrita às 18:38Z e corpos às 18:40Z. Não há prova de que o replay
+quente já representou um ciclo vivo inteiro. A auditoria leve está no branch
+de diagnóstico `codex/news-extraction-cycle-audit`, sem deploy desse branch.
+Uma primeira tentativa de diagnóstico isolando um processo por publicação teve
+deadline de startup insuficiente e não permite atribuir falha ao extrator.
+O replay corrigido
+[38789060105](https://github.com/kkroth0/thre4th-summary/actions/runs/38789060105)
+amortizou a inicialização: 33 entradas recentes concluíram em 19.091 ms, nenhuma
+ficou travada. O corpo de BEC de 21.411 caracteres levou 5.409 ms. Isso limita a
+conclusão à amostra, sem excluir textos antigos ou outras etapas.
+
+A revisão encontrou `dns.lookup` antes do timeout HTTP nas fontes automáticas,
+e caminhos de RSS/corpos usando o pool getaddrinfo do sistema. Um timeout de
+socket não limita essa resolução prévia. A correção passa a usar resolvers DNS
+independentes/canceláveis e deadline único de 12 s por requisição completa,
+incluindo DNS e redirecionamentos. A documentação do
+[Node.js](https://nodejs.org/api/dns.html#implementation-considerations) diferencia
+o pool compartilhado de `dns.lookup` das consultas assíncronas `resolve*`.
+É uma lacuna comprovada no código; a atribuição de toda a demora de produção
+a essa lacuna ainda depende do reteste após publicação.
+
+RSS, listagens, corpos e apêndices usam o mesmo transporte que fixa o IP validado
+ao socket e revalida cada destino. Literais e respostas DNS mistas com endereços
+privados continuam bloqueados. Limites de 8 MB/2 MB/40 KB preservados. Apêndices
+relativos usam a URL final do artigo. RSS/scrapers fazem uma tentativa por ciclo;
+o snapshot válido anterior permanece disponível nas falhas, e o próximo ciclo
+substitui as três tentativas consecutivas e os backoffs do mesmo erro.
+Isso pode aumentar fontes marcadas stale em falhas transitórias; não apaga suas
+publicações ou evidências anteriores.
+
+736 testes backend aprovados após essa correção, incluindo DNS que nunca retorna,
+DNS lento em segundo hop, HTTP pendente, cancelamento isolado por fonte,
+validação de destinos mistos/privados, IP fixado, ETag/304 e tamanho de apêndices.

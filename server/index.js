@@ -15,7 +15,7 @@ import * as cheerio from 'cheerio';
 import {
     scoreArticle, localizeEnrichment, severityFromScore, extractIOCs, CTI_FEEDS,
     extractReadableText, collectArtifactLinks, githubArtifact, ARTIFACT_TEXT_FILE,
-    protectTerms, restoreTerms, isTransientFeedError, isPureNoise,
+    protectTerms, restoreTerms, isPureNoise,
     ttpIdsFrom,
 } from './ctiIntel.js';
 import { actorTargeting } from './actorProfile.js';
@@ -45,7 +45,7 @@ import { publishNewsSnapshot } from './publishNewsSnapshot.js';
 import { createIocIntelligence } from './iocIntelligence.js';
 import { createIntelligenceCollector, sourceObservations } from './intelligenceSources.js';
 import { createWeeklyReports, weeklyWindow } from './weeklyReports.js';
-import { createPublicationRequest } from './publicationHttp.js';
+import { createPublicationRequest, resolvePublicationHost } from './publicationHttp.js';
 import { actorPublications, buildActorActivity, buildActorEvidence } from './actorEvidence.js';
 import { otxThrottled, OTX_TIMEOUT_MS } from './otxGate.js';
 import { findMentions, findDomainMentions } from './newsIocs.js';
@@ -1346,30 +1346,6 @@ function effectiveFeeds() {
     return catalogFeeds().filter((f) => f.enabled);
 }
 
-// Uma falha passageira de rede (timeout, 5xx) costuma se resolver sozinha —
-// tentar de novo com um respiro curto evita que ela custe o ciclo de refresh
-// inteiro, já que o próximo só vem horas depois. Uma fonte realmente fora do
-// ar ainda acaba marcada como falha em feedHealth, só que depois destas
-// tentativas em vez de uma.
-const FEED_FETCH_RETRIES = 3;
-const FEED_RETRY_BACKOFF_MS = [1000, 3000];
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
-async function fetchFeedWithRetry(url, options) {
-    for (let attempt = 0; attempt < FEED_FETCH_RETRIES; attempt++) {
-        try {
-            return await axios.get(url, options);
-        } catch (err) {
-            // Um 404, uma falha de DNS ou um bloqueio de WAF vão parecer
-            // idênticos na próxima tentativa — só vale esperar e tentar de novo
-            // quando o erro é do tipo que pode mesmo se resolver sozinho.
-            const isLastAttempt = attempt === FEED_FETCH_RETRIES - 1;
-            if (isLastAttempt || !isTransientFeedError(err)) throw err;
-            await sleep(FEED_RETRY_BACKOFF_MS[attempt]);
-        }
-    }
-}
-
 // Background newsletter feed refresher
 const rssCollectionCache = createFeedCache({ directory: path.join(__dirname, '.feed-cache', 'rss'), fs, writeJsonAtomic });
 const feedExtractionCache = createFeedExtractionCache();
@@ -1466,10 +1442,10 @@ const feedCollector = createFeedCollector({
     resolve: (feed, previous, options) => feed.kind === 'github' ? repositoryResolver(feed, previous, options) : publicationResolver(feed, previous, options),
     onHealth: (url, health) => feedHealth.set(url, health),
     concurrency: Number(process.env.FEED_FETCH_CONCURRENCY) || 6,
-    request: (url, { headers }) => fetchFeedWithRetry(url, {
+    // One bounded attempt per cycle; the collector retains the last good
+    // source snapshot on failure instead of tripling timeouts/API calls.
+    request: (url, { headers }) => publicationRequest(url, {
         headers: { 'User-Agent': 'ThreatSumm4ry/1.0 RSS collector', Accept: 'application/rss+xml,application/atom+xml,application/xml,text/xml', ...headers },
-        timeout: 8000, responseType: 'text', maxContentLength: 8000000, maxRedirects: 3,
-        validateStatus: (status) => (status >= 200 && status < 300) || status === 304,
     }),
 });
 
@@ -1488,7 +1464,7 @@ const refreshNewsletterFeed = singleFlightRefresh(async () => {
         try {
             const result = await collectScraped({
                 sources, seen: scrapeSeen, now: new Date(), maxNew: 10,
-                fetchText: async (url) => (await fetchFeedWithRetry(url, { headers: { 'User-Agent': BROWSER_UA }, timeout: 8000, maxContentLength: 2000000 })).data,
+                fetchText: async (url) => (await publicationRequest(url, { headers: { 'User-Agent': BROWSER_UA }, maxContentLength: 2000000 })).data,
             });
             // Keep each scraper's last successful publications if it is offline.
             for (const source of sources) {
@@ -2868,16 +2844,13 @@ const BROWSER_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
 
 async function fetchArticleText(url, textCap = 8000) {
     try {
-        const resp = await axios.get(url, {
+        const resp = await publicationRequest(url, {
             headers: { 'User-Agent': BROWSER_UA, Accept: 'text/html,application/xhtml+xml' },
-            timeout: 10000,
-            maxRedirects: 3,
             maxContentLength: 2000000,
-            responseType: 'text',
         });
         return {
             text: extractReadableText(resp.data).slice(0, textCap),
-            artifactLinks: collectArtifactLinks(resp.data, url),
+            artifactLinks: collectArtifactLinks(resp.data, resp.url || url),
         };
     } catch (err) {
         console.warn(`Article fetch failed for ${url}: ${err.message}`);
@@ -2893,14 +2866,9 @@ const ARTIFACT_MAX_BYTES = 40_000;
 const ARTIFACT_MAX_FILES = 6;
 
 async function fetchArtifactFile(url) {
-    await assertSafePublicUrl(url);
-    const resp = await axios.get(url, {
+    const resp = await publicationRequest(url, {
         headers: { 'User-Agent': BROWSER_UA, Accept: 'text/plain,*/*' },
-        timeout: 8000,
-        maxRedirects: 2,
         maxContentLength: ARTIFACT_MAX_BYTES,
-        responseType: 'text',
-        transformResponse: (d) => d,
     });
     const body = String(resp.data || '').slice(0, ARTIFACT_MAX_BYTES);
     // Nem todo apêndice é arquivo texto: gist.github.com, uma página de release
@@ -2919,13 +2887,11 @@ async function resolveArtifactFiles(link) {
     if (!gh) return [link];
     if (gh.kind === 'raw') return [gh.url];
 
-    await assertSafePublicUrl(gh.url);
-    const resp = await axios.get(gh.url, {
+    const resp = await publicationRequest(gh.url, {
         headers: { 'User-Agent': BROWSER_UA, Accept: 'application/vnd.github+json' },
-        timeout: 8000,
-        maxRedirects: 2,
     });
-    return (Array.isArray(resp.data) ? resp.data : [])
+    const data=typeof resp.data==='string'?JSON.parse(resp.data):resp.data;
+    return (Array.isArray(data) ? data : [])
         .filter((f) => f?.type === 'file' && f.download_url && f.size < ARTIFACT_MAX_BYTES && ARTIFACT_TEXT_FILE.test(f.name))
         .slice(0, ARTIFACT_MAX_FILES)
         .map((f) => f.download_url);
@@ -3192,7 +3158,7 @@ const assertSafePublicUrl = async (raw) => {
     }
     let records;
     try {
-        records = await dns.promises.lookup(host, { all: true });
+        records = await resolvePublicationHost(host, { signal: AbortSignal.timeout(8000) });
     } catch {
         throw new Error('Could not resolve URL host');
     }
