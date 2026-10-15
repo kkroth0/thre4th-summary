@@ -36,6 +36,23 @@ a semana e a quantidade de membros e baixa o arquivo, sem navegar para a API.
 Sem conteúdo original suficiente, uma mudança de regras não pode ser tratada
 como uma série histórica homogênea.
 
+A extração `phishing-kits-v2` exige evidência de nome para kits: família
+reconhecida, nome explicitamente declarado/citado ou construção específica
+"Nome Phishkit". Adjetivos antes de "kit" não bastam; famílias novas sem
+nomeação explícita podem deixar de ser reconhecidas. Ela revisa os nomes usando
+texto e trechos de evidência preservados, mantendo a classificação original de
+incidente quando o corpo completo não está mais disponível. A versão de kits
+fica separada nas regras; os snapshots anteriores permanecem no histórico.
+Uma recuperação única confere evidências de corpo retidas em eventos/backups,
+exigindo a mesma revisão da publicação (hash, ou título/data/resumo iguais quando
+não há hash). Ela copia o arquivo antes de gravar e não restaura inferências sem
+evidência de corpo. Falha de gravação não avança o estado em memória.
+Quando só resta a participação em um snapshot anterior à regressão, a recuperação
+exige a versão original e URL/hash de conteúdo idênticos. Preserva a classificação
+de phishing registrada, com proveniência explícita no JSON, sem inventar técnicas,
+marcas ou atribuições. O painel identifica quantas publicações têm esse nível de
+evidência. Revisões sem hash verificável não são recuperadas por esse caminho.
+
 `phishing_collection_cycles` guarda ciclos observados; `phishing_source_days`
 acumula fresh/304/stale/failed por fonte habilitada. Ambos retêm 90 dias. Repetir
 o mesmo identificador de ciclo é idempotente. Esse histórico começa no deploy;
