@@ -30,7 +30,7 @@ const selected = [...(watch.hits || []).filter(hit => hit.verdict === 'malicious
   .map(hit => ({ hostname: hit.domain || hit.apexDomain, firstSeen: hit.firstSeen, cohort: 'watch', label: hit.verdict === 'legitimate' ? 'legitimate' : 'malicious' }));
 const brands = [...new Set((watch.hits || []).map(hit => hit.term).filter(Boolean))];
 const watched = new Set((watch.hits || []).flatMap(hit => [hit.domain, hit.apexDomain]));
-const independent = db.prepare("SELECT DISTINCT i.value,i.type FROM observations o JOIN indicators i ON i.id=o.indicator WHERE o.scope='global' AND o.provider IN ('ThreatFox','URLhaus') AND i.type IN ('domain','url') ORDER BY i.value LIMIT 2000").all();
+const independent = db.prepare("SELECT DISTINCT i.value,i.type FROM observations o JOIN indicators i ON i.id=o.indicator WHERE o.scope='global' AND o.provider IN ('ThreatFox','URLhaus','OpenPhish') AND i.type IN ('domain','url') ORDER BY i.value LIMIT 2000").all();
 for (const row of independent) {
   let hostname; try { hostname = row.type === 'url' ? new URL(row.value).hostname : row.value; } catch { continue; }
   if (selected.length >= 8) break;

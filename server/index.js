@@ -86,6 +86,8 @@ import { collectArticleTexts } from './articleCollector.js';
 import { enrichFeedItemsAsync, mergeIocEvidence, applyVulnerabilityContext, EXTRACTION_VERSION } from './feedEnrichment.js';
 import { createStoryStore } from './newsStoryStore.js';
 import { createNewsArchiveStore } from './newsArchiveStore.js';
+import { durableArticleCache } from './newsPersistence.js';
+import { proposeWatchTerms } from './watchSuggestions.js';
 import { newsExportQuery, newsExportRows, newsExportCsv } from './newsExport.js';
 import { buildPhishingDataset, phishingQuery } from './phishingDataset.js';
 import { buildPhishingWeeks } from './phishingEvolution.js';
@@ -169,11 +171,26 @@ const exposureStore = createWatchlistStore({
 const DAILY_SUMMARIES_PATH = path.join(__dirname, '.daily-summaries.json');
 const dailyEditionStore = createEditionStore({ filePath: DAILY_SUMMARIES_PATH, writeJsonAtomic });
 
-const NEWS_STORIES_PATH = path.join(__dirname, '.news-stories.json');
+const NEWS_STORIES_PATH = process.env.NEWS_STORIES_PATH || path.join(__dirname, '.news-stories.json');
 const newsStoryStore = createStoryStore({ filePath: NEWS_STORIES_PATH, readFileSync: fs.readFileSync, writeJsonAtomic });
 const NEWS_ARCHIVE_PATH = process.env.NEWS_ARCHIVE_PATH || path.join(__dirname, '.news-archive.json');
 const newsArchiveStore = createNewsArchiveStore({ filePath: NEWS_ARCHIVE_PATH, readFileSync: fs.readFileSync, writeJsonAtomic });
 const iocIntelligence = createIocIntelligence({ filePath: process.env.IOC_INTELLIGENCE_PATH || (process.env.NODE_ENV === 'test' ? ':memory:' : path.join(__dirname, '.ioc-intelligence.sqlite')) });
+function registerCatalogEntities(rows, kind) {
+    try { iocIntelligence.news.registerEntities(rows.map(row => ({ ...row, kind })), 'global', 'catalog'); }
+    catch (error) { console.warn('Entity catalog persistence failed:', error.message); }
+}
+function syncNewsShadow() {
+    try {
+        const result = iocIntelligence.news.reconcile({ archive: newsArchiveStore.all(), stories: newsStoryStore.all() });
+        iocIntelligence.setState('news-shadow-error', null);
+        return result;
+    } catch (error) {
+        iocIntelligence.setState('news-shadow-error', { at: new Date().toISOString(), message: 'SQLite shadow synchronization failed' });
+        console.warn('News shadow synchronization failed:', error.message);
+        return null;
+    }
+}
 const intelligenceCollector = createIntelligenceCollector({ store: iocIntelligence, http: axios,
     onQuota: (name, headers, key, operation) => quotaReader.record(name, headers, { key, operation }),
     getKeys: source => source === 'abuse_ch' ? abuseChKey() : source === 'otx' ? getKeys('ALIENVAULT_API_KEY')[0] : getKeys('ABUSEIPDB_API_KEY')[0],
@@ -312,6 +329,7 @@ try { scrapeSeen = JSON.parse(fs.readFileSync(SCRAPE_SEEN_PATH, 'utf8')) || {}; 
 const actorIndex = (() => {
     try {
         const raw = JSON.parse(fs.readFileSync(path.join(__dirname, 'data', 'actors.json'), 'utf8'));
+        registerCatalogEntities(Array.isArray(raw) ? raw : raw.actors, 'actor');
         return buildActorIndex(Array.isArray(raw) ? raw : raw.actors);
     } catch (error) {
         console.error('actor index unavailable:', error.message);
@@ -324,6 +342,7 @@ const actorIndex = (() => {
 const malwareIndex = (() => {
     try {
         const raw = JSON.parse(fs.readFileSync(path.join(__dirname, 'data', 'malware.json'), 'utf8'));
+        registerCatalogEntities(Array.isArray(raw) ? raw : raw.malware, 'malware');
         return buildMalwareIndex(Array.isArray(raw) ? raw : raw.malware);
     } catch (error) {
         console.error('malware index unavailable:', error.message);
@@ -336,6 +355,7 @@ const malwareIndex = (() => {
 const campaignIndex = (() => {
     try {
         const raw = JSON.parse(fs.readFileSync(path.join(__dirname, 'data', 'campaigns.json'), 'utf8'));
+        registerCatalogEntities(Array.isArray(raw) ? raw : raw.campaigns, 'campaign');
         return buildCampaignIndex(Array.isArray(raw) ? raw : raw.campaigns);
     } catch (error) {
         console.error('campaign index unavailable:', error.message);
@@ -1356,11 +1376,22 @@ async function fetchFeedWithRetry(url, options) {
 
 // Background newsletter feed refresher
 const rssCollectionCache = createFeedCache({ directory: path.join(__dirname, '.feed-cache', 'rss'), fs, writeJsonAtomic });
-const articleCollectionCache = createFeedCache({ directory: path.join(__dirname, '.feed-cache', 'articles'), fs, writeJsonAtomic });
+const articleCollectionCache = durableArticleCache(createFeedCache({ directory: path.join(__dirname, '.feed-cache', 'articles'), fs, writeJsonAtomic }), iocIntelligence.news, error => console.warn('Article body persistence failed:', error.message));
 // Reclassify metadata only; preserve publications and reuse existing body
 // caches without issuing hundreds of historical requests on startup.
 const newsQualityReady=(async()=>{if (process.env.NODE_ENV !== 'test') try {
     await new Promise(resolve=>setImmediate(resolve));
+    if (!iocIntelligence.state('news-body-backfill-v1')) {
+        let saved = 0, unreadable = 0, visited = 0;
+        const directory = path.join(__dirname, '.feed-cache', 'articles');
+        for (const name of fs.readdirSync(directory).filter(name => /^[a-f0-9]{64}\.json$/.test(name))) {
+            let entry;
+            try { entry = JSON.parse(fs.readFileSync(path.join(directory, name), 'utf8')); } catch { unreadable++; continue; }
+            if (entry?.link && entry.text) { iocIntelligence.news.saveBody(entry.link, entry); saved++; }
+            if (++visited % 25 === 0) await new Promise(resolve => setImmediate(resolve));
+        }
+        iocIntelligence.setState('news-body-backfill-v1', { at: new Date().toISOString(), saved, unreadable });
+    }
     if (!iocIntelligence.state('phishing-body-evidence-recovery-v1')) {
         let backup = {};
         try { backup = JSON.parse(fs.readFileSync(path.join(__dirname, '.news-quality-v16.bak.json'), 'utf8')); } catch { /* optional prior evidence */ }
@@ -1503,6 +1534,7 @@ const refreshNewsletterFeed = singleFlightRefresh(async () => {
         applyVulnerabilityContext(unifiedFeed, kevMap, epssMap);
         unifiedFeed.sort((a, b) => b.pubDate.localeCompare(a.pubDate) || a.link.localeCompare(b.link));
         const correlation = await publishNewsSnapshot(unifiedFeed, { archive: newsArchiveStore, stories: newsStoryStore });
+        syncNewsShadow();
         await iocIntelligence.ingestNews(newsArchiveStore.all());
         iocIntelligence.phishing.saveWeeks(buildPhishingWeeks(newsArchiveStore.all()));
         const healthSources = new Set([...effectiveFeeds().map(feed => feed.url), ...sources.map(source => source.url)]);
@@ -1522,7 +1554,7 @@ const refreshNewsletterFeed = singleFlightRefresh(async () => {
         console.error('Failed to background refresh newsletter feeds:', error.message);
     }
 });
-void newsQualityReady.then(() => { iocIntelligence.phishing.saveWeeks(buildPhishingWeeks(newsArchiveStore.all())); }).catch(error => console.warn('Phishing weekly snapshot unavailable:', error.message));
+void newsQualityReady.then(() => { syncNewsShadow(); iocIntelligence.phishing.saveWeeks(buildPhishingWeeks(newsArchiveStore.all())); }).catch(error => console.warn('Phishing weekly snapshot unavailable:', error.message));
 
 // CTI News feed endpoint.
 app.get('/api/news/monitoring', requireAuth, (req, res) => {
@@ -3085,6 +3117,7 @@ app.post('/api/newsletter/enrich', requirePremium, scanLimiter, async (req, res)
         });
         const persisted = await persistNewsEvidence(sourceRows, { archive: newsArchiveStore, stories: newsStoryStore, articleCache: articleCollectionCache,
             originalFor: row => rssCollectionCache.get(row.feedUrl)?.items?.find(source => source.link === row.link) });
+        syncNewsShadow();
         await iocIntelligence.ingestNews(persisted);
         payload.iocs = mergeIocEvidence(...persisted.map(row => row.iocs));
         const replacements = new Map(persisted.map(row => { const publicRow = { ...row }; delete publicRow.text; return [row.link, publicRow]; }));
@@ -3552,6 +3585,7 @@ app.delete('/api/org/profiles/:id', requireAuth, (req, res) => {
     // ninguém vê e que a retenção nunca alcança.
     phishWatchStore.dropProfile(String(req.params.id));
     iocIntelligence.phishing.dropProfile(req.user.sub, String(req.params.id));
+    iocIntelligence.watchSuggestions.dropProfile(req.user.sub, String(req.params.id));
     phishTicketStore.dropProfile(String(req.params.id));
     res.json({ ok: true });
 });
@@ -3837,6 +3871,39 @@ app.get('/api/phishing-watch/intelligence', requirePremium, (req, res) => {
     if (profile) { try { orgProfileStore.get(req.user.sub, profile); } catch { return res.status(404).json({ error: 'Perfil não encontrado' }); } }
     res.set('Cache-Control', 'private, no-store');
     res.json(iocIntelligence.phishing.metrics(req.user.sub, profile));
+});
+const watchProposalCache = new Map();
+function profileWatchProposals(profile) {
+    const generation = `${profile.updatedAt || ''}:${iocIntelligence.news.status().latest?.at || ''}`;
+    const key = `${profile.ownerId}:${profile.id}`;
+    let cached = watchProposalCache.get(key);
+    if (!cached || cached.generation !== generation || cached.expires < Date.now()) {
+        if (watchProposalCache.size >= 100) watchProposalCache.delete(watchProposalCache.keys().next().value);
+        cached = { generation, expires: Date.now() + 10 * 60000, proposals: proposeWatchTerms(newsArchiveStore.all(), profile) };
+        watchProposalCache.set(key, cached);
+    }
+    return cached.proposals;
+}
+app.get('/api/phishing-watch/suggestions', requirePremium, (req, res) => {
+    try {
+        const profile = orgProfileStore.get(req.user.sub, String(req.query.profileId || ''));
+        res.set('Cache-Control', 'private, no-store').json({ suggestions: iocIntelligence.watchSuggestions.list(profile, profileWatchProposals(profile)) });
+    } catch (error) { phishError(res, error); }
+});
+app.post('/api/phishing-watch/suggestions/:id/review', requirePremium, (req, res) => {
+    try {
+        const profile = orgProfileStore.get(req.user.sub, String(req.body?.profileId || ''));
+        iocIntelligence.watchSuggestions.list(profile, profileWatchProposals(profile));
+        const result = iocIntelligence.watchSuggestions.review(req.user.sub, profile, req.params.id, req.body?.decision, orgProfileStore);
+        watchProposalCache.delete(`${profile.ownerId}:${profile.id}`);
+        res.set('Cache-Control', 'private, no-store').json(result);
+    } catch (error) { phishError(res, error); }
+});
+app.get('/api/intelligence/storage', requirePremium, (req, res) => {
+    res.set('Cache-Control', 'private, no-store').json({ ...iocIntelligence.news.status(), error: iocIntelligence.state('news-shadow-error') });
+});
+app.get('/api/intelligence/entities', requirePremium, (req, res) => {
+    res.set('Cache-Control', 'private, no-store').json({ entities: iocIntelligence.news.entities({ owner: req.user.sub, kind: String(req.query.kind || ''), query: String(req.query.query || '') }) });
 });
 app.get('/api/phishing-watch/hits/:id/context', requirePremium, (req, res) => {
     const hit = iocIntelligence.phishing.candidates(req.user.sub).find(row => row.id === req.params.id);

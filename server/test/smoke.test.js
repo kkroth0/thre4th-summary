@@ -17,6 +17,7 @@ const PREMIUM_OPEN_PATH = path.join(tmpdir(), `threatsumm4ry-smoke-premium-${POR
 const NEWS_MONITORING_PATH = path.join(tmpdir(), `threatsumm4ry-smoke-monitoring-${PORT}.json`);
 const USERS_STORE_PATH = path.join(tmpdir(), `threatsumm4ry-smoke-users-${PORT}.json`);
 const NEWS_ARCHIVE_PATH = path.join(tmpdir(), `threatsumm4ry-smoke-archive-${PORT}.json`);
+const NEWS_STORIES_PATH = path.join(tmpdir(), `threatsumm4ry-smoke-stories-${PORT}.json`);
 const FEED_JOBS_PATH = path.join(tmpdir(), `threatsumm4ry-smoke-jobs-${PORT}.json`);
 const ORG_PROFILES_PATH = path.join(tmpdir(), `threatsumm4ry-smoke-profiles-${PORT}.json`);
 const PHISH_WATCH_PATH = path.join(tmpdir(), `threatsumm4ry-smoke-watch-${PORT}.json`);
@@ -56,10 +57,11 @@ test('domain investigation and actor archive endpoints enforce premium access an
 });
 
 before(async () => {
+    writeFileSync(NEWS_STORIES_PATH, '[]');
     writeFileSync(PHISH_WATCH_PATH, JSON.stringify({ hits: [{ id: 'owned:example.net', profileId: 'owned', ownerId: 'smoke-user', apexDomain: 'example.net', domain: 'example.net', status: 'new', score: 20, reasons: ['brand-glued'], firstSeen: '2026-10-08T12:00:00Z', lastSeen: new Date().toISOString() }], runs: {} }));
     writeFileSync(FEED_JOBS_PATH, JSON.stringify({ 'smoke-multi-source': { id: 'smoke-multi-source', url: 'https://example.com/a', urls: ['https://example.com/a', 'https://example.com/b'], status: 'pending', createdAt: new Date().toISOString() } }));
     writeFileSync(NEWS_ARCHIVE_PATH, JSON.stringify([
-        { link: 'https://example.com/a', title: 'ClickFix phishing targets banks in Brazil', source: 'Research', pubDate: '2026-10-08T23:59:59.999Z', storyId: 'same', iocs: { ips: ['9.9.9.10'], domains: ['example.net'] } },
+        { link: 'https://example.com/a', title: 'ClickFix phishing targets banks in Brazil with fake Adobe login pages', source: 'Research', pubDate: '2026-10-08T23:59:59.999Z', storyId: 'same', iocs: { ips: ['9.9.9.10'], domains: ['example.net'] } },
         { link: 'https://example.com/b', title: 'ClickFix phishing campaign', source: 'News', pubDate: '2026-10-09T00:00:00Z', storyId: 'same' },
     ]));
     writeFileSync(ORG_PROFILES_PATH, JSON.stringify([
@@ -72,7 +74,7 @@ before(async () => {
             ...process.env,
             PORT: String(PORT), NODE_ENV: 'test', SESSION_SECRET,
             GITHUB_ALLOWED_LOGINS: 'tester', PREMIUM_OPEN_PATH, NEWS_MONITORING_PATH,
-            USERS_STORE_PATH, NEWS_ARCHIVE_PATH, ORG_PROFILES_PATH, PHISH_WATCH_PATH, SECRETS_ENCRYPTION_KEY, URLSCAN_API_KEY: '',
+            USERS_STORE_PATH, NEWS_ARCHIVE_PATH, NEWS_STORIES_PATH, ORG_PROFILES_PATH, PHISH_WATCH_PATH, SECRETS_ENCRYPTION_KEY, URLSCAN_API_KEY: '',
             FEED_JOBS_PATH, FEED_AGENT_SECRET: 'smoke-worker-secret',
         },
         stdio: 'ignore',
@@ -88,7 +90,7 @@ after(() => {
     rmSync(`${NEWS_MONITORING_PATH}.tmp`, { force: true });
     rmSync(USERS_STORE_PATH, { force: true });
     rmSync(`${USERS_STORE_PATH}.tmp`, { force: true });
-    for (const target of [NEWS_ARCHIVE_PATH, ORG_PROFILES_PATH, FEED_JOBS_PATH, PHISH_WATCH_PATH]) { rmSync(target, { force: true }); rmSync(`${target}.tmp`, { force: true }); }
+    for (const target of [NEWS_ARCHIVE_PATH, NEWS_STORIES_PATH, ORG_PROFILES_PATH, FEED_JOBS_PATH, PHISH_WATCH_PATH]) { rmSync(target, { force: true }); rmSync(`${target}.tmp`, { force: true }); }
 });
 
 test('weekly evidence and private watch context enforce access, preserve candidate roles and separate inconclusive verdicts', async () => {
@@ -108,6 +110,23 @@ test('weekly evidence and private watch context enforce access, preserve candida
     assert.equal(response.status, 200);
     const summary = await fetch(BASE + '/api/phishing-watch/intelligence?profileId=owned', { headers: AUTH_HEADERS }).then(res => res.json());
     assert.equal(summary.precision, null); assert.equal(summary.unresolved, 1);
+});
+
+test('storage shadow and news-based monitoring suggestions enforce access and explicit account-owned acceptance', async () => {
+    for (const route of ['/api/intelligence/storage','/api/intelligence/entities?kind=actor','/api/phishing-watch/suggestions?profileId=owned']) assert.equal((await fetch(BASE+route)).status,401);
+    assert.equal((await fetch(BASE+'/api/phishing-watch/suggestions?profileId=private',{headers:AUTH_HEADERS})).status,404);
+    const storage=await fetch(BASE+'/api/intelligence/storage',{headers:AUTH_HEADERS}).then(res=>res.json());
+    assert.equal(storage.mode,'shadow'); assert.equal(storage.latest.equal,true); assert.equal(storage.latest.archive.source,2);
+    const response=await fetch(BASE+'/api/phishing-watch/suggestions?profileId=owned',{headers:AUTH_HEADERS});
+    assert.equal(response.headers.get('cache-control'),'private, no-store');
+    const data=await response.json(); const suggestion=data.suggestions.find(row=>row.term==='adobe'); assert.ok(suggestion);
+    const review=(headers,decision)=>fetch(BASE+`/api/phishing-watch/suggestions/${suggestion.id}/review`,{method:'POST',headers:{...headers,'Content-Type':'application/json'},body:JSON.stringify({profileId:'owned',decision})});
+    assert.equal((await review(OUTSIDER_HEADERS,'accepted')).status,403);
+    assert.equal((await review(AUTH_HEADERS,'accepted')).status,200);
+    const profiles=await fetch(BASE+'/api/org/profiles',{headers:AUTH_HEADERS}).then(res=>res.json());
+    assert.ok(profiles.profiles.find(row=>row.id==='owned').brands.includes('adobe'));
+    assert.equal((await fetch(BASE+'/api/phishing-watch/suggestions?profileId=owned',{headers:AUTH_HEADERS}).then(res=>res.json())).suggestions.length,0);
+    assert.equal((await fetch(BASE+'/api/org/profiles/owned',{method:'PATCH',headers:{...AUTH_HEADERS,'Content-Type':'application/json'},body:JSON.stringify({brands:[]})})).status,200);
 });
 
 test('the worker receives all selected sources and requires its dedicated secret', async () => {

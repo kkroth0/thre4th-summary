@@ -111,8 +111,11 @@ ausente, pequena ou sem exemplos legítimos não autoriza concluir ganho de CT.
 
 ## Próximas etapas
 
+Continuação implementada em 15/10: [sugestões, persistência e avaliação PT/EN](./news-persistence-and-watch-suggestions.md).
+
 - Ampliar e revisar as amostras positivas/legítimas do backtest.
-- Sugestões de vigilância por campanha/marca com evidência e aceitação do dono.
+- Validar em uso as sugestões de vigilância por campanha/marca, já disponíveis
+  com evidência e aceitação do dono.
 - Piloto CT por marca e orçamento, condicionado aos resultados anteriores.
 - Migração gradual do arquivo/stories, conferindo IDs, aliases e evidências.
 - Avaliação PT/EN rotulada antes de ativar similaridade como sinal adicional.

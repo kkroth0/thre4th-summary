@@ -1750,6 +1750,12 @@ export interface PhishCandidateContext {
 }
 export const fetchPhishWatchMetrics = (profileId: string): Promise<PhishWatchMetrics> => orgJson(`/api/phishing-watch/intelligence?${new URLSearchParams({ profileId })}`);
 export const fetchPhishCandidateContext = (id: string): Promise<PhishCandidateContext> => orgJson(`/api/phishing-watch/hits/${encodeURIComponent(id)}/context`);
+export interface WatchTermSuggestion {
+    id: string; term: string; brand: string; events: number; sources: number; reasons: string[];
+    publications: { link: string; title: string; pubDate: string; techniques: string[]; campaign: string; patterns: { hostname: string; path: string }[] }[];
+}
+export const fetchWatchSuggestions = (profileId: string): Promise<{ suggestions: WatchTermSuggestion[] }> => orgJson(`/api/phishing-watch/suggestions?${new URLSearchParams({ profileId })}`);
+export const reviewWatchSuggestion = (profileId: string, id: string, decision: 'accepted' | 'dismissed'): Promise<{ id: string; term: string; status: string }> => orgJson(`/api/phishing-watch/suggestions/${encodeURIComponent(id)}/review`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ profileId, decision }) });
 export interface PhishingEvolution {
     weeks: { week: string; end: string; closed: boolean; hasArchiveHistory: boolean; publications: number; events: number; sources: number; historicalMemberships?: number; bodyCoverage: { known: number; available: number; unknown: number } }[];
     target: string | null; baselineWeeks: number; baselineReady: boolean; updatedAt: string | null;

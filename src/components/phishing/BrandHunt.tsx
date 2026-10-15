@@ -13,6 +13,7 @@ import { useOrgProfile } from "@/hooks/useOrgProfile";
 import { toast } from "sonner";
 import { defang } from "@/utils/defang";
 import { RecordDrawer } from '@/components/workbench/RecordDrawer';
+import { WatchSuggestions } from './WatchSuggestions';
 import {
   fetchPhishHits, runPhishWatch, setPhishHitStatus, reviewPhishHit, fetchPhishWatchMetrics, fetchPhishCandidateContext,
   type PhishHit, type PhishHitStatus, type PhishRun, type PhishVerdict, type PhishWatchMetrics, type PhishCandidateContext,
@@ -51,7 +52,7 @@ const sinceLabel = (iso: string | undefined, pt: boolean): string => {
 export function BrandHunt() {
   const { language } = useLanguage();
   const pt = language === "pt";
-  const { profiles, activeId, setActiveId, loading: loadingProfiles } = useOrgProfile();
+  const { profiles, activeId, setActiveId, loading: loadingProfiles, reload } = useOrgProfile();
 
   const [status, setStatus] = useState<PhishHitStatus>("new");
   const [hits, setHits] = useState<PhishHit[]>([]);
@@ -200,6 +201,7 @@ export function BrandHunt() {
         </div>
       </div>
 
+      <WatchSuggestions key={activeId} profileId={activeId} onAccepted={reload} />
       {!configured && (
         <p className="rounded-md border border-amber-500/30 bg-amber-500/5 p-3 text-xs text-amber-600">
           {pt

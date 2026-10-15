@@ -5,6 +5,8 @@ import { setImmediate as yieldLoop } from 'node:timers/promises';
 import { declaredRepositoryMalware } from './repositorySources.js';
 import { sanitizeStoredMalware } from './malwareMatch.js';
 import { createPhishingEvolution } from './phishingEvolution.js';
+import { createNewsPersistence } from './newsPersistence.js';
+import { createWatchSuggestions } from './watchSuggestions.js';
 
 const idFor = value => crypto.createHash('sha256').update(value).digest('hex');
 const refang = value => String(value || '').trim().replace(/^hxxp/i,'http').replace(/\[\.\]|\(\.\)|\{\.\}/g,'.').replace(/\[:\]/g,':');
@@ -39,6 +41,7 @@ export function createIocIntelligence({filePath=':memory:',now=()=>Date.now()}={
     CREATE INDEX IF NOT EXISTS entity_lookup ON entity_links(kind,entity,observation);
     CREATE TABLE IF NOT EXISTS observation_revisions(id INTEGER PRIMARY KEY,observation TEXT NOT NULL,at TEXT NOT NULL,payload TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS intelligence_state(id TEXT PRIMARY KEY,value TEXT NOT NULL);`);
+  const news = createNewsPersistence(db, { now });
   const putIoc=db.prepare('INSERT OR IGNORE INTO indicators VALUES(?,?,?)');
   const putObservation=db.prepare('INSERT INTO observations VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET published=excluded.published,collected=excluded.collected,details=excluded.details');
   const clearLinks=db.prepare('DELETE FROM entity_links WHERE observation=?');
@@ -55,7 +58,7 @@ export function createIocIntelligence({filePath=':memory:',now=()=>Date.now()}={
       const details={title:String(row.title||provider).slice(0,300),source:String(row.source||provider).slice(0,200),link:row.link||'',confidence:row.confidence??null,reputation:row.reputation||null,port:row.port||null,storyId:row.storyId||null,tags:(row.tags||[]).slice(0,50),...(row.payload?{payload:row.payload}:{})};
       putObservation.run(observation,key,scope,provider,String(row.externalId||row.link||indicator.value),published,new Date(now()).toISOString(),JSON.stringify(details));
       clearLinks.run(observation);
-      for(const kind of ['actor','malware','cve'])for(const entity of row[kind+'s']||[])if(entity?.id&&entity?.name){putLink.run(observation,kind,String(entity.id).slice(0,180),String(entity.name).slice(0,200),row.relation||'mentioned-with');}
+      for(const kind of ['actor','malware','cve'])for(const entity of row[kind+'s']||[])if(entity?.id&&entity?.name){putLink.run(observation,kind,String(entity.id).slice(0,180),String(entity.name).slice(0,200),row.relation||'mentioned-with');news.registerEntities([{...entity,kind}],scope,provider);}
     }
   });
   let flight=Promise.resolve();
@@ -177,7 +180,7 @@ export function createIocIntelligence({filePath=':memory:',now=()=>Date.now()}={
     const scope=scopeSql(owner);
     return db.prepare(`SELECT e.entity id,e.name,MAX(o.published) updated,GROUP_CONCAT(DISTINCT COALESCE(json_extract(o.details,'$.source'),o.provider)) source FROM entity_links e JOIN observations o ON o.id=e.observation WHERE e.kind=? AND ${scope.sql} GROUP BY e.entity,e.name LIMIT 10000`).all(kind,...scope.args).map(row=>({...row,references:[]}));
   }
-  return {ingest,list,detail,publications,replayProviderPayloads,phishing:createPhishingEvolution(db,{now}),
+  return {ingest,list,detail,publications,replayProviderPayloads,news,watchSuggestions:createWatchSuggestions(db),phishing:createPhishingEvolution(db,{now}),
     exportRows:({owner='',from,to})=>{
       const scope=scopeSql(owner);
       return db.prepare(`SELECT o.*,i.value,i.type FROM observations o JOIN indicators i ON i.id=o.indicator WHERE ${scope.sql} AND o.published>=? AND o.published<=? ORDER BY o.published DESC,o.id`).all(...scope.args,from,to).map(row=>{
