@@ -57,7 +57,9 @@ o denominador e os casos sem conclusão são apresentados. Não é uma estimativ
 independente da acurácia global: existe seleção humana de quais casos revisar.
 
 `GET /api/phishing-watch/hits/:id/context` cruza indicadores extraídos do arquivo
-e observações globais/da própria conta, sem chamadas externas. NS/ASN compartilhados
+e observações globais/da própria conta para domínio, até oito IPs observados e
+quatro nameservers, sem chamadas externas. Cada correspondência identifica seu
+tipo; um IP compartilhado não confirma atividade maliciosa do domínio. NS/ASN compartilhados
 apenas apresentam outros candidatos privados como contexto. O escopo é sempre o
 usuário autenticado; retirar o perfil remove os candidatos e suas revisões.
 A persistência JSON operacional e o SQLite não têm uma transação conjunta:
@@ -79,7 +81,9 @@ caso/controle. Certificado novo não prova registro novo nem campanha maliciosa.
 O workflow manual `Phishing evolution audit` lê a base sem alterá-la e pode fazer
 até oito consultas sequenciais, de oito segundos e 5 MB cada, ao crt.sh, usando
 confirmações existentes e candidatos independentes reportados por ThreatFox ou
-URLhaus para as marcas observadas. Logs mostram somente agregados. Uma amostra
+URLhaus para as marcas observadas. Candidatos dos provedores filtrados pela própria
+regra aguardam revisão e não estimam recall independente; sem o timestamp original
+não recebem antecedência calculada. Logs mostram somente agregados. Uma amostra
 ausente, pequena ou sem exemplos legítimos não autoriza concluir ganho de CT.
 É necessário um piloto prospectivo antes de decidir pela infraestrutura própria.
 

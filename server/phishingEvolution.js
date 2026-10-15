@@ -23,7 +23,7 @@ export function buildPhishingWeeks(rows, { now = new Date() } = {}) {
     const eventOf = row => row.storyId || `publication:${row.link}`;
     const facets = Object.fromEntries(Object.entries(dimensions).map(([kind, field]) => {
       const counts = new Map();
-      for (const row of reports) for (const label of unique((row[field] || []).map(value => typeof value === 'string' ? value : value.name))) {
+      for (const row of reports) for (const label of unique((Array.isArray(row[field]) ? row[field] : []).map(value => typeof value === 'string' ? value : value?.name))) {
         const entry = counts.get(label) || { label, events: new Set(), sources: new Set() };
         entry.events.add(eventOf(row)); entry.sources.add(sourceHost(row)); counts.set(label, entry);
       }
@@ -49,8 +49,8 @@ export function summarizePhishingWeeks(weeks) {
     const average = baseline.length ? baseline.reduce((sum, week) => sum + (week.facets[kind].find(entry => entry.label === item.label)?.count || 0), 0) / baseline.length : null;
     return { kind, ...item, baseline: ready ? average : null, delta: ready ? item.count - average : null,
       percent: ready && average > 0 ? (item.count / average - 1) * 100 : null, newInArchive: ready && average === 0 };
-  })).sort((a, b) => (b.delta ?? b.count) - (a.delta ?? a.count) || b.count - a.count);
-  return { target: target?.week || null, baselineWeeks: baseline.length, baselineReady: ready, signals: signals.slice(0, 100),
+  }).sort((a, b) => (b.delta ?? b.count) - (a.delta ?? a.count) || b.count - a.count).slice(0, 20));
+  return { target: target?.week || null, baselineWeeks: baseline.length, baselineReady: ready, signals,
     basis: 'archive-observations', sourceIndependence: 'hostname-proxy', timezone: 'UTC', weekStartsOn: 'Sunday' };
 }
 
@@ -87,8 +87,13 @@ export function createPhishingEvolution(db, { now = () => Date.now() } = {}) {
     for (const hit of hits) {
       if (!hit.ownerId || !hit.id || !hit.profileId || !hit.apexDomain) continue;
       const payload = { ...hit, verdict: hit.verdict || (hit.status === 'confirmed' ? 'malicious' : 'unknown'), role: 'candidate' };
-      const revision = hash(payload), previous = db.prepare('SELECT * FROM watch_candidates WHERE scope=? AND id=?').get(hit.ownerId, hit.id);
-      if (previous?.hash === revision) continue;
+      const { lastSeen: _lastSeen, dns, ...evidence } = payload;
+      const { checkedAt: _checkedAt, ...dnsEvidence } = dns || {};
+      const revision = hash({ ...evidence, dns: dnsEvidence }), previous = db.prepare('SELECT * FROM watch_candidates WHERE scope=? AND id=?').get(hit.ownerId, hit.id);
+      if (previous?.hash === revision) {
+        if (previous.payload !== JSON.stringify(payload)) db.prepare('UPDATE watch_candidates SET payload=?,updated=? WHERE scope=? AND id=?').run(JSON.stringify(payload), new Date(now()).toISOString(), hit.ownerId, hit.id);
+        continue;
+      }
       if (previous) db.prepare('INSERT INTO watch_candidate_revisions(scope,candidate,payload,at) VALUES(?,?,?,?)').run(hit.ownerId, hit.id, previous.payload, new Date(now()).toISOString());
       db.prepare('INSERT OR REPLACE INTO watch_candidates VALUES(?,?,?,?,?,?,?)').run(hit.ownerId, hit.id, hit.profileId, hit.apexDomain, revision, JSON.stringify(payload), new Date(now()).toISOString());
     }
@@ -114,7 +119,7 @@ export function createPhishingEvolution(db, { now = () => Date.now() } = {}) {
       return { weeks: values.map(({ members: _members, ...week }) => week), ...summarizePhishingWeeks(values), updatedAt: weeks.at(-1)?.updated || null,
         health: { observedSince: db.prepare('SELECT MIN(at) at FROM phishing_collection_cycles').get().at, cycles24h: cycles.length, failed24h: cycles.filter(row => row.status !== 'ready').length,
           latest: cycles[0] ? { at: cycles[0].at, status: cycles[0].status, ...JSON.parse(cycles[0].payload) } : null,
-          sources: db.prepare('SELECT source,SUM(fresh) fresh,SUM(unchanged) unchanged,SUM(stale) stale,SUM(failed) failed,MAX(last_success) lastSuccess FROM phishing_source_days WHERE day>=? GROUP BY source ORDER BY failed+stale DESC LIMIT 15').all(new Date(now() - 7 * DAY).toISOString().slice(0, 10)) } };
+          sources: db.prepare('SELECT source,SUM(fresh) fresh,SUM(unchanged) unchanged,SUM(stale) stale,SUM(failed) failed,MAX(last_success) lastSuccess FROM phishing_source_days WHERE day>=? GROUP BY source ORDER BY SUM(failed)+SUM(stale) DESC,source LIMIT 15').all(new Date(now() - 7 * DAY).toISOString().slice(0, 10)) } };
     },
     weekEvidence: week => { const row = db.prepare('SELECT payload FROM phishing_weeks WHERE week=?').get(week); return row ? JSON.parse(row.payload) : null; }
   };

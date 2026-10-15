@@ -1745,7 +1745,7 @@ export interface PhishWatchMetrics {
 export interface PhishCandidateContext {
     candidate: PhishHit;
     publications: { link: string; title: string; source: string; pubDate: string; actors: string[] }[];
-    observations: { value: string; total: number; evidence: { provider: string; title: string; link: string; published: string }[] }[];
+    observations: { value: string; basis: string; total: number; evidence: { provider: string; title: string; link: string; published: string }[] }[];
     related: { id: string; domain: string; basis: string }[]; basis: string;
 }
 export const fetchPhishWatchMetrics = (profileId: string): Promise<PhishWatchMetrics> => orgJson(`/api/phishing-watch/intelligence?${new URLSearchParams({ profileId })}`);

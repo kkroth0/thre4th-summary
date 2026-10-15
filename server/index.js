@@ -1509,7 +1509,7 @@ const refreshNewsletterFeed = singleFlightRefresh(async () => {
         console.error('Failed to background refresh newsletter feeds:', error.message);
     }
 });
-void newsQualityReady.then(() => { iocIntelligence.phishing.saveWeeks(buildPhishingWeeks(newsArchiveStore.all())); }).catch(() => console.warn('Phishing weekly snapshot unavailable'));
+void newsQualityReady.then(() => { iocIntelligence.phishing.saveWeeks(buildPhishingWeeks(newsArchiveStore.all())); }).catch(error => console.warn('Phishing weekly snapshot unavailable:', error.message));
 
 // CTI News feed endpoint.
 app.get('/api/news/monitoring', requireAuth, (req, res) => {
@@ -3830,7 +3830,12 @@ app.get('/api/phishing-watch/hits/:id/context', requirePremium, (req, res) => {
     if (!hit) return res.status(404).json({ error: 'Achado não encontrado' });
     const domains = [...new Set([hit.domain, hit.apexDomain].filter(Boolean))];
     const publications = [...new Map(domains.flatMap(domain => findDomainMentions([{ id: '', sources: newsArchiveStore.all() }], domain)).map(row => [row.link, row])).values()].slice(0, 50);
-    const observations = domains.map(domain => iocIntelligence.detail(domain, req.user.sub, { size: 30 })).filter(Boolean);
+    const lookups = new Map(domains.map(value => [value, 'domain']));
+    for (const ip of [...(hit.dns?.a || []), ...(hit.dns?.aaaa || []), hit.ip].filter(Boolean).slice(0, 8)) lookups.set(ip, 'observed-ip');
+    for (const ns of (hit.dns?.ns || []).slice(0, 4)) lookups.set(ns, 'nameserver');
+    const observations = [...lookups].map(([value, basis]) => {
+        const evidence = iocIntelligence.detail(value, req.user.sub, { size: 20 }); return evidence ? { ...evidence, basis } : null;
+    }).filter(Boolean);
     const related = iocIntelligence.phishing.candidates(req.user.sub).filter(row => row.id !== hit.id && (
         row.apexDomain === hit.apexDomain || hit.asn && row.asn === hit.asn || (hit.dns?.ns || []).some(ns => row.dns?.ns?.includes(ns))
     )).slice(0, 30).map(row => ({ id: row.id, domain: row.domain, basis: row.apexDomain === hit.apexDomain ? 'domain' : hit.asn && row.asn === hit.asn ? 'asn' : 'nameserver' }));

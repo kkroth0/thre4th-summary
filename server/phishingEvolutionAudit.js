@@ -13,20 +13,28 @@ const report = { at: new Date().toISOString(), readOnly: true, candidateCount, c
   weeks: weekly.map(row => { const data = JSON.parse(row.payload); return { week: row.week, publications: data.publications, events: data.events, evidenceMembers: data.members.length, closed: data.closed }; }),
   collectionCycles: db.prepare('SELECT COUNT(*) n FROM phishing_collection_cycles').get().n,
   observedSources: db.prepare('SELECT COUNT(DISTINCT source) n FROM phishing_source_days').get().n };
+try {
+  const { buildPhishingWeeks } = await import(pathToFileURL(path.join(root, 'server/phishingEvolution.js')));
+  const recalculated = buildPhishingWeeks(JSON.parse(fs.readFileSync(path.join(root, 'server/.news-archive.json'), 'utf8')));
+  report.replay = { weeks: recalculated.length, publications: recalculated.reduce((sum, week) => sum + week.publications, 0) };
+} catch (error) { report.replay = { error: error.name, message: error.message, stack: String(error.stack).split('\n').slice(0, 5) }; }
 const { evaluateCtBacktest, candidateBrandMatch } = await import(pathToFileURL(path.join(root, 'server/phishingCtBacktest.js')));
 let watch = { hits: [] }; try { watch = JSON.parse(fs.readFileSync(path.join(root, 'server/.phish-watch.json'), 'utf8')); } catch { /* not populated */ }
-const selected = (watch.hits || []).filter(hit => ['malicious', 'legitimate'].includes(hit.verdict) || hit.status === 'confirmed').slice(0, 4)
+const selected = [...(watch.hits || []).filter(hit => hit.verdict === 'malicious' || !hit.verdict && hit.status === 'confirmed').slice(0, 2), ...(watch.hits || []).filter(hit => hit.verdict === 'legitimate').slice(0, 2)]
   .map(hit => ({ hostname: hit.domain || hit.apexDomain, firstSeen: hit.firstSeen, cohort: 'watch', label: hit.verdict === 'legitimate' ? 'legitimate' : 'malicious' }));
 const brands = [...new Set((watch.hits || []).map(hit => hit.term).filter(Boolean))];
 const watched = new Set((watch.hits || []).flatMap(hit => [hit.domain, hit.apexDomain]));
-const independent = db.prepare("SELECT i.value,i.type,MIN(o.collected) firstSeen FROM observations o JOIN indicators i ON i.id=o.indicator WHERE o.scope='global' AND o.provider IN ('ThreatFox','URLhaus') AND i.type IN ('domain','url') GROUP BY i.id ORDER BY firstSeen DESC LIMIT 2000").all();
+const independent = db.prepare("SELECT DISTINCT i.value,i.type FROM observations o JOIN indicators i ON i.id=o.indicator WHERE o.scope='global' AND o.provider IN ('ThreatFox','URLhaus') AND i.type IN ('domain','url') ORDER BY i.value LIMIT 2000").all();
 for (const row of independent) {
   let hostname; try { hostname = row.type === 'url' ? new URL(row.value).hostname : row.value; } catch { continue; }
   if (selected.length >= 8) break;
-  if (!watched.has(hostname) && !selected.some(sample => sample.hostname === hostname) && candidateBrandMatch(hostname, brands)) selected.push({ hostname, firstSeen: row.firstSeen, cohort: 'independent-provider', label: 'malicious' });
+  // Provider records are screened by this very filter, so they cannot estimate
+  // recall. Their source first-seen is not recoverable from last-collected.
+  if (!watched.has(hostname) && !selected.some(sample => sample.hostname === hostname) && candidateBrandMatch(hostname, brands)) selected.push({ hostname, firstSeen: null, cohort: 'provider-screened', label: 'reported-malicious' });
 }
 const samples = [];
 for (const sample of selected) {
+  if (!sample.firstSeen) { samples.push({ ...sample, certificates: [] }); continue; }
   let certificates = [], lookupFailed = false;
   try {
     const url = new URL('https://crt.sh/'); url.searchParams.set('q', sample.hostname); url.searchParams.set('output', 'json');
@@ -41,7 +49,7 @@ for (const sample of selected) {
 const backtest = evaluateCtBacktest(samples, { brands });
 const { results: _results, ...summary } = backtest;
 report.backtest = { ...summary, completedLookups: samples.filter(sample => !sample.lookupFailed).length,
-  independentSampleAvailable: selected.some(sample => sample.cohort === 'independent-provider'), decision: 'prospective-validation-required',
+  independentSampleAvailable: false, providerCandidatesAwaitingReview: selected.filter(sample => sample.cohort === 'provider-screened').length, decision: 'independent-samples-and-prospective-validation-required',
   labels: 'analyst-verdicts-and-provider-reports-not-independent-ground-truth',
   note: 'A matched retrospective name is not a detected threat. Independent positive and legitimate samples plus a prospective pilot are required.' };
 db.close(); console.log(JSON.stringify(report, null, 2));

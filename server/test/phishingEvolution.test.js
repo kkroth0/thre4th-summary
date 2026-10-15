@@ -8,6 +8,8 @@ import { createPhishWatchStore } from '../phishingWatch.js';
 import { buildPhishingWeeks, summarizePhishingWeeks } from '../phishingEvolution.js';
 import { evaluateCtBacktest } from '../phishingCtBacktest.js';
 import { PHISHING_VERSION } from '../phishingIntel.js';
+import Database from 'better-sqlite3';
+import { createPhishingEvolution } from '../phishingEvolution.js';
 
 const at = new Date('2026-10-14T12:00:00Z');
 const row = (id, extra = {}) => ({ link: `https://source.example/${id}`, title: 'ClickFix credential phishing campaign', description: 'Attackers targeted victims with phishing',
@@ -31,6 +33,15 @@ test('baseline uses eight comparable closed weeks and never a partial current we
   assert.equal(summary.baselineReady, true); assert.equal(summary.baselineWeeks, 8);
   assert.equal(summary.signals.find(signal => signal.kind === 'technique').baseline, 1);
   weeks[0].rules.phishing = 'old'; assert.equal(summarizePhishingWeeks(weeks).baselineReady, false);
+  rows[0].extractionVersion = 'feed-v7'; assert.equal(summarizePhishingWeeks(buildPhishingWeeks(rows, { now: at })).baselineReady, false);
+});
+test('unchanged DNS checks update observation time without generating evidence revisions', () => {
+  const db = new Database(':memory:'), evolution = createPhishingEvolution(db);
+  const hit = { id: 'p:example.com', ownerId: 'one', profileId: 'p', apexDomain: 'example.com', status: 'new', lastSeen: at.toISOString(), dns: { checkedAt: at.toISOString(), a: ['9.9.9.9'] } };
+  evolution.syncCandidates([hit]); evolution.syncCandidates([{ ...hit, lastSeen: '2026-10-14T13:00:00Z', dns: { ...hit.dns, checkedAt: '2026-10-14T13:00:00Z' } }]);
+  assert.equal(db.prepare('SELECT COUNT(*) n FROM watch_candidate_revisions').get().n, 0);
+  assert.equal(evolution.candidates('one')[0].lastSeen, '2026-10-14T13:00:00Z');
+  evolution.syncCandidates([{ ...hit, verdict: 'legitimate' }]); assert.equal(db.prepare('SELECT COUNT(*) n FROM watch_candidate_revisions').get().n, 1); db.close();
 });
 test('SQLite rollups survive restart, retain source members and revise corrected event IDs', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'phishing-rollup-')), filePath = path.join(dir, 'inventory.sqlite');
