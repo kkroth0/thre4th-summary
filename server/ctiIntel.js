@@ -377,7 +377,7 @@ const addUrl = (set, raw) => {
 // (`vers:intdot/`) e os comparadores que aparecem em "prior to <4.3.4.1".
 const RE_VERSION_BEFORE = /(?:vers(?:ions?|ao|ão)?|vers:intdot\/|firmware|release|build|update|patch|prior to|earlier than|before|through|バージョン|版本|版本号)\s*[:v<>=]*\s*$|(?:<|>|&lt;|&gt;|≤|≥)\s*$/i;
 function followsVersionList(text) {
-    const markers=[...text.matchAll(/\b(?:versions?|versões|versoes|firmware|releases?|builds?)\b|\bvers:intdot\/|\b(?:\d+\.){1,8}\d+(?:[a-z]\d*(?:[._-][a-z0-9]+)*)?\s+(?:and\s+(?:prior|earlier)|e\s+anteriores)\b|\b(?:upgrade|update)\s+to\b/gi)];
+    const markers=[...text.matchAll(/\b(?:versions?|versões|versoes|firmware|releases?|builds?)\b|\bvers:intdot\/|\b\d+(?:\.\d+){1,8}[rpb]\d+(?:[._-][a-z0-9]+)*\b|\b(?:\d+\.){1,8}\d+(?:[a-z]\d*(?:[._-][a-z0-9]+)*)?\s+(?:and\s+(?:prior|earlier)|e\s+anteriores)\b|\b(?:upgrade|update)\s+to\b/gi)];
     const marker=markers.at(-1);
     if(!marker)return false;
     // A bounded, explicit list grammar rather than a broad "version nearby"
@@ -413,7 +413,7 @@ export function isSoftwareVersionAt(text, index, value) {
         || /\bv\s*$/i.test(before)
         || /(?:AiCloud|FortiOS|FortiClient|PAN-OS|Windows|firmware|software|OpenSSL|Rails|Ruby|\.NET|Java|JDK|Tomcat|Python|Django|Spring|Ubuntu|Debian|Android|iOS|Apache|OpenSSH|PHP|Jenkins|GitLab|Chrome|Firefox|Edge|Safari|Opera)\s+v?\s*$/i.test(before)
         || /^(?:[rpb]\d+(?:[_-](?:stable|release|build)\w*)?|[-_](?:stable|release|build|rc\d+|beta\d*|alpha\d*))(?![a-z0-9_])/i.test(after)
-        || /^\s*(?:以前|以降|未満|以上|のバージョン|版本|version\b)/i.test(after);
+        || /^\s*(?:以前|以降|未満|以上|のバージョン|版本|(?:version|release|build|firmware)\b)/i.test(after);
 }
 
 // A version can be repeated later in prose about its fix/platform. Such a

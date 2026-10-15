@@ -67,6 +67,13 @@ test('version columns and later software references are not independent IP sight
   }
 });
 
+test('an alphanumeric firmware build anchors the rest of its version list',()=>{
+  const text='Patched appliances run Secure Gateway 22.8R2.5, 25.1.1.2, 25.1.3.0 and 25.1.3.1.\nProtection shipped in the 25.1.3.0 release.';
+  assert.deepEqual(extractIOCs(text).ips,[]);
+  assert.deepEqual(extractIOCs(text+'\nC2 IP: 108.165.147.64\nIP IOC: 25.1.3.1:443').ips,['108.165.147.64','25.1.3.1']);
+  assert.deepEqual(reviewNewsEvidence({title:'Gateway security update',description:text,iocs:{ips:['25.1.1.2','25.1.3.0','25.1.3.1']}}).iocs.ips,[]);
+});
+
 test('inline table markup and old concatenated labels do not hide IPs or corrupt endpoints',()=>{
   const text=extractReadableText('<article><table><tr><td><strong>204.8.96.109</strong>Tor exit</td><td><code>/fz/x.js</code>Browser-based payload</td></tr></table></article>');
   assert.match(text,/204\.8\.96\.109 Tor exit/);assert.match(text,/\/fz\/x\.js Browser-based/);
