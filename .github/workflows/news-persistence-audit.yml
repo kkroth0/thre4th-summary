@@ -5,7 +5,7 @@ on:
       mode:
         description: Audit kind (read-only)
         type: choice
-        options: [integrity, performance]
+        options: [integrity, performance, extraction]
         default: integrity
 permissions:
   contents: read
@@ -37,6 +37,7 @@ jobs:
           case "$AUDIT_MODE" in
             integrity) audit_script=server/newsPersistenceAudit.js ;;
             performance) audit_script=server/newsPerformanceAudit.js ;;
+            extraction) audit_script=server/newsExtractionAudit.js ;;
             *) exit 1 ;;
           esac
           ssh -o ConnectTimeout=15 -p "$VPS_PORT" "$VPS_USER@$VPS_HOST" "timeout 170 node --input-type=module - '$VPS_APP_DIR' '$VPS_SERVICE'" < "$audit_script"

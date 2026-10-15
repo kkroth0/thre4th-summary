@@ -86,6 +86,7 @@ import { parseFeed } from './feedParse.js';
 import { createFeedCache, createFeedCollector, canonicalArticleUrl, singleFlightRefresh } from './feedCollector.js';
 import { collectArticleTexts } from './articleCollector.js';
 import { enrichFeedItemsAsync, mergeIocEvidence, applyVulnerabilityContext, EXTRACTION_VERSION } from './feedEnrichment.js';
+import { createFeedExtractionCache } from './feedExtractionCache.js';
 import { createStoryStore } from './newsStoryStore.js';
 import { createNewsArchiveStore } from './newsArchiveStore.js';
 import { durableArticleCache } from './newsPersistence.js';
@@ -1371,6 +1372,7 @@ async function fetchFeedWithRetry(url, options) {
 
 // Background newsletter feed refresher
 const rssCollectionCache = createFeedCache({ directory: path.join(__dirname, '.feed-cache', 'rss'), fs, writeJsonAtomic });
+const feedExtractionCache = createFeedExtractionCache();
 const articleCollectionCache = durableArticleCache(createFeedCache({ directory: path.join(__dirname, '.feed-cache', 'articles'), fs, writeJsonAtomic }), iocIntelligence.news, error => console.warn('Article body persistence failed:', error.message));
 // Reclassify metadata only; preserve publications and reuse existing body
 // caches without issuing hundreds of historical requests on startup.
@@ -1525,11 +1527,18 @@ const refreshNewsletterFeed = singleFlightRefresh(async () => {
             fetchText: (url) => fetchArticleText(url, 64000),
         });
         stage('extraction');
+        // Malware/campaign catalogs are immutable until restart. CTI.fyi replaces
+        // actor index fields; capture both the index and its revision for this
+        // entire yielding pass, even if CTI.fyi refreshes between publications.
+        const extractionActors = { ...actorIndex }, extractionBefore = feedExtractionCache.stats();
         let unifiedFeed = await enrichFeedItemsAsync(rawItems, {
-            texts: bodies.texts, supplementalIocs: bodies.supplementalIocs, actors: (text) => matchActors(text, actorIndex),
+            texts: bodies.texts, supplementalIocs: bodies.supplementalIocs, actors: (text) => matchActors(text, extractionActors),
             malware: (text) => matchMalware(text, malwareIndex, {news:true}), campaigns: (text) => matchCampaigns(text, campaignIndex),
-            seller: extractSellerHandle, categorize,
+            seller: extractSellerHandle, categorize, extractionCache: feedExtractionCache, catalogRevision: ctiActorIndexVersion || 'boot',
         });
+        const extractionAfter = feedExtractionCache.stats();
+        const extraction = { reused: extractionAfter.hits - extractionBefore.hits, recomputed: extractionAfter.misses - extractionBefore.misses,
+            evictions: extractionAfter.evictions - extractionBefore.evictions, entries: extractionAfter.entries, bytes: extractionAfter.bytes };
         const allCves = [...new Set(unifiedFeed.flatMap((item) => item.cves))];
         stage('vulnerabilities');
         const [kevMap, epssMap] = await Promise.all([getKevMap(), getEpssMap(allCves)]);
@@ -1554,8 +1563,8 @@ const refreshNewsletterFeed = singleFlightRefresh(async () => {
         memoryCache.newsletter.expiresAt = Date.now() + memoryCache.newsletter.ttl;
         try { rssCollectionCache.prune({ maxEntries: Math.max(600, effectiveFeeds().length * 3 + 50) }); articleCollectionCache.prune({ maxEntries: 1500 }); } catch (error) { console.warn('feed cache pruning failed:', error.message); }
         stage('done');
-        iocIntelligence.phishing.recordCycle({ at: new Date().toISOString(), status: 'ready', elapsedMs: Date.now() - startedAt, stages, bodies: bodies.stats, sources: [...feedHealth].filter(([url]) => healthSources.has(url)) });
-        console.log('[feed] cycle', JSON.stringify({ elapsedMs: Date.now() - startedAt, stages, sources: collected.health.size, failedSources: [...collected.health.values()].filter((health) => !health.ok).length, articles: unifiedFeed.length, bodies: bodies.stats, correlation: correlation.stats }));
+        iocIntelligence.phishing.recordCycle({ at: new Date().toISOString(), status: 'ready', elapsedMs: Date.now() - startedAt, stages, bodies: bodies.stats, extraction, sources: [...feedHealth].filter(([url]) => healthSources.has(url)) });
+        console.log('[feed] cycle', JSON.stringify({ elapsedMs: Date.now() - startedAt, stages, sources: collected.health.size, failedSources: [...collected.health.values()].filter((health) => !health.ok).length, articles: unifiedFeed.length, bodies: bodies.stats, extraction, correlation: correlation.stats }));
     } catch (error) {
         stage('failed');
         try { iocIntelligence.phishing.recordCycle({ status: 'failed', elapsedMs: Date.now() - startedAt, stages }); } catch { /* preserve the previous snapshot */ }

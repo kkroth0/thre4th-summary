@@ -33,7 +33,7 @@ if (fs.existsSync(path.join(root, 'server/newsFeedResponse.js'))) {
   report.feedResponse = { equal: first.body === encoded, reused: warm === first, bytes: first.size };
 }
 report.lastCycles = db.prepare('SELECT at,status,payload FROM phishing_collection_cycles ORDER BY at DESC LIMIT 5').all().map(row => {
-  const value = JSON.parse(row.payload); return { at: row.at, status: row.status, elapsedMs: value.elapsedMs, stages: value.stages, bodies: value.bodies, sourceCount: value.sourceCount, healthySources: value.healthySources };
+  const value = JSON.parse(row.payload); return { at: row.at, status: row.status, elapsedMs: value.elapsedMs, stages: value.stages, bodies: value.bodies, extraction: value.extraction, sourceCount: value.sourceCount, healthySources: value.healthySources };
 });
 const sync = db.prepare("SELECT value FROM intelligence_state WHERE id='news-sync'").get(); report.newsSync = sync ? JSON.parse(sync.value) : null;
 db.close();
@@ -56,7 +56,7 @@ if (service) {
     const statuses = pattern => lines.filter(line => pattern.test(line)).reduce((result, line) => { const key = line.match(/(?:status code |HTTP )(\d{3})/)?.[1] || (/timeout/i.test(line) ? 'timeout' : 'other'); result[key] = (result[key] || 0) + 1; return result; }, {});
     const cycles = lines.filter(line => line.includes('[feed] cycle ')).flatMap(line => { try {
       const value = JSON.parse(line.slice(line.indexOf('[feed] cycle ') + 13));
-      return [{ elapsedMs: value.elapsedMs, stages: value.stages, correlationMs: value.correlation?.elapsedMs, publications: value.correlation?.publications }];
+      return [{ elapsedMs: value.elapsedMs, stages: value.stages, extraction: value.extraction, correlationMs: value.correlation?.elapsedMs, publications: value.correlation?.publications }];
     } catch { return []; } });
     const diagnosticPatterns = ['Server running on port', 'news evidence review failed:', 'Phishing weekly snapshot unavailable:', 'Unhandled', 'unhandled', 'Article body persistence failed:', 'Saved provider match review failed'];
     const diagnostics = Object.fromEntries(diagnosticPatterns.map(pattern => [pattern, lines.filter(line => line.includes(pattern)).length]));

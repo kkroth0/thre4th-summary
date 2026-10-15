@@ -73,9 +73,10 @@ export function createPhishingEvolution(db, { now = () => Date.now() } = {}) {
       db.prepare('INSERT OR REPLACE INTO phishing_weeks VALUES(?,?,?,?)').run(week.week, revision, JSON.stringify(week), new Date(now()).toISOString());
     }
   });
-  const recordCycle = db.transaction(({ at = new Date(now()).toISOString(), status = 'ready', elapsedMs = 0, bodies = {}, sources = [], stages = {} } = {}) => {
+  const recordCycle = db.transaction(({ at = new Date(now()).toISOString(), status = 'ready', elapsedMs = 0, bodies = {}, extraction = {}, sources = [], stages = {} } = {}) => {
     const timings = Object.fromEntries(['feeds', 'scrapers', 'bodies', 'extraction', 'vulnerabilities', 'publication', 'inventory', 'phishing', 'cache'].filter(key => Number.isFinite(stages[key]) && stages[key] >= 0).map(key => [key, Math.round(stages[key])]));
-    const inserted = db.prepare('INSERT OR IGNORE INTO phishing_collection_cycles VALUES(?,?,?)').run(at, status, JSON.stringify({ elapsedMs, stages: timings, bodies, sourceCount: sources.length, healthySources: sources.filter(([, health]) => ['fresh', 'unchanged'].includes(health.status)).length }));
+    const extractionCounts = Object.fromEntries(['reused', 'recomputed', 'evictions', 'entries', 'bytes'].filter(key => Number.isFinite(extraction[key]) && extraction[key] >= 0).map(key => [key, Math.round(extraction[key])]));
+    const inserted = db.prepare('INSERT OR IGNORE INTO phishing_collection_cycles VALUES(?,?,?)').run(at, status, JSON.stringify({ elapsedMs, stages: timings, bodies, extraction: extractionCounts, sourceCount: sources.length, healthySources: sources.filter(([, health]) => ['fresh', 'unchanged'].includes(health.status)).length }));
     if (!inserted.changes) return;
     for (const [source, health] of sources) {
       const state = ['fresh', 'unchanged', 'stale', 'failed'].includes(health.status) ? health.status : 'failed';

@@ -64,6 +64,14 @@ test('archive backfill alone cannot claim comparable weeks without observed coll
   const overview = store.phishing.overview(); assert.equal(overview.baselineReady, false); assert.equal(overview.baselineWeeks, 0); assert.ok(overview.signals.every(signal => signal.percent === null));
   store.close();
 });
+
+test('collection telemetry persists only aggregate extraction cache counts for production diagnostics', () => {
+  const db = new Database(':memory:'), evolution = createPhishingEvolution(db);
+  evolution.recordCycle({ at: at.toISOString(), extraction: { reused: 2000, recomputed: 10, entries: 2010, bytes: 100000, evictions: 0, title: 'must not persist', bad: -1 } });
+  const cycle = JSON.parse(db.prepare('SELECT payload FROM phishing_collection_cycles').get().payload);
+  assert.deepEqual(cycle.extraction, { reused: 2000, recomputed: 10, entries: 2010, bytes: 100000, evictions: 0 });
+  db.close();
+});
 test('SQLite rollups survive restart, retain source members and revise corrected event IDs', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'phishing-rollup-')), filePath = path.join(dir, 'inventory.sqlite');
   try {
