@@ -7,6 +7,7 @@ import { sanitizeStoredMalware } from './malwareMatch.js';
 import { createPhishingEvolution } from './phishingEvolution.js';
 import { createNewsPersistence } from './newsPersistence.js';
 import { createWatchSuggestions } from './watchSuggestions.js';
+import { canonicalJsonEvidence } from './jsonEvidence.js';
 
 const idFor = value => crypto.createHash('sha256').update(value).digest('hex');
 const refang = value => String(value || '').trim().replace(/^hxxp/i,'http').replace(/\[\.\]|\(\.\)|\{\.\}/g,'.').replace(/\[:\]/g,':');
@@ -116,7 +117,7 @@ export function createIocIntelligence({filePath=':memory:',now=()=>Date.now()}={
   }
   async function ingestNews(rows) {
     rows=rows.map(row=>row.repository?{...row,malware:[...new Map([...declaredRepositoryMalware({...row,repositoryReport:true}),...(row.malware||[])].map(family=>[family.name.toLowerCase(),family])).values()]}:row);
-    const changed=rows.map(row=>({row,key:'news:'+idFor(row.link),hash:idFor(JSON.stringify(['evidence-v9',row.title,row.pubDate,row.iocs,row.actors,row.malware,row.cves,row.storyId]))}))
+    const changed=rows.map(row=>({row,key:'news:'+idFor(row.link),hash:idFor(canonicalJsonEvidence(['evidence-v9',row.title,row.pubDate,row.iocs,row.actors,row.malware,row.cves,row.storyId]))}))
       .filter(entry=>db.prepare('SELECT value FROM intelligence_state WHERE id=?').get(entry.key)?.value!==JSON.stringify(entry.hash));
     const replace=db.transaction(entry=>{
       const {row}=entry;

@@ -5,6 +5,7 @@
 // as categorias" — isto é a base de dados pra isso, consultável e exportável,
 // sem tela nova. Mesmo padrão de fs-por-injeção do createStoryStore.
 import { analyzePhishing, PHISHING_VERSION } from './phishingIntel.js';
+import { equalJsonEvidence } from './jsonEvidence.js';
 
 export function createNewsArchiveStore({ filePath, readFileSync, writeJsonAtomic, initialRows }) {
     let rows = initialRows || [];
@@ -73,7 +74,7 @@ export function createNewsArchiveStore({ filePath, readFileSync, writeJsonAtomic
                     if (item[field] !== undefined) row[field] = item[field];
                     else if (old?.[field] !== undefined) row[field] = old[field];
                 }
-                if (old && JSON.stringify(row) === JSON.stringify(old)) continue;
+                if (old && equalJsonEvidence(row, old)) continue;
                 changed = true;
                 if (index === undefined) { indices.set(item.link, next.length); next.push(row); additions++; }
                 else next[index] = row;

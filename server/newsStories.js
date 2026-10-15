@@ -3,6 +3,7 @@ import { setImmediate as yieldLoop } from 'node:timers/promises';
 import { canonicalArticleUrl } from './feedCollector.js';
 import { NEWS_CATEGORIES } from './newsCategories.js';
 import { sanitizeStoredMalware } from './malwareMatch.js';
+import { equalJsonEvidence } from './jsonEvidence.js';
 
 // The same story reaches us from Reuters, BleepingComputer and CISA within
 // hours, worded three different ways. De-duplicating by URL — which is all the
@@ -479,8 +480,8 @@ function* mergeStorySteps(stories, items, now) {
         const unchanged = knownSources.get(canonicalArticleUrl(item.link) || item.link);
         if (unchanged) {
             const next = newStory(item).sources[0];
-            if (Object.keys(next).every(key => JSON.stringify(next[key] ?? null) === JSON.stringify(unchanged[key] ?? null))) { yield; continue; }
-            if (Object.keys(next).filter(key=>!publicationMetadata.has(key)).every(key=>JSON.stringify(next[key]??null)===JSON.stringify(unchanged[key]??null))) {
+            if (Object.keys(next).every(key => equalJsonEvidence(next[key] ?? null, unchanged[key] ?? null))) { yield; continue; }
+            if (Object.keys(next).filter(key=>!publicationMetadata.has(key)).every(key=>equalJsonEvidence(next[key]??null,unchanged[key]??null))) {
                 const link=canonicalArticleUrl(item.link)||item.link,owner=sourceOwners.get(link),index=result.indexOf(owner);
                 if(index>=0){
                     const source={...unchanged,...Object.fromEntries([...publicationMetadata].filter(key=>next[key]!==undefined).map(key=>[key,next[key]]))};
@@ -495,7 +496,7 @@ function* mergeStorySteps(stories, items, now) {
         yield;
         const link = canonicalArticleUrl(item.link) || item.link;
         const direct = newStory({ ...item, link });
-        if (JSON.stringify(knownSources.get(link)) === JSON.stringify(direct.sources[0])) continue;
+        if (equalJsonEvidence(knownSources.get(link), direct.sources[0])) continue;
         const ownerIndex = result.indexOf(sourceOwners.get(link));
         let candidate = direct;
         if (ownerIndex >= 0) {

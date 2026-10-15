@@ -83,3 +83,51 @@ Comparação local com a implementação anterior: igualdade integral na amostra
 pública de 61 publicações, inclusive replay com score/hash alterados. Em 1.000
 matérias sintéticas: montagem inicial 846 → 39 ms, replay 845 → 33 ms, com mesmo
 resultado. Esses números são do ambiente local, não estimativa de ganho em VPS.
+
+### Publicação da correção de correlação
+
+- Release `36c71c0bb746f6045fcfb2a65bfda5bd2b250b39`.
+- CI [38777206641](https://github.com/kkroth0/thre4th-summary/actions/runs/38777206641):
+  721 backend + 255 frontend/marca, TypeScript e build aprovados; lint sem erros.
+- [VPS 38777475683](https://github.com/kkroth0/thre4th-summary/actions/runs/38777475683)
+  e [Cloudflare 38777475104](https://github.com/kkroth0/thre4th-summary/actions/runs/38777475104)
+  concluídos com sucesso.
+- Integridade após reinício [38777959145](https://github.com/kkroth0/thre4th-summary/actions/runs/38777959145):
+  geração 15, 7.539 publicações, 5.057 eventos; paridade SQLite/JSON e todos os
+  vínculos válidos. Esta conferência antecede a conclusão do primeiro novo ciclo.
+- Navegador: 5.076 eventos carregados; busca C2Agent mantém a referência original
+  da Unit 42 e as famílias no evento, sem novo erro de carregamento. Não foi
+  recontada a totalidade dos hashes pela interface nesse reteste.
+- Evidência visual: `news-feed-performance-production.png`.
+
+A proposta de camada editorial e clientes foi avaliada em
+`docs/product/editorial-ai-and-client-workspaces.md`; não há ativação de LLM ou
+envio externo nesta release.
+
+### Regressão de ordem de chaves depois do cutover
+
+O primeiro ciclo de `36c71c0` concluiu às 14:40:35 de Fortaleza: 636.080 ms,
+com 227.757 ms na correlação e 283.966 ms na publicação. A auditoria
+[38779489068](https://github.com/kkroth0/thre4th-summary/actions/runs/38779489068)
+confirmou processo ativo, sem erro de inicialização, e snapshot avançado à geração 16.
+A auditoria [38779728410](https://github.com/kkroth0/thre4th-summary/actions/runs/38779728410)
+conferiu também o hash do módulo de correlação contra o blob Git da release.
+O índice sozinho, portanto, não resolveu o custo de reprocessamento real.
+
+Causa adicional encontrada: a comparação por `JSON.stringify` considerava a
+ordem das propriedades de objetos dentro de listas de atores, vendors e IOCs.
+SQLite grava essas chaves canonicamente; o extrator as constrói em outra ordem.
+Evidência igual passava a parecer alterada depois da leitura do banco, tanto na
+correlação quanto no arquivo. O fingerprint da ingestão também dependia da ordem.
+
+A correção compara valores JSON sem depender de ordem das propriedades, mantém
+a ordem de arrays, trata propriedades omitidas e ainda detecta qualquer mudança
+real. O fingerprint de ingestão passa a ser canônico. A mudança pode provocar uma
+única reingestão dos fingerprints antigos, sem mudar os IDs das observações.
+
+Regressões cobrem reutilização da mesma instância de evento/fonte após reload
+canônico, ausência de gravação redundante do arquivo, fingerprint estável no
+inventário e aplicação de mudanças reais nos hashes/atribuições. 725 testes backend
+passaram. Benchmark local de 1.000 publicações com entidades e reload canônico:
+776 → 15 ms, resultado igual e 1.000 eventos reaproveitados. A medição em VPS será
+registrada após a publicação desta correção.
