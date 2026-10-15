@@ -129,5 +129,50 @@ Regressões cobrem reutilização da mesma instância de evento/fonte após relo
 canônico, ausência de gravação redundante do arquivo, fingerprint estável no
 inventário e aplicação de mudanças reais nos hashes/atribuições. 725 testes backend
 passaram. Benchmark local de 1.000 publicações com entidades e reload canônico:
-776 → 15 ms, resultado igual e 1.000 eventos reaproveitados. A medição em VPS será
-registrada após a publicação desta correção.
+776 → 15 ms, resultado igual e 1.000 eventos reaproveitados.
+
+### Publicação e reprodução com a base real
+
+- Release `0702bc5126aafbc5548a5233903977258698288a`.
+- CI [38780242772](https://github.com/kkroth0/thre4th-summary/actions/runs/38780242772):
+  725 backend + 255 frontend/marca, TypeScript/build aprovados, lint sem erros.
+- [VPS 38780556389](https://github.com/kkroth0/thre4th-summary/actions/runs/38780556389)
+  e [Cloudflare 38780556143](https://github.com/kkroth0/thre4th-summary/actions/runs/38780556143)
+  concluídos com sucesso.
+- Replay somente em memória [38780974320](https://github.com/kkroth0/thre4th-summary/actions/runs/38780974320),
+  usando o módulo efetivamente publicado e o snapshot SQLite real: 2.700
+  publicações em 3.120 ms, todos os 5.062 eventos reaproveitados por referência,
+  zero publicações sem evento e zero mudanças de vínculo. Não grava no banco
+  nem chama fontes externas. Script de diagnóstico no ref `d70d3ba`.
+- Leitura validada do banco nessa execução: 10.815 ms (baseline 29.501 ms).
+  Resposta HTTP fria: 1.503 ms. Os números variam com a carga da VPS; o tempo de
+  replay não equivale ao tempo total da coleta com rede, extração e persistência.
+- Navegador após publicação: 5.082 eventos, sem novo erro de carregamento.
+  A captura foi atualizada para esse estado. As fontes externas continuam
+  apresentando HTTP 403 em parte dos corpos; essa limitação não foi ocultada.
+
+### Primeiro ciclo real após a correção de ordem
+
+Auditoria [38781722597](https://github.com/kkroth0/thre4th-summary/actions/runs/38781722597):
+o log de conclusão do novo processo registra 377.497 ms (6min17s), 2.702
+publicações, correlação de 1.828 ms e publicação de 28.846 ms. O ciclo anterior
+instrumentado levou 636.080 ms (10min36s), com correlação de 227.757 ms e publicação
+de 283.966 ms. São ciclos reais com insumos diferentes; não é um benchmark de
+mesmas entradas. O replay sem gravação acima complementa essa comparação.
+
+Tempos restantes: feeds 153.001 ms; scrapers 402 ms; corpos 10.327 ms; extração
+168.694 ms; vulnerabilidades 2.652 ms; inventário 9.663 ms; phishing 813 ms;
+cache 2.995 ms. Próximas otimizações devem priorizar coleta externa e evitar
+reextração de conteúdo idêntico, com invalidação por versões dos catálogos/regras
+e suplementos de IOC. A aprovação desta release não significa que todo o produto
+ou todas as fontes estejam livres de latência/falhas externas.
+
+O snapshot do auditor começou após o commit da geração 17 e antes de o coletor
+registrar o término no SQLite; por isso `lastCycles` dessa leitura ainda lista o
+ciclo anterior. O tempo novo vem do log agregado do processo.
+
+Integridade posterior ao término [38781928009](https://github.com/kkroth0/thre4th-summary/actions/runs/38781928009),
+às 15:00:21 de Fortaleza: geração 17, 7.551 publicações e 5.068 eventos; zero
+ausências, diferenças, fontes órfãs, aliases conflitantes ou fontes duplicadas.
+Backup JSON igual ao SQLite, confirmado para a mesma geração. Sem perda de
+identidade/vínculos detectada pelos invariantes de persistência desta auditoria.
