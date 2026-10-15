@@ -6,6 +6,14 @@ export interface CertificateResult extends DomainSource { certificates: Certific
 export interface DnsChange { hostname: string; firstSeen: string | null; lastSeen: string | null; current: boolean; provider: string; records: Record<string, string[]>; source: string }
 export interface DnsHistoryResult extends DomainSource { changes: DnsChange[]; local: DnsChange[]; nextCursor?: string | null; snapshotTime?: string | null; externalUrl: string }
 export interface DomainMention { storyId: string; title: string; source: string; link: string; pubDate: string; actors: string[]; matched: string[]; iocs: { ips: string[]; domains: string[]; hashes: string[] } }
+export interface SimilarDomain { domain: string; kind: 'tld' | 'omission' | 'transposition'; addresses: string[]; nameservers: string[]; registrar: string | null; expiresAt: string | null; registrationStatus: 'available' | 'unsupported' | 'unavailable' | 'not_checked'; source: string[] }
+export interface SimilarDomainResult extends DomainSource { apex: string; checked: number; candidateCount: number; incomplete: number; domains: SimilarDomain[] }
+
+export async function fetchSimilarDomains(domain: string, signal: AbortSignal) {
+  const data = await domainRequest<SimilarDomainResult>('/api/domain/similar', signal, { query: domain });
+  if (!Array.isArray(data.domains) || !['available', 'unavailable'].includes(data.status)) throw new Error('Invalid similar domains response');
+  return data;
+}
 
 export async function domainRequest<T>(path: string, signal: AbortSignal, body?: object): Promise<T> {
   const controller = new AbortController(); const cancel = () => controller.abort();

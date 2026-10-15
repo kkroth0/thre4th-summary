@@ -382,6 +382,7 @@ export function isSoftwareVersionAt(text, index, value) {
     return RE_VERSION_BEFORE.test(before)
         || /\bv\s*$/i.test(before)
         || /(?:AiCloud|FortiOS|FortiClient|PAN-OS|Windows|firmware|software|OpenSSL|Rails|Ruby|\.NET|Java|JDK|Tomcat|Python|Django|Spring|Ubuntu|Debian|Android|iOS|Apache|OpenSSH|PHP|Jenkins|GitLab|Chrome|Firefox|Edge|Safari|Opera)\s+v?\s*$/i.test(before)
+        || /^(?:[rpb]\d+(?:[_-](?:stable|release|build)\w*)?|[-_](?:stable|release|build|rc\d+|beta\d*|alpha\d*))(?![a-z0-9_])/i.test(after)
         || /^\s*(?:以前|以降|未満|以上|のバージョン|版本|version\b)/i.test(after);
 }
 

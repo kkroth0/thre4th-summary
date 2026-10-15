@@ -27,6 +27,7 @@ import { createMalwareCatalog } from './malwareCatalog.js';
 import { createPhishingSources } from './phishingSources.js';
 import { createWhoisLookup } from './whoisLookup.js';
 import { createDomainIntelligence, domainTarget } from './domainIntelligence.js';
+import { createSimilarDomains } from './similarDomains.js';
 import { createVulnerabilityCatalog } from './vulnerabilityCatalog.js';
 import { createVulnerabilityQueries, optimizeVulnerabilityCatalog } from './vulnerabilityQueries.js';
 import { createLookupCache } from './lookupCache.js';
@@ -1019,19 +1020,20 @@ app.get('/api/intel/latam-threats', async (req, res) => {
 // WHOIS — Who.is snapshot lookup (no paid live refresh).
 const lookupWhois = createWhoisLookup({ http: axios, getKey: () => process.env.WHOIS_API_KEY, onQuota: (headers, key) => quotaReader.record('WHOIS', headers, { key }) });
 const DOMAIN_DNS_HISTORY_PATH = path.join(__dirname, '.domain-dns-history.json');
+const similarDomains = createSimilarDomains();
 const domainIntelligence = createDomainIntelligence({ http: axios, getWhoisKey: () => process.env.WHOIS_API_KEY,
     onQuota: (headers, key) => quotaReader.record('WHOIS', headers, { key }),
     readObservations: () => JSON.parse(fs.readFileSync(DOMAIN_DNS_HISTORY_PATH, 'utf8')),
     saveObservations: data => writeJsonAtomic(DOMAIN_DNS_HISTORY_PATH, data),
 });
 app.post('/api/domain/:view', requirePremium, scanLimiter, async (req, res) => {
-    const methods = { subdomains: 'subdomains', certificates: 'certificates', history: 'history' };
+    const methods = { subdomains: 'subdomains', certificates: 'certificates', history: 'history', similar: 'similar' };
     if (!Object.hasOwn(methods, req.params.view)) return res.status(404).json({ error: 'Unknown domain view' });
     const method = methods[req.params.view];
     try {
         const { hostname } = domainTarget(req.body?.query);
         res.set('Cache-Control', 'private, no-store');
-        res.json(await domainIntelligence[method](hostname, req.body.cursor || ''));
+        res.json(method === 'similar' ? await similarDomains.search(hostname) : await domainIntelligence[method](hostname, req.body.cursor || ''));
     } catch { res.status(400).json({ error: 'Invalid domain or cursor' }); }
 });
 app.post('/api/whois', scanLimiter, async (req, res) => {
@@ -1349,7 +1351,7 @@ const newsQualityReady=(async()=>{if (process.env.NODE_ENV !== 'test') try {
         await iocIntelligence.ingestNews(newsArchiveStore.all());
         iocIntelligence.setState('news-quality-v15',{at:new Date().toISOString()});
     }
-    if(!iocIntelligence.state('news-version-v11')){
+    if(!iocIntelligence.state('news-version-v12')){
         const revised=[];let lastYield=performance.now();
         for(const row of newsArchiveStore.all()){
             revised.push(row.iocs?.ips?.length?{...row,iocs:removeVersionIndicators(row.iocs,[row.title,row.text||row.description,articleCollectionCache.get(row.link)?.text||''].join('\n'))}:row);
@@ -1357,9 +1359,10 @@ const newsQualityReady=(async()=>{if (process.env.NODE_ENV !== 'test') try {
         }
         newsArchiveStore.add(revised);
         const byLink=new Map(revised.map(row=>[row.link,row]));
-        newsStoryStore.save(newsStoryStore.all().map(story=>({...story,sources:story.sources.map(source=>({...source,iocs:byLink.get(source.link)?.iocs||source.iocs}))})));
+        const stories=newsStoryStore.all().map(story=>({...story,sources:story.sources.map(source=>({...source,iocs:byLink.get(source.link)?.iocs||source.iocs}))}));
+        newsStoryStore.save(await rebuildStoryCorrelationsAsync(stories,completeNewsFeed([],revised)));
         await iocIntelligence.ingestNews(revised);
-        iocIntelligence.setState('news-version-v11',{at:new Date().toISOString()});
+        iocIntelligence.setState('news-version-v12',{at:new Date().toISOString()});
     }
     if(!iocIntelligence.state('news-table-v13')){
         const changed=[];let lastYield=performance.now();

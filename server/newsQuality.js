@@ -6,7 +6,7 @@ import { declaredRepositoryMalware } from './repositorySources.js';
 export function removeVersionIndicators(iocs, text) {
   const body=String(text||'').replace(/\[\.\]|\(\.\)|\{\.\}/g,'.');
   const seen=new Set(),valid=new Set();
-  for(const match of body.matchAll(/\b(?:\d{1,3}\.){3}\d{1,3}\b/g)){seen.add(match[0]);if(!isSoftwareVersionAt(body,match.index,match[0]))valid.add(match[0]);}
+  for(const match of body.matchAll(/(?<![\d.])\b(?:\d{1,3}\.){3}\d{1,3}(?!\d|\.\d)/g)){seen.add(match[0]);if(!isSoftwareVersionAt(body,match.index,match[0]))valid.add(match[0]);}
   return {...iocs,ips:(iocs?.ips||[]).filter(ip=>{
     return !seen.has(ip)||valid.has(ip);
   })};

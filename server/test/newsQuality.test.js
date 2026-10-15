@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { extractIOCs, extractReadableText } from '../ctiIntel.js';
 import { buildMalwareIndex, matchMalware } from '../malwareMatch.js';
-import { completeNewsFeed, reviewNewsEvidence, recoverJoinedTableIps } from '../newsQuality.js';
+import { completeNewsFeed, reviewNewsEvidence, recoverJoinedTableIps, removeVersionIndicators } from '../newsQuality.js';
 import { buildWeeklyReport,weeklyWindow } from '../weeklyReports.js';
 import { completeReportEvidence } from '../reportEvidence.js';
 import { readFileSync } from 'node:fs';
@@ -18,6 +18,13 @@ test('software versions and HTTP/USB terms do not become threat infrastructure o
   assert.equal(matchMalware('404 Keylogger and USBStealer infected the host',index).length,2);
   const reviewed=reviewNewsEvidence({title:'ASUS AiCloud',description:text,iocs:{ips:['2.0.0.39','154.81.156.10']},malware:[{id:'404',name:'404 Keylogger',matched:'404',via:'distinctive'}]});
   assert.deepEqual(reviewed.iocs.ips,['154.81.156.10']);assert.deepEqual(reviewed.malware,[]);
+});
+
+test('firmware release suffixes are not IPv4 and stale archived matches are removed without removing real IOC occurrences',()=>{
+  const text='Lantronix G520 Series cellular gateways running 2.6.0.4R6_stable. IOC: 64.227.4.134';
+  assert.deepEqual(extractIOCs(text).ips,['64.227.4.134']);
+  assert.deepEqual(removeVersionIndicators({ips:['2.6.0.4','64.227.4.134']},text).ips,['64.227.4.134']);
+  assert.deepEqual(removeVersionIndicators({ips:['2.6.0.4']},text+' Separately, C2 address: 2.6.0.4:443').ips,['2.6.0.4']);
 });
 test('a true IP remains when also mentioned independently of a software version',()=>{
   assert.deepEqual(reviewNewsEvidence({title:'Version 2.0.0.39. IOC 2.0.0.39',iocs:{ips:['2.0.0.39']}}).iocs.ips,['2.0.0.39']);
