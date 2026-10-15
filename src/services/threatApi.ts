@@ -1751,7 +1751,7 @@ export interface PhishCandidateContext {
 export const fetchPhishWatchMetrics = (profileId: string): Promise<PhishWatchMetrics> => orgJson(`/api/phishing-watch/intelligence?${new URLSearchParams({ profileId })}`);
 export const fetchPhishCandidateContext = (id: string): Promise<PhishCandidateContext> => orgJson(`/api/phishing-watch/hits/${encodeURIComponent(id)}/context`);
 export interface PhishingEvolution {
-    weeks: { week: string; end: string; closed: boolean; hasArchiveHistory: boolean; publications: number; events: number; sources: number; bodyCoverage: { known: number; available: number; unknown: number } }[];
+    weeks: { week: string; end: string; closed: boolean; hasArchiveHistory: boolean; publications: number; events: number; sources: number; historicalMemberships?: number; bodyCoverage: { known: number; available: number; unknown: number } }[];
     target: string | null; baselineWeeks: number; baselineReady: boolean; updatedAt: string | null;
     signals: { kind: string; label: string; count: number; sources: number; baseline: number | null; delta: number | null; percent: number | null; newInArchive: boolean }[];
     health: { observedSince: string | null; cycles24h: number; failed24h: number; latest: { at: string; status: string; elapsedMs: number; sourceCount: number } | null;

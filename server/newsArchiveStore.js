@@ -16,6 +16,20 @@ export function createNewsArchiveStore({ filePath, readFileSync, writeJsonAtomic
     return {
         all: () => rows,
         size: () => rows.length,
+        restorePhishingMembership(members) {
+            const byLink = new Map((members || []).filter(member => member.contentHash && member.phishingVersion === PHISHING_VERSION).map(member => [member.link, member]));
+            let changed = 0;
+            const next = rows.map(row => {
+                const member = byLink.get(row.link);
+                if (!member || row.contentHash !== member.contentHash || row.phishingIntel?.detected) return row;
+                changed++;
+                const phishingIntel = { version: PHISHING_VERSION, detected: true, techniques: [], primaryTechnique: null, vectors: [], sectors: [], regions: [], brands: [], kits: [], nationState: 'unknown', ttps: [],
+                    evidence: [{ kind: 'classification', label: 'Phishing', field: 'archive', basis: 'retained-week-membership', term: 'phishing', snippet: `Classificação preservada no snapshot semanal ${member.week}; mesma URL e hash de conteúdo.` }] };
+                return { ...row, phishingIntel, phishingTechniques: [], categories: [...new Set([...(row.categories || []), 'Phishing'])] };
+            });
+            if (changed) { writeJsonAtomic(filePath, next); rows = next; }
+            return changed;
+        },
         /** Recover retained body evidence for the same publication revision. */
         restorePhishingEvidence(candidates) {
             const byLink = new Map();

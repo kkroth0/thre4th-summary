@@ -25,6 +25,16 @@ test('recovery restores original body evidence only for the same publication rev
     assert.equal(store.all()[1].phishingIntel, undefined); assert.equal(store.restorePhishingEvidence([source]), 0);
 });
 
+test('historical membership recovery requires original version and exact content hash without inventing technique or attribution', () => {
+    const store = createNewsArchiveStore({ filePath: 'unused', readFileSync: () => JSON.stringify([row({contentHash:'same'}), row({link:'https://a.example/changed',contentHash:'new'})]), writeJsonAtomic: () => {} });
+    const member = { link:'https://a.example/1', contentHash:'same', phishingVersion:'phishing-v1',week:'2026-10-04' };
+    assert.equal(store.restorePhishingMembership([{...member,phishingVersion:'other'}]),0);
+    assert.equal(store.restorePhishingMembership([member,{...member,link:'https://a.example/changed',contentHash:'old'}]),1);
+    assert.equal(store.all()[0].phishingIntel.detected,true); assert.deepEqual(store.all()[0].phishingIntel.techniques,[]);
+    assert.deepEqual(store.all()[0].phishingIntel.brands,[]); assert.equal(store.all()[0].phishingIntel.evidence[0].basis,'retained-week-membership');
+    assert.equal(store.all()[1].phishingIntel,undefined); assert.equal(store.restorePhishingMembership([member]),0);
+});
+
 test('phishing migration reclassifies cached body, removes generic labels and preserves history', () => {
     const filePath = tempFile();
     const store = createNewsArchiveStore({ filePath, readFileSync: fs.readFileSync, writeJsonAtomic });

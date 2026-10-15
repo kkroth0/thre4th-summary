@@ -36,6 +36,7 @@ export function buildPhishingWeeks(rows, { now = new Date() } = {}) {
       rules: { phishing: PHISHING_VERSION, phishingKits: PHISHING_KIT_VERSION, extraction: EXTRACTION_VERSION },
       publications: reports.length, events: unique(reports.map(eventOf)).length, sources: unique(reports.map(sourceHost)).length,
       bodyCoverage: { known: known.length, available: known.filter(row => row.articleTextAvailable).length, unknown: reports.length - known.length }, facets,
+      historicalMemberships: reports.filter(row => row.evidence.some(e => e.basis === 'retained-week-membership')).length,
       members: reports.map(row => ({ link: row.link, event: eventOf(row), source: sourceHost(row), contentHash: row.contentHash || null,
         phishingVersion: row.phishingIntel?.version || PHISHING_VERSION, extractionVersion: row.extractionVersion || null, articleTextAvailable: row.articleTextAvailable ?? null })) };
   });
@@ -108,6 +109,10 @@ export function createPhishingEvolution(db, { now = () => Date.now() } = {}) {
     return { total: rows.length, malicious, legitimate, unresolved: rows.length - malicious - legitimate, precision: malicious + legitimate ? malicious / (malicious + legitimate) : null, byReason };
   }
   return { saveWeeks, recordCycle, syncCandidates, candidates, metrics,
+    historicalMemberships: () => db.prepare('SELECT payload FROM phishing_week_revisions').all().flatMap(row => {
+      const week = JSON.parse(row.payload);
+      return week.rules?.phishing === PHISHING_VERSION && !week.rules.phishingKits ? week.members.map(member => ({ ...member, week: week.week })) : [];
+    }),
     dropProfile: (owner, profile) => db.transaction(() => {
       db.prepare('DELETE FROM watch_candidate_revisions WHERE scope=? AND candidate IN (SELECT id FROM watch_candidates WHERE scope=? AND profile=?)').run(owner, owner, profile);
       db.prepare('DELETE FROM watch_candidates WHERE scope=? AND profile=?').run(owner, profile);

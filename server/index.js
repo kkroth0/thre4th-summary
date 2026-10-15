@@ -1370,6 +1370,11 @@ const newsQualityReady=(async()=>{if (process.env.NODE_ENV !== 'test') try {
         iocIntelligence.setState('phishing-body-evidence-recovery-v1', { at: new Date().toISOString(), recovered });
     }
     newsArchiveStore.reclassifyPhishing({ bodyFor: link => articleCollectionCache.get(link)?.text || '' });
+    if (!iocIntelligence.state('phishing-snapshot-evidence-recovery-v1')) {
+        writeJsonAtomic(path.join(__dirname, '.news-phishing-snapshot-recovery.bak.json'), { archive: newsArchiveStore.all() });
+        const recovered = newsArchiveStore.restorePhishingMembership(iocIntelligence.phishing.historicalMemberships());
+        iocIntelligence.setState('phishing-snapshot-evidence-recovery-v1', { at: new Date().toISOString(), recovered });
+    }
     if(!iocIntelligence.state('news-quality-v16')){
         writeJsonAtomic(path.join(__dirname,'.news-quality-v16.bak.json'),{archive:newsArchiveStore.all(),stories:newsStoryStore.all()});
         const reviewed=[];let lastYield=performance.now();
