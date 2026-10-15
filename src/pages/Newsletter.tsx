@@ -482,15 +482,13 @@ const Newsletter = () => {
     }
   };
 
-  // O destaque abre sozinho — é o card que o leitor vai ler de qualquer jeito, e
-  // uma chamada de enrich por carga do feed é barata. Abrir todos não seria:
-  // cada painel custa um scrape e uma chamada de LLM.
-  const isExpanded = (card: StoryCard<Advisory>, featured: boolean) =>
-    expanded[card.sources[0].link] ?? featured;
+  // Details and the complete CVE list open only on request.
+  const isExpanded = (card: StoryCard<Advisory>) =>
+    expanded[card.sources[0].link] ?? false;
 
-  const toggleExpand = (card: StoryCard<Advisory>, featured: boolean) => {
+  const toggleExpand = (card: StoryCard<Advisory>) => {
     const item = card.sources[0];
-    const open = !isExpanded(card, featured);
+    const open = !isExpanded(card);
     if (open && !enrichment[enrichKeyOf(card)]) void getEnrichment(item, sourcesOf(card));
     if (open && card.sources.length > 1 && isServerStoryId(card.storyId) && !correlation[card.storyId]) {
       void getCorrelation(card.storyId);
@@ -1151,12 +1149,12 @@ const Newsletter = () => {
 
                             <button
                               type="button"
-                              onClick={() => toggleExpand(card, featured)}
-                              aria-expanded={isExpanded(card, featured)}
-                              aria-label={language === "pt" ? "Expandir" : "Expand"}
+                              onClick={() => toggleExpand(card)}
+                              aria-expanded={isExpanded(card)}
+                              aria-label={isExpanded(card) ? (language === "pt" ? "Recolher notícia" : "Collapse news") : (language === "pt" ? "Expandir notícia" : "Expand news")}
                               className="text-muted-foreground transition-colors hover:text-foreground"
                             >
-                              <ChevronDown className={cn("h-4 w-4 transition-transform", !isExpanded(card, featured) && "-rotate-90")} />
+                              <ChevronDown className={cn("h-4 w-4 transition-transform", !isExpanded(card) && "-rotate-90")} />
                             </button>
                           </div>
                         </div>
@@ -1175,7 +1173,7 @@ const Newsletter = () => {
                             quando existe (bastante fonte não traz nenhum) e só
                             fechado: expandido, o painel abaixo já mostra o texto
                             inteiro (ou o resumo da análise, quando houver). */}
-                        {!isExpanded(card, featured) && item.description?.trim() && (
+                        {!isExpanded(card) && item.description?.trim() && (
                           <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">
                             {item.description}
                           </p>
@@ -1184,20 +1182,31 @@ const Newsletter = () => {
                         {/* Faixa de identificadores: rótulo apagado, valor legível, um
                             filete entre os pares. Pílula para cada um enchia a linha de
                             molduras sem acrescentar informação. */}
-                        {(item.cves?.length || typeof item.epss === "number" || item.kev) && (
+                        {(card.cves.length || typeof item.epss === "number" || item.kev) && (
                           <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-xs">
-                            {(item.cves ?? []).slice(0, 2).map((cve) => (
+                            {(isExpanded(card) ? card.cves : card.cves.slice(0, 3)).map((cve) => (
                               <a
                                 key={cve}
                                 href={`https://nvd.nist.gov/vuln/detail/${cve}`}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="group/cve"
+                                className="group/cve whitespace-nowrap"
                               >
                                 <span className="text-[10px] uppercase tracking-wider text-muted-foreground/70">CVE </span>
                                 <span className="text-foreground/90 group-hover/cve:text-primary">{cve.replace(/^CVE-/i, "")}</span>
                               </a>
                             ))}
+                            {!isExpanded(card) && card.cves.length > 3 && (
+                              <button
+                                type="button"
+                                onClick={() => toggleExpand(card)}
+                                aria-expanded={false}
+                                aria-label={language === "pt" ? `Abrir notícia e ver todas as ${card.cves.length} CVEs` : `Open news and view all ${card.cves.length} CVEs`}
+                                className="rounded-sm font-sans text-primary hover:underline focus-visible:ring-2 focus-visible:ring-ring"
+                              >
+                                +{card.cves.length - 3} {language === "pt" ? "CVEs · ver todas" : "CVEs · view all"}
+                              </button>
+                            )}
                             {typeof item.epss === "number" && (
                               <span className="border-l border-border pl-3" title={language === "pt" ? "Probabilidade de exploração em 30 dias (FIRST EPSS)" : "30-day exploit probability (FIRST EPSS)"}>
                                 <span className="text-[10px] uppercase tracking-wider text-muted-foreground/70">EPSS </span>
@@ -1213,7 +1222,7 @@ const Newsletter = () => {
                           </div>
                         )}
 
-                        {isExpanded(card, featured) && (
+                        {isExpanded(card) && (
                           <>
                             {enrichment[enrichKey]?.loading ? (
                               <div className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">

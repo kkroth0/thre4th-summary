@@ -112,6 +112,46 @@ substitui as três tentativas consecutivas e os backoffs do mesmo erro.
 Isso pode aumentar fontes marcadas stale em falhas transitórias; não apaga suas
 publicações ou evidências anteriores.
 
-736 testes backend aprovados após essa correção, incluindo DNS que nunca retorna,
+737 testes backend aprovados após essa correção, incluindo DNS que nunca retorna,
 DNS lento em segundo hop, HTTP pendente, cancelamento isolado por fonte,
 validação de destinos mistos/privados, IP fixado, ETag/304 e tamanho de apêndices.
+
+## Reteste do ciclo recorrente e correção de versões
+
+Release de rede `332d498`: CI 38790299524, VPS 38790786678 e Cloudflare
+38790786532 aprovados. O detalhe de C2Agent voltou a concluir; o de Ivanti
+CVE-2026-104935 apresentou nove fontes e evidências compartilhadas. A conferência
+identificou cinco versões de Ivanti classificadas como IPs, além do endereço real
+108.165.147.64. A correção reconhece listas explícitas de versões, inclusive
+separadas por vírgulas/linhas; uma menção independente como IOC permanece válida.
+
+A revisão única `news-version-lists-v1` atualiza histórico e eventos em transação
+SQLite, preserva aliases e hashes, e reaplica o histórico canônico ao inventário.
+Observações independentes das APIs mantêm seus escopos. O marcador só é gravado
+após a atualização do inventário, permitindo retomar uma interrupção entre etapas.
+741 testes backend aprovados: cobertura de listas de versões, 32 hashes retidos,
+divisão de agregado legado, hashes exclusivos de fontes e rollback de falha SQL.
+
+[Auditoria leve 38793260480](https://github.com/kkroth0/thre4th-summary/actions/runs/38793260480),
+19:21:55Z, confirmou o ciclo recorrente encerrado às 19:19:18Z:
+
+| Medida | Primeiro ciclo após reinício | Ciclo recorrente seguinte |
+| --- | --- | --- |
+| Extração | 135.066 ms | 3.507 ms |
+| Reaproveitadas / recalculadas | 0 / 3.246 | 3.206 / 42 |
+| Ciclo completo | 383.195 ms | 192.975 ms |
+
+Sem expulsões do cache (4.193.323 bytes contabilizados) ou falhas de ciclo nesse
+recorte. Os ciclos tiveram entradas/carga diferentes; a queda do tempo total não
+é atribuível somente ao cache. Rede ainda levou 119 s e persistência/publicação
+28 s no segundo ciclo. Houve 38 falhas de corpos e 1.195 adiados: não significa
+que todas as fontes ou artigos foram obtidos. As evidências anteriores permanecem.
+
+## CVEs na interface de notícias
+
+Tabela e cards fechados mostram até três CVEs e o número oculto; o botão abre o
+detalhe completo. Cards começam fechados, inclusive o destaque. O drawer contém
+uma seção própria com todas as CVEs e links ao catálogo interno. O agrupamento,
+a busca e as exportações continuam recebendo a lista completa. Nenhum LLM é
+necessário para listar as CVEs no drawer. Validação visual de produção registrada
+após o deploy desta revisão.
