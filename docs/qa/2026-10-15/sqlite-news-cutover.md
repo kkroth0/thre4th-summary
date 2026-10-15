@@ -61,6 +61,20 @@ Esta entrega não modifica regras de classificação nem configurações privada
   auditoria de phishing `38748708553` ainda era o das 13:58 UTC, anterior ao deploy.
   Portanto, esta evidência confirma a migração/leitura e a retenção de novos corpos,
   mas ainda não confirma um ciclo completo de novas publicações após a troca.
+- A verificação posterior
+  [38750814400](https://github.com/kkroth0/thre4th-summary/actions/runs/38750814400)
+  confirmou o primeiro ciclo concluído após a troca às **14:14:57 UTC**:
+  68 ciclos completos e uma falha histórica, 833.951 ms, 264 fontes/192 saudáveis,
+  40 buscas de textos/39 falhas, 506 corpos reaproveitados e 1.202 diferidos.
+  A persistência funcionou; o tempo de aproximadamente 14 minutos e as falhas
+  de corpos continuam uma pendência de desempenho/cobertura.
+- [Auditoria 38751349854](https://github.com/kkroth0/thre4th-summary/actions/runs/38751349854),
+  às **14:27:03 UTC**, após novo deploy/reinício: modo SQLite, geração **2**,
+  **7.449 publicações e 4.989 eventos**. Cópias JSON iguais ao banco; nenhum
+  registro ausente/alterado/extra, fonte órfã, alias conflitante ou fonte duplicada.
+  O commit das 14:14:43 alterou 363 documentos; 808 revisões estavam retidas no
+  total e 622 publicações tinham corpo. O reinício manteve a geração, sem repetir
+  o commit. Export XLSX real posterior incluiu o hash da publicação UAC-0226.
 - [Continuous Security Scan 38746976216](https://github.com/kkroth0/thre4th-summary/actions/runs/38746976216):
   Gitleaks aprovado; NPM Audit, Trivy e OSV continuam falhando, como no run anterior
   `38738880021`. Dependências e lockfiles não foram alterados nesta entrega;
