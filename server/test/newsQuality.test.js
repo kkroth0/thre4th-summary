@@ -45,6 +45,28 @@ test('Ivanti affected/fixed version lists do not become IP infrastructure, inclu
   assert.deepEqual(extractIOCs('Version 25.1.1.1 is affected. Attackers connect to 25.1.2.2.').ips,['25.1.2.2']);
 });
 
+test('version tables and Portuguese version comparisons preserve independent network IOCs',()=>{
+  for(const text of [
+    'Afeta as versões 22.8R2.4 e anteriores, 25.1.2.2 e anteriores, e 25.1.1.1 e anteriores.',
+    'Affected versions are:\n• Connect Secure 22.8R2.4 and earlier\n• Connect Secure 25.1.2.2 and earlier',
+    'Affected versions\nResolved versions\n25.1.1.1 and prior in the applicable code line\n25.1.1.2\n25.1.2.2 and prior in the applicable code line\n25.1.3.0, 25.1.3.1',
+    'Fixed releases are 25.1.1.2, 25.1.3.0 or 25.1.3.1. Upgrade to 25.1.3.1',
+  ]) {
+    assert.deepEqual(extractIOCs(text).ips,[],text);
+    assert.deepEqual(extractIOCs(text+'\nIOC: 108.165.147.64 and 25.1.2.2:443').ips,['108.165.147.64','25.1.2.2']);
+  }
+});
+
+test('version columns and later software references are not independent IP sightings',()=>{
+  const table='| Product | Affected Versions | Fixed Versions |\n|---|---|---|\n| VPN Gateway | 25.1.1.1 and prior 25.1.2.2 and prior | 25.1.1.2 25.1.3.0, 25.1.3.1 |';
+  const text=table+'\nThe fixed versions are 25.1.1.2, 25.1.3.0 or 25.1.3.1.\nConfirm the vendor advisory before relying on 25.1.1.2 as a fix.\n25.1.3.0 requires the newer platform.\nCNA record: the version list omits the older-platform 25.1.1.2 exception.\nC2 IP: 108.165.147.64';
+  assert.deepEqual(extractIOCs(text).ips,['108.165.147.64']);
+  assert.deepEqual(reviewNewsEvidence({title:'VPN security',description:text,iocs:{ips:['25.1.1.2','25.1.3.0','25.1.3.1','108.165.147.64']}}).iocs.ips,['108.165.147.64']);
+  for(const network of ['IOC: 25.1.3.0:443','Attackers connect to 25.1.3.0','Attackers contacted 25.1.3.0.','25.1.3.0','| IP address |\n|---|\n| 25.1.3.0 |']) {
+    assert.ok(extractIOCs(text+'\n'+network).ips.includes('25.1.3.0'),network);
+  }
+});
+
 test('inline table markup and old concatenated labels do not hide IPs or corrupt endpoints',()=>{
   const text=extractReadableText('<article><table><tr><td><strong>204.8.96.109</strong>Tor exit</td><td><code>/fz/x.js</code>Browser-based payload</td></tr></table></article>');
   assert.match(text,/204\.8\.96\.109 Tor exit/);assert.match(text,/\/fz\/x\.js Browser-based/);

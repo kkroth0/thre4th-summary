@@ -1,15 +1,12 @@
-import { extractIOCs, isSoftwareVersionAt } from './ctiIntel.js';
+import { extractIOCs, softwareVersionIpValues } from './ctiIntel.js';
 import { sanitizeStoredMalware } from './malwareMatch.js';
 import { isAiNews } from './newsCategories.js';
 import { declaredRepositoryMalware } from './repositorySources.js';
 
 export function removeVersionIndicators(iocs, text) {
   const body=String(text||'').replace(/\[\.\]|\(\.\)|\{\.\}/g,'.');
-  const seen=new Set(),valid=new Set();
-  for(const match of body.matchAll(/(?<![\d.])\b(?:\d{1,3}\.){3}\d{1,3}(?!\d|\.\d)/g)){seen.add(match[0]);if(!isSoftwareVersionAt(body,match.index,match[0]))valid.add(match[0]);}
-  return {...iocs,ips:(iocs?.ips||[]).filter(ip=>{
-    return !seen.has(ip)||valid.has(ip);
-  })};
+  const versions=softwareVersionIpValues(body);
+  return {...iocs,ips:(iocs?.ips||[]).filter(ip=>!versions.has(ip))};
 }
 export function recoverJoinedTableIps(row,text='') {
   // Older cached HTML collapsed an inline address and its next column label

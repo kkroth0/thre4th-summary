@@ -377,26 +377,64 @@ const addUrl = (set, raw) => {
 // (`vers:intdot/`) e os comparadores que aparecem em "prior to <4.3.4.1".
 const RE_VERSION_BEFORE = /(?:vers(?:ions?|ao|ão)?|vers:intdot\/|firmware|release|build|update|patch|prior to|earlier than|before|through|バージョン|版本|版本号)\s*[:v<>=]*\s*$|(?:<|>|&lt;|&gt;|≤|≥)\s*$/i;
 function followsVersionList(text) {
-    const markers=[...text.matchAll(/\b(?:versions?|versões|versoes|firmware|releases?|builds?)\b|\bvers:intdot\//gi)];
+    const markers=[...text.matchAll(/\b(?:versions?|versões|versoes|firmware|releases?|builds?)\b|\bvers:intdot\/|\b(?:\d+\.){1,8}\d+(?:[a-z]\d*(?:[._-][a-z0-9]+)*)?\s+(?:and\s+(?:prior|earlier)|e\s+anteriores)\b|\b(?:upgrade|update)\s+to\b/gi)];
     const marker=markers.at(-1);
     if(!marker)return false;
     // A bounded, explicit list grammar rather than a broad "version nearby"
     // heuristic. Ordinary prose/IOC labels terminate the version context.
     const remaining=text.slice(marker.index+marker[0].length)
-        .replace(/\b\d+(?:\.\d+){1,8}(?:[a-z]\d+(?:[_-][a-z]+)?)?\b/gi,'')
-        .replace(/\b(?:and|or|prior|earlier|later|before|through|to|up|including|inclusive|respectively|v)\b/gi,'')
-        .replace(/[\s,;:()[\]<>=≤≥–—-]+/g,'');
+        .replace(/\b\d+(?:\.\d+){1,8}(?:[a-z]\d*(?:[._-][a-z0-9]+)*)?\b/gi,'')
+        .replace(/\bin the applicable code line\b/gi,'')
+        .replace(/\b(?:and|or|prior|earlier|later|before|through|to|up|including|inclusive|respectively|are|is|include|includes|e|ou|anteriores|anterior|incluem|v)\b/gi,'')
+        .replace(/[\s,;:()[\]<>=≤≥–—|•*-]+/g,'');
     return remaining.length===0;
+}
+function inVersionTable(text,index) {
+    const start=text.lastIndexOf('\n',index)+1,end=text.indexOf('\n',index);
+    const line=text.slice(start,end<0?text.length:end);
+    if(!line.includes('|'))return false;
+    const column=text.slice(start,index).split('|').length-1;
+    for(const previous of text.slice(Math.max(0,start-1200),start).split('\n').reverse()) {
+        if(!previous.trim())continue;
+        if(!previous.includes('|'))break;
+        if(/\b(?:versions?|releases?|builds?|firmware)\b/i.test(previous))return /\b(?:versions?|releases?|builds?|firmware)\b/i.test(previous.split('|')[column]||'');
+    }
+    return false;
 }
 export function isSoftwareVersionAt(text, index, value) {
     const before = text.slice(Math.max(0, index - 80), index);
     const after = text.slice(index + value.length, index + value.length + 40);
     return RE_VERSION_BEFORE.test(before)
         || followsVersionList(text.slice(Math.max(0,index-240),index))
+        || inVersionTable(text,index)
+        || /^\s+(?:and\s+(?:prior|earlier)|e\s+anteriores)\b/i.test(after)
+        || /\b(?:upgrad(?:e|ed|ing)|updat(?:e|ed|ing))\s+to\s*$/i.test(before)
+        || /\b(?:release|version)\s+of\s*$/i.test(before)
         || /\bv\s*$/i.test(before)
         || /(?:AiCloud|FortiOS|FortiClient|PAN-OS|Windows|firmware|software|OpenSSL|Rails|Ruby|\.NET|Java|JDK|Tomcat|Python|Django|Spring|Ubuntu|Debian|Android|iOS|Apache|OpenSSH|PHP|Jenkins|GitLab|Chrome|Firefox|Edge|Safari|Opera)\s+v?\s*$/i.test(before)
         || /^(?:[rpb]\d+(?:[_-](?:stable|release|build)\w*)?|[-_](?:stable|release|build|rc\d+|beta\d*|alpha\d*))(?![a-z0-9_])/i.test(after)
         || /^\s*(?:以前|以降|未満|以上|のバージョン|版本|version\b)/i.test(after);
+}
+
+// A version can be repeated later in prose about its fix/platform. Such a
+// reference is not a second, independent IP observation. Explicit network
+// labels, endpoints and bare indicator lines still provide independent roles.
+export function softwareVersionIpValues(text) {
+    const mentions=[...text.matchAll(/(?<![\d.])\b(?:\d{1,3}\.){3}\d{1,3}(?!\d|\.\d)/g)].map(match=>({value:match[0],index:match.index,version:isSoftwareVersionAt(text,match.index,match[0])}));
+    const versions=new Set(mentions.filter(match=>match.version).map(match=>match.value)),valid=new Set();
+    for(const match of mentions) {
+        if(match.version)continue;
+        const before=text.slice(Math.max(0,match.index-120),match.index),after=text.slice(match.index+match.value.length,match.index+match.value.length+120);
+        const start=text.lastIndexOf('\n',match.index)+1,end=text.indexOf('\n',match.index);
+        const line=text.slice(start,end<0?text.length:end).trim();
+        const network=/\b(?:iocs?|ip(?:v[46])?(?: addresses?)?|c2|c&c|hosts?|servers?|endpoints?|beacons?|callbacks?|connect(?:ed|ing|s)?\s+to|endereços?|servidores?)\s*(?::|=|is|are|was|were)?\s*[^\n]*$/i.test(before)
+            || /^:\d{1,5}\b/.test(after)||/https?:\/\/$/i.test(before)||line===match.value;
+        const sentenceBefore=before.split(/[.!?]\s+(?=[A-Z])/).at(-1);
+        const sentenceAfter=after.split(/[.!?]\s+(?=[A-Z]|$)/)[0];
+        const software=/\b(?:versions?|firmware|releases?|patch(?:ed|es)?|fix(?:es)?|vendor table|code line|platform|CNA record)\b/i.test(sentenceBefore+' '+sentenceAfter);
+        if(!versions.has(match.value)||network||!software)valid.add(match.value);
+    }
+    return new Set([...versions].filter(value=>!valid.has(value)));
 }
 
 export function extractIOCs(text, { plaintext = false } = {}) {
@@ -426,6 +464,7 @@ export function extractIOCs(text, { plaintext = false } = {}) {
 
     const ips = new Set();
     const refanged = refang(t).replace(/(?<=[A-Za-z])(?=(?:\d{1,3}\.){3}\d{1,3})/g,' ');
+    const versionValues=softwareVersionIpValues(refanged);
     for (const m of refanged.matchAll(/(?<![\d.])\b(?:\d{1,3}\.){3}\d{1,3}(?!\d|\.\d)/g)) {
         const ip = m[0];
         if (ip.split('.').some((o) => Number(o) > 255)) continue;
@@ -436,7 +475,7 @@ export function extractIOCs(text, { plaintext = false } = {}) {
         // guardas abaixo, um boletim da CISA sobre a Siemens saía com quatro
         // "IOCs" que são número de firmware.
         if (ip.split('.').some((o) => o.length > 1 && o.startsWith('0'))) continue;
-        if (isSoftwareVersionAt(refanged, m.index, ip)) continue;
+        if (versionValues.has(ip)||isSoftwareVersionAt(refanged, m.index, ip)) continue;
         ips.add(ip);
     }
 

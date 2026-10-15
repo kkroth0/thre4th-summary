@@ -9,6 +9,7 @@ import { createStoryStore } from '../newsStoryStore.js';
 import { publishNewsSnapshot } from '../publishNewsSnapshot.js';
 import { mergeIntoStories } from '../newsStories.js';
 import { repairNewsVersionLists } from '../repairNewsVersionLists.js';
+import { enrichFeedItems } from '../feedEnrichment.js';
 
 const now=new Date('2026-10-15T12:00:00Z');
 const stores=(persistence,rows=[],events=[])=>createSqliteNewsStores({persistence,
@@ -64,4 +65,18 @@ test('a failed SQLite story update rolls back archive corrections and can be ret
   assert.deepEqual(persistence.readSnapshot(),before);
   db.exec('DROP TRIGGER reject_version_repair');await repairNewsVersionLists({...news,now});
   assert.deepEqual(news.archive.all()[0].iocs.ips,['108.165.147.64']);db.close();
+});
+
+test('version-table corrections survive the next extraction even with stale supplemental indicators',async()=>{
+  const inventory=createIocIntelligence(),news=stores(inventory.news);
+  const body='CVE-2026-104935\n| Product | Affected Versions | Fixed Versions |\n|---|---|---|\n| Gateway | 25.1.1.1 and prior 25.1.2.2 and prior | 25.1.1.2 25.1.3.0, 25.1.3.1 |\nThe vendor table lists 25.1.3.0 as the fix.\nC2 IP: 108.165.147.64';
+  const original=row('table',{description:'VPN bulletin CVE-2026-104935',iocs:{...row('table').iocs,ips:['25.1.1.1','25.1.2.2','25.1.1.2','25.1.3.0','25.1.3.1','108.165.147.64']}});
+  await publishNewsSnapshot([original],{...news,now});
+  await repairNewsVersionLists({...news,bodyFor:()=>body,now});
+  const next=enrichFeedItems([original],{texts:new Map([[original.link,body]]),supplementalIocs:new Map([[original.link,original.iocs]]),
+    actors:()=>[],malware:()=>[],campaigns:()=>[],seller:()=>null,categorize:()=>({categories:['Vulnerabilities'],primary:'Vulnerabilities'})});
+  assert.equal(next.length,1);assert.deepEqual(next[0].iocs.ips,['108.165.147.64']);assert.equal(next[0].iocs.hashes.length,32);
+  await publishNewsSnapshot(next,{...news,now});await inventory.ingestNews(news.archive.all());
+  assert.deepEqual(news.archive.all()[0].iocs.ips,['108.165.147.64']);assert.equal(inventory.detail('25.1.3.0'),null);
+  assert.equal(inventory.news.compare(news.archive.all(),news.stories.all()).readyForReadPilot,true);inventory.close();
 });
