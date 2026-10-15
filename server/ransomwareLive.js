@@ -122,10 +122,11 @@ export function normalizeVictim(v = {}, source = 'ransomware.live') {
     const country = text(v.country, v.country_code, v.countryCode).toUpperCase();
     const name = text(v.post_title, v.victim, v.name, v.website, v.domain, 'Unknown victim');
     const description = text(v.description);
+    const isSourceLink = value => { try { const host = new URL(value).hostname.toLowerCase(); return host === 'ransomware.live' || host.endsWith('.ransomware.live') || host === 'cti.fyi' || host.endsWith('.cti.fyi') || host.endsWith('.onion'); } catch { return false; } };
     return {
         id: text(v.id, v.slug) || undefined,
         name,
-        website: text(v.website, v.domain, v.url),
+        website: [v.website, v.domain, v.url].map(value => text(value)).find(value => value && !isSourceLink(value)) || '',
         group: text(v.group_name, v.group, 'unknown'),
         country,
         countryName: COUNTRY_NAMES[country] || country || 'Unknown',
@@ -138,7 +139,7 @@ export function normalizeVictim(v = {}, source = 'ransomware.live') {
         discovered: text(v.discovered, v.published, v.date, v.attackdate, v.attack_date) || null,
         description: description ? description.slice(0, 500) : '',
         screenshot: text(v.screenshot),
-        permalink: text(v.permalink, v.link),
+        permalink: text(v.permalink, v.link, isSourceLink(v.url) ? v.url : ''),
         infostealer: v.infostealer ?? v.infostealer_detected ?? null,
         press: maybeArray(v.press),
         source: text(v.source, source),

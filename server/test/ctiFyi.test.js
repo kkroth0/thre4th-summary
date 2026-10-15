@@ -16,6 +16,11 @@ test('CTI timestamps remain UTC, discovery does not become publication, victim d
   assert.notEqual(normalizeCtiPost(post({ post_url: 'http://example.onion/#box_v28' })).id, row.id);
   assert.notEqual(normalizeCtiPost(post({ post_url: '', post_title: 'A' })).id, normalizeCtiPost(post({ post_url: '', post_title: 'B' })).id);
 });
+test('provider record URLs remain references instead of masquerading as victim websites',()=>{
+  const row=normalizeVictim({name:'ACME',url:'https://www.ransomware.live/id/claim'});assert.equal(row.website,'');assert.equal(row.permalink,'https://www.ransomware.live/id/claim');
+  assert.equal(normalizeVictim({name:'ACME',domain:'acme.com',url:'https://cti.fyi/api/v1/posts'}).website,'acme.com');
+  assert.equal(normalizeVictim({name:'ACME',url:'https://acme.com/'}).website,'https://acme.com/');
+});
 test('group dossiers merge aliases into existing actors, keep MITRE evidence and ignore tactic IDs as techniques', () => {
   const existing = [{ id: 'ransomware:akira', name: 'Akira', aliases: [], techniques: [{ id: 'T1486', name: 'Authoritative MITRE name', url: 'https://attack.mitre.org/techniques/T1486/' }] }];
   const actors = mergeCtiActors(existing, groups());
@@ -43,6 +48,12 @@ test('multiple source group aliases retain all claim links on one established ac
   const actors=mergeCtiActors([{id:'akira',name:'Akira',aliases:[]}],groups);assert.equal(actors.length,1);
   const rows=ctiPublications([normalizeCtiPost(post()),normalizeCtiPost(post({group_name:'Akira ransomware',post_url:'http://example.onion/#second'}))],actors);
   assert.equal(rows.length,2);assert.ok(rows.every(row=>row.actors[0].id==='akira'));assert.notEqual(rows[0].link,rows[1].link);
+});
+test('an exact actor name and explicit CTI group mapping take precedence over another actors shared alias',()=>{
+  const catalog=[{id:'version3',name:'LockBit3',aliases:[]},{id:'other',name:'LockBit',aliases:['LockBit3']}];
+  const groups=normalizeCtiGroups({results:[{name:'lockbit3'}]});const actors=mergeCtiActors(catalog,groups);assert.equal(actors.length,2);
+  const victims=attachRansomwareActors([normalizeCtiPost(post({group_name:'lockbit3'}))],actors);assert.equal(victims[0].actorId,'version3');
+  assert.equal(ctiPublications(victims,actors)[0].actors[0].id,'version3');
 });
 test('shared collector persists updates, removes quarantined claims, caches and resumes after restart', async () => {
   let clock = NOW, calls = 0, saved, changed = false;

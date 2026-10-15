@@ -41,11 +41,12 @@ export function normalizeCtiGroups(payload) {
   });
 }
 export function mergeCtiActors(actors, groups) {
-  const rows = actors.map(row => ({ ...row })); const names = new Map();
+  const rows = actors.map(row => ({ ...row })); const names = new Map(), primary = new Map();
+  for (const actor of rows) { const ids = primary.get(key(actor.name)) || new Set(); ids.add(actor.id); primary.set(key(actor.name), ids); }
   const index = actor => { for (const name of [actor.name, ...array(actor.aliases)]) { const ids = names.get(key(name)) || new Set(); ids.add(actor.id); names.set(key(name), ids); } };
   rows.forEach(index);
   for (const group of groups) {
-    let matches = names.get(key(group.name));
+    let matches = primary.get(key(group.name)) || names.get(key(group.name));
     if (!matches?.size) matches = new Set(group.aliases.flatMap(alias => [...(names.get(key(alias)) || [])]));
     const existing = matches?.size === 1 ? rows.find(row => row.id === [...matches][0]) : null;
     const ctiFyi = { group: group.name, description: group.description, claims: group.postCount, metadataBasis: 'source-automated', references: group.refs };
@@ -86,9 +87,13 @@ export function mergeRansomwareVictims(primary, secondary) {
   return result;
 }
 export function attachRansomwareActors(victims, actors) {
-  const names = new Map();
+  const names = new Map(), primary = new Map(), sourceGroups = new Map();
+  for (const actor of actors) {
+    const ids = primary.get(key(actor.name)) || new Set(); ids.add(actor.id); primary.set(key(actor.name), ids);
+    if (actor.ctiFyi) for (const name of [...array(actor.ctiFyi.groups), actor.ctiFyi.group]) sourceGroups.set(key(name), actor.id);
+  }
   for (const actor of actors) for (const name of [actor.name, ...array(actor.aliases), actor.ctiFyi?.group].filter(Boolean)) { const ids = names.get(key(name)) || new Set(); ids.add(actor.id); names.set(key(name), ids); }
-  return victims.map(row => { const ids = names.get(key(row.group)); return ids?.size === 1 ? { ...row, actorId: [...ids][0] } : row; });
+  return victims.map(row => { const sourceId = sourceGroups.get(key(row.group)); if (sourceId) return { ...row, actorId: sourceId }; const ids = primary.get(key(row.group)) || names.get(key(row.group)); return ids?.size === 1 ? { ...row, actorId: [...ids][0] } : row; });
 }
 
 export function createCtiFyi({ http, read = () => null, save = () => {}, now = () => Date.now() }) {
