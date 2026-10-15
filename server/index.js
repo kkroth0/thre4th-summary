@@ -87,6 +87,7 @@ import { enrichFeedItemsAsync, mergeIocEvidence, applyVulnerabilityContext, EXTR
 import { createStoryStore } from './newsStoryStore.js';
 import { createNewsArchiveStore } from './newsArchiveStore.js';
 import { durableArticleCache } from './newsPersistence.js';
+import { createSqliteNewsStores } from './sqliteNewsStores.js';
 import { proposeWatchTerms } from './watchSuggestions.js';
 import { newsExportQuery, newsExportRows, newsExportCsv } from './newsExport.js';
 import { buildPhishingDataset, phishingQuery } from './phishingDataset.js';
@@ -172,16 +173,22 @@ const DAILY_SUMMARIES_PATH = path.join(__dirname, '.daily-summaries.json');
 const dailyEditionStore = createEditionStore({ filePath: DAILY_SUMMARIES_PATH, writeJsonAtomic });
 
 const NEWS_STORIES_PATH = process.env.NEWS_STORIES_PATH || path.join(__dirname, '.news-stories.json');
-const newsStoryStore = createStoryStore({ filePath: NEWS_STORIES_PATH, readFileSync: fs.readFileSync, writeJsonAtomic });
+const legacyNewsStories = createStoryStore({ filePath: NEWS_STORIES_PATH, readFileSync: fs.readFileSync, writeJsonAtomic });
 const NEWS_ARCHIVE_PATH = process.env.NEWS_ARCHIVE_PATH || path.join(__dirname, '.news-archive.json');
-const newsArchiveStore = createNewsArchiveStore({ filePath: NEWS_ARCHIVE_PATH, readFileSync: fs.readFileSync, writeJsonAtomic });
+const legacyNewsArchive = createNewsArchiveStore({ filePath: NEWS_ARCHIVE_PATH, readFileSync: fs.readFileSync, writeJsonAtomic });
 const iocIntelligence = createIocIntelligence({ filePath: process.env.IOC_INTELLIGENCE_PATH || (process.env.NODE_ENV === 'test' ? ':memory:' : path.join(__dirname, '.ioc-intelligence.sqlite')) });
+const { archive: newsArchiveStore, stories: newsStoryStore } = createSqliteNewsStores({
+    persistence: iocIntelligence.news, archive: legacyNewsArchive, stories: legacyNewsStories,
+    writeBackup: snapshot => { writeJsonAtomic(NEWS_ARCHIVE_PATH, snapshot.archive); writeJsonAtomic(NEWS_STORIES_PATH, snapshot.stories); },
+    onBackupError: () => console.warn('News SQLite committed; JSON recovery copy needs repair'),
+});
 function registerCatalogEntities(rows, kind) {
     try { iocIntelligence.news.registerEntities(rows.map(row => ({ ...row, kind })), 'global', 'catalog'); }
     catch (error) { console.warn('Entity catalog persistence failed:', error.message); }
 }
 function syncNewsShadow() {
     try {
+        if (iocIntelligence.news.status().mode === 'sqlite') return iocIntelligence.news.status().latest;
         const result = iocIntelligence.news.reconcile({ archive: newsArchiveStore.all(), stories: newsStoryStore.all() });
         iocIntelligence.setState('news-shadow-error', null);
         return result;

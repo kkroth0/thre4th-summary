@@ -6,6 +6,7 @@ import { pathToFileURL } from 'node:url';
 const root = path.resolve(process.argv[2] || process.cwd());
 const { default: Database } = await import(pathToFileURL(path.join(root, 'server/node_modules/better-sqlite3/lib/index.js')));
 const db = new Database(path.join(root, 'server/.ioc-intelligence.sqlite'), { readonly: true, fileMustExist: true }); db.pragma('query_only=ON');
+db.exec('BEGIN');
 const candidateCount = db.prepare('SELECT COUNT(*) n FROM watch_candidates').get().n;
 const weekly = db.prepare('SELECT week,payload FROM phishing_weeks ORDER BY week DESC LIMIT 10').all();
 const candidatesMisclassified = db.prepare("SELECT COUNT(*) n FROM observations WHERE provider='phishingWatch'").get().n;
@@ -21,7 +22,11 @@ report.collection = {
 };
 try {
   const { buildPhishingWeeks } = await import(pathToFileURL(path.join(root, 'server/phishingEvolution.js')));
-  const recalculated = buildPhishingWeeks(JSON.parse(fs.readFileSync(path.join(root, 'server/.news-archive.json'), 'utf8')));
+  const { readPrimaryNewsSnapshot } = await import(pathToFileURL(path.join(root, 'server/newsPersistence.js')));
+  const hasManifest = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='news_storage_state'").get();
+  const primary = hasManifest ? readPrimaryNewsSnapshot(db) : null;
+  const recalculated = buildPhishingWeeks(primary?.archive || JSON.parse(fs.readFileSync(path.join(root, 'server/.news-archive.json'), 'utf8')));
+  report.newsStorage = primary ? 'sqlite' : 'json';
   report.replay = { weeks: recalculated.length, publications: recalculated.reduce((sum, week) => sum + week.publications, 0) };
 } catch (error) { report.replay = { error: error.name, message: error.message, stack: String(error.stack).split('\n').slice(0, 5) }; }
 const { evaluateCtBacktest, candidateBrandMatch } = await import(pathToFileURL(path.join(root, 'server/phishingCtBacktest.js')));

@@ -26,20 +26,43 @@ novas sugestões. Repetir o aceite não duplica a marca.
 
 ## Migração gradual no banco do inventário
 
-`news_documents` espelha as publicações e stories completos, incluindo IDs,
-aliases, IOCs por fonte, versões e evidências. O arquivo JSON continua sendo a
-origem de leitura durante esta etapa. Após inicialização/revisão, coleta e
-enriquecimento manual, os dois snapshots são copiados na mesma transação SQLite.
-Uma falha reverte ambos. `news_document_revisions` preserva a versão substituída
+`news_documents` guarda as publicações e stories completos, incluindo IDs,
+aliases, IOCs por fonte, versões e evidências. A ativação exige as três últimas
+comparações shadow válidas e igualdade com os JSONs naquele instante. Uma instalação
+sem documentos anteriores importa os arquivos existentes após validar os vínculos.
+Se os critérios ainda não forem atendidos, a instalação permanece em shadow até
+uma próxima inicialização; não apaga nem substitui a cópia divergente.
+
+Após a ativação, leituras são carregadas do SQLite e mantidas em memória por geração;
+os JSONs passam a ser cópias de recuperação. `news_storage_state` confirma a geração
+e a ordem original de publicações/stories na mesma transação. A fila de publicação
+serializa coletas e enriquecimentos assíncronos. Uma geração desatualizada é rejeitada.
+O correlacionador prepara os dois snapshots sem publicá-los; só depois os grava
+juntos no banco. Uma falha reverte ambos. `news_document_revisions` preserva a versão substituída
 e a retirada de um story pela retenção; não cria uma revisão para dados iguais.
+O registro de nomes processa apenas publicações alteradas a cada commit.
+
+Reinícios verificam hashes de payloads, identidades, ordem, aliases e vínculos;
+um banco inválido impede a inicialização dessa versão, sem importar JSON vazio
+por cima. JSON ausente, antigo ou inválido é reconstruído do banco verificado.
+Falha ao atualizar a cópia JSON não desfaz um commit SQLite nem anuncia falha
+da publicação já salva; fica registrada como recuperação pendente no endpoint.
+As duas cópias JSON não compartilham transação de filesystem. Antes de voltar a
+uma versão antiga que lê JSON, executar a auditoria e exigir paridade de ambas.
+Não apagar `.ioc-intelligence.sqlite`, WAL ou SHM para forçar uma reimportação.
+Esta implementação pressupõe um único processo escritor da aplicação; não é uma
+coordenação de coletas distribuídas entre réplicas.
 
 `news_shadow_checks` guarda as últimas mil comparações de identidades, hashes e
 payloads, além de fontes órfãs e colisões de aliases. O endpoint premium
 `GET /api/intelligence/storage` mostra somente contagens e o último resultado.
-O workflow manual **News persistence audit** lê os arquivos e o SQLite sem
-alterá-los e confere as cópias novamente. Uma troca definitiva de leitura deve
-aguardar comparações de ciclos reais e investigação de qualquer divergência.
-`readyForReadPilot` é um diagnóstico, não um comando de troca automática.
+O workflow manual **News persistence audit** lê o banco em uma transação somente
+de leitura, valida o manifesto e os vínculos e compara separadamente os JSONs de
+recuperação. A auditoria de phishing também recalcula as semanas a partir do SQLite
+após ativação. `mode`, `generation`, `backup` e o último resultado permitem verificar
+a troca sem expor conteúdo privado. A ingestão no inventário de IOCs continua
+idempotente após o commit de notícias e é repetida ao iniciar o servidor; ela não
+participa da mesma transação assíncrona da correlação.
 
 `news_body_versions` retém o texto efetivamente coletado e os anexos/IOCs
 suplementares por URL e hash. Na primeira execução, importa os corpos que ainda
@@ -90,7 +113,7 @@ etapa; uniões automáticas continuam desativadas e o correlacionador não foi a
 - Passo 0: avaliador e auditoria disponíveis; amostra independente/rotulada ainda
   necessária. A busca considera também observações OpenPhish já existentes.
 - Passo 3: condicionado aos resultados e ao piloto; nenhum stream CT foi ativado.
-- Passo 4: espelhamento, revisões, corpos duráveis e registro de nomes entregues;
-  troca definitiva de leitura fica após a auditoria de ciclos reais.
+- Passo 4: espelhamento, revisões, corpos duráveis, registro de nomes e troca
+  condicionada para SQLite como origem de leitura/gravação entregues.
 - Passo 5: avaliação offline preparada; faltam vetores de modelo fixado e corpus
   PT/EN revisado para decidir sobre a ativação.

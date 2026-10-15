@@ -112,11 +112,11 @@ test('weekly evidence and private watch context enforce access, preserve candida
     assert.equal(summary.precision, null); assert.equal(summary.unresolved, 1);
 });
 
-test('storage shadow and news-based monitoring suggestions enforce access and explicit account-owned acceptance', async () => {
+test('SQLite storage and news-based monitoring suggestions enforce access and explicit account-owned acceptance', async () => {
     for (const route of ['/api/intelligence/storage','/api/intelligence/entities?kind=actor','/api/phishing-watch/suggestions?profileId=owned']) assert.equal((await fetch(BASE+route)).status,401);
     assert.equal((await fetch(BASE+'/api/phishing-watch/suggestions?profileId=private',{headers:AUTH_HEADERS})).status,404);
     const storage=await fetch(BASE+'/api/intelligence/storage',{headers:AUTH_HEADERS}).then(res=>res.json());
-    assert.equal(storage.mode,'shadow'); assert.equal(storage.latest.equal,true); assert.equal(storage.latest.archive.source,2);
+    assert.equal(storage.mode,'sqlite'); assert.equal(storage.latest.equal,true); assert.equal(storage.latest.archive.source,2); assert.equal(storage.backup.ok,true);
     const response=await fetch(BASE+'/api/phishing-watch/suggestions?profileId=owned',{headers:AUTH_HEADERS});
     assert.equal(response.headers.get('cache-control'),'private, no-store');
     const data=await response.json(); const suggestion=data.suggestions.find(row=>row.term==='adobe'); assert.ok(suggestion);

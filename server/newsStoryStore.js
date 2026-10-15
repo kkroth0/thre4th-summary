@@ -2,9 +2,9 @@
 // injection so the tests never touch the real state file. A corrupt or missing
 // file is an empty store, never a crash — the feed has to keep serving news even
 // when the grouping state is gone.
-export function createStoryStore({ filePath, readFileSync, writeJsonAtomic }) {
-    let stories = [];
-    try {
+export function createStoryStore({ filePath, readFileSync, writeJsonAtomic, initialRows }) {
+    let stories = initialRows || [];
+    if (!initialRows) try {
         const parsed = JSON.parse(readFileSync(filePath, 'utf8'));
         stories = Array.isArray(parsed) ? parsed.filter((story) => story && story.id && Array.isArray(story.sources)) : [];
     } catch { /* empty store */ }

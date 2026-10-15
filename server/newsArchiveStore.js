@@ -6,9 +6,9 @@
 // sem tela nova. Mesmo padrão de fs-por-injeção do createStoryStore.
 import { analyzePhishing, PHISHING_VERSION } from './phishingIntel.js';
 
-export function createNewsArchiveStore({ filePath, readFileSync, writeJsonAtomic }) {
-    let rows = [];
-    try {
+export function createNewsArchiveStore({ filePath, readFileSync, writeJsonAtomic, initialRows }) {
+    let rows = initialRows || [];
+    if (!initialRows) try {
         const parsed = JSON.parse(readFileSync(filePath, 'utf8'));
         rows = Array.isArray(parsed) ? parsed.filter((r) => r && r.link) : [];
     } catch { /* arquivo ausente ou corrompido: arquivo vazio, não derruba o servidor */ }

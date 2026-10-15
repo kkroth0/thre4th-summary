@@ -17,7 +17,7 @@ jobs:
       SSH_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
     steps:
       - uses: actions/checkout@v7
-      - name: Compare source files and SQLite without modifying production
+      - name: Validate SQLite integrity and JSON recovery copies without modifying production
         shell: bash
         run: |
           set -euo pipefail
