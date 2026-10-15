@@ -36,7 +36,50 @@ acima identificam custos reais, mas não provam sozinhos a causa desse erro.
 
 ## Regressões
 
-718 testes backend aprovados antes do caso adicional de integridade na leitura;
-11 testes SQLite aprovados depois, incluindo rejeição de relações inválidas com
-hash válido. TypeScript e lint do frontend alterado aprovados. Sem dependências novas.
-As provas finais de CI/deploy, integridade e navegador serão registradas após a publicação.
+CI [38762317521](https://github.com/kkroth0/thre4th-summary/actions/runs/38762317521):
+719 testes backend e 255 frontend/marca aprovados, TypeScript/build aprovados,
+lint sem erros e com 16 avisos existentes. Inclui rejeição de relações inválidas
+com hash válido. Sem dependências novas.
+
+## Publicação e conferência
+
+- Release `06870a273c916cb15c665a4ac840f25ddcb12c38`.
+- [VPS 38762671714](https://github.com/kkroth0/thre4th-summary/actions/runs/38762671714)
+  e [Cloudflare 38762671819](https://github.com/kkroth0/thre4th-summary/actions/runs/38762671819)
+  concluídos com sucesso.
+- Auditoria [38764219161](https://github.com/kkroth0/thre4th-summary/actions/runs/38764219161):
+  leitura validada caiu de 29.501 para 13.589 ms nessa medição; resposta HTTP fria
+  1.662 ms e reutilização abaixo de 1 ms (arredondada para zero), com payload
+  integral igual ao anterior. Isso mede o processamento isolado, não latência
+  completa da rede nem o tempo total do coletor.
+- Integridade [38764462779](https://github.com/kkroth0/thre4th-summary/actions/runs/38764462779):
+  geração 8, 7.499 publicações e 5.025 eventos; zero ausências, diferenças,
+  fontes órfãs, aliases conflitantes ou fontes duplicadas. JSON de recuperação
+  em paridade com SQLite.
+- Navegador autenticado: após reload, 5.044 eventos visíveis, sem novo erro de
+  carregamento; abertura de evento com 11 fontes, atores/malwares/domínios de
+  evidência, e outra notícia com CVE e duas fontes. Esse teste não é um gabarito
+  de precisão de todas as correlações.
+- Segurança: Gitleaks passou. NPM Audit/Trivy/OSV continuam com falhas preexistentes;
+  o push informou 49 avisos de dependência. Nenhuma dependência foi alterada.
+
+## Gargalo adicional identificado pelo primeiro ciclo instrumentado
+
+Auditoria [38765879518](https://github.com/kkroth0/thre4th-summary/actions/runs/38765879518):
+o ciclo concluído às 12:56:11 de Fortaleza levou 694.277 ms. Etapas: feeds
+110.775 ms; scrapers 1.403 ms; corpos 14.399 ms; extração 102.245 ms; contexto
+de vulnerabilidades 3.360 ms; publicação 435.301 ms; inventário 21.323 ms.
+A auditoria posterior [38766273063](https://github.com/kkroth0/thre4th-summary/actions/runs/38766273063)
+isolou 373.309 ms na correlação desse ciclo, antes da gravação SQLite.
+
+A correção seguinte indexa candidatos por CVE, campanha, IOC forte, termo do
+título e título normalizado. Todas as regras de aceite compartilham ao menos
+um desses sinais; o índice só elimina comparações impossíveis e a decisão
+continua na mesma função. Atualizações exclusivamente editoriais atualizam
+metadados/agregados sem remover e recomparar a fonte contra todo o catálogo.
+Mapas de propriedade das fontes são atualizados também após merges e splits.
+
+Comparação local com a implementação anterior: igualdade integral na amostra
+pública de 61 publicações, inclusive replay com score/hash alterados. Em 1.000
+matérias sintéticas: montagem inicial 846 → 39 ms, replay 845 → 33 ms, com mesmo
+resultado. Esses números são do ambiente local, não estimativa de ganho em VPS.

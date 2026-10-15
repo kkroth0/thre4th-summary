@@ -153,3 +153,28 @@ test('auditoria sem rótulos não inventa métricas e identifica publicações p
     assert.deepEqual(report.duplicateLinks, [items[0].link]);
     assert.deepEqual(report.unassigned, [items[1].link]);
 });
+
+test('editorial and extraction metadata updates preserve event membership while refreshing aggregates', () => {
+    const a = article('metadata-a', { cves: ['CVE-2026-11111'], contentHash: 'first', extractionVersion: 'feed-v13', score: 40, newsCategories: ['Malware'] });
+    const b = article('metadata-b', { cves: ['CVE-2026-11111'], contentHash: 'second', extractionVersion: 'feed-v13', score: 60, newsCategories: ['Malware'] });
+    const original = mergeIntoStories([], [a, b], now), before = structuredClone(original);
+    original[0].aliases.push('stable-shared-link'); before[0].aliases.push('stable-shared-link');
+    const updated = mergeIntoStories(original, [{ ...a, score: 95, severity: 'Critical', contentHash: 'new-body-same-signals', newsCategories: ['Phishing'] }, { ...b, score: 20 }], now);
+    assert.equal(updated.length, 1); assert.equal(updated[0].id, original[0].id);
+    assert.ok(updated[0].aliases.includes('stable-shared-link'));
+    assert.equal(updated[0].score, 95); assert.equal(updated[0].title, a.title);
+    assert.ok(updated[0].categories.includes('Phishing')); assert.ok(updated[0].categories.includes('Malware'));
+    assert.equal(updated[0].sources.find(source => source.link === a.link).contentHash, 'new-body-same-signals');
+    assert.equal(updated[0].sources.find(source => source.link === b.link).score, 20);
+    assert.deepEqual(original, before, 'metadata updates must not mutate the previous published snapshot');
+});
+
+test('indexed candidates retain an empty-term same-edition match and strong IOC matches', () => {
+    const sameEdition = [article('edition-a', { title: 'CISA adds two known exploited vulnerabilities to catalog', source: 'CISA' }), article('edition-b', { title: 'CISA adds two known exploited vulnerabilities to catalog', source: 'CISA' })];
+    assert.equal(mergeIntoStories([], sameEdition, now).length, 1);
+    for (const field of ['hashes', 'domains', 'urls']) {
+        const value = { hashes: 'a'.repeat(64), domains: 'attacker.example', urls: 'https://attacker.example/one' }[field];
+        const pair = [article('indicator-a', { title: 'Unrelated alpha', iocs: { [field]: [value] } }), article('indicator-b', { title: 'Different omega', iocs: { [field]: [value] } })];
+        assert.equal(mergeIntoStories([], pair, now).length, 1, field);
+    }
+});

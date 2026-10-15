@@ -418,7 +418,27 @@ function* mergeStorySteps(stories, items, now) {
     }
     const knownSources = new Map(result.flatMap((story) => story.sources.map((source) => [canonicalArticleUrl(source.link) || source.link, source])));
     const sourceOwners = new Map(result.flatMap((story) => story.sources.map((source) => [canonicalArticleUrl(source.link) || source.link, story])));
-    const publicationMetadata = new Set(['dateInferred', 'publicationTimeKnown', 'publicationDateBasis', 'firstCollectedAt', 'repository']);
+    const publicationMetadata = new Set(['dateInferred', 'publicationTimeKnown', 'publicationDateBasis', 'firstCollectedAt', 'repository', 'score', 'severity', 'newsCategories', 'assets', 'contentHash', 'extractionVersion', 'sellerHandle']);
+    // Every accepting rule shares a CVE, campaign, strong IOC, title term or
+    // exact normalized title. This index only removes impossible comparisons;
+    // the unchanged decision() still decides every candidate pair.
+    const candidates = new Map(), indexedKeys = new WeakMap();
+    const keysOf = story => [...new Set(story.sources.flatMap(source => [
+        ...(source.topicCves || source.cves || []).map(value => 'cve:' + value),
+        ...(source.campaigns || []).map(value => 'campaign:' + value),
+        ...iocsOf(source).strong.map(value => 'ioc:' + value),
+        ...rareTerms(source.title).map(value => 'term:' + value),
+        'title:' + normalize(source.title).trim(),
+    ]))];
+    const indexStory = story => {
+        const keys = keysOf(story); indexedKeys.set(story, keys);
+        for (const key of keys) { if (!candidates.has(key)) candidates.set(key, new Set()); candidates.get(key).add(story); }
+        for (const source of story.sources) { const key = canonicalArticleUrl(source.link) || source.link; sourceOwners.set(key, story); knownSources.set(key, source); }
+    };
+    const unindexStory = story => {
+        for (const key of indexedKeys.get(story) || []) { const rows = candidates.get(key); rows?.delete(story); if (!rows?.size) candidates.delete(key); }
+    };
+    for (const story of result) indexStory(story);
     const signalCache = new WeakMap();
     const sourceSignals = (story, source) => {
         if (signalCache.has(source)) return signalCache.get(source);
@@ -457,16 +477,17 @@ function* mergeStorySteps(stories, items, now) {
         .sort((a, b) => String(a.pubDate).localeCompare(String(b.pubDate)) || String(a.link).localeCompare(String(b.link)));
     for (const item of incoming) {
         const unchanged = knownSources.get(canonicalArticleUrl(item.link) || item.link);
-        if (item.contentHash && unchanged?.contentHash === item.contentHash && unchanged.extractionVersion === item.extractionVersion) {
+        if (unchanged) {
             const next = newStory(item).sources[0];
             if (Object.keys(next).every(key => JSON.stringify(next[key] ?? null) === JSON.stringify(unchanged[key] ?? null))) { yield; continue; }
             if (Object.keys(next).filter(key=>!publicationMetadata.has(key)).every(key=>JSON.stringify(next[key]??null)===JSON.stringify(unchanged[key]??null))) {
                 const link=canonicalArticleUrl(item.link)||item.link,owner=sourceOwners.get(link),index=result.indexOf(owner);
                 if(index>=0){
                     const source={...unchanged,...Object.fromEntries([...publicationMetadata].filter(key=>next[key]!==undefined).map(key=>[key,next[key]]))};
-                    const updated={...owner,sources:owner.sources.map(row=>row===unchanged?source:row)};
+                    const updated=summarize({...owner,sources:owner.sources.map(row=>row===unchanged?source:row)});
+                    unindexStory(owner);
                     result[index]=updated;
-                    for(const row of updated.sources){const key=canonicalArticleUrl(row.link)||row.link;sourceOwners.set(key,updated);knownSources.set(key,row);}
+                    indexStory(updated);
                     yield;continue;
                 }
             }
@@ -475,10 +496,11 @@ function* mergeStorySteps(stories, items, now) {
         const link = canonicalArticleUrl(item.link) || item.link;
         const direct = newStory({ ...item, link });
         if (JSON.stringify(knownSources.get(link)) === JSON.stringify(direct.sources[0])) continue;
-        const ownerIndex = result.findIndex((story) => story.sources.some((source) => (canonicalArticleUrl(source.link) || source.link) === link));
+        const ownerIndex = result.indexOf(sourceOwners.get(link));
         let candidate = direct;
         if (ownerIndex >= 0) {
             const owner = result[ownerIndex];
+            unindexStory(owner);
             result = result.filter((_, index) => index !== ownerIndex);
             const remaining = owner.sources.filter((source) => (canonicalArticleUrl(source.link) || source.link) !== link);
             if (remaining.length) {
@@ -489,7 +511,9 @@ function* mergeStorySteps(stories, items, now) {
                     aliases: (owner.aliases || []).filter((alias) => alias !== direct.id && alias !== id && (owner.id !== direct.id || memberIds.has(alias))), sources: remaining });
                 // Removing an updated bridge may disconnect the publications
                 // it formerly joined. Re-evaluate the residual group too.
-                result.push(...(remaining.length > 1 ? yield* rebuildStorySteps([residual], [], now) : [residual]));
+                const residuals = remaining.length > 1 ? yield* rebuildStorySteps([residual], [], now) : [residual];
+                result.push(...residuals);
+                for (const story of residuals) indexStory(story);
                 if (owner.id === direct.id) {
                     candidate.aliases = (owner.aliases || []).filter((alias) => !memberIds.has(alias));
                 }
@@ -500,7 +524,8 @@ function* mergeStorySteps(stories, items, now) {
         // Signals inherited from one merge cannot manufacture the next merge.
         const potential = [];
         let checked = 0;
-        for (const story of result) {
+        const possible = new Set(keysOf(direct).flatMap(key => [...(candidates.get(key) || [])]));
+        for (const story of possible) {
             if (directMatch(story, direct)) potential.push(story);
             if (++checked % 32 === 0) yield;
         }
@@ -516,9 +541,9 @@ function* mergeStorySteps(stories, items, now) {
         if (!signals(direct).observedCves.size && matches.some((left, index) => matches.slice(index + 1).some((right) => incompatible(left, right)))) matches = [];
         matches = matches.filter((story) => !incompatible(story, candidate));
         const ids = new Set(matches.map((story) => story.id));
-        for (const story of matches) candidate = absorb(story, candidate);
+        for (const story of matches) { unindexStory(story); candidate = absorb(story, candidate); }
         result = [...result.filter((story) => !ids.has(story.id)), candidate];
-        for (const source of candidate.sources) knownSources.set(canonicalArticleUrl(source.link) || source.link, source);
+        indexStory(candidate);
     }
     return result.sort((a, b) => String(b.lastSeen).localeCompare(String(a.lastSeen)) || a.id.localeCompare(b.id));
 }
