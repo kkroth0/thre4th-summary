@@ -5,6 +5,12 @@ const fold = value => String(value || '').normalize('NFD').replace(/[\u0300-\u03
 const safeUrl = value => { try { const u = new URL(value); return /^https?:$/.test(u.protocol) && !u.username && !u.password && u.href.length <= 450 ? u.href : ''; } catch { return ''; } };
 const clean = (value, max = 700) => String(value || '').replace(/[\u0000-\u001f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, max);
 const stampDate = value => new Date(value).toISOString();
+// Editorial freshness requires a publication date, not a first-collected date.
+const editorialCandidate = row => row.dateInferred !== true && row.securityRelevant !== false;
+const editorialKey = row => {
+    const focus = [...new Set((String(row.title || '').match(/CVE-\d{4}-\d{4,}/gi) || row.topicCves || []).map(id => id.toUpperCase()))].sort();
+    return row.storyId ? row.storyId + (focus.length ? ':' + focus.join(',') : '') : row.link;
+};
 const stop = new Set('a o os as de do da dos das em no na nos nas um uma e com para por que qual quais como sobre me fale falar quero saber noticias noticia ultimas ultimos hoje semana dias mais quais the of in about tell news latest what is are and'.split(' '));
 export function parseAssistantQuery(value) {
     const input = String(value || '').trim().slice(0, 500);
@@ -49,11 +55,11 @@ export function createKnowledgeAssistant({ getNews, getRevision = () => '', getI
             const groups = new Map();
             for (const { row } of index()) {
                 const published = Date.parse(row.pubDate);
-                if (!Number.isFinite(published) || published > now() || published < now() - request.days * 86400000) continue;
+                if (!editorialCandidate(row) || !Number.isFinite(published) || published > now() || published < now() - request.days * 86400000) continue;
                 for (const entity of row[request.query === 'actor' ? 'actors' : 'malware'] || []) {
                     if (!entity?.id) continue;
                     const group = groups.get(entity.id) || { name: entity.name, events: new Set(), posts: new Set(), latest: 0, link: '' };
-                    group.events.add(row.storyId || row.link); group.posts.add(row.link);
+                    group.events.add(editorialKey(row)); group.posts.add(row.link);
                     if (published > group.latest) { group.latest = published; group.link = safeUrl(row.link); }
                     groups.set(entity.id, group);
                 }
@@ -96,13 +102,13 @@ export function createKnowledgeAssistant({ getNews, getRevision = () => '', getI
         }
         const terms = fold(request.query).split(/[^\p{L}\p{N}_.-]+/u).filter(term => term.length >= 2 && !stop.has(term)).slice(0, 12);
         const cutoff = request.kind === 'briefing' ? now() - request.days * 86400000 : 0;
-        const ranked = index().filter(({ row }) => Date.parse(row.pubDate) <= now() && Date.parse(row.pubDate) >= cutoff)
+        const ranked = index().filter(({ row }) => Date.parse(row.pubDate) <= now() && Date.parse(row.pubDate) >= cutoff && (request.kind !== 'briefing' || editorialCandidate(row)))
             .map(entry => ({ ...entry, hits: terms.filter(term => entry.search.includes(term)).length }))
             .filter(entry => request.kind === 'briefing' || terms.length && entry.hits > 0)
             .sort((a, b) => b.hits - a.hits || (Number(!!b.row.kev) * 25 + (b.row.score || 0)) - (Number(!!a.row.kev) * 25 + (a.row.score || 0)) || Date.parse(b.row.pubDate) - Date.parse(a.row.pubDate));
         const seen = new Set(), selected = [];
         for (const { row } of ranked) {
-            const key = row.storyId || row.link;
+            const key = editorialKey(row);
             if (!seen.has(key) && safeUrl(row.link)) { seen.add(key); selected.push(row); }
             if (selected.length === 4) break;
         }

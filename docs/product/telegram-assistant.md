@@ -22,7 +22,10 @@ Token cifrado com a chave-mestra existente; nunca retorna ao navegador.
 ## Consulta e custo
 
 - /briefing: até quatro notícias das últimas 24 horas, ordenadas por relevância,
-  KEV/score e data, deduplicadas pelo evento registrado.
+  KEV/score e data de publicação, deduplicadas pelo evento e tema/CVEs de foco.
+  Páginas com data inferida da coleta ou marcadas como não relevantes não
+  entram no briefing nem no ranking de menções recentes; continuam pesquisáveis.
+  CVEs de foco distintas não são ocultadas somente por compartilhar storyId.
 - /briefing semana: mesma seleção para sete dias.
 - /buscar termo e perguntas: recuperação lexical no acervo salvo. Não é busca
   semântica por embeddings nem navegação autônoma na internet.

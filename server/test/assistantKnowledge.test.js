@@ -30,6 +30,21 @@ test('natural malware panorama counts distinct publications and events with boun
   const result = await service.answer('me', 'Quais malwares mais aparecem nas notícias da semana?');
   assert.match(result.text, /Mirai · 2 eventos \/ 3 publicações/); assert.match(result.text, /11:00:00/); assert.equal(result.aiUsed, false);
 });
+test('undated collected pages remain searchable but cannot become new briefings or recent malware signals', async () => {
+  const service = assistant({ getNews: () => [news(), news({ title: 'Undated product promotion', link: 'https://vendor.example/promotion', dateInferred: true, score: 100, kev: true, malware: [{ id: 'other', name: 'UndatedFamily' }] }),
+    news({ title: 'Not security relevant', link: 'https://vendor.example/unrelated', securityRelevant: false, score: 100 })] });
+  assert.doesNotMatch((await service.answer('me', '/briefing')).text, /Undated product|Not security/);
+  assert.match((await service.answer('me', '/buscar Undated')).text, /Undated product/);
+  assert.doesNotMatch((await service.answer('me', 'Quais malwares mais recentes?')).text, /UndatedFamily/);
+});
+test('a broad stored event cannot hide distinct explicitly identified vulnerability topics', async () => {
+  const service = assistant({ getNews: () => [news({ storyId: 'broad', title: 'Ivanti CVE-2026-12345', topicCves: ['CVE-2026-12345'] }),
+    news({ storyId: 'broad', link: 'https://other.example/moodle', title: 'Moodle CVE-2026-99999', topicCves: ['CVE-2026-99999'] }),
+    news({ storyId: 'broad', link: 'https://other.example/ivanti-copy', title: 'Ivanti patch', topicCves: ['CVE-2026-12345'] })] });
+  const result = await service.answer('me', '/briefing');
+  assert.match(result.text, /Ivanti CVE-2026-12345/); assert.match(result.text, /Moodle CVE-2026-99999/);
+  assert.doesNotMatch(result.text, /Ivanti patch/);
+});
 test('news queries single-flight AI, cache per owner and invalidate on dataset revision', async () => {
   let calls = 0, revision = 1, claims = 0;
   const service = assistant({ getRevision: () => revision, generate: async () => { calls++; await new Promise(resolve => setTimeout(resolve, 5)); return { bullets: [{ text: 'Mirai reportado por pesquisadores.', sources: ['N1'] }] }; } });
