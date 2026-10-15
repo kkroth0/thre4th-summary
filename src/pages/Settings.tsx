@@ -2,6 +2,7 @@ import { ArrowLeft, Loader2 } from "lucide-react";
 import { Link, Navigate, useSearchParams } from "react-router-dom";
 import { AdminSettings } from "@/components/settings/AdminSettings";
 import { ApiKeysSettings } from "@/components/settings/ApiKeysSettings";
+import { AssistantSettings } from "@/components/settings/AssistantSettings";
 import { MonitoringSettings } from "@/components/settings/MonitoringSettings";
 import { PreferencesSettings } from "@/components/settings/PreferencesSettings";
 import { PageLayout } from "@/components/PageLayout";
@@ -10,7 +11,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { cn } from "@/lib/utils";
 
-type SettingsSection = "general" | "monitoring" | "api-keys" | "admin";
+type SettingsSection = "general" | "monitoring" | "api-keys" | "assistant" | "admin";
 
 export default function Settings() {
   const { language, tr } = useLanguage();
@@ -23,7 +24,7 @@ export default function Settings() {
   if (!auth.authenticated) return <Navigate to="/login" replace />;
 
   const requested = searchParams.get("section");
-  const section: SettingsSection = requested === "api-keys" ? "api-keys" : requested === "general" ? "general" : requested === "admin" && auth.isAdmin ? "admin" : "monitoring";
+  const section: SettingsSection = requested === "assistant" ? "assistant" : requested === "api-keys" ? "api-keys" : requested === "general" ? "general" : requested === "admin" && auth.isAdmin ? "admin" : "monitoring";
   // Only accept local paths for the return link.
   const rawFrom = searchParams.get("from") || "";
   const from = /^\/[^/]/.test(rawFrom) ? rawFrom : "";
@@ -36,6 +37,7 @@ export default function Settings() {
   const sections = [
     { id: "monitoring", label: tr({ pt: "Monitoramento", en: "Monitoring", es: "Monitoreo", fr: "Surveillance" }) },
     { id: "api-keys", label: tr({ pt: "Chaves de API", en: "API keys", es: "Claves de API", fr: "Clés API" }) },
+    { id: "assistant", label: pt ? "IA e Telegram" : "AI & Telegram" },
     { id: "general", label: tr({ pt: "Interface", en: "Interface", es: "Interfaz", fr: "Interface" }) },
     ...(auth.isAdmin ? [{ id: "admin", label: pt ? "Administração" : "Administration" }] : []),
   ];
@@ -62,6 +64,7 @@ export default function Settings() {
         {section === "general" && <PreferencesSettings />}
         {section === "monitoring" && <MonitoringSettings />}
         {section === "api-keys" && <ApiKeysSettings />}
+        {section === "assistant" && <AssistantSettings />}
         {section === "admin" && auth.isAdmin && <AdminSettings />}
       </div>
     </PageLayout>

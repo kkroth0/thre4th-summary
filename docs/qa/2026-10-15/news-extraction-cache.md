@@ -211,3 +211,24 @@ compartilhadas, exigindo comparar fontes do evento com o histórico mais amplo.
 [Integridade 38821157046](https://github.com/kkroth0/thre4th-summary/actions/runs/38821157046),
 23:04:50Z, geração 47: 7.746 publicações e 5.241 eventos, comparação canônica e
 backup iguais, sem ausências, diferenças, órfãos, duplicatas ou aliases conflitantes.
+
+## Revisão final de versões alfanuméricas
+
+Release `3f256f6`: [CI 38822192610](https://github.com/kkroth0/thre4th-summary/actions/runs/38822192610)
+aprovada (745 backend, 256 frontend/marca), [VPS 38822440064](https://github.com/kkroth0/thre4th-summary/actions/runs/38822440064)
+e [Cloudflare 38822439951](https://github.com/kkroth0/thre4th-summary/actions/runs/38822439951)
+concluídos. Listas iniciadas por builds como 22.8R2.5 e referências a releases
+são classificadas; rótulos explícitos de IP preservam ocorrências de rede.
+
+[Auditoria 38822820810](https://github.com/kkroth0/thre4th-summary/actions/runs/38822820810),
+23:19:06Z: v3 concluída, duas publicações, cinco menções retiradas e um evento
+reconstruído. Doze publicações da amostra ampla 25.1.* sem as versões-alvo nos
+IPs; nenhuma dessas versões nos sources dos eventos. IP real 108.165.147.64
+preservado. C2Agent mantém 32 hashes no histórico, evento e inventário.
+Conferência visual posterior ao deploy confirmou o IP real no detalhe Ivanti
+e ausência dos chips 25.1.*. Isso não valida semanticamente todas as uniões do
+evento: fontes de advisories distintos ainda exigem auditoria de correlação.
+
+[Integridade 38822817196](https://github.com/kkroth0/thre4th-summary/actions/runs/38822817196),
+23:21:03Z, geração 49: 7.747 publicações e 5.242 eventos, comparações canônica
+e backup iguais; zero ausências, diferenças, órfãos, duplicatas ou aliases conflitantes.

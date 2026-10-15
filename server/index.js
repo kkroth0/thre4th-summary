@@ -108,6 +108,8 @@ import {
 } from './phishTickets.js';
 import { createRdap, takedownTargets } from './rdap.js';
 import { createQuotaReader } from './vendorQuotas.js';
+import { createKnowledgeAssistant, createAssistantGenerator } from './assistantKnowledge.js';
+import { createTelegramIntegration } from './telegramIntegration.js';
 import { ORG_REGIONS, ORG_SECTORS, createProfileStore } from './orgProfiles.js';
 import { buildThreatModel } from './orgThreatModel.js';
 import { SCRAPE_SOURCES, collectScraped } from './scrapeFeeds.js';
@@ -399,8 +401,10 @@ app.use(cors(corsOptionsDelegate));
 // ~3 MB de .pptx + ~2 MB de .pdf viram ~7 MB depois do base64, e o JSON vai junto.
 const tightJson = express.json({ limit: '10kb' });
 const bulkJson = express.json({ limit: '25mb' });
+const telegramJson = express.json({ limit: '64kb' });
 app.use((req, res, next) => {
     if (req.method === 'POST' && req.path === '/api/feed/job/result') return bulkJson(req, res, next);
+    if (req.method === 'POST' && /^\/api\/integrations\/telegram\/webhook\/\d{5,16}$/.test(req.path)) return telegramJson(req, res, next);
     return tightJson(req, res, next);
 });
 app.use(express.urlencoded({ extended: false, limit: '10kb' }));
@@ -419,6 +423,8 @@ const skipRateLimit = (req) => {
     if (verifySession(getCookie(req, 'ts_session'))) return true;
 
     const p = req.path || '';
+    const telegramWebhook = p.match(/^(?:\/api)?\/integrations\/telegram\/webhook\/(\d{5,16})$/);
+    if (telegramWebhook && telegramIntegration.validWebhook(telegramWebhook[1], req.get('X-Telegram-Bot-Api-Secret-Token'))) return true;
     // Rotas worker<->site: o worker na VPS faz poll a cada 10s, o que sozinho
     // consome 90 das 150 requisições da janela de 15 min e derruba o próprio
     // pipeline de geração. Não são superfície pública — requireFeedSecret já
@@ -3196,6 +3202,57 @@ async function queryVulnerabilities(method, params) {
     return data;
 }
 
+const knowledgeAssistant = createKnowledgeAssistant({
+    getNews: () => newsArchiveStore.all(),
+    getRevision: () => iocIntelligence.news.generation() + ':' + newsArchiveStore.size(),
+    getIoc: (owner, value) => iocIntelligence.detail(value, owner, { size: 20 }),
+    getEntities: (owner, kind, query) => iocIntelligence.news.entities({ owner, kind, query }),
+    getEntityEvidence: (owner, kind, id) => {
+        const rows = actorPublications([...newsArchiveStore.all(), ...iocIntelligence.publications({ owner, kind, id })], []);
+        return buildActorEvidence(kind === 'actor' ? rows : rows.map(row => ({ ...row, actors: row.malware || [] })), id, { days: 0 });
+    },
+    getCve: id => queryVulnerabilities('detail', id),
+    getStatus: owner => ({ ...iocIntelligence.status(owner), publications: newsArchiveStore.size(), updatedAt: iocIntelligence.state('news-sync')?.lastSuccessfulAt }),
+    generate: createAssistantGenerator({ http: axios, getKey: () => process.env.OPENROUTER_API_KEY, model: process.env.OPENROUTER_ASSISTANT_MODEL || OPENROUTER_MODEL }),
+});
+const telegramIntegration = createTelegramIntegration({
+    filePath: process.env.IOC_INTELLIGENCE_PATH || (process.env.NODE_ENV === 'test' ? ':memory:' : path.join(__dirname, '.ioc-intelligence.sqlite')),
+    http: axios, encrypt: encryptSecret, decrypt: decryptSecret, publicOrigin: APP_BASE_URL,
+    answer: knowledgeAssistant.answer, aiAvailable: () => !!process.env.OPENROUTER_API_KEY,
+    isAllowed: (owner, until) => !!usersStore[owner] && (premiumOpen || hasPremiumAccessSync(usersStore[owner].login) || !!ALLOWED_ORG && until > Date.now()),
+});
+const assistantLimiter = rateLimit({ windowMs: 3600000, max: 20, keyGenerator: req => req.user.sub, standardHeaders: true, legacyHeaders: false,
+    message: { error: 'Limite de 20 prévias por hora atingido.' } });
+const telegramSettingsGuard = (req, res, next) => {
+    if (req.get('Origin') && req.get('Origin') !== new URL(APP_BASE_URL).origin) return res.status(403).json({ error: 'Origem não autorizada.' });
+    res.set('Cache-Control', 'private, no-store'); next();
+};
+app.get('/api/integrations/telegram', requirePremium, telegramSettingsGuard, (req, res) => {
+    telegramIntegration.authorize(req.user.sub, req.user.premiumViaOrg ? req.user.exp * 1000 : 0);
+    res.json({ ...telegramIntegration.status(req.user.sub), encryptionAvailable: !!ENC_KEY });
+});
+app.post('/api/integrations/telegram/connect', requirePremium, telegramSettingsGuard, assistantLimiter, async (req, res) => {
+    if (!ENC_KEY) return res.status(503).json({ error: 'Armazenamento cifrado de credenciais indisponível.' });
+    try { res.json(await telegramIntegration.configure(req.user.sub, req.body?.token, req.user.premiumViaOrg ? req.user.exp * 1000 : 0)); }
+    catch (error) { res.status(error.status === 429 ? 429 : 400).json({ error: error.message }); }
+});
+app.post('/api/integrations/telegram/link', requirePremium, telegramSettingsGuard, (req, res) => {
+    try { res.json(telegramIntegration.link(req.user.sub)); } catch (error) { res.status(400).json({ error: error.message }); }
+});
+app.patch('/api/integrations/telegram', requirePremium, telegramSettingsGuard, (req, res) => {
+    try { res.json(telegramIntegration.preferences(req.user.sub, req.body || {})); } catch (error) { res.status(400).json({ error: error.message }); }
+});
+app.delete('/api/integrations/telegram', requirePremium, telegramSettingsGuard, async (req, res) => { res.json(await telegramIntegration.disconnect(req.user.sub)); });
+app.post('/api/integrations/telegram/webhook/:botId', (req, res) => {
+    const result = telegramIntegration.accept(req.params.botId, req.get('X-Telegram-Bot-Api-Secret-Token'), req.body);
+    res.status(result.authorized ? 200 : 401).json({ ok: result.authorized });
+});
+app.post('/api/assistant/query', requirePremium, telegramSettingsGuard, assistantLimiter, async (req, res) => {
+    if (typeof req.body?.question !== 'string' || !req.body.question.trim() || req.body.question.length > 500) return res.status(400).json({ error: 'Informe uma consulta de até 500 caracteres.' });
+    try { res.json(await telegramIntegration.preview(req.user.sub, req.body.question, req.body.aiEnabled === true)); }
+    catch { res.status(503).json({ error: 'Consulta indisponível. Tente novamente.' }); }
+});
+
 const weeklySourceCache=new Map();
 async function weeklyInputs(range){
     const cached=weeklySourceCache.get(range.id);
@@ -4052,6 +4109,7 @@ app.listen(PORT, () => {
     // Unit/API tests invoke collectors explicitly with controlled inputs.
     // Booting a test server must not launch real scheduled collections.
     if (process.env.NODE_ENV === 'test') return;
+    setInterval(() => { void telegramIntegration.tick().catch(() => console.warn('Telegram worker unavailable')); }, 2000).unref();
     console.log(`Server running on port ${PORT}`);
     setTimeout(()=>{void iocIntelligence.replayProviderPayloads((provider,payload,options)=>sourceObservations(provider,payload,{...options,
         matchActors:text=>matchActors(text,actorIndex),matchMalware:(text,matchOptions)=>matchMalware(text,malwareIndex,matchOptions)})).catch(()=>console.warn('Saved provider match review failed'));},2000).unref();

@@ -4,6 +4,7 @@ import { pathToFileURL } from 'node:url';
 const root = path.resolve(process.argv[2] || process.cwd());
 const { default: Database } = await import(pathToFileURL(path.join(root, 'server/node_modules/better-sqlite3/lib/index.js')));
 const { compareNewsSnapshots, readPrimaryNewsSnapshot } = await import(pathToFileURL(path.join(root, 'server/newsPersistence.js')));
+const { auditNewsInventory } = await import(pathToFileURL(path.join(root, 'server/newsInventoryAudit.js')));
 const db = new Database(path.join(root, 'server/.ioc-intelligence.sqlite'), { readonly: true, fileMustExist: true });
 db.pragma('query_only=ON');
 db.exec('BEGIN');
@@ -18,6 +19,7 @@ const snapshot = primary || jsonSnapshot;
 if (!snapshot) throw Error('No valid news snapshot available');
 const comparison = compareNewsSnapshots(db, snapshot.archive, snapshot.stories);
 const report = { readOnly: true, at: new Date().toISOString(), mode: primary ? 'sqlite' : 'shadow', generation: primary?.generation || 0, comparison, backupComparison,
+  inventoryComparison: auditNewsInventory(db, snapshot.archive),
   backup: hasManifest ? JSON.parse(db.prepare("SELECT payload FROM news_storage_state WHERE id='backup'").get()?.payload || 'null') : null,
   bodyVersions: db.prepare('SELECT COUNT(*) n FROM news_body_versions').get().n,
   retainedBodies: db.prepare('SELECT COUNT(DISTINCT link) n FROM news_body_versions').get().n,
@@ -27,4 +29,4 @@ const report = { readOnly: true, at: new Date().toISOString(), mode: primary ? '
   recentChecks: db.prepare('SELECT payload FROM news_shadow_checks ORDER BY id DESC LIMIT 3').all().map(row => JSON.parse(row.payload)),
 };
 db.close(); console.log(JSON.stringify(report, null, 2));
-if (!comparison.readyForReadPilot || !backupComparison.equal) process.exitCode = 1;
+if (!comparison.readyForReadPilot || !backupComparison.equal || !report.inventoryComparison.passed) process.exitCode = 1;

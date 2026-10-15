@@ -15,10 +15,13 @@ registra decisões propostas; não habilita IA, canais de entrega nem novos aces
 - **Piloto editorial dentro da plataforma:** a base de notícias, evidências e
   seleção já permite avançar. Validar provedor, citações e custo em amostra antes
   de ampliar o uso; não bloquear coleta ou correlação pela disponibilidade da IA.
-- **Telegram não implementado:** não há conector de envio, destinos configurados,
-  aprovação de entrega, outbox com idempotência nem registro de confirmação de envio.
+- **Telegram pessoal:** a implementação posterior está descrita em
+  [telegram-assistant.md](telegram-assistant.md): webhook, vínculo privado,
+  consultas à base, briefing diário com ativação explícita, fila persistida e
+  confirmação de entrega. Ainda depende de criar/configurar o bot e validar
+  entrega real. O usuário autorizou o canal pessoal e seu envio automático.
   Relatórios ainda usam conta/semana; separar por perfil/workspace antes de
-  atender clientes diferentes. Não habilitar envio externo a partir deste status.
+  atender clientes diferentes. Esse canal não conclui a proposta multicliente.
 
 ## Direção
 
