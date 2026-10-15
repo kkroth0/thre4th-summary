@@ -1,11 +1,16 @@
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowUpRight, Download, Globe2, RefreshCw } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { domainRequest, fetchSimilarDomains, type SimilarDomain } from '@/services/domainIntelligence';
 import { formatVendorData } from '@/services/threatApi';
 import { domainDate } from '@/utils/domainInvestigation';
+
+function domainRegistration(row: SimilarDomain, whois?: Record<string, unknown>) {
+  const field = (value: unknown) => typeof value === 'string' && value.trim() && !/^(?:unknown|n\/a|not available|unavailable|-)$/i.test(value.trim()) ? value : null;
+  return { ...row, registrar: field(row.registrar) || field(whois?.Registrar), expiresAt: row.expiresAt || field(whois?.Expires), source: [...new Set([...row.source, ...(whois ? ['Who.is'] : [])])], ...(whois ? { whois } : {}) };
+}
 
 function DomainRow({ row, pt, owner, onPivot }: { row: SimilarDomain; pt: boolean; owner: string; onPivot: (value: string) => void }) {
   const [requested, setRequested] = useState(false); const l = (a: string, b: string) => pt ? a : b;
@@ -14,18 +19,18 @@ function DomainRow({ row, pt, owner, onPivot }: { row: SimilarDomain; pt: boolea
     if (!raw.WhoisRecord) throw new Error('Invalid WHOIS response');
     return formatVendorData('WHOIS', raw, row.domain) as Record<string, unknown>;
   } });
-  const registrar = row.registrar || (typeof whois.data?.Registrar === 'string' ? whois.data.Registrar : null);
-  const expiry = row.expiresAt || (typeof whois.data?.Expires === 'string' ? whois.data.Expires : null);
+  const { registrar, expiresAt: expiry } = domainRegistration(row, whois.data);
   const records = row.addresses.length ? row.addresses : row.nameservers;
   return <tr><td><button className="inline-flex items-center gap-2 text-left font-mono font-semibold text-primary hover:underline" onClick={() => onPivot(row.domain)}>{row.domain}<ArrowUpRight className="h-3.5 w-3.5 shrink-0" /></button></td><td><span className="whitespace-nowrap rounded-full bg-muted px-2.5 py-1">{row.kind === 'tld' ? 'TLD' : row.kind === 'omission' ? l('Letra omitida', 'Omitted letter') : l('Letras trocadas', 'Swapped letters')}</span></td><td className="max-w-64 break-all font-mono">{records.slice(0, 3).map(value => <div key={value}>{value}</div>)}{records.length > 3 && <details className="mt-1"><summary className="cursor-pointer text-muted-foreground">+{records.length - 3}</summary>{records.slice(3).map(value => <div key={value}>{value}</div>)}</details>}</td><td className="whitespace-nowrap">{domainDate(expiry, pt)}</td><td className="max-w-60 break-words">{registrar || '—'}{(!registrar || !expiry) && <div className="mt-2">{!requested ? <button className="text-primary hover:underline" onClick={() => setRequested(true)} aria-label={`${l('Consultar WHOIS de', 'Look up WHOIS for')} ${row.domain}`}>{l('Consultar WHOIS', 'Look up WHOIS')}</button> : <span className="text-[11px] text-muted-foreground">{whois.isFetching ? l('Consultando…', 'Loading…') : whois.isError ? l('WHOIS indisponível', 'WHOIS unavailable') : l('Campo não informado pela fonte', 'Field not reported by source')}</span>}</div>}</td><td><span className="whitespace-nowrap">{[...row.source, ...(whois.data ? ['Who.is'] : [])].join(' · ')}</span></td></tr>;
 }
 
 export function SimilarDomains({ domain, pt, onPivot }: { domain: string; pt: boolean; onPivot: (value: string) => void }) {
-  const { auth } = useAuth(); const [filter, setFilter] = useState(''); const l = (a: string, b: string) => pt ? a : b;
-  const result = useQuery({ queryKey: ['domain-similar', auth.login || '', domain], queryFn: ({ signal }) => fetchSimilarDomains(domain, signal), staleTime: 21_600_000, retry: false });
+  const { auth } = useAuth(); const queryClient = useQueryClient(); const [filter, setFilter] = useState(''); const l = (a: string, b: string) => pt ? a : b;
+  const result = useQuery({ queryKey: ['domain-similar', auth.login || '', domain], queryFn: ({ signal }) => fetchSimilarDomains(domain, signal), staleTime: query => query.state.data?.status === 'unavailable' ? 60_000 : query.state.data?.incomplete ? 300_000 : 21_600_000, retry: false });
   const rows = (result.data?.domains || []).filter(row => row.domain.includes(filter.toLowerCase().trim()));
   const exportRows = () => {
-    const url = URL.createObjectURL(new Blob([JSON.stringify(result.data, null, 2)], { type: 'application/json' }));
+    const data = { ...result.data, domains: result.data?.domains.map(row => domainRegistration(row, queryClient.getQueryData<Record<string, unknown>>(['domain-whois', auth.login || '', row.domain]))) };
+    const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
     const link = document.createElement('a'); link.href = url; link.download = `${domain}-similar-domains.json`; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
   return <article className="actor-surface overflow-hidden">
