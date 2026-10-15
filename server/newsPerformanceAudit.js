@@ -11,6 +11,7 @@ const { default: Database } = await import(pathToFileURL(path.join(root, 'server
 const { readPrimaryNewsSnapshot } = await import(pathToFileURL(path.join(root, 'server/newsPersistence.js')));
 const { completeNewsFeed } = await import(pathToFileURL(path.join(root, 'server/newsQuality.js')));
 const report = { readOnly: true, at: new Date().toISOString(), timingsMs: {} };
+report.code = Object.fromEntries(['newsStories.js', 'newsPersistence.js'].map(name => [name, createHash('sha256').update(fs.readFileSync(path.join(root, 'server', name))).digest('hex')]));
 const measure = (key, task) => { const start = performance.now(); const value = task(); report.timingsMs[key] = Math.round(performance.now() - start); return value; };
 const db = new Database(path.join(root, 'server/.ioc-intelligence.sqlite'), { readonly: true, fileMustExist: true });
 db.pragma('query_only=ON'); db.exec('BEGIN');
