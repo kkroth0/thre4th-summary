@@ -25,8 +25,9 @@ report.versionSamples = db.prepare("SELECT payload FROM news_documents WHERE kin
 report.c2Agent = db.prepare("SELECT kind,payload FROM news_documents WHERE payload LIKE '%C2Agent%'").all().flatMap(row=>{
     const value=JSON.parse(row.payload);
     const sources=row.kind==='archive'?[value]:(value.sources||[]);
-    return sources.filter(source=>/unit42\.paloaltonetworks\.com\/.*c2agent/i.test(source.link||'')).map(source=>({kind:row.kind,hashes:source.iocs?.hashes?.length||0}));
+    return sources.filter(source=>source.repository?.repo?.includes('Unit42')&&/C2Agent/i.test(source.title||'')).map(source=>({kind:row.kind,hashes:source.iocs?.hashes?.length||0}));
 });
+report.c2AgentInventory = db.prepare("SELECT COUNT(DISTINCT o.indicator) hashes FROM observations o JOIN entity_links e ON e.observation=o.id JOIN indicators i ON i.id=o.indicator WHERE o.scope='global' AND e.kind='malware' AND e.name='C2Agent' AND i.type='hash'").get();
 db.close();
 report.code = Object.fromEntries(['feedEnrichment.js','feedExtractionCache.js'].map(name => [name,createHash('sha256').update(fs.readFileSync(path.join(root,'server',name))).digest('hex')]));
 try {
