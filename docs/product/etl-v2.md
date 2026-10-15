@@ -183,11 +183,13 @@ preserva `archivedAt`. O texto fica nos caches e no histórico SQLite e não é 
 normal do feed. Os caches não são um arquivo bruto permanente: respostas XML
 e HTML originais não são preservadas integralmente, e a poda remove cache antigo.
 O snapshot permite servir a última versão após reinício, sinalizada como stale,
-até a próxima coleta. Gravações usam arquivo temporário e rename; os diferentes
-arquivos do ETL não participam de uma transação única.
-O espelhamento de archive/stories no SQLite usa uma transação para os dois
-snapshots e compara IDs, aliases, payloads e hashes. As leituras principais
-continuam nos JSON enquanto a migração é auditada; ver
+até a próxima coleta. Arquivos auxiliares e cópias JSON usam temporário e rename.
+Após três comparações shadow válidas e paridade atual, archive/stories passam a
+usar SQLite como origem de leitura/gravação. Uma transação confirma ambos os
+snapshots, sua ordem e geração; JSONs viram recuperação. Reinícios validam IDs,
+aliases, payloads, hashes e vínculos antes de servir dados do banco. Os demais
+arquivos do ETL e a ingestão assíncrona do inventário ainda não participam dessa
+transação; ver
 [persistência e sugestões](./news-persistence-and-watch-suggestions.md).
 
 O workflow de deploy preserva `.feed-cache/` em envio e rollback. O diretório

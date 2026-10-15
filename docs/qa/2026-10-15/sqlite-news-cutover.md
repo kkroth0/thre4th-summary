@@ -33,4 +33,35 @@ Esta entrega não modifica regras de classificação nem configurações privada
 
 ## Produção
 
-Resultados de CI, deploy e auditorias serão registrados após execução real.
+- Código: `1cf980f305faf1d1bd80e8f0ece9960471e887ba`.
+- CI [38746975569](https://github.com/kkroth0/thre4th-summary/actions/runs/38746975569):
+  710 testes backend, 242 testes frontend e sete testes de marca/i18n aprovados;
+  TypeScript e build aprovados, lint com zero erros e 16 avisos existentes.
+- [VPS 38747320900](https://github.com/kkroth0/thre4th-summary/actions/runs/38747320900)
+  e [Cloudflare 38747320789](https://github.com/kkroth0/thre4th-summary/actions/runs/38747320789): sucesso.
+- Auditorias de persistência
+  [38747763040](https://github.com/kkroth0/thre4th-summary/actions/runs/38747763040) e
+  [38748282612](https://github.com/kkroth0/thre4th-summary/actions/runs/38748282612): sucesso.
+  Modo `sqlite`, geração 1, 7.447 publicações e 4.982 eventos. Zero registros
+  ausentes/alterados/extras, fontes órfãs, aliases conflitantes ou fontes duplicadas.
+  Cópias JSON iguais ao banco e backup confirmado na mesma geração.
+- [Auditoria de phishing 38747769926](https://github.com/kkroth0/thre4th-summary/actions/runs/38747769926):
+  sucesso, `newsStorage: sqlite`, dez semanas/494 publicações recalculadas.
+  Nenhum candidato privado inserido como reputação maliciosa. CT segue sem amostras.
+- UI autenticada após o deploy: busca da notícia sobre UAC-0226 → evidências
+  do evento → perfil do ator → um IP e sete hashes, todos com a publicação
+  `blog.synapticsystems.de` como referência. Nenhum erro de console observado.
+  Provas: `sqlite-news-event-production.png` e `sqlite-news-actor-production.png`.
+  O carregamento inicial do feed mostrou o cache resumido antes de servir o acervo;
+  este teste não mediu nem promete resolver toda a latência desse endpoint.
+- A coleta de corpos continuou: 614 publicações com texto na primeira auditoria,
+  615 na segunda. Os totais de eventos/publicações acima são do instante da migração.
+- Auditorias adicionais `38748702598` e `38749246757` passaram, ainda na geração 1;
+  a última leu o estado às 14:13:39 UTC. O último ciclo completo observado na
+  auditoria de phishing `38748708553` ainda era o das 13:58 UTC, anterior ao deploy.
+  Portanto, esta evidência confirma a migração/leitura e a retenção de novos corpos,
+  mas ainda não confirma um ciclo completo de novas publicações após a troca.
+- [Continuous Security Scan 38746976216](https://github.com/kkroth0/thre4th-summary/actions/runs/38746976216):
+  Gitleaks aprovado; NPM Audit, Trivy e OSV continuam falhando, como no run anterior
+  `38738880021`. Dependências e lockfiles não foram alterados nesta entrega;
+  esses alertas existentes não foram corrigidos por esta migração.

@@ -26,9 +26,11 @@ A implementação e seus limites estão em [ETL v2](./etl-v2.md). Esta etapa cor
 perda de evidências e inconsistências de agrupamento; a qualidade semântica ainda
 precisa ser medida em um conjunto de eventos reais rotulados.
 
-O registro de nomes/aliases de entidades e o espelhamento de notícias/stories
-no SQLite estão disponíveis, com isolamento das observações privadas e auditoria
-de igualdade; detalhes em [persistência e sugestões](./news-persistence-and-watch-suggestions.md).
+O registro de nomes/aliases de entidades e a persistência de notícias/stories
+no SQLite estão disponíveis, com isolamento das observações privadas. A troca
+para leituras/gravações principais no banco exige comparações shadow válidas;
+publicações e eventos passam a compartilhar a mesma transação. Detalhes em
+[persistência e sugestões](./news-persistence-and-watch-suggestions.md).
 Não estão ativados: correlação semântica entre idiomas, grafo persistente de
 ameaças e integração com CTINexus. A avaliação semântica offline não muda os merges.
 
