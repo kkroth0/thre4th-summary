@@ -1,6 +1,6 @@
 // Phishing evidence is scoped to the publication, not inherited from a vendor,
 // a campaign catalogue or the recommendations at the end of an advisory.
-export const PHISHING_VERSION = 'phishing-v1';
+export const PHISHING_VERSION = 'phishing-v2';
 const normalize = value => String(value || '').normalize('NFD').replace(/\p{Mn}/gu, '').replace(/[‐‑–—]/g, '-');
 const rule = (label, pattern, options = {}) => ({ label, re: new RegExp(pattern, 'i'), ...options });
 
@@ -43,6 +43,23 @@ const GUIDANCE = /\b(?:recommend\w*|recomend\w*|best practices|boas praticas|awa
 const FOOTER = /^(?:\d+[.)]\s*)?(?:mitigations?|recommendations?|recomendacoes|related (?:articles|posts|stories)|read more|references|referencias|subscribe|newsletter|general security recommendations|recommended security measures)\b/i;
 const NEGATION = /(?:no evidence of|not (?:using |a )?|does not (?:use |involve )?|did not (?:use |involve )?|sem evidencias? de|nao (?:usa |houve |envolve |e ))\s*$/i;
 const unique = values => [...new Set(values)];
+
+// Capitalization before "kit" is not evidence of a family name (e.g.
+// "AI-powered phishing kit" or "AiTM kit"). Retain recognized families,
+// explicit naming/quotation, or the more specific coined "Name Phishkit".
+const KNOWN_KITS = new Set(['evilginx', 'evilginx2', 'evilproxy', 'tycoon2fa', 'mamba2fa', 'rockstar2fa', 'greatness', 'flowerstorm', 'darcula', 'lucid', '16shop', 'onnx', 'strox', 'modlishka', 'gophish', 'wazza']);
+const KIT_DESCRIPTOR = /^(?:new|the|this|phishing|microsoft|ai[-_]?powered|aitm|bitm|advanced|sophisticated|custom|open[-_]?source|free|commercial|credential)$/i;
+function namedKits(context) {
+    const result = [];
+    for (const match of context.matchAll(/\b([A-Z0-9][A-Za-z0-9_-]{2,35})\s+([Pp]hishkit|[Pp]hishing kit|[Kk]it|\(PhaaS\))/g)) {
+        if (!KIT_DESCRIPTOR.test(match[1]) && (KNOWN_KITS.has(match[1].toLowerCase()) || /^phishkit$/i.test(match[2]))) result.push(match[1]);
+    }
+    for (const match of context.matchAll(/\b(?:phishing kit|phishkit|kit de phishing)\s+(?:named|called|dubbed|conhecido como|chamado|denominado)\s+["'“‘]?([A-Z0-9][A-Za-z0-9_-]{2,35})\b|["“‘]([A-Z0-9][A-Za-z0-9_-]{2,35})["”’]\s+(?:phishing kit|phishkit)\b/g)) {
+        const name = match[1] || match[2];
+        if (!KIT_DESCRIPTOR.test(name)) result.push(name);
+    }
+    return unique(result);
+}
 
 export function phishingTextBlocks({ title, description, text, bodyText } = {}) {
     const blocks = [];
@@ -124,7 +141,7 @@ export function analyzePhishing(input = {}) {
     }
     const reportedIds = detected ? unique(context.match(/\bT\d{4}(?:\.\d{3})?\b/g) || []) : [];
     const ttps = [...reportedIds.map(id => ({ id, basis: 'reported', reason: 'ID citado na publicação' })), ...inferred.filter(e => !reportedIds.includes(e.id))];
-    const kits = detected ? unique([...context.matchAll(/\b([A-Z][A-Za-z0-9_-]{2,35})\s*(?:[Pp]hishkit|[Pp]hishing kit|[Kk]it|\(PhaaS\))/g)].map(m => m[1]).filter(name => !['New', 'The', 'This', 'Phishing', 'Microsoft'].includes(name))) : [];
+    const kits = detected ? namedKits(context) : [];
     const stateEvidence = detected && relevant.find(block => {
         const match = /\b(?:nation[- ]state|state[- ]sponsored|government[- ]backed|estado[- ]nacao|patrocinad[oa]s? (?:pelo|por) (?:estado|governo)|ligad[oa]s? ao governo)\b/i.exec(block.normalized);
         return match && actionable(block, match);

@@ -64,3 +64,12 @@ test('named kit and explicit nation-state evidence are retained without inferrin
     assert.equal(intel.nationState, 'reported');
     assert.equal(analyzePhishing({ title: 'Phishing campaign; no evidence of state-sponsored actors' }).nationState, 'unknown');
 });
+
+test('kit families require naming evidence instead of capitalized descriptors or places', () => {
+    for (const name of ['AI-powered', 'AiTM', 'Australia', 'Blue', 'New', 'Advanced']) {
+        assert.deepEqual(analyzePhishing({ title: `${name} phishing kit steals credentials from victims` }).kits, [], name);
+    }
+    assert.deepEqual(analyzePhishing({ title: 'Tycoon2FA phishing kit steals credentials' }).kits, ['Tycoon2FA']);
+    assert.deepEqual(analyzePhishing({ title: 'Attackers deploy phishing kit called NovelBrand to steal credentials' }).kits, ['NovelBrand']);
+    assert.deepEqual(analyzePhishing({ title: 'Attackers deploy “NovelBrand” phishing kit' }).kits, ['NovelBrand']);
+});
