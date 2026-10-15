@@ -18,6 +18,9 @@ A semana fechada mais recente é comparada às oito anteriores, somente quando h
 histórico e versões de classificação/extração comparáveis. Datas inferidas/futuras
 e conteúdo explicitamente não relevante são excluídos. O teto de 20 mil relatórios
 é explícito e impede a publicação de percentuais quando atingido.
+Backfill de notícias não comprova continuidade da coleta: uma semana comparável
+também exige pelo menos um ciclo com fonte fresh/304 em cada um dos sete dias.
+Isso é um mínimo de observação, não uma garantia de completude ou uptime.
 
 Conta-se `storyId`, ou URL quando não há vínculo, uma vez por dimensão/semana.
 Campanhas nomeadas não substituem a identidade do evento. Um evento observado

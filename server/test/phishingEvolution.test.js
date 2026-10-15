@@ -48,6 +48,13 @@ test('unchanged DNS checks update observation time without generating evidence r
   assert.equal(evolution.candidates('one')[0].lastSeen, '2026-10-14T13:00:00Z');
   evolution.syncCandidates([{ ...hit, verdict: 'legitimate' }]); assert.equal(db.prepare('SELECT COUNT(*) n FROM watch_candidate_revisions').get().n, 1); db.close();
 });
+test('archive backfill alone cannot claim comparable weeks without observed collection coverage', () => {
+  const store = createIocIntelligence({ now: () => at.getTime() });
+  const rows = Array.from({ length: 9 }, (_, i) => row('old-' + i, { pubDate: new Date(Date.parse('2026-08-09T00:00:00Z') + i * 7 * 86400000).toISOString() }));
+  store.phishing.saveWeeks(buildPhishingWeeks(rows, { now: at }));
+  const overview = store.phishing.overview(); assert.equal(overview.baselineReady, false); assert.equal(overview.baselineWeeks, 0); assert.ok(overview.signals.every(signal => signal.percent === null));
+  store.close();
+});
 test('SQLite rollups survive restart, retain source members and revise corrected event IDs', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'phishing-rollup-')), filePath = path.join(dir, 'inventory.sqlite');
   try {

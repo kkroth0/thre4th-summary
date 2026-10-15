@@ -73,7 +73,7 @@ export function createPhishingEvolution(db, { now = () => Date.now() } = {}) {
     }
   });
   const recordCycle = db.transaction(({ at = new Date(now()).toISOString(), status = 'ready', elapsedMs = 0, bodies = {}, sources = [] } = {}) => {
-    const inserted = db.prepare('INSERT OR IGNORE INTO phishing_collection_cycles VALUES(?,?,?)').run(at, status, JSON.stringify({ elapsedMs, bodies, sourceCount: sources.length }));
+    const inserted = db.prepare('INSERT OR IGNORE INTO phishing_collection_cycles VALUES(?,?,?)').run(at, status, JSON.stringify({ elapsedMs, bodies, sourceCount: sources.length, healthySources: sources.filter(([, health]) => ['fresh', 'unchanged'].includes(health.status)).length }));
     if (!inserted.changes) return;
     for (const [source, health] of sources) {
       const state = ['fresh', 'unchanged', 'stale', 'failed'].includes(health.status) ? health.status : 'failed';
@@ -115,8 +115,13 @@ export function createPhishingEvolution(db, { now = () => Date.now() } = {}) {
     overview: () => {
       const weeks = db.prepare('SELECT payload,updated FROM phishing_weeks ORDER BY week DESC LIMIT 10').all().reverse();
       const values = weeks.map(row => JSON.parse(row.payload));
+      const observedDays = new Set(db.prepare("SELECT substr(at,1,10) day FROM phishing_collection_cycles WHERE status='ready' AND json_extract(payload,'$.healthySources')>0 GROUP BY day").all().map(row => row.day));
+      const comparable = values.map(week => {
+        const collectionDays = Array.from({ length: 7 }, (_, day) => new Date(Date.parse(week.week) + day * DAY).toISOString().slice(0, 10)).filter(day => observedDays.has(day)).length;
+        return { ...week, collectionDays, comparable: week.comparable && collectionDays === 7 };
+      });
       const cycles = db.prepare('SELECT * FROM phishing_collection_cycles WHERE at>=? ORDER BY at DESC').all(new Date(now() - DAY).toISOString());
-      return { weeks: values.map(({ members: _members, ...week }) => week), ...summarizePhishingWeeks(values), updatedAt: weeks.at(-1)?.updated || null,
+      return { weeks: comparable.map(({ members: _members, ...week }) => week), ...summarizePhishingWeeks(comparable), updatedAt: weeks.at(-1)?.updated || null,
         health: { observedSince: db.prepare('SELECT MIN(at) at FROM phishing_collection_cycles').get().at, cycles24h: cycles.length, failed24h: cycles.filter(row => row.status !== 'ready').length,
           latest: cycles[0] ? { at: cycles[0].at, status: cycles[0].status, ...JSON.parse(cycles[0].payload) } : null,
           sources: db.prepare('SELECT source,SUM(fresh) fresh,SUM(unchanged) unchanged,SUM(stale) stale,SUM(failed) failed,MAX(last_success) lastSuccess FROM phishing_source_days WHERE day>=? GROUP BY source ORDER BY SUM(failed)+SUM(stale) DESC,source LIMIT 15').all(new Date(now() - 7 * DAY).toISOString().slice(0, 10)) } };
