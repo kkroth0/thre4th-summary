@@ -31,6 +31,8 @@ novos. Domínios de fonte são uma aproximação de independência editorial.
 disponibilidade do corpo); revisões preservam snapshots substituídos. O endpoint
 `/api/phishing/evolution/weeks/:week` entrega essas evidências. As últimas dez
 semanas são recalculadas; semanas anteriores permanecem como snapshots históricos.
+O botão **Baixar evidências JSON** consulta essa rota com a sessão atual, valida
+a semana e a quantidade de membros e baixa o arquivo, sem navegar para a API.
 Sem conteúdo original suficiente, uma mudança de regras não pode ser tratada
 como uma série histórica homogênea.
 

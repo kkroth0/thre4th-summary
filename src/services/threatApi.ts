@@ -1758,6 +1758,15 @@ export interface PhishingEvolution {
         sources: { source: string; fresh: number; unchanged: number; stale: number; failed: number; lastSuccess: string | null }[] };
 }
 export const fetchPhishingEvolution = (): Promise<PhishingEvolution> => orgJson('/api/phishing/evolution');
+export interface PhishingWeekEvidence {
+    week: string; end: string; closed: boolean; publications: number; events: number; sources: number;
+    rules: { phishing: string; extraction: string };
+    members: { link: string; event: string; source: string; contentHash: string | null; phishingVersion: string; extractionVersion: string | null; articleTextAvailable: boolean | null }[];
+}
+export const fetchPhishingWeekEvidence = (week: string): Promise<PhishingWeekEvidence> => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(week)) return Promise.reject(new Error('Invalid week'));
+    return orgJson(`/api/phishing/evolution/weeks/${week}`);
+};
 
 export type TicketStatus = 'open' | 'analysis' | 'takedown' | 'down' | 'closed';
 

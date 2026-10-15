@@ -95,7 +95,12 @@ test('weekly evidence and private watch context enforce access, preserve candida
     for (const endpoint of ['/api/phishing/evolution', '/api/phishing-watch/intelligence', '/api/phishing-watch/hits/owned%3Aexample.net/context']) assert.equal((await fetch(BASE + endpoint)).status, 401);
     const weekly = await fetch(BASE + '/api/phishing/evolution', { headers: AUTH_HEADERS });
     assert.equal(weekly.status, 200); assert.equal(weekly.headers.get('cache-control'), 'private, no-store');
-    assert.equal((await weekly.json()).weeks.length, 10);
+    const overview = await weekly.json(); assert.equal(overview.weeks.length, 10);
+    const weekUrl = BASE + '/api/phishing/evolution/weeks/' + overview.target;
+    assert.equal((await fetch(weekUrl)).status, 401);
+    const weekResponse = await fetch(weekUrl, { headers: AUTH_HEADERS }); assert.equal(weekResponse.status, 200);
+    assert.equal(weekResponse.headers.get('cache-control'), 'private, no-store');
+    const weekEvidence = await weekResponse.json(); assert.equal(weekEvidence.week, overview.target); assert.equal(weekEvidence.members.length, weekEvidence.publications);
     assert.equal((await fetch(BASE + '/api/phishing-watch/intelligence?profileId=private', { headers: AUTH_HEADERS })).status, 404);
     const context = await fetch(BASE + '/api/phishing-watch/hits/owned%3Aexample.net/context', { headers: AUTH_HEADERS }).then(res => res.json());
     assert.equal(context.candidate.role, 'candidate'); assert.ok(context.publications.some(row => row.link === 'https://example.com/a'));
