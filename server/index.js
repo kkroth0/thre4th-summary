@@ -1454,8 +1454,10 @@ const refreshNewsletterFeed = singleFlightRefresh(async () => {
     const startedAt = Date.now();
     const stages = {};
     let stageStartedAt = startedAt, activeStage = 'feeds';
-    const stage = next => { const at = Date.now(); stages[activeStage] = at - stageStartedAt; activeStage = next; stageStartedAt = at; };
+    const recordProgress = () => { try { iocIntelligence.setState('news-current-cycle', { startedAt: new Date(startedAt).toISOString(), updatedAt: new Date().toISOString(), phase: activeStage, stages }); } catch { /* diagnostics must not fail collection */ } };
+    const stage = next => { const at = Date.now(); stages[activeStage] = at - stageStartedAt; activeStage = next; stageStartedAt = at; recordProgress(); };
     try {
+        recordProgress();
         const collected = await feedCollector.collect(effectiveFeeds());
         stage('scrapers');
         for (const [url, health] of collected.health) feedHealth.set(url, health);
