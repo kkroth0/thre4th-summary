@@ -423,7 +423,7 @@ export async function runDuePhishWatch({ store, profiles, now = new Date(), runO
     return result;
 }
 
-export function createPhishWatchStore({ filePath, readFileSync, writeJsonAtomic }) {
+export function createPhishWatchStore({ filePath, readFileSync, writeJsonAtomic, onChange = () => {} }) {
     let state = { hits: [], runs: {} };
     try {
         const parsed = JSON.parse(readFileSync(filePath, 'utf8'));
@@ -435,9 +435,14 @@ export function createPhishWatchStore({ filePath, readFileSync, writeJsonAtomic 
         }
     } catch { /* store vazio: a vigilância recomeça, a tela não cai */ }
 
-    const save = () => writeJsonAtomic(filePath, state);
+    const commit = (next, changed = next.hits) => {
+        writeJsonAtomic(filePath, next);
+        state = next;
+        onChange(changed);
+    };
 
     return {
+        all: () => state.hits,
         runs: () => state.runs,
         runOf: (profileId) => state.runs[profileId] || null,
         list(ownerId, { profileId, status } = {}) {
@@ -455,22 +460,28 @@ export function createPhishWatchStore({ filePath, readFileSync, writeJsonAtomic 
                 .map((hit) => hit.id));
             const fresh = incoming.filter((hit) => !dismissed.has(hit.id));
             const { hits, added } = mergeHits(state.hits, fresh);
-            state.hits = applyRetention(hits, { profileId, now });
-            save();
+            commit({ ...state, hits: applyRetention(hits, { profileId, now }) }, hits.filter(hit => hit.profileId === profileId));
             return added.length;
         },
         setStatus(ownerId, hitId, status, now = new Date().toISOString()) {
             if (!HIT_STATUS.includes(status)) throw createPhishError(400, 'estado inválido');
             const hit = state.hits.find((item) => item.id === hitId && item.ownerId === ownerId);
             if (!hit) throw createPhishError(404, 'achado não encontrado');
-            hit.status = status;
-            hit.triagedAt = now;
-            save();
-            return hit;
+            const updated = { ...hit, status, triagedAt: now, ...(status === 'confirmed' ? { verdict: 'malicious', verdictAt: now, verdictBasis: 'analyst', verdictReason: 'analyst-confirmed' } : {}) };
+            commit({ ...state, hits: state.hits.map(item => item === hit ? updated : item) }, [updated]);
+            return updated;
+        },
+        review(ownerId, hitId, verdict, reason, at = new Date().toISOString()) {
+            if (!['malicious', 'legitimate', 'inconclusive'].includes(verdict)) throw createPhishError(400, 'veredito inválido');
+            if (!['analyst-confirmed', 'duplicate', 'insufficient-evidence', 'out-of-scope'].includes(reason) || (verdict !== 'inconclusive' && reason !== 'analyst-confirmed')) throw createPhishError(400, 'motivo inválido');
+            const hit = state.hits.find(item => item.id === hitId && item.ownerId === ownerId);
+            if (!hit) throw createPhishError(404, 'achado não encontrado');
+            const updated = { ...hit, verdict, verdictReason: reason, verdictAt: at, verdictBasis: 'analyst', triagedAt: at, status: verdict === 'malicious' ? 'confirmed' : 'dismissed' };
+            commit({ ...state, hits: state.hits.map(item => item === hit ? updated : item) }, [updated]);
+            return updated;
         },
         recordRun(profileId, run) {
-            state.runs[profileId] = { ...(state.runs[profileId] || {}), ...run };
-            save();
+            commit({ ...state, runs: { ...state.runs, [profileId]: { ...(state.runs[profileId] || {}), ...run } } }, []);
             return state.runs[profileId];
         },
         // Todo dono, todo perfil — o recheck de DNS não filtra por quem está
@@ -483,14 +494,12 @@ export function createPhishWatchStore({ filePath, readFileSync, writeJsonAtomic 
         updateHit(hitId, updated) {
             const idx = state.hits.findIndex((item) => item.id === hitId);
             if (idx === -1) return null;
-            state.hits[idx] = updated;
-            save();
+            commit({ ...state, hits: state.hits.map((hit, index) => index === idx ? updated : hit) }, [updated]);
             return updated;
         },
         dropProfile(profileId) {
-            state.hits = state.hits.filter((hit) => hit.profileId !== profileId);
-            delete state.runs[profileId];
-            save();
+            const runs = { ...state.runs }; delete runs[profileId];
+            commit({ hits: state.hits.filter((hit) => hit.profileId !== profileId), runs }, []);
         },
     };
 }

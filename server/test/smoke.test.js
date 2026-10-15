@@ -19,6 +19,7 @@ const USERS_STORE_PATH = path.join(tmpdir(), `threatsumm4ry-smoke-users-${PORT}.
 const NEWS_ARCHIVE_PATH = path.join(tmpdir(), `threatsumm4ry-smoke-archive-${PORT}.json`);
 const FEED_JOBS_PATH = path.join(tmpdir(), `threatsumm4ry-smoke-jobs-${PORT}.json`);
 const ORG_PROFILES_PATH = path.join(tmpdir(), `threatsumm4ry-smoke-profiles-${PORT}.json`);
+const PHISH_WATCH_PATH = path.join(tmpdir(), `threatsumm4ry-smoke-watch-${PORT}.json`);
 const SECRETS_ENCRYPTION_KEY = 'smoke-only-encryption-secret';
 const SESSION_SECRET = 'test-secret';
 const sessionBody = Buffer.from(JSON.stringify({ sub: 'smoke-user', login: 'tester', exp: Math.floor(Date.now() / 1000) + 3600 })).toString('base64url');
@@ -55,6 +56,7 @@ test('domain investigation and actor archive endpoints enforce premium access an
 });
 
 before(async () => {
+    writeFileSync(PHISH_WATCH_PATH, JSON.stringify({ hits: [{ id: 'owned:example.net', profileId: 'owned', ownerId: 'smoke-user', apexDomain: 'example.net', domain: 'example.net', status: 'new', score: 20, reasons: ['brand-glued'], firstSeen: '2026-10-08T12:00:00Z', lastSeen: new Date().toISOString() }], runs: {} }));
     writeFileSync(FEED_JOBS_PATH, JSON.stringify({ 'smoke-multi-source': { id: 'smoke-multi-source', url: 'https://example.com/a', urls: ['https://example.com/a', 'https://example.com/b'], status: 'pending', createdAt: new Date().toISOString() } }));
     writeFileSync(NEWS_ARCHIVE_PATH, JSON.stringify([
         { link: 'https://example.com/a', title: 'ClickFix phishing targets banks in Brazil', source: 'Research', pubDate: '2026-10-08T23:59:59.999Z', storyId: 'same', iocs: { ips: ['9.9.9.10'], domains: ['example.net'] } },
@@ -70,7 +72,7 @@ before(async () => {
             ...process.env,
             PORT: String(PORT), NODE_ENV: 'test', SESSION_SECRET,
             GITHUB_ALLOWED_LOGINS: 'tester', PREMIUM_OPEN_PATH, NEWS_MONITORING_PATH,
-            USERS_STORE_PATH, NEWS_ARCHIVE_PATH, ORG_PROFILES_PATH, SECRETS_ENCRYPTION_KEY, URLSCAN_API_KEY: '',
+            USERS_STORE_PATH, NEWS_ARCHIVE_PATH, ORG_PROFILES_PATH, PHISH_WATCH_PATH, SECRETS_ENCRYPTION_KEY, URLSCAN_API_KEY: '',
             FEED_JOBS_PATH, FEED_AGENT_SECRET: 'smoke-worker-secret',
         },
         stdio: 'ignore',
@@ -86,7 +88,21 @@ after(() => {
     rmSync(`${NEWS_MONITORING_PATH}.tmp`, { force: true });
     rmSync(USERS_STORE_PATH, { force: true });
     rmSync(`${USERS_STORE_PATH}.tmp`, { force: true });
-    for (const target of [NEWS_ARCHIVE_PATH, ORG_PROFILES_PATH, FEED_JOBS_PATH]) { rmSync(target, { force: true }); rmSync(`${target}.tmp`, { force: true }); }
+    for (const target of [NEWS_ARCHIVE_PATH, ORG_PROFILES_PATH, FEED_JOBS_PATH, PHISH_WATCH_PATH]) { rmSync(target, { force: true }); rmSync(`${target}.tmp`, { force: true }); }
+});
+
+test('weekly evidence and private watch context enforce access, preserve candidate roles and separate inconclusive verdicts', async () => {
+    for (const endpoint of ['/api/phishing/evolution', '/api/phishing-watch/intelligence', '/api/phishing-watch/hits/owned%3Aexample.net/context']) assert.equal((await fetch(BASE + endpoint)).status, 401);
+    const weekly = await fetch(BASE + '/api/phishing/evolution', { headers: AUTH_HEADERS });
+    assert.equal(weekly.status, 200); assert.equal(weekly.headers.get('cache-control'), 'private, no-store');
+    assert.equal((await weekly.json()).weeks.length, 10);
+    assert.equal((await fetch(BASE + '/api/phishing-watch/intelligence?profileId=private', { headers: AUTH_HEADERS })).status, 404);
+    const context = await fetch(BASE + '/api/phishing-watch/hits/owned%3Aexample.net/context', { headers: AUTH_HEADERS }).then(res => res.json());
+    assert.equal(context.candidate.role, 'candidate'); assert.ok(context.publications.some(row => row.link === 'https://example.com/a'));
+    const response = await fetch(BASE + '/api/phishing-watch/hits/owned%3Aexample.net/verdict', { method: 'POST', headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' }, body: JSON.stringify({ verdict: 'inconclusive', reason: 'duplicate' }) });
+    assert.equal(response.status, 200);
+    const summary = await fetch(BASE + '/api/phishing-watch/intelligence?profileId=owned', { headers: AUTH_HEADERS }).then(res => res.json());
+    assert.equal(summary.precision, null); assert.equal(summary.unresolved, 1);
 });
 
 test('the worker receives all selected sources and requires its dedicated secret', async () => {

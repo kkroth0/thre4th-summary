@@ -4,6 +4,7 @@ import net from 'node:net';
 import { setImmediate as yieldLoop } from 'node:timers/promises';
 import { declaredRepositoryMalware } from './repositorySources.js';
 import { sanitizeStoredMalware } from './malwareMatch.js';
+import { createPhishingEvolution } from './phishingEvolution.js';
 
 const idFor = value => crypto.createHash('sha256').update(value).digest('hex');
 const refang = value => String(value || '').trim().replace(/^hxxp/i,'http').replace(/\[\.\]|\(\.\)|\{\.\}/g,'.').replace(/\[:\]/g,':');
@@ -176,7 +177,7 @@ export function createIocIntelligence({filePath=':memory:',now=()=>Date.now()}={
     const scope=scopeSql(owner);
     return db.prepare(`SELECT e.entity id,e.name,MAX(o.published) updated,GROUP_CONCAT(DISTINCT COALESCE(json_extract(o.details,'$.source'),o.provider)) source FROM entity_links e JOIN observations o ON o.id=e.observation WHERE e.kind=? AND ${scope.sql} GROUP BY e.entity,e.name LIMIT 10000`).all(kind,...scope.args).map(row=>({...row,references:[]}));
   }
-  return {ingest,list,detail,publications,replayProviderPayloads,
+  return {ingest,list,detail,publications,replayProviderPayloads,phishing:createPhishingEvolution(db,{now}),
     exportRows:({owner='',from,to})=>{
       const scope=scopeSql(owner);
       return db.prepare(`SELECT o.*,i.value,i.type FROM observations o JOIN indicators i ON i.id=o.indicator WHERE ${scope.sql} AND o.published>=? AND o.published<=? ORDER BY o.published DESC,o.id`).all(...scope.args,from,to).map(row=>{

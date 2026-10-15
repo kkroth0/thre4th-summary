@@ -1,10 +1,10 @@
 // Caça a domínios: o que a vigilância do urlscan achou para as marcas do perfil
 // da organização. Componente separado porque o PhishingAnalyzer já passa de mil
 // linhas e as abas de lá pertencem ao e-mail analisado, não à página.
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { EmptyState } from "@/components/EmptyState";
-import { AlertTriangle, Check, Clock, ExternalLink, Loader2, RefreshCw, Search, ShieldAlert, X } from "lucide-react";
+import { AlertTriangle, Check, Clock, ExternalLink, Loader2, RefreshCw, Search, ShieldAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -12,9 +12,10 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { useOrgProfile } from "@/hooks/useOrgProfile";
 import { toast } from "sonner";
 import { defang } from "@/utils/defang";
+import { RecordDrawer } from '@/components/workbench/RecordDrawer';
 import {
-  fetchPhishHits, runPhishWatch, setPhishHitStatus,
-  type PhishHit, type PhishHitStatus, type PhishRun,
+  fetchPhishHits, runPhishWatch, setPhishHitStatus, reviewPhishHit, fetchPhishWatchMetrics, fetchPhishCandidateContext,
+  type PhishHit, type PhishHitStatus, type PhishRun, type PhishVerdict, type PhishWatchMetrics, type PhishCandidateContext,
 } from "@/services/threatApi";
 
 // Os motivos chegam do servidor como código justamente para a tradução morar
@@ -58,28 +59,46 @@ export function BrandHunt() {
   const [configured, setConfigured] = useState(true);
   const [loading, setLoading] = useState(false);
   const [hunting, setHunting] = useState(false);
+  const [metrics, setMetrics] = useState<PhishWatchMetrics | null>(null);
+  const [contextId, setContextId] = useState<string | null>(null);
+  const [context, setContext] = useState<PhishCandidateContext | null>(null);
+  const [contextError, setContextError] = useState(false);
+  const loadRevision = useRef(0);
 
   const profile = profiles.find((item) => item.id === activeId) || null;
   const brands = profile?.brands ?? [];
 
   const load = useCallback(async (profileId: string, next: PhishHitStatus) => {
+    const revision = ++loadRevision.current;
     setLoading(true);
     try {
-      const data = await fetchPhishHits(profileId, next);
+      const [data, summary] = await Promise.all([fetchPhishHits(profileId, next), fetchPhishWatchMetrics(profileId)]);
+      if (revision !== loadRevision.current) return;
       setHits(data.hits);
       setRun(data.run);
       setConfigured(data.configured);
+      setMetrics(summary);
     } catch (error) {
+      if (revision !== loadRevision.current) return;
       toast.error(error instanceof Error ? error.message : (pt ? "Falha ao carregar" : "Failed to load"));
     } finally {
-      setLoading(false);
+      if (revision === loadRevision.current) setLoading(false);
     }
   }, [pt]);
 
   useEffect(() => {
+    ++loadRevision.current;
+    setContextId(null); setContext(null); setMetrics(null);
     if (!activeId) { setHits([]); setRun(null); return; }
     load(activeId, status);
+    return () => { ++loadRevision.current; };
   }, [activeId, status, load]);
+
+  useEffect(() => {
+    let active = true; setContext(null); setContextError(false);
+    if (contextId) fetchPhishCandidateContext(contextId).then(value => { if (active) setContext(value); }).catch(() => { if (active) setContextError(true); });
+    return () => { active = false; };
+  }, [contextId]);
 
   const hunt = async () => {
     if (!activeId) return;
@@ -88,6 +107,7 @@ export function BrandHunt() {
       const data = await runPhishWatch(activeId);
       setRun(data.run);
       if (status === "new") setHits(data.hits); else await load(activeId, status);
+      setMetrics(await fetchPhishWatchMetrics(activeId));
       toast.success(data.found
         ? (pt ? `${data.found} domínio(s) novo(s)` : `${data.found} new domain(s)`)
         : (pt ? "Nenhum domínio novo" : "No new domains"));
@@ -103,11 +123,21 @@ export function BrandHunt() {
   const triage = async (hit: PhishHit, next: PhishHitStatus) => {
     setHits((current) => current.filter((item) => item.id !== hit.id));
     try {
-      await setPhishHitStatus(hit.id, next);
+      if (next === 'confirmed') await reviewPhishHit(hit.id, 'malicious', 'analyst-confirmed');
+      else await setPhishHitStatus(hit.id, next);
+      if (activeId) setMetrics(await fetchPhishWatchMetrics(activeId));
     } catch (error) {
       setHits((current) => [hit, ...current]);
       toast.error(error instanceof Error ? error.message : (pt ? "Falha na triagem" : "Triage failed"));
     }
+  };
+  const review = async (hit: PhishHit, value: string) => {
+    if (!value) return;
+    const verdict: Exclude<PhishVerdict, 'unknown'> = value === 'legitimate' ? 'legitimate' : 'inconclusive';
+    try {
+      await reviewPhishHit(hit.id, verdict, verdict === 'legitimate' ? 'analyst-confirmed' : value);
+      if (activeId) await load(activeId, status);
+    } catch { toast.error(pt ? 'Falha ao salvar veredito' : 'Could not save verdict'); }
   };
 
   const filters: { key: PhishHitStatus; label: string }[] = [
@@ -138,6 +168,11 @@ export function BrandHunt() {
 
   return (
     <div className="space-y-4">
+      {metrics && <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">{[
+        [metrics.total, pt ? 'Candidatos no histórico privado' : 'Candidates in private history'], [metrics.malicious, pt ? 'Maliciosos confirmados' : 'Confirmed malicious'],
+        [metrics.legitimate, pt ? 'Legítimos confirmados' : 'Confirmed legitimate'], [metrics.precision === null ? '—' : `${(metrics.precision * 100).toFixed(1)}%`, pt ? 'Precisão entre vereditos conclusivos' : 'Precision among conclusive verdicts'],
+      ].map(([value, label]) => <div key={label} className="intel-panel p-3"><p className="font-mono text-xl font-semibold">{value}</p><p className="mt-1 text-[11px] text-muted-foreground">{label}</p></div>)}</div>}
+      {metrics && <p className="text-xs text-muted-foreground">{metrics.unresolved} {pt ? 'sem veredito conclusivo. Candidatos e coincidências de infraestrutura não recebem atribuição automática a ator.' : 'without conclusive verdict. Candidates and shared infrastructure receive no automatic actor attribution.'}</p>}
       <div className="flex flex-col gap-3 rounded-lg border bg-card p-3 xl:flex-row xl:items-center">
         <select
           value={activeId}
@@ -252,6 +287,7 @@ export function BrandHunt() {
                       </Badge>
                     )}
                     {hit.term && <Badge variant="secondary" className="text-[10px]">{hit.term}</Badge>}
+                    <Badge variant="outline" className="text-[10px]">{({ malicious: pt ? 'Malicioso confirmado' : 'Confirmed malicious', legitimate: pt ? 'Legítimo confirmado' : 'Confirmed legitimate', inconclusive: pt ? 'Inconclusivo' : 'Inconclusive', unknown: pt ? 'Candidato sem veredito' : 'Unreviewed candidate' })[hit.verdict || (hit.status === 'confirmed' ? 'malicious' : 'unknown')]}</Badge>
                   </div>
 
                   {hit.title && <p className="truncate text-xs text-muted-foreground">{hit.title}</p>}
@@ -277,16 +313,20 @@ export function BrandHunt() {
                       <ExternalLink className="h-3.5 w-3.5" /> urlscan
                     </a>
                   </Button>
+                  <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => setContextId(hit.id)}>{pt ? 'Notícias e evidências' : 'News and evidence'}</Button>
                   {hit.status !== "confirmed" && (
                     <Button variant="outline" size="sm" className="h-8 gap-1.5 border-red-500/30 text-xs text-red-500 hover:bg-red-500/5" onClick={() => triage(hit, "confirmed")}>
                       <AlertTriangle className="h-3.5 w-3.5" /> {pt ? "É phishing" : "Phishing"}
                     </Button>
                   )}
-                  {hit.status !== "dismissed" ? (
-                    <Button variant="ghost" size="sm" className="h-8 gap-1.5 text-xs text-muted-foreground" onClick={() => triage(hit, "dismissed")}>
-                      <X className="h-3.5 w-3.5" /> {pt ? "Dispensar" : "Dismiss"}
-                    </Button>
-                  ) : (
+                  <select aria-label={`${pt ? 'Registrar veredito' : 'Record verdict'}: ${hit.domain}`} className="h-8 max-w-52 rounded border bg-background px-2 text-xs" value="" onChange={event => void review(hit, event.target.value)}>
+                    <option value="">{pt ? 'Veredito / motivo…' : 'Verdict / reason…'}</option>
+                    <option value="legitimate">{pt ? 'Legítimo confirmado' : 'Confirmed legitimate'}</option>
+                    <option value="insufficient-evidence">{pt ? 'Inconclusivo · sem evidência' : 'Inconclusive · insufficient evidence'}</option>
+                    <option value="duplicate">{pt ? 'Inconclusivo · duplicado' : 'Inconclusive · duplicate'}</option>
+                    <option value="out-of-scope">{pt ? 'Inconclusivo · fora do escopo' : 'Inconclusive · out of scope'}</option>
+                  </select>
+                  {hit.status === "dismissed" && (
                     <Button variant="ghost" size="sm" className="h-8 gap-1.5 text-xs text-muted-foreground" onClick={() => triage(hit, "new")}>
                       <RefreshCw className="h-3.5 w-3.5" /> {pt ? "Devolver" : "Restore"}
                     </Button>
@@ -301,9 +341,17 @@ export function BrandHunt() {
       {status === "confirmed" && hits.length > 0 && (
         <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
           <Check className="h-3.5 w-3.5" />
-          {pt ? "Confirmados não expiram." : "Confirmed hits never expire."}
+          {pt ? "O inventário preserva os vereditos, inclusive quando o limite da lista operacional é atingido." : "The inventory retains verdicts even when the operational list reaches its limit."}
         </p>
       )}
+      <RecordDrawer open={!!contextId} onClose={() => setContextId(null)} title={context ? defang(context.candidate.domain) : (pt ? 'Evidências do candidato' : 'Candidate evidence')} description={pt ? 'Histórico privado e contexto das fontes' : 'Private history and source context'}>
+        {contextError ? <p role="alert">{pt ? 'Não foi possível carregar as evidências.' : 'Could not load evidence.'}</p> : !context ? <Loader2 className="h-5 w-5 animate-spin" /> : <div className="space-y-5 text-sm">
+          <p className="text-xs text-muted-foreground">{pt ? 'Coincidências são contexto. Elas não confirmam phishing, campanha ou vínculo com ator.' : 'Matches provide context; they do not confirm phishing, campaign or actor attribution.'}</p>
+          <section><h4 className="mb-2 font-semibold">{pt ? 'Publicações que citaram o domínio' : 'Publications mentioning the domain'} · {context.publications.length}</h4>{context.publications.map(row => <p className="mb-3" key={row.link}><a href={row.link} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">{row.title}</a><span className="mt-1 block text-xs text-muted-foreground">{row.source} · {row.pubDate}</span></p>)}{!context.publications.length && <p className="text-xs text-muted-foreground">{pt ? 'Nenhuma menção extraída encontrada.' : 'No extracted mentions found.'}</p>}</section>
+          <section><h4 className="mb-2 font-semibold">{pt ? 'Observações no inventário' : 'Inventory observations'}</h4>{context.observations.flatMap(row => row.evidence.map((evidence, index) => <p className="mb-2 text-xs" key={`${row.value}:${index}`}>{evidence.provider} · {evidence.title}<span className="block font-mono text-muted-foreground">{defang(row.value)}</span></p>))}{!context.observations.length && <p className="text-xs text-muted-foreground">{pt ? 'Sem observações anteriores para o domínio. O candidato continua salvo separadamente.' : 'No previous domain observations. The candidate remains stored separately.'}</p>}</section>
+          <section><h4 className="mb-2 font-semibold">{pt ? 'Candidatos com infraestrutura coincidente' : 'Candidates with shared infrastructure'} · {context.related.length}</h4>{context.related.map(row => <p key={row.id} className="mb-1 font-mono text-xs">{defang(row.domain)} · {row.basis}</p>)}</section>
+        </div>}
+      </RecordDrawer>
     </div>
   );
 }

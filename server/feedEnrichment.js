@@ -37,6 +37,7 @@ export function enrichFeedItems(items, { texts = new Map(), supplementalIocs = n
             actors: actors(text), malware: [...new Map([...declaredRepositoryMalware(item),...malware(text)].map(family=>[family.name.toLowerCase(),family])).values()], campaigns: campaigns(text),
             iocs: removeVersionIndicators(mergeIocEvidence(item.repositoryReport ? item.iocs : extractIOCs(text), supplementalIocs.get(item.link)),text), sellerHandle: seller(text),
             contentHash: contentHash(text), extractionVersion: EXTRACTION_VERSION,
+            articleTextAvailable: !!texts.get(item.link) || (item.text || '').length >= 1500 || item.repositoryReport === true,
             topicCves: topicCvesOf(item.title, item.text || item.description || '', texts.get(item.link) || ''),
         };
         enriched.phishingIntel = analyzePhishing({ title: item.title, description: item.text || item.description, bodyText: texts.get(item.link) });

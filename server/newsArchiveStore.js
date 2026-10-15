@@ -35,6 +35,10 @@ export function createNewsArchiveStore({ filePath, readFileSync, writeJsonAtomic
                     if (item[field] !== undefined) row[field] = item[field];
                     else if (old?.[field] !== undefined) row[field] = old[field];
                 }
+                for (const field of ['articleTextAvailable', 'articleCollectionStatus']) {
+                    if (item[field] !== undefined) row[field] = item[field];
+                    else if (old?.[field] !== undefined) row[field] = old[field];
+                }
                 if (old && JSON.stringify(row) === JSON.stringify(old)) continue;
                 changed = true;
                 if (index === undefined) { indices.set(item.link, next.length); next.push(row); additions++; }

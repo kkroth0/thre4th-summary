@@ -1685,6 +1685,7 @@ export const fetchOrgAssetSuggestions = async (): Promise<OrgAssetSuggestion[]> 
 
 // ─── Vigilância de marca (urlscan) ─────────────────────────────────────────
 export type PhishHitStatus = 'new' | 'confirmed' | 'dismissed';
+export type PhishVerdict = 'malicious' | 'legitimate' | 'inconclusive' | 'unknown';
 
 export interface PhishHit {
     id: string;
@@ -1706,6 +1707,8 @@ export interface PhishHit {
     score: number;
     reasons: string[];
     status: PhishHitStatus;
+    verdict?: PhishVerdict;
+    verdictReason?: string;
 }
 
 export interface PhishRun {
@@ -1732,6 +1735,29 @@ export const setPhishHitStatus = (id: string, status: PhishHitStatus): Promise<{
     orgJson(`/api/phishing-watch/hits/${encodeURIComponent(id)}/status`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status }),
     });
+
+export const reviewPhishHit = (id: string, verdict: Exclude<PhishVerdict, 'unknown'>, reason: string): Promise<{ hit: PhishHit }> =>
+    orgJson(`/api/phishing-watch/hits/${encodeURIComponent(id)}/verdict`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ verdict, reason }) });
+export interface PhishWatchMetrics {
+    total: number; malicious: number; legitimate: number; unresolved: number; precision: number | null;
+    byReason: { reason: string; total: number; malicious: number; legitimate: number; precision: number | null }[];
+}
+export interface PhishCandidateContext {
+    candidate: PhishHit;
+    publications: { link: string; title: string; source: string; pubDate: string; actors: string[] }[];
+    observations: { value: string; total: number; evidence: { provider: string; title: string; link: string; published: string }[] }[];
+    related: { id: string; domain: string; basis: string }[]; basis: string;
+}
+export const fetchPhishWatchMetrics = (profileId: string): Promise<PhishWatchMetrics> => orgJson(`/api/phishing-watch/intelligence?${new URLSearchParams({ profileId })}`);
+export const fetchPhishCandidateContext = (id: string): Promise<PhishCandidateContext> => orgJson(`/api/phishing-watch/hits/${encodeURIComponent(id)}/context`);
+export interface PhishingEvolution {
+    weeks: { week: string; end: string; closed: boolean; hasArchiveHistory: boolean; publications: number; events: number; sources: number; bodyCoverage: { known: number; available: number; unknown: number } }[];
+    target: string | null; baselineWeeks: number; baselineReady: boolean; updatedAt: string | null;
+    signals: { kind: string; label: string; count: number; sources: number; baseline: number | null; delta: number | null; percent: number | null; newInArchive: boolean }[];
+    health: { observedSince: string | null; cycles24h: number; failed24h: number; latest: { at: string; status: string; elapsedMs: number; sourceCount: number } | null;
+        sources: { source: string; fresh: number; unchanged: number; stale: number; failed: number; lastSuccess: string | null }[] };
+}
+export const fetchPhishingEvolution = (): Promise<PhishingEvolution> => orgJson('/api/phishing/evolution');
 
 export type TicketStatus = 'open' | 'analysis' | 'takedown' | 'down' | 'closed';
 

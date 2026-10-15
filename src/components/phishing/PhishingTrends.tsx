@@ -8,6 +8,7 @@ import { toast } from 'sonner';
 import { fetchPhishingReports, type PhishingDataset, type PhishingFilters, type PhishingReport } from '@/services/threatApi';
 import { exportPhishingTrendsExcel } from '@/utils/phishingTrendsExport';
 import { PhishingDashboard } from './PhishingDashboard';
+import { PhishingWeeklySignals } from './PhishingWeeklySignals';
 
 type Query = PhishingFilters & { from?: string; to?: string };
 const inputStyle = 'min-w-0 w-full rounded border border-border bg-background px-3 py-2 text-sm text-foreground';
@@ -95,6 +96,7 @@ export function PhishingTrends({ dashboard = false }: { dashboard?: boolean }) {
   const groupDetail = data?.campaigns.find(group => group.id === selectedGroup);
   const reportDetail = data?.reports.find(row => row.id === selectedReport);
   return <section className="space-y-5" aria-label={l('Inteligência de campanhas de phishing', 'Phishing campaign intelligence')}>
+    {dashboard && <PhishingWeeklySignals pt={pt} />}
     <div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="sr-only">{l('Campanhas de phishing', 'Phishing campaigns')}</h2><p className="text-xs text-muted-foreground">{l('Publicações, vínculos e técnicas com evidências das fontes.', 'Publications, relationships and techniques with source evidence.')}</p></div>
       <Button size="sm" variant="outline" onClick={exportData} disabled={loading || !data?.reports.length || exporting} className="gap-2">{exporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}{l('Exportar Excel', 'Export Excel')}</Button>
     </div>

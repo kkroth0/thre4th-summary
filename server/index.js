@@ -88,6 +88,7 @@ import { createStoryStore } from './newsStoryStore.js';
 import { createNewsArchiveStore } from './newsArchiveStore.js';
 import { newsExportQuery, newsExportRows, newsExportCsv } from './newsExport.js';
 import { buildPhishingDataset, phishingQuery } from './phishingDataset.js';
+import { buildPhishingWeeks } from './phishingEvolution.js';
 import { VENDOR_CATALOG } from './vendorCatalog.js';
 import { createNewsMonitoringStore, filterMonitoredNews, filterMonitoredStories } from './newsMonitoring.js';
 import {
@@ -208,8 +209,10 @@ const newsMonitoringStore = createNewsMonitoringStore({
     readFileSync: fs.readFileSync, writeJsonAtomic,
 });
 
-const PHISH_WATCH_PATH = path.join(__dirname, '.phish-watch.json');
-const phishWatchStore = createPhishWatchStore({ filePath: PHISH_WATCH_PATH, readFileSync: fs.readFileSync, writeJsonAtomic });
+const PHISH_WATCH_PATH = process.env.PHISH_WATCH_PATH || path.join(__dirname, '.phish-watch.json');
+const phishWatchStore = createPhishWatchStore({ filePath: PHISH_WATCH_PATH, readFileSync: fs.readFileSync, writeJsonAtomic,
+    onChange: hits => iocIntelligence.phishing.syncCandidates(hits) });
+iocIntelligence.phishing.syncCandidates(phishWatchStore.all());
 // Só busca, nunca submete: submeter publicaria a URL do cliente no urlscan.
 const urlscanClientFor = createOwnerUrlscanClient({
     getUserApiKey: (ownerId) => getUserApiKey(ownerId, 'urlscan'),
@@ -1488,6 +1491,9 @@ const refreshNewsletterFeed = singleFlightRefresh(async () => {
         unifiedFeed.sort((a, b) => b.pubDate.localeCompare(a.pubDate) || a.link.localeCompare(b.link));
         const correlation = await publishNewsSnapshot(unifiedFeed, { archive: newsArchiveStore, stories: newsStoryStore });
         await iocIntelligence.ingestNews(newsArchiveStore.all());
+        iocIntelligence.phishing.saveWeeks(buildPhishingWeeks(newsArchiveStore.all()));
+        const healthSources = new Set([...effectiveFeeds().map(feed => feed.url), ...sources.map(source => source.url)]);
+        iocIntelligence.phishing.recordCycle({ at: new Date().toISOString(), status: 'ready', elapsedMs: Date.now() - startedAt, bodies: bodies.stats, sources: [...feedHealth].filter(([url]) => healthSources.has(url)) });
         unifiedFeed = correlation.items;
 
         // Raw RSS and collected article text remain in the disk caches. The
@@ -1498,8 +1504,12 @@ const refreshNewsletterFeed = singleFlightRefresh(async () => {
         memoryCache.newsletter.expiresAt = Date.now() + memoryCache.newsletter.ttl;
         try { rssCollectionCache.prune({ maxEntries: Math.max(600, effectiveFeeds().length * 3 + 50) }); articleCollectionCache.prune({ maxEntries: 1500 }); } catch (error) { console.warn('feed cache pruning failed:', error.message); }
         console.log('[feed] cycle', JSON.stringify({ elapsedMs: Date.now() - startedAt, sources: collected.health.size, failedSources: [...collected.health.values()].filter((health) => !health.ok).length, articles: unifiedFeed.length, bodies: bodies.stats, correlation: correlation.stats }));
-    } catch (error) { console.error('Failed to background refresh newsletter feeds:', error.message); }
+    } catch (error) {
+        try { iocIntelligence.phishing.recordCycle({ status: 'failed', elapsedMs: Date.now() - startedAt }); } catch { /* preserve the previous snapshot */ }
+        console.error('Failed to background refresh newsletter feeds:', error.message);
+    }
 });
+void newsQualityReady.then(() => { iocIntelligence.phishing.saveWeeks(buildPhishingWeeks(newsArchiveStore.all())); }).catch(() => console.warn('Phishing weekly snapshot unavailable'));
 
 // CTI News feed endpoint.
 app.get('/api/news/monitoring', requireAuth, (req, res) => {
@@ -1576,6 +1586,17 @@ app.get('/api/news/stories', requirePremium, async (req, res) => {
 // qualquer categoria, não só Phishing.
 //   GET /api/news/archive?category=Phishing&from=2026-08-01&to=2026-10-08
 const phishingTechniqueCatalog = JSON.parse(fs.readFileSync(new URL('./data/attack.json', import.meta.url), 'utf8')).techniques;
+app.get('/api/phishing/evolution', requirePremium, (req, res) => {
+    res.set('Cache-Control', 'private, no-store');
+    res.json(iocIntelligence.phishing.overview());
+});
+app.get('/api/phishing/evolution/weeks/:week', requirePremium, (req, res) => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(req.params.week)) return res.status(400).json({ error: 'Semana inválida' });
+    res.set('Cache-Control', 'private, no-store');
+    const evidence = iocIntelligence.phishing.weekEvidence(req.params.week);
+    if (!evidence) return res.status(404).json({ error: 'Semana não encontrada' });
+    res.json(evidence);
+});
 app.get('/api/phishing/reports', requirePremium, (req, res) => {
     try {
         const options = phishingQuery(req.query);
@@ -3517,6 +3538,7 @@ app.delete('/api/org/profiles/:id', requireAuth, (req, res) => {
     // Os achados de phishing são do perfil: sem isto viram lixo órfão que
     // ninguém vê e que a retenção nunca alcança.
     phishWatchStore.dropProfile(String(req.params.id));
+    iocIntelligence.phishing.dropProfile(req.user.sub, String(req.params.id));
     phishTicketStore.dropProfile(String(req.params.id));
     res.json({ ok: true });
 });
@@ -3795,6 +3817,33 @@ app.get('/api/phishing-watch/hits', requirePremium, (req, res) => {
         run: profileId ? phishWatchStore.runOf(profileId) : null,
         intervalMs: PHISH_LIMITS.runIntervalMs,
     });
+});
+
+app.get('/api/phishing-watch/intelligence', requirePremium, (req, res) => {
+    const profile = String(req.query.profileId || '');
+    if (profile) { try { orgProfileStore.get(req.user.sub, profile); } catch { return res.status(404).json({ error: 'Perfil não encontrado' }); } }
+    res.set('Cache-Control', 'private, no-store');
+    res.json(iocIntelligence.phishing.metrics(req.user.sub, profile));
+});
+app.get('/api/phishing-watch/hits/:id/context', requirePremium, (req, res) => {
+    const hit = iocIntelligence.phishing.candidates(req.user.sub).find(row => row.id === req.params.id);
+    if (!hit) return res.status(404).json({ error: 'Achado não encontrado' });
+    const domains = [...new Set([hit.domain, hit.apexDomain].filter(Boolean))];
+    const publications = [...new Map(domains.flatMap(domain => findDomainMentions([{ id: '', sources: newsArchiveStore.all() }], domain)).map(row => [row.link, row])).values()].slice(0, 50);
+    const observations = domains.map(domain => iocIntelligence.detail(domain, req.user.sub, { size: 30 })).filter(Boolean);
+    const related = iocIntelligence.phishing.candidates(req.user.sub).filter(row => row.id !== hit.id && (
+        row.apexDomain === hit.apexDomain || hit.asn && row.asn === hit.asn || (hit.dns?.ns || []).some(ns => row.dns?.ns?.includes(ns))
+    )).slice(0, 30).map(row => ({ id: row.id, domain: row.domain, basis: row.apexDomain === hit.apexDomain ? 'domain' : hit.asn && row.asn === hit.asn ? 'asn' : 'nameserver' }));
+    res.set('Cache-Control', 'private, no-store');
+    res.json({ candidate: hit, publications, observations, related, basis: 'context-only' });
+});
+app.post('/api/phishing-watch/hits/:id/verdict', requirePremium, async (req, res) => {
+    try {
+        const hit = phishWatchStore.review(req.user.sub, String(req.params.id), req.body?.verdict, req.body?.reason);
+        if (hit.verdict === 'malicious') await syncTicketsFromHits(req.user.sub, hit.profileId, { manualHitId: hit.id });
+        res.set('Cache-Control', 'private, no-store');
+        res.json({ hit });
+    } catch (error) { phishError(res, error); }
 });
 
 app.post('/api/phishing-watch/hits/:id/status', requirePremium, async (req, res) => {
