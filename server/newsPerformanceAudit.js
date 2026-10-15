@@ -28,6 +28,14 @@ report.c2Agent = db.prepare("SELECT kind,payload FROM news_documents WHERE paylo
     return sources.filter(source=>source.repository?.repo?.includes('Unit42')&&/C2Agent/i.test(source.title||'')).map(source=>({kind:row.kind,hashes:source.iocs?.hashes?.length||0}));
 });
 report.c2AgentInventory = db.prepare("SELECT COUNT(DISTINCT o.indicator) hashes FROM observations o JOIN entity_links e ON e.observation=o.id JOIN indicators i ON i.id=o.indicator WHERE o.scope='global' AND e.kind='malware' AND e.name='C2Agent' AND i.type='hash'").get();
+const {isSoftwareVersionAt}=await import(pathToFileURL(path.join(root,'server/ctiIntel.js')));
+report.versionContexts=db.prepare("SELECT id,payload FROM news_documents WHERE kind='archive' AND payload LIKE '%25.1.2.2%'").all().map(record=>{
+    const row=JSON.parse(record.payload);
+    const saved=db.prepare('SELECT payload FROM news_body_versions WHERE link=? ORDER BY collected DESC,rowid DESC LIMIT 1').get(record.id);
+    const body=saved?JSON.parse(saved.payload).text||'':'';
+    const text=[row.title,row.text||row.description,body].filter(Boolean).join('\n');
+    return {source:row.source,title:row.title,ips:row.iocs?.ips||[],matches:[...text.matchAll(/25\.1\.2\.2/g)].slice(0,8).map(match=>({version:isSoftwareVersionAt(text,match.index,match[0]),context:text.slice(Math.max(0,match.index-100),match.index+70)}))};
+});
 db.close();
 report.code = Object.fromEntries(['feedEnrichment.js','feedExtractionCache.js'].map(name => [name,createHash('sha256').update(fs.readFileSync(path.join(root,'server',name))).digest('hex')]));
 try {
