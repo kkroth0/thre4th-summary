@@ -13,6 +13,12 @@ const report = { at: new Date().toISOString(), readOnly: true, candidateCount, c
   weeks: weekly.map(row => { const data = JSON.parse(row.payload); return { week: row.week, publications: data.publications, events: data.events, evidenceMembers: data.members.length, closed: data.closed }; }),
   collectionCycles: db.prepare('SELECT COUNT(*) n FROM phishing_collection_cycles').get().n,
   observedSources: db.prepare('SELECT COUNT(DISTINCT source) n FROM phishing_source_days').get().n };
+const latestCycle = db.prepare('SELECT at,status,payload FROM phishing_collection_cycles ORDER BY at DESC LIMIT 1').get();
+report.collection = {
+  successfulCycles: db.prepare("SELECT COUNT(*) n FROM phishing_collection_cycles WHERE status='ready'").get().n,
+  failedCycles: db.prepare("SELECT COUNT(*) n FROM phishing_collection_cycles WHERE status<>'ready'").get().n,
+  latest: latestCycle ? { at: latestCycle.at, status: latestCycle.status, ...JSON.parse(latestCycle.payload) } : null,
+};
 try {
   const { buildPhishingWeeks } = await import(pathToFileURL(path.join(root, 'server/phishingEvolution.js')));
   const recalculated = buildPhishingWeeks(JSON.parse(fs.readFileSync(path.join(root, 'server/.news-archive.json'), 'utf8')));
@@ -53,4 +59,4 @@ report.backtest = { ...summary, completedLookups: samples.filter(sample => !samp
   labels: 'analyst-verdicts-and-provider-reports-not-independent-ground-truth',
   note: 'A matched retrospective name is not a detected threat. Independent positive and legitimate samples plus a prospective pilot are required.' };
 db.close(); console.log(JSON.stringify(report, null, 2));
-if (!weekly.length || candidatesMisclassified || weekly.some(row => JSON.parse(row.payload).publications !== JSON.parse(row.payload).members.length)) process.exitCode = 1;
+if (!weekly.length || report.replay.error || candidatesMisclassified || weekly.some(row => JSON.parse(row.payload).publications !== JSON.parse(row.payload).members.length)) process.exitCode = 1;
