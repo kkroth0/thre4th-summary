@@ -23,6 +23,20 @@ const file = path.join(root, 'server/.feed-cache/rss', createHash('sha256').upda
 let current = [];
 try { report.feedCacheBytes = fs.statSync(file).size; if (report.feedCacheBytes < 128 * 1024 * 1024) current = measure('readFeedCache', () => JSON.parse(fs.readFileSync(file, 'utf8'))).items || []; } catch { report.feedCacheUnavailable = true; }
 const rows = measure('completeFeed', () => completeNewsFeed(current, snapshot.archive));
+if (fs.existsSync(path.join(root, 'server/jsonEvidence.js'))) {
+  const { mergeIntoStoriesAsync } = await import(pathToFileURL(path.join(root, 'server/newsStories.js')));
+  const before = new Map(snapshot.stories.flatMap(story => story.sources.map(source => [source.link, story.id])));
+  const started = performance.now();
+  // Pure in-memory replay against the verified snapshot. No stores, writes,
+  // API requests or provider payloads participate in this measurement.
+  const replay = await mergeIntoStoriesAsync(snapshot.stories, current, new Date());
+  report.timingsMs.correlationReplay = Math.round(performance.now() - started);
+  const after = new Map(replay.flatMap(story => story.sources.map(source => [source.link, story.id])));
+  report.correlationReplay = { publications: current.length, events: replay.length,
+    reusedEvents: replay.filter(story => snapshot.stories.includes(story)).length,
+    unassigned: current.filter(row => !after.has(row.link)).length,
+    changedMemberships: current.filter(row => before.has(row.link) && before.get(row.link) !== after.get(row.link)).length };
+}
 const encoded = measure('serializeFeed', () => JSON.stringify(rows));
 report.feed = { publications: rows.length, bytes: Buffer.byteLength(encoded), gzipBytes: measure('compressFeed', () => gzipSync(encoded)).length };
 if (fs.existsSync(path.join(root, 'server/newsFeedResponse.js'))) {
