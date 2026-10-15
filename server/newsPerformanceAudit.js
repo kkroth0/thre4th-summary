@@ -16,6 +16,11 @@ report.cycles = db.prepare('SELECT at,status,payload FROM phishing_collection_cy
 report.generation = JSON.parse(db.prepare("SELECT payload FROM news_storage_state WHERE id='primary'").get()?.payload || 'null')?.generation;
 db.close();
 report.code = Object.fromEntries(['feedEnrichment.js','feedExtractionCache.js'].map(name => [name,createHash('sha256').update(fs.readFileSync(path.join(root,'server',name))).digest('hex')]));
+try {
+    const data=JSON.parse(fs.readFileSync(path.join(root,'server/.cti-fyi.json'),'utf8'));
+    const names=(data.groups||[]).flatMap(row=>[row.name,...(row.aliases||[])]).filter(value=>typeof value==='string');
+    report.ctiActorCatalog={groups:data.groups?.length,groupsAt:data.groupsAt,aliases:names.length,maxWords:Math.max(0,...names.map(name=>name.trim().split(/\s+/).length)),maxChars:Math.max(0,...names.map(name=>name.length))};
+}catch{report.ctiActorCatalog={unavailable:true};}
 report.processes = execFileSync('ps',['-eo','pid=,ppid=,pcpu=,rss=,comm=,wchan='],{encoding:'utf8',timeout:10000}).trim().split('\n').flatMap(line=>{
     const [pid,ppid,cpu,rss,command,wait]=line.trim().split(/\s+/);
     return /^(node|npm|nodejs)/.test(command)?[{pid:Number(pid),ppid:Number(ppid),cpu:Number(cpu),rssKiB:Number(rss),command,wait}]:[];
