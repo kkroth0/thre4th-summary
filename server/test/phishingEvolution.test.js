@@ -26,6 +26,11 @@ test('Sunday UTC boundaries, partial week and unavailable history never fabricat
   assert.equal(weeks.at(-1).closed, false); assert.equal(weeks.at(-1).publications, 1);
   const summary = summarizePhishingWeeks(weeks); assert.equal(summary.baselineReady, false); assert.equal(summary.signals[0].percent, null);
 });
+test('legacy null campaign entries cannot prevent the production weekly snapshot', () => {
+  const weeks = buildPhishingWeeks([row('legacy', { campaigns: [null, { id: 'reported:one', name: 'Named campaign' }] })], { now: at });
+  const week = weeks.find(week => week.week === '2026-10-04');
+  assert.equal(week.publications, 1); assert.equal(week.facets.campaign.length, 1); assert.equal(week.facets.campaign[0].label, 'Named campaign');
+});
 test('baseline uses eight comparable closed weeks and never a partial current week', () => {
   const rows = Array.from({ length: 9 }, (_, i) => row('week-' + i, { pubDate: new Date(Date.parse('2026-08-09T00:00:00Z') + i * 7 * 86400000).toISOString() }));
   rows.push(row('extra', { storyId: 'second-incident' }));
