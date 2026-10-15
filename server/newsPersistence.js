@@ -100,7 +100,7 @@ export function createNewsPersistence(db, { now = () => Date.now() } = {}) {
       const clauses = [`scope IN (${scopes.map(() => '?').join(',')})`], args = [...scopes];
       if (kind) { clauses.push('kind=?'); args.push(kind); }
       if (query) { clauses.push("alias LIKE ? ESCAPE '\\'"); args.push('%' + aliasKey(query).slice(0, 180).replace(/[\\%_]/g, '\\$&') + '%'); }
-      return db.prepare(`SELECT kind,entity id,name,json_group_array(DISTINCT alias) aliases FROM intelligence_entity_names WHERE ${clauses.join(' AND ')} GROUP BY kind,entity,name ORDER BY name,entity LIMIT ?`).all(...args, Math.min(100, Math.max(1, Number(limit) || 50))).map(row => ({ ...row, aliases: JSON.parse(row.aliases) }));
+      return db.prepare(`SELECT kind,entity id,COALESCE(MAX(CASE WHEN source='catalog' THEN name END),MIN(name)) name,json_group_array(DISTINCT alias) aliases FROM intelligence_entity_names WHERE ${clauses.join(' AND ')} GROUP BY kind,entity ORDER BY name,entity LIMIT ?`).all(...args, Math.min(100, Math.max(1, Number(limit) || 50))).map(row => ({ ...row, aliases: JSON.parse(row.aliases) }));
     },
   };
 }

@@ -57,9 +57,11 @@ test('body revisions survive cache eviction while failed fingerprints never reus
 
 test('entity aliases preserve ambiguity and private provider names never cross owners', async () => {
   const store = createIocIntelligence();
-  store.news.registerEntities([{kind:'actor',id:'G1',name:'One',aliases:['Shared']},{kind:'actor',id:'G2',name:'Two',aliases:['Shared']}]);
+  store.news.registerEntities([{kind:'actor',id:'G1',name:'One',aliases:['Shared']},{kind:'actor',id:'G2',name:'Two',aliases:['Shared']}], 'global', 'catalog');
+  store.news.registerEntities([{kind:'actor',id:'G1',name:'One alternate',aliases:['Shared']}], 'global', 'OTX');
   await store.ingest([{value:'9.9.9.9',scope:'owner-one',provider:'OTX',actors:[{id:'private',name:'Hidden actor',aliases:['Private alias']}]}]);
   assert.equal(store.news.entities({owner:'owner-one',query:'shared'}).length,2);
+  assert.equal(store.news.entities({owner:'owner-one',query:'shared'}).find(row=>row.id==='G1').name,'One');
   assert.equal(store.news.entities({owner:'owner-one',query:'private alias'}).length,1);
   assert.equal(store.news.entities({owner:'owner-two',query:'private alias'}).length,0);
   store.close();
