@@ -50,7 +50,11 @@ if (service) {
     const text = execFileSync('journalctl', ['-u', service, '--since', '90 minutes ago', '-n', '5000', '-o', 'cat', '--no-pager'], { encoding: 'utf8', maxBuffer: 8 * 1024 * 1024, timeout: 10000, stdio: ['ignore', 'pipe', 'ignore'] });
     const lines = text.split('\n');
     const statuses = pattern => lines.filter(line => pattern.test(line)).reduce((result, line) => { const key = line.match(/(?:status code |HTTP )(\d{3})/)?.[1] || (/timeout/i.test(line) ? 'timeout' : 'other'); result[key] = (result[key] || 0) + 1; return result; }, {});
-    report.service = { lines: lines.length, epssFailures: statuses(/EPSS fetch failed:/), bodyFailures: statuses(/Article fetch failed for /), newsletterFailures: lines.filter(line => line.includes('Failed to background refresh newsletter feeds:')).length };
+    const cycles = lines.filter(line => line.includes('[feed] cycle ')).flatMap(line => { try {
+      const value = JSON.parse(line.slice(line.indexOf('[feed] cycle ') + 13));
+      return [{ elapsedMs: value.elapsedMs, stages: value.stages, correlationMs: value.correlation?.elapsedMs, publications: value.correlation?.publications }];
+    } catch { return []; } });
+    report.service = { lines: lines.length, cycles: cycles.slice(-3), epssFailures: statuses(/EPSS fetch failed:/), bodyFailures: statuses(/Article fetch failed for /), newsletterFailures: lines.filter(line => line.includes('Failed to background refresh newsletter feeds:')).length };
   } catch { report.service = { unavailable: true }; }
 }
 console.log(JSON.stringify(report, null, 2));
