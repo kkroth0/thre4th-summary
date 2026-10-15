@@ -17,6 +17,7 @@ report.generation = JSON.parse(db.prepare("SELECT payload FROM news_storage_stat
 report.currentCycle = JSON.parse(db.prepare("SELECT value FROM intelligence_state WHERE id='news-current-cycle'").get()?.value || 'null');
 report.versionRepair = JSON.parse(db.prepare("SELECT value FROM intelligence_state WHERE id='news-version-lists-v1'").get()?.value || 'null');
 report.versionRepairV2 = JSON.parse(db.prepare("SELECT value FROM intelligence_state WHERE id='news-version-lists-v2'").get()?.value || 'null');
+report.versionRepairV3 = JSON.parse(db.prepare("SELECT value FROM intelligence_state WHERE id='news-version-lists-v3'").get()?.value || 'null');
 report.versionSamples = db.prepare("SELECT payload FROM news_documents WHERE kind='archive' AND payload LIKE '%25.1.%'").all().map(row=>JSON.parse(row.payload)).reduce((counts,row)=>{
     counts.publications++;
     counts.retainedIpMentions+=(row.iocs?.ips||[]).filter(ip=>['25.1.2.2','25.1.1.1','25.1.3.0','25.1.1.2','25.1.3.1'].includes(ip)).length;
