@@ -17,7 +17,7 @@ report.generation = JSON.parse(db.prepare("SELECT payload FROM news_storage_stat
 report.currentCycle = JSON.parse(db.prepare("SELECT value FROM intelligence_state WHERE id='news-current-cycle'").get()?.value || 'null');
 report.versionRepair = JSON.parse(db.prepare("SELECT value FROM intelligence_state WHERE id='news-version-lists-v1'").get()?.value || 'null');
 report.versionRepairV2 = JSON.parse(db.prepare("SELECT value FROM intelligence_state WHERE id='news-version-lists-v2'").get()?.value || 'null');
-report.versionSamples = db.prepare("SELECT payload FROM news_documents WHERE kind='archive' AND payload LIKE '%25.1.2.2%'").all().map(row=>JSON.parse(row.payload)).reduce((counts,row)=>{
+report.versionSamples = db.prepare("SELECT payload FROM news_documents WHERE kind='archive' AND payload LIKE '%25.1.%'").all().map(row=>JSON.parse(row.payload)).reduce((counts,row)=>{
     counts.publications++;
     counts.retainedIpMentions+=(row.iocs?.ips||[]).filter(ip=>['25.1.2.2','25.1.1.1','25.1.3.0','25.1.1.2','25.1.3.1'].includes(ip)).length;
     counts.realIpMentions+=(row.iocs?.ips||[]).filter(ip=>ip==='108.165.147.64').length;
@@ -29,14 +29,15 @@ report.c2Agent = db.prepare("SELECT kind,payload FROM news_documents WHERE paylo
     return sources.filter(source=>source.repository?.repo?.includes('Unit42')&&/C2Agent/i.test(source.title||'')).map(source=>({kind:row.kind,hashes:source.iocs?.hashes?.length||0}));
 });
 report.c2AgentInventory = db.prepare("SELECT COUNT(DISTINCT o.indicator) hashes FROM observations o JOIN entity_links e ON e.observation=o.id JOIN indicators i ON i.id=o.indicator WHERE o.scope='global' AND e.kind='malware' AND e.name='C2Agent' AND i.type='hash'").get();
-const {isSoftwareVersionAt}=await import(pathToFileURL(path.join(root,'server/ctiIntel.js')));
-report.versionContexts=db.prepare("SELECT id,payload FROM news_documents WHERE kind='archive' AND payload LIKE '%25.1.2.2%'").all().filter(record=>(JSON.parse(record.payload).iocs?.ips||[]).some(ip=>/^25\.1\./.test(ip))).map(record=>{
+const {isSoftwareVersionAt,softwareVersionIpValues}=await import(pathToFileURL(path.join(root,'server/ctiIntel.js')));
+report.versionContexts=db.prepare("SELECT id,payload FROM news_documents WHERE kind='archive' AND payload LIKE '%25.1.%'").all().filter(record=>(JSON.parse(record.payload).iocs?.ips||[]).some(ip=>/^25\.1\./.test(ip))).map(record=>{
     const row=JSON.parse(record.payload);
     const saved=db.prepare('SELECT payload FROM news_body_versions WHERE link=? ORDER BY collected DESC,rowid DESC LIMIT 1').get(record.id);
     const body=saved?JSON.parse(saved.payload).text||'':'';
     const text=[row.title,row.text||row.description,body].filter(Boolean).join('\n');
-    return {source:row.source,title:row.title,ips:row.iocs?.ips||[],matches:[...text.matchAll(/\b25\.1\.(?:1\.[12]|2\.2|3\.[01])\b/g)].filter(match=>!isSoftwareVersionAt(text,match.index,match[0])).slice(0,20).map(match=>({value:match[0],context:text.slice(Math.max(0,match.index-140),match.index+80)}))};
+    return {source:row.source,title:row.title,ips:row.iocs?.ips||[],classifiedVersionValues:[...softwareVersionIpValues(text)],matches:[...text.matchAll(/\b25\.1\.(?:1\.[12]|2\.2|3\.[01])\b/g)].filter(match=>!isSoftwareVersionAt(text,match.index,match[0])).slice(0,20).map(match=>({value:match[0],context:text.slice(Math.max(0,match.index-140),match.index+80)}))};
 });
+report.storyVersionIps=db.prepare("SELECT payload FROM news_documents WHERE kind='stories' AND payload LIKE '%25.1.%'").all().flatMap(record=>JSON.parse(record.payload).sources||[]).filter(row=>(row.iocs?.ips||[]).some(ip=>/^25\.1\./.test(ip))).map(row=>({source:row.source,title:row.title,ips:row.iocs.ips,archiveIps:JSON.parse(db.prepare("SELECT payload FROM news_documents WHERE kind='archive' AND id=?").get(row.link)?.payload||'null')?.iocs?.ips||[]}));
 db.close();
 report.code = Object.fromEntries(['feedEnrichment.js','feedExtractionCache.js'].map(name => [name,createHash('sha256').update(fs.readFileSync(path.join(root,'server',name))).digest('hex')]));
 try {
