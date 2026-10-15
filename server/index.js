@@ -1333,8 +1333,8 @@ const articleCollectionCache = createFeedCache({ directory: path.join(__dirname,
 const newsQualityReady=(async()=>{if (process.env.NODE_ENV !== 'test') try {
     await new Promise(resolve=>setImmediate(resolve));
     newsArchiveStore.reclassifyPhishing({ bodyFor: link => articleCollectionCache.get(link)?.text || '' });
-    if(!iocIntelligence.state('news-quality-v15')){
-        writeJsonAtomic(path.join(__dirname,'.news-quality-v15.bak.json'),{archive:newsArchiveStore.all(),stories:newsStoryStore.all()});
+    if(!iocIntelligence.state('news-quality-v16')){
+        writeJsonAtomic(path.join(__dirname,'.news-quality-v16.bak.json'),{archive:newsArchiveStore.all(),stories:newsStoryStore.all()});
         const reviewed=[];let lastYield=performance.now();
         for(const row of actorPublications(newsArchiveStore.all(),newsStoryStore.all())){
             reviewed.push({...reviewNewsEvidence(row,articleCollectionCache.get(row.link)?.text||'',text=>matchMalware(text,malwareIndex,{news:true})),extractionVersion:EXTRACTION_VERSION});
@@ -1349,7 +1349,7 @@ const newsQualityReady=(async()=>{if (process.env.NODE_ENV !== 'test') try {
         newsArchiveStore.add(newsArchiveStore.all().map(row=>({...row,storyId:identities.get(row.link)||row.storyId})));
         iocIntelligence.reviewSoftwareLinks();
         await iocIntelligence.ingestNews(newsArchiveStore.all());
-        iocIntelligence.setState('news-quality-v15',{at:new Date().toISOString()});
+        iocIntelligence.setState('news-quality-v16',{at:new Date().toISOString()});
     }
     if(!iocIntelligence.state('news-version-v12')){
         const revised=[];let lastYield=performance.now();
