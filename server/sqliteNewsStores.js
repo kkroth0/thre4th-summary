@@ -14,16 +14,22 @@ export function createSqliteNewsStores({ persistence, archive, stories, writeBac
     // copy bookkeeping or a diagnostic callback could not be written.
     if (failure) { try { onBackupError(failure); } catch { /* diagnostic only */ } }
   }
-  function refresh() {
-    if (snapshot?.generation === persistence.generation()) return;
-    snapshot = persistence.readSnapshot();
+  function install(next) {
+    snapshot = next;
     archiveView = createNewsArchiveStore({ initialRows: snapshot.archive, writeJsonAtomic: (_, next) => commit({ ...snapshot, archive: next }) });
     storyView = createStoryStore({ initialRows: snapshot.stories, writeJsonAtomic: (_, next) => commit({ ...snapshot, stories: next }) });
   }
+  function refresh() {
+    if (snapshot?.generation === persistence.generation()) return;
+    install(persistence.readSnapshot());
+  }
   function commit(next) {
-    persistence.commit(next, next.generation);
-    snapshot = null;
-    refresh();
+    // Detach drafts exactly as persisted JSON before advancing the database.
+    // The transaction verifies payloads and relationships; a second full read
+    // after that successful commit provided no additional integrity guarantee.
+    const detached = JSON.parse(JSON.stringify(next));
+    const result = persistence.commit(detached, detached.generation);
+    install({ ...detached, generation: result.generation });
     backup();
   }
   refresh();

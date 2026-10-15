@@ -309,7 +309,7 @@ const Newsletter = () => {
     setNewsError(null);
     try {
       const res = await fetch("/api/newsletter", { signal: controller.signal, cache: "no-store" });
-      if (!res.ok) throw new Error("Failed to load threat advisories");
+      if (!res.ok) throw new Error(`Failed to load threat advisories (HTTP ${res.status})`);
       const data = await res.json();
       if (controller.signal.aborted) return;
       

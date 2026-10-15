@@ -25,7 +25,7 @@ const rows = measure('completeFeed', () => completeNewsFeed(current, snapshot.ar
 const encoded = measure('serializeFeed', () => JSON.stringify(rows));
 report.feed = { publications: rows.length, bytes: Buffer.byteLength(encoded), gzipBytes: measure('compressFeed', () => gzipSync(encoded)).length };
 report.lastCycles = db.prepare('SELECT at,status,payload FROM phishing_collection_cycles ORDER BY at DESC LIMIT 5').all().map(row => {
-  const value = JSON.parse(row.payload); return { at: row.at, status: row.status, elapsedMs: value.elapsedMs, bodies: value.bodies, sourceCount: value.sourceCount, healthySources: value.healthySources };
+  const value = JSON.parse(row.payload); return { at: row.at, status: row.status, elapsedMs: value.elapsedMs, stages: value.stages, bodies: value.bodies, sourceCount: value.sourceCount, healthySources: value.healthySources };
 });
 const sync = db.prepare("SELECT value FROM intelligence_state WHERE id='news-sync'").get(); report.newsSync = sync ? JSON.parse(sync.value) : null;
 db.close();

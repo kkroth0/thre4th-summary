@@ -14,23 +14,33 @@ const prepared = (rows, field) => {
 };
 const pairs = (archive, stories) => [['archive', prepared(archive, 'link')], ['stories', prepared(stories, 'id')]];
 
-export function compareNewsSnapshots(db, archive, stories) {
+function relationships(archive, stories) {
+  const links = new Set(archive.map(row => row.link));
+  const identities = stories.flatMap(row => [row.id, ...(row.aliases || [])]);
+  const sourceLinks = stories.flatMap(row => (row.sources || []).map(source => source.link));
+  return {
+    orphanSources: sourceLinks.filter(link => !links.has(link)).length,
+    conflictingAliases: identities.length - new Set(identities).size,
+    duplicateSources: sourceLinks.length - new Set(sourceLinks).size,
+  };
+}
+
+function comparePrepared(db, expectedPairs, archive, stories) {
   const result = {};
-  for (const [kind, expected] of pairs(archive, stories)) {
+  for (const [kind, expected] of expectedPairs) {
     const stored = new Map(db.prepare('SELECT id,hash,payload FROM news_documents WHERE kind=?').all(kind).map(row => [row.id, hash(row.payload) === row.hash ? row.hash : 'invalid-payload']));
     result[kind] = { source: expected.size, stored: stored.size, missing: 0, changed: 0, extra: 0 };
     for (const [id, row] of expected) { if (!stored.has(id)) result[kind].missing++; else if (stored.get(id) !== row.hash) result[kind].changed++; }
     for (const id of stored.keys()) if (!expected.has(id)) result[kind].extra++;
   }
-  const links = new Set(archive.map(row => row.link));
-  const identities = stories.flatMap(row => [row.id, ...(row.aliases || [])]);
-  result.orphanSources = stories.flatMap(row => row.sources || []).filter(row => !links.has(row.link)).length;
-  result.conflictingAliases = identities.length - new Set(identities).size;
-  const sourceLinks = stories.flatMap(row => (row.sources || []).map(source => source.link));
-  result.duplicateSources = sourceLinks.length - new Set(sourceLinks).size;
+  Object.assign(result, relationships(archive, stories));
   result.equal = ['archive', 'stories'].every(kind => !result[kind].missing && !result[kind].changed && !result[kind].extra);
   result.readyForReadPilot = result.equal && !result.orphanSources && !result.conflictingAliases && !result.duplicateSources;
   return result;
+}
+
+export function compareNewsSnapshots(db, archive, stories) {
+  return comparePrepared(db, pairs(archive, stories), archive, stories);
 }
 
 // Pure read path shared by the application and read-only production audits.
@@ -51,7 +61,10 @@ export function readPrimaryNewsSnapshot(db) {
     if (!Array.isArray(order) || new Set(order).size !== order.length || order.length !== documents.size || order.some(id => !documents.has(id))) throw Error('SQLite news manifest integrity check failed');
     snapshot[kind] = order.map(id => documents.get(id));
   }
-  if (!compareNewsSnapshots(db, snapshot.archive, snapshot.stories).readyForReadPilot) throw Error('SQLite news relationship integrity check failed');
+  // Every stored payload, identity and manifest entry was verified above. Only
+  // cross-document relationships remain; reserializing and rereading the full
+  // corpus here repeated the same integrity work on every restart/publication.
+  if (Object.values(relationships(snapshot.archive, snapshot.stories)).some(Boolean)) throw Error('SQLite news relationship integrity check failed');
   return { ...snapshot, generation: JSON.parse(primary.payload).generation };
 }
 
@@ -87,7 +100,8 @@ export function createNewsPersistence(db, { now = () => Date.now() } = {}) {
     let changed = 0;
     const changedPublications = [];
     const publications = new Map(archive.map(row => [row.link, row]));
-    for (const [kind, desired] of pairs(archive, stories)) {
+    const desiredPairs = pairs(archive, stories);
+    for (const [kind, desired] of desiredPairs) {
       const previous = new Map(db.prepare('SELECT * FROM news_documents WHERE kind=?').all(kind).map(row => [row.id, row]));
       for (const [id, row] of desired) {
         const old = previous.get(id);
@@ -105,7 +119,7 @@ export function createNewsPersistence(db, { now = () => Date.now() } = {}) {
       ...['actor', 'malware', 'campaign'].flatMap(kind => (row[{ actor: 'actors', malware: 'malware', campaign: 'campaigns' }[kind]] || []).filter(Boolean).map(entity => ({ ...entity, kind }))),
       ...(row.cves || []).map(id => ({ id, name: id, kind: 'cve' })),
     ]));
-    const result = { ...compare(archive, stories), changed, at: at(), mode: state('primary') ? 'sqlite' : 'shadow' };
+    const result = { ...comparePrepared(db, desiredPairs, archive, stories), changed, at: at(), mode: state('primary') ? 'sqlite' : 'shadow' };
     db.prepare('INSERT INTO news_shadow_checks(at,payload) VALUES(?,?)').run(result.at, JSON.stringify(result));
     db.prepare('DELETE FROM news_shadow_checks WHERE id NOT IN (SELECT id FROM news_shadow_checks ORDER BY id DESC LIMIT 1000)').run();
     return result;
@@ -120,7 +134,7 @@ export function createNewsPersistence(db, { now = () => Date.now() } = {}) {
     setState('primary', { ...previous, generation: previous.generation + 1, updatedAt: at() });
     setState('order', { archive: archive.map(row => row.link), stories: stories.map(row => row.id) });
     setState('backup', { at: at(), ok: false, generation: previous.generation + 1, message: 'JSON recovery copy pending' });
-    return result;
+    return { ...result, generation: previous.generation + 1 };
   });
   const activate = db.transaction(({ archive, stories }) => {
     if (state('primary')) { readSnapshot(); return true; }

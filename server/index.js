@@ -31,6 +31,8 @@ import { createSimilarDomains } from './similarDomains.js';
 import { createCtiFyi, mergeCtiActors, ctiPublications, mergeRansomwareVictims, attachRansomwareActors } from './ctiFyi.js';
 import { createVulnerabilityCatalog } from './vulnerabilityCatalog.js';
 import { createVulnerabilityQueries, optimizeVulnerabilityCatalog } from './vulnerabilityQueries.js';
+import { createNewsEpssLookup } from './newsEpss.js';
+import { createNewsFeedResponse } from './newsFeedResponse.js';
 import { createLookupCache } from './lookupCache.js';
 import { PUBLICATION_SOURCES, OT_PUBLICATION_SOURCES, createPublicationResolver } from './publicationSources.js';
 import { REPOSITORY_SOURCES, createRepositoryResolver } from './repositorySources.js';
@@ -1299,26 +1301,12 @@ async function getKevMap() {
 
 // FIRST.org EPSS scores (probability a CVE is exploited in the next 30 days) for
 // a set of CVEs. Returns Map<CVE, number(0-1)>. Batched; failures degrade to {}.
-async function getEpssMap(cveIds) {
-    const map = new Map();
-    const ids = [...new Set(cveIds)].filter(Boolean);
-    for (let i = 0; i < ids.length; i += 100) {
-        const chunk = ids.slice(i, i + 100);
-        try {
-            const resp = await axios.get('https://api.first.org/data/v1/epss', {
-                params: { cve: chunk.join(',') },
-                timeout: 8000,
-            });
-            for (const r of (resp.data?.data || [])) {
-                const v = parseFloat(r.epss);
-                if (r.cve && !Number.isNaN(v)) map.set(r.cve.toUpperCase(), v);
-            }
-        } catch (err) {
-            console.warn(`EPSS fetch failed: ${err.message}`);
-        }
-    }
-    return map;
-}
+const getEpssMap = createNewsEpssLookup({
+    readLocal: ids => queryVulnerabilities('epss', ids),
+    fetchBatch: async (ids, { signal }) => (await axios.get('https://api.first.org/data/v1/epss', {
+        params: { cve: ids.join(',') }, timeout: 8000, signal,
+    })).data?.data || [],
+});
 
 // ─── Catálogo de feeds RSS (base estática + overrides em disco) ────────────
 // CTI_FEEDS é o catálogo built-in. Os overrides ficam num JSON flat (como os
@@ -1486,8 +1474,12 @@ const feedCollector = createFeedCollector({
 const refreshNewsletterFeed = singleFlightRefresh(async () => {
     await newsQualityReady;
     const startedAt = Date.now();
+    const stages = {};
+    let stageStartedAt = startedAt, activeStage = 'feeds';
+    const stage = next => { const at = Date.now(); stages[activeStage] = at - stageStartedAt; activeStage = next; stageStartedAt = at; };
     try {
         const collected = await feedCollector.collect(effectiveFeeds());
+        stage('scrapers');
         for (const [url, health] of collected.health) feedHealth.set(url, health);
         let scraped = [];
         const sources = SCRAPE_SOURCES.filter((source) => !feedOverrides.disabled.includes(source.url));
@@ -1525,27 +1517,33 @@ const refreshNewsletterFeed = singleFlightRefresh(async () => {
         // Do not collapse publications by vendor/date before correlation: every
         // advisory and its own CVEs/evidence must survive into the event store.
         const rawItems = [...byUrl.values()];
+        stage('bodies');
         const bodies = await collectArticleTexts(rawItems, {
             cache: articleCollectionCache,
             maxFetches: process.env.NEWS_ARTICLE_MAX_FETCHES === undefined ? 40 : Number(process.env.NEWS_ARTICLE_MAX_FETCHES),
             concurrency: Number(process.env.NEWS_IOC_CONCURRENCY) || 3,
             fetchText: (url) => fetchArticleText(url, 64000),
         });
+        stage('extraction');
         let unifiedFeed = await enrichFeedItemsAsync(rawItems, {
             texts: bodies.texts, supplementalIocs: bodies.supplementalIocs, actors: (text) => matchActors(text, actorIndex),
             malware: (text) => matchMalware(text, malwareIndex, {news:true}), campaigns: (text) => matchCampaigns(text, campaignIndex),
             seller: extractSellerHandle, categorize,
         });
         const allCves = [...new Set(unifiedFeed.flatMap((item) => item.cves))];
+        stage('vulnerabilities');
         const [kevMap, epssMap] = await Promise.all([getKevMap(), getEpssMap(allCves)]);
         applyVulnerabilityContext(unifiedFeed, kevMap, epssMap);
         unifiedFeed.sort((a, b) => b.pubDate.localeCompare(a.pubDate) || a.link.localeCompare(b.link));
+        stage('publication');
         const correlation = await publishNewsSnapshot(unifiedFeed, { archive: newsArchiveStore, stories: newsStoryStore });
         syncNewsShadow();
+        stage('inventory');
         await iocIntelligence.ingestNews(newsArchiveStore.all());
+        stage('phishing');
         iocIntelligence.phishing.saveWeeks(buildPhishingWeeks(newsArchiveStore.all()));
+        stage('cache');
         const healthSources = new Set([...effectiveFeeds().map(feed => feed.url), ...sources.map(source => source.url)]);
-        iocIntelligence.phishing.recordCycle({ at: new Date().toISOString(), status: 'ready', elapsedMs: Date.now() - startedAt, bodies: bodies.stats, sources: [...feedHealth].filter(([url]) => healthSources.has(url)) });
         unifiedFeed = correlation.items;
 
         // Raw RSS and collected article text remain in the disk caches. The
@@ -1555,9 +1553,12 @@ const refreshNewsletterFeed = singleFlightRefresh(async () => {
         memoryCache.newsletter.data = unifiedFeed;
         memoryCache.newsletter.expiresAt = Date.now() + memoryCache.newsletter.ttl;
         try { rssCollectionCache.prune({ maxEntries: Math.max(600, effectiveFeeds().length * 3 + 50) }); articleCollectionCache.prune({ maxEntries: 1500 }); } catch (error) { console.warn('feed cache pruning failed:', error.message); }
-        console.log('[feed] cycle', JSON.stringify({ elapsedMs: Date.now() - startedAt, sources: collected.health.size, failedSources: [...collected.health.values()].filter((health) => !health.ok).length, articles: unifiedFeed.length, bodies: bodies.stats, correlation: correlation.stats }));
+        stage('done');
+        iocIntelligence.phishing.recordCycle({ at: new Date().toISOString(), status: 'ready', elapsedMs: Date.now() - startedAt, stages, bodies: bodies.stats, sources: [...feedHealth].filter(([url]) => healthSources.has(url)) });
+        console.log('[feed] cycle', JSON.stringify({ elapsedMs: Date.now() - startedAt, stages, sources: collected.health.size, failedSources: [...collected.health.values()].filter((health) => !health.ok).length, articles: unifiedFeed.length, bodies: bodies.stats, correlation: correlation.stats }));
     } catch (error) {
-        try { iocIntelligence.phishing.recordCycle({ status: 'failed', elapsedMs: Date.now() - startedAt }); } catch { /* preserve the previous snapshot */ }
+        stage('failed');
+        try { iocIntelligence.phishing.recordCycle({ status: 'failed', elapsedMs: Date.now() - startedAt, stages }); } catch { /* preserve the previous snapshot */ }
         console.error('Failed to background refresh newsletter feeds:', error.message);
     }
 });
@@ -1581,6 +1582,8 @@ app.put('/api/news/monitoring', requireAuth, (req, res) => {
 
 // Optional query params: minScore (0-100), severity (Critical|High|Medium|Low),
 // category (substring of a category label), layer (1-4), sort (relevance|date).
+const newsFeedResponse = createNewsFeedResponse();
+const emptyNewsFeed = [];
 app.get('/api/newsletter', requirePremium, async (req, res) => {
     try {
         if (!memoryCache.newsletter.data) {
@@ -1588,25 +1591,8 @@ app.get('/api/newsletter', requirePremium, async (req, res) => {
             void refreshNewsletterFeed();
         }
         if (!memoryCache.newsletter.data && !newsArchiveStore.size()) return res.status(503).set('Retry-After', '60').json({ error: 'News feed is not available yet' });
-        let data = filterMonitoredNews(completeNewsFeed(memoryCache.newsletter.data || [],newsArchiveStore.all()), newsMonitoringStore.get(req.user.sub), newsStoryStore.all());
-
-        const minScore = parseInt(req.query.minScore, 10);
-        const severity = (req.query.severity || '').toString();
-        const category = (req.query.category || '').toString().toLowerCase();
-        const layer = parseInt(req.query.layer, 10);
-        const sort = (req.query.sort || 'date').toString();
-
-        if (!Number.isNaN(minScore)) data = data.filter((i) => (i.score || 0) >= minScore);
-        if (severity) data = data.filter((i) => i.severity === severity);
-        if (layer) data = data.filter((i) => i.layer === layer);
-        if (category) data = data.filter((i) => (i.categories || []).some((c) => c.toLowerCase().includes(category)));
-
-        if (sort === 'relevance') {
-            data = [...data].sort((a, b) => (b.score || 0) - (a.score || 0) || new Date(b.pubDate) - new Date(a.pubDate));
-        }
-
-        res.set('Cache-Control', 'private, no-store');
-        res.json(data);
+        const response = newsFeedResponse({ current: memoryCache.newsletter.data || emptyNewsFeed, archive: newsArchiveStore.all(), stories: newsStoryStore.all(), owner: req.user.sub, preferences: newsMonitoringStore.get(req.user.sub), query: req.query });
+        res.set('Cache-Control', 'private, no-store').set('ETag', response.etag).type('json').send(response.body);
     } catch (error) {
         const { status, message } = sanitizeError(error);
         res.status(status).json({ error: message });

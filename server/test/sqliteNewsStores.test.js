@@ -4,6 +4,7 @@ import Database from 'better-sqlite3';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { createHash } from 'node:crypto';
 import { createNewsPersistence } from '../newsPersistence.js';
 import { createSqliteNewsStores } from '../sqliteNewsStores.js';
 import { createNewsArchiveStore } from '../newsArchiveStore.js';
@@ -122,4 +123,31 @@ test('published news enters the IOC inventory with actor evidence and survives r
   const restarted = createSqliteNewsStores({ persistence: inventory.news, ...legacy() });
   assert.equal(restarted.archive.all()[0].storyId, stores.stories.all()[0].id);
   inventory.close();
+});
+
+test('successful publications reuse the verified transaction result without a full database reread', async () => {
+  const db = new Database(':memory:'), persistence = createNewsPersistence(db);
+  let reads = 0;
+  const measured = { ...persistence, readSnapshot: () => { reads++; return persistence.readSnapshot(); } };
+  const stores = createSqliteNewsStores({ persistence: measured, ...legacy() });
+  const startupReads = reads;
+  await publishNewsSnapshot([row()], { ...stores, now });
+  assert.equal(reads, startupReads);
+  assert.deepEqual(stores.archive.all(), persistence.readSnapshot().archive);
+  assert.deepEqual(stores.stories.all(), persistence.readSnapshot().stories);
+  // A commit from a separate facade still invalidates the in-memory revision.
+  const before = persistence.readSnapshot(); persistence.commit(before, before.generation);
+  stores.archive.all(); assert.equal(reads, startupReads + 1);
+  db.close();
+});
+
+test('restart still rejects invalid cross-document relationships even with matching payload hashes', () => {
+  for (const sources of [[{ link: 'missing' }], [{ link: row().link }, { link: row().link }]]) {
+    const db = new Database(':memory:'), persistence = createNewsPersistence(db);
+    createSqliteNewsStores({ persistence, ...legacy([row()], [{ id: 'A', sources: [] }]) });
+    const payload = JSON.stringify({ id: 'A', sources });
+    db.prepare("UPDATE news_documents SET payload=?,hash=? WHERE kind='stories'").run(payload, createHash('sha256').update(payload).digest('hex'));
+    assert.throws(() => persistence.readSnapshot(), /relationship integrity/);
+    db.close();
+  }
 });
