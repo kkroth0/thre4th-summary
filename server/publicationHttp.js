@@ -11,11 +11,11 @@ const privateIp = address => {
   return true;
 };
 
-async function abortable(task, signal) {
+async function abortable(start, signal) {
   signal.throwIfAborted();
   let abort;
   const cancelled=new Promise((_,reject)=>{abort=()=>reject(signal.reason);signal.addEventListener('abort',abort,{once:true});});
-  try { return await Promise.race([task,cancelled]); }
+  try { return await Promise.race([Promise.resolve().then(()=>{signal.throwIfAborted();return start();}),cancelled]); }
   finally { signal.removeEventListener('abort',abort); }
 }
 
@@ -28,7 +28,7 @@ export async function resolvePublicationHost(host,{signal,createResolver=()=>new
   const resolver=createResolver(),cancel=()=>resolver.cancel();
   signal.addEventListener('abort',cancel,{once:true});
   try {
-    const results=await abortable(Promise.allSettled([resolver.resolve4(host),resolver.resolve6(host)]),signal);
+    const results=await abortable(()=>Promise.allSettled([resolver.resolve4(host),resolver.resolve6(host)]),signal);
     const records=results.flatMap((result,index)=>result.status==='fulfilled'?result.value.map(address=>({address,family:index?6:4})):[]);
     if(!records.length)throw results.find(result=>result.status==='rejected')?.reason||new Error('Publication DNS returned no addresses');
     return records;
@@ -47,10 +47,10 @@ export function createPublicationRequest({ http=axios, lookup=resolvePublication
         const target=new URL(current);
         if(!['http:','https:'].includes(target.protocol)||target.username||target.password||(target.port&&!['80','443'].includes(target.port))) throw new Error('Unsafe publication URL');
         const host=target.hostname.replace(/^\[|\]$/g,'');
-        const records=await abortable(lookup(host,{all:true,signal}),signal);
+        const records=await abortable(()=>lookup(host,{all:true,signal}),signal);
         if(!records.length||records.some(record=>privateIp(record.address))) throw new Error('Non-public publication host');
         const record=records.find(row=>row.family===4)||records[0];
-        const response=await abortable(http.get(target.href,{
+        const response=await abortable(()=>http.get(target.href,{
           headers:{'User-Agent':'Mozilla/5.0 (compatible; ThreatSumm4ry/1.0; public publication collector)',Accept:'application/rss+xml,application/atom+xml,text/html,application/xml;q=0.9,*/*;q=0.5',...headers},
           timeout:7000,signal,responseType:'text',maxContentLength:Math.min(8000000,maxContentLength),maxRedirects:0,proxy:false,
           family:record.family,lookup:(name,options,callback)=>name===host?options?.all?callback(null,[record]):callback(null,record.address,record.family):callback(new Error('Unexpected DNS target')),

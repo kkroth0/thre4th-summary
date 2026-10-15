@@ -2,6 +2,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createPublicationRequest, resolvePublicationHost } from '../publicationHttp.js';
 
+test('an already-cancelled DNS request cannot start a resolver', async () => {
+  const controller=new AbortController();controller.abort(Error('expired before DNS'));
+  await assert.rejects(resolvePublicationHost('lab.example',{signal:controller.signal,createResolver:()=>{throw Error('must not run');}}),/expired before DNS/);
+});
+
 test('publication deadline includes a DNS lookup that never settles and performs no HTTP', async () => {
   let called=false;
   const request=createPublicationRequest({timeoutMs:15,lookup:()=>new Promise(()=>{}),http:{get:async()=>{called=true;}}});
