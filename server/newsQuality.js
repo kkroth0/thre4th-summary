@@ -39,5 +39,9 @@ export function reviewNewsEvidence(row,body='',matchMalware) {
 export function completeNewsFeed(current,archive) {
   const rows=new Map(current.map(row=>[row.link,row]));
   for(const row of archive)rows.set(row.link,{...rows.get(row.link),...row,description:row.description||rows.get(row.link)?.description||'',newsCategories:row.categories});
-  return [...rows.values()].filter(isRelevantNews).map(({text,archivedAt,...row})=>row);
+  return [...rows.values()].filter(isRelevantNews).map(({text,archivedAt,...row})=>{
+    const entities=values=>Array.isArray(values)?values.filter(value=>value&&typeof value.id==='string'&&value.id&&typeof value.name==='string'&&value.name):[];
+    for(const field of ['actors','malware','campaigns'])if(row[field]!==undefined)row[field]=entities(row[field]);
+    return row;
+  });
 }

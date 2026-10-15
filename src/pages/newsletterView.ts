@@ -125,6 +125,11 @@ export interface StorySource {
   orgMatches?: OrgMatch[];
 }
 
+export function normalizeStoryEntities<T extends StorySource>(item: T): T {
+  const entities = (values: unknown): StoryActor[] => Array.isArray(values) ? values.filter((value): value is StoryActor => !!value && typeof value === 'object' && typeof value.id === 'string' && !!value.id && typeof value.name === 'string' && !!value.name) : [];
+  return { ...item, actors: entities(item.actors), malware: entities(item.malware), campaigns: entities(item.campaigns) };
+}
+
 export interface StoryCard<T extends StorySource = StorySource> {
   storyId: string;
   title: string;
@@ -174,7 +179,8 @@ export const groupAdvisoriesIntoStories = <T extends StorySource>(
   const byStory = new Map<string, StoryCard<T>>();
   const vendorOfKey = new Map<string, string>();
 
-  for (const item of advisories) {
+  for (const raw of advisories) {
+    const item = normalizeStoryEntities(raw);
     const vendor = advisoryVendor(item.title);
     const day = (item.pubDate || "").slice(0, 10);
     const rollup = vendor && day ? `${ROLLUP}${vendor}:${day}` : null;

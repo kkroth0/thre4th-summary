@@ -25,7 +25,7 @@ import {
 } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
-import { NEWS_CATEGORY_ORDER, countByCategory, filterNewsletterAdvisories, filterStoryCards, groupAdvisoriesIntoStories, severityEvidence, activeFilterChips, TIME_RANGES } from "./newsletterView";
+import { NEWS_CATEGORY_ORDER, countByCategory, filterNewsletterAdvisories, filterStoryCards, groupAdvisoriesIntoStories, normalizeStoryEntities, severityEvidence, activeFilterChips, TIME_RANGES } from "./newsletterView";
 import type { TimeRange } from "./newsletterView";
 import type { StoryCard } from "./newsletterView";
 import { generateBoletim, saveKnowledge, fetchStoryDetail, type StoryDetail, type CorrelationEvidenceType } from "@/services/threatApi";
@@ -286,7 +286,7 @@ const Newsletter = () => {
             vendors: Array.isArray(item.vendors) ? (item.vendors as Advisory["vendors"]) : undefined,
             primaryCategory: typeof item.primaryCategory === "string" || item.primaryCategory === null ? (item.primaryCategory as string | null) : undefined,
           }));
-          setAdvisories(validated);
+          setAdvisories(validated.map(normalizeStoryEntities));
         }
       } catch (e) {
         console.error("Failed to parse cached advisories", e);
@@ -316,7 +316,7 @@ const Newsletter = () => {
       if (!Array.isArray(data)) throw new Error("Invalid feed response");
       // The backend snapshot owns story identity. Combining it with older
       // snapshots resurrects retired IDs after an event merge.
-      const snapshot = data as Advisory[];
+      const snapshot = (data as Advisory[]).map(normalizeStoryEntities);
       setAdvisories(snapshot);
       try {
         localStorage.removeItem("cached_cti_advisories_v2");

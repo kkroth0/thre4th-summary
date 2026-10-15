@@ -86,6 +86,17 @@ const advisory = (over: Record<string, unknown> = {}) => ({
   source: "Feed", storyId: "s1", actors: [], malware: [], campaigns: [], newsCategories: [], primaryCategory: null, cves: [], ...over,
 });
 
+test('legacy null entities cannot crash news grouping and valid evidence survives on all sources',()=>{
+  const cards=groupAdvisoriesIntoStories([
+    advisory({actors:[null,{id:'actor',name:'Actor'}],malware:[null,{id:'malware',name:'Malware'}],campaigns:[null]}),
+    advisory({link:'https://b.example/2',actors:[null,{id:'actor2',name:'Actor 2'}],malware:[{id:'malware',name:'Malware'},null],campaigns:[{id:'campaign',name:'Campaign'},null]}),
+  ]);
+  assert.deepEqual(cards[0].actors.map(row=>row.id),['actor','actor2']);
+  assert.deepEqual(cards[0].malware.map(row=>row.id),['malware']);
+  assert.deepEqual(cards[0].campaigns.map(row=>row.id),['campaign']);
+  assert.ok(cards[0].sources.every(row=>row.actors.every(Boolean)&&row.malware.every(Boolean)&&row.campaigns.every(Boolean)));
+});
+
 test("itens da mesma história viram um card só, com as fontes dentro", () => {
   const cards = groupAdvisoriesIntoStories([
     advisory({ link: "https://a.example/1", source: "Reuters", pubDate: "2026-08-10T00:00:00.000Z" }),

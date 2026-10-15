@@ -8,6 +8,13 @@ import { completeReportEvidence } from '../reportEvidence.js';
 import { readFileSync } from 'node:fs';
 import { prepareFeedJobDocuments } from '../feedJobDocuments.js';
 
+test('feed responses discard malformed entity slots without erasing valid associations or missing metadata',()=>{
+  const valid={id:'win.vidar',name:'Vidar'};
+  const [row,legacy]=completeNewsFeed([],[{link:'https://test.example/security',title:'Security report',actors:[null,{name:'No ID'}],malware:[null,valid],campaigns:[null]}, {link:'https://test.example/legacy',title:'Security report'}]);
+  assert.deepEqual(row.actors,[]);assert.deepEqual(row.malware,[valid]);assert.deepEqual(row.campaigns,[]);
+  assert.equal(legacy.actors,undefined);
+});
+
 test('software versions and HTTP/USB terms do not become threat infrastructure or malware',()=>{
   const text='ASUS AiCloud 2.0.0.39 のバージョン is vulnerable. Returns HTTP 404 Not Found. USB audio failed. ftp uploads files. IOC: 154.81.156.10';
   assert.deepEqual(extractIOCs(text).ips,['154.81.156.10']);
