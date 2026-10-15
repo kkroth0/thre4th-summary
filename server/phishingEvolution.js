@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { buildPhishingDataset } from './phishingDataset.js';
-import { PHISHING_VERSION } from './phishingIntel.js';
+import { PHISHING_VERSION, PHISHING_KIT_VERSION } from './phishingIntel.js';
 import { EXTRACTION_VERSION } from './feedEnrichment.js';
 
 const DAY = 86400000, WEEK = 7 * DAY;
@@ -33,7 +33,7 @@ export function buildPhishingWeeks(rows, { now = new Date() } = {}) {
     return { week: new Date(start).toISOString().slice(0, 10), end: new Date(end).toISOString().slice(0, 10), closed: end <= current,
       hasArchiveHistory: oldest <= start, truncated: dataset.truncated,
       comparable: reports.every(row => row.phishingIntel?.version === PHISHING_VERSION && row.extractionVersion === EXTRACTION_VERSION),
-      rules: { phishing: PHISHING_VERSION, extraction: EXTRACTION_VERSION },
+      rules: { phishing: PHISHING_VERSION, phishingKits: PHISHING_KIT_VERSION, extraction: EXTRACTION_VERSION },
       publications: reports.length, events: unique(reports.map(eventOf)).length, sources: unique(reports.map(sourceHost)).length,
       bodyCoverage: { known: known.length, available: known.filter(row => row.articleTextAvailable).length, unknown: reports.length - known.length }, facets,
       members: reports.map(row => ({ link: row.link, event: eventOf(row), source: sourceHost(row), contentHash: row.contentHash || null,

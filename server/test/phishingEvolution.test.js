@@ -31,6 +31,15 @@ test('legacy null campaign entries cannot prevent the production weekly snapshot
   const week = weeks.find(week => week.week === '2026-10-04');
   assert.equal(week.publications, 1); assert.equal(week.facets.campaign.length, 1); assert.equal(week.facets.campaign[0].label, 'Named campaign');
 });
+
+test('kit rule changes preserve archived incident classification when only a summary remains', () => {
+  const cached = row('body-only', { title: 'Research findings', description: 'Summary without incident details' });
+  cached.phishingIntel = { ...cached.phishingIntel, kits: ['AI-powered', 'Australia', 'Blue'], evidence: [{ kind: 'classification', label: 'Phishing', field: 'body', term: 'phishing', snippet: 'Attackers deploy phishing kit called NovelBrand to steal credentials.' }] };
+  const week = buildPhishingWeeks([cached], { now: at }).find(week => week.week === '2026-10-04');
+  assert.equal(week.events, 1); assert.equal(week.publications, 1);
+  assert.deepEqual(week.facets.malware.map(item => item.label), ['NovelBrand']);
+  assert.equal(week.rules.phishing, PHISHING_VERSION); assert.equal(week.rules.phishingKits, 'phishing-kits-v2');
+});
 test('baseline uses eight comparable closed weeks and never a partial current week', () => {
   const rows = Array.from({ length: 9 }, (_, i) => row('week-' + i, { pubDate: new Date(Date.parse('2026-08-09T00:00:00Z') + i * 7 * 86400000).toISOString() }));
   rows.push(row('extra', { storyId: 'second-incident' }));

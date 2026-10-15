@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { analyzePhishing, PHISHING_VERSION } from './phishingIntel.js';
+import { analyzePhishing, extractNamedPhishingKits, PHISHING_VERSION } from './phishingIntel.js';
 
 const unique = values => [...new Set(values.filter(Boolean))];
 const names = values => unique((Array.isArray(values) ? values : []).map(value => typeof value === 'string' ? value : value?.name));
@@ -40,6 +40,10 @@ export function buildPhishingDataset(rows, { profiles = [], techniqueCatalog = [
         seenLinks.add(row.link);
         const intel = row.phishingIntel?.version === PHISHING_VERSION ? row.phishingIntel : analyzePhishing(row);
         if (!intel.detected) continue;
+        // Revalidate kit names using retained text/evidence without rerunning the
+        // incident classifier on a shortened archival summary. The original body
+        // may no longer be available, but its classification remains evidence.
+        const kits = extractNamedPhishingKits([row.title, row.description, row.text, row.bodyText, ...intel.evidence.map(e => e.snippet)].filter(Boolean).join('\n'));
         const campaignMatches = (Array.isArray(row.campaigns) ? row.campaigns : []).filter(campaign => campaign?.id && campaign?.name &&
             [row.title, row.description, ...intel.evidence.filter(e => e.kind === 'classification' || e.kind === 'technique').map(e => e.snippet)].some(text => hasTerm(text, campaign.name)));
         const named = campaignMatches.length === 1 ? campaignMatches[0] : null;
@@ -51,7 +55,7 @@ export function buildPhishingDataset(rows, { profiles = [], techniqueCatalog = [
             campaignName: named?.name || '', primaryTechnique: intel.primaryTechnique,
             phishingTechniques: intel.techniques, vectors: intel.vectors, sectors: intel.sectors,
             regions: intel.regions, brands: intel.brands, actorNames: names(row.actors),
-            software: unique([...names(row.malware), ...intel.kits, ...intel.evidence.filter(e => e.label === 'RMM Abuse').map(e => e.term)]),
+            software: unique([...names(row.malware), ...kits, ...intel.evidence.filter(e => e.label === 'RMM Abuse').map(e => e.term)]),
             nationState: intel.nationState,
             ttps: intel.ttps.map(ttp => ({ ...ttp, name: catalog.get(ttp.id)?.name || '', tactics: catalog.get(ttp.id)?.tactics || [] })),
             evidence: intel.evidence,

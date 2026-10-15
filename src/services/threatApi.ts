@@ -1760,7 +1760,7 @@ export interface PhishingEvolution {
 export const fetchPhishingEvolution = (): Promise<PhishingEvolution> => orgJson('/api/phishing/evolution');
 export interface PhishingWeekEvidence {
     week: string; end: string; closed: boolean; publications: number; events: number; sources: number;
-    rules: { phishing: string; extraction: string };
+    rules: { phishing: string; phishingKits?: string; extraction: string };
     members: { link: string; event: string; source: string; contentHash: string | null; phishingVersion: string; extractionVersion: string | null; articleTextAvailable: boolean | null }[];
 }
 export const fetchPhishingWeekEvidence = (week: string): Promise<PhishingWeekEvidence> => {
