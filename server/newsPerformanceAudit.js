@@ -24,6 +24,13 @@ try { report.feedCacheBytes = fs.statSync(file).size; if (report.feedCacheBytes 
 const rows = measure('completeFeed', () => completeNewsFeed(current, snapshot.archive));
 const encoded = measure('serializeFeed', () => JSON.stringify(rows));
 report.feed = { publications: rows.length, bytes: Buffer.byteLength(encoded), gzipBytes: measure('compressFeed', () => gzipSync(encoded)).length };
+if (fs.existsSync(path.join(root, 'server/newsFeedResponse.js'))) {
+  const { createNewsFeedResponse } = await import(pathToFileURL(path.join(root, 'server/newsFeedResponse.js')));
+  const respond = createNewsFeedResponse(), args = { current, archive: snapshot.archive, stories: snapshot.stories, owner: 'read-only-audit', preferences: { mode: 'all', vendorIds: [] } };
+  const first = measure('feedResponseCold', () => respond(args));
+  const warm = measure('feedResponseWarm', () => respond(args));
+  report.feedResponse = { equal: first.body === encoded, reused: warm === first, bytes: first.size };
+}
 report.lastCycles = db.prepare('SELECT at,status,payload FROM phishing_collection_cycles ORDER BY at DESC LIMIT 5').all().map(row => {
   const value = JSON.parse(row.payload); return { at: row.at, status: row.status, elapsedMs: value.elapsedMs, stages: value.stages, bodies: value.bodies, sourceCount: value.sourceCount, healthySources: value.healthySources };
 });
