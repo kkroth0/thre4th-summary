@@ -14,6 +14,7 @@ export interface ActorListItem {
 }
 
 export interface ActorDetail extends Omit<ActorListItem, 'techniques'> {
+  ctiFyi?: { group: string; description: string; claims: number; metadataBasis: string; references: string[] };
   description: string;
   attack_id: string;
   attack_url: string;

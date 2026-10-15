@@ -134,7 +134,7 @@ export function normalizeVictim(v = {}, source = 'ransomware.live') {
         // atingido: Not Found") e ainda liderava o ranking de setores. Vazio
         // some do countBy e a tabela já mostra "-".
         sector: unknownSector(text(v.activity, v.sector, v.industry)),
-        published: text(v.published, v.attackdate, v.attack_date, v.date, v.discovered) || null,
+        published: v.source === 'CTI.fyi' && v.published === null ? null : text(v.published, v.attackdate, v.attack_date, v.date, v.discovered) || null,
         discovered: text(v.discovered, v.published, v.date, v.attackdate, v.attack_date) || null,
         description: description ? description.slice(0, 500) : '',
         screenshot: text(v.screenshot),
@@ -142,6 +142,13 @@ export function normalizeVictim(v = {}, source = 'ransomware.live') {
         infostealer: v.infostealer ?? v.infostealer_detected ?? null,
         press: maybeArray(v.press),
         source: text(v.source, source),
+        sources: Array.isArray(v.sources) ? v.sources.filter(item => typeof item === 'string') : [text(v.source, source)],
+        claimStatus: 'unverified', domainRole: 'victim',
+        ...(v.actorId ? { actorId: v.actorId } : {}),
+        ...(v.updated ? { updated: v.updated } : {}),
+        ...(v.ctiFyi ? { ctiFyi: v.ctiFyi } : {}),
+        ...(v.metadataBasis ? { metadataBasis: v.metadataBasis } : {}),
+        ...(typeof v.publicationTimeKnown === 'boolean' ? { publicationTimeKnown: v.publicationTimeKnown } : {}),
     };
 }
 
@@ -239,7 +246,7 @@ function summarizeVictimSet(victims, days, key = `${days}d`, label = `${days}d`)
         groups,
         sectors,
         topCountry: countries[0] || null,
-        activeGroups: groups.length,
+        activeGroups: new Set(filtered.map(victim => victim.group).filter(Boolean)).size,
         latestVictim: filtered[0] || null,
     };
 }
@@ -281,7 +288,7 @@ export function buildThreatMapResponse(rawVictims, {
         groups,
         sectors,
         topCountry: countries[0] || null,
-        activeGroups: groups.length,
+        activeGroups: current.activeGroups,
         delta: {
             victims: deltaVictims,
             previousVictims: previous.totalVictims,

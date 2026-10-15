@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { ExternalLink, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -36,7 +37,7 @@ export function RansomwareVictimsTable({ victims, pt, filters, onFiltersChange }
   const [page, setPage] = useState(1); const [size, setSize] = useState(20);
   const [selected, setSelected] = useState<RansomwareVictim | null>(null);
   const rows = useMemo(() => victims.filter(victim =>
-    (!search.trim() || [victim.name, victim.group, victim.countryName, victim.country, victim.sector, victim.website].some(value => value?.toLowerCase().includes(search.trim().toLowerCase())))
+    (!search.trim() || [victim.name, victim.group, victim.countryName, victim.country, victim.sector, victim.website, victim.source].some(value => value?.toLowerCase().includes(search.trim().toLowerCase())))
     && (group === 'all' || victim.group === group)
     && (country === 'all' || (victim.countryName || victim.country) === country)
     && (sector === 'all' || victim.sector === sector)), [victims, search, group, country, sector]);
@@ -64,7 +65,7 @@ export function RansomwareVictimsTable({ victims, pt, filters, onFiltersChange }
         <thead><tr>{[pt ? 'Vítima / organização' : 'Victim / organization', pt ? 'Grupo' : 'Group', pt ? 'País' : 'Country', pt ? 'Setor' : 'Sector', pt ? 'Descoberta' : 'Discovered', pt ? 'Evidências' : 'Evidence', pt ? 'Fonte' : 'Source'].map(label => <th key={label}>{label}</th>)}</tr></thead>
         <tbody>{rows.slice((current - 1) * size, current * size).map((victim, index) => <tr key={`${victim.id || victim.name}-${victim.group}-${victim.discovered || victim.published}-${index}`}>
           <td className="max-w-72"><button type="button" className="break-words text-left font-medium hover:text-primary focus-visible:ring-2 focus-visible:ring-ring" onClick={() => setSelected(victim)}>{victim.name}</button><p className="mt-1 break-all text-xs text-muted-foreground">{victim.website || '—'}</p></td>
-          <td className="max-w-40 break-words">{victim.group || '—'}</td><td>{victim.countryName || victim.country || '—'}</td><td className="max-w-44 text-muted-foreground">{victim.sector || '—'}</td>
+          <td className="max-w-40 break-words">{victim.actorId ? <Link className="text-primary hover:underline" to={'/atores?actor=' + encodeURIComponent(victim.actorId)}>{victim.group}</Link> : victim.group || '—'}</td><td>{victim.countryName || victim.country || '—'}</td><td className="max-w-44 text-muted-foreground">{victim.sector || '—'}</td>
           <td className="whitespace-nowrap text-xs text-muted-foreground">{victimDate(victim.discovered || victim.published, pt)}</td>
           <td><div className="flex max-w-48 flex-wrap gap-1">{evidence(victim, pt).length ? evidence(victim, pt).map(label => <span key={label} className="rounded border px-1.5 py-0.5 text-[10px] text-muted-foreground">{label}</span>) : <span className="text-muted-foreground">—</span>}</div></td>
           <td>{safeLink(victim.permalink) ? <a href={victim.permalink} target="_blank" rel="noopener noreferrer" aria-label={`${pt ? 'Abrir fonte de' : 'Open source for'} ${victim.name}`} className="inline-flex rounded p-1 text-muted-foreground hover:text-primary focus-visible:ring-2 focus-visible:ring-ring"><ExternalLink className="h-3.5 w-3.5" /></a> : <span className="text-muted-foreground">—</span>}</td>
@@ -80,7 +81,7 @@ export function RansomwareVictimsTable({ victims, pt, filters, onFiltersChange }
           [pt ? 'Descoberta' : 'Discovered', victimDate(selected.discovered, pt)], [pt ? 'Publicação' : 'Published', victimDate(selected.published, pt)],
         ].map(([label, value]) => <div key={label} className="min-w-0"><dt className="intel-eyebrow">{label}</dt><dd className="mt-1 break-words">{value || '—'}</dd></div>)}</dl>
         <section><h3 className="intel-eyebrow">{pt ? 'Descrição da fonte' : 'Source description'}</h3><p className="mt-3 whitespace-pre-wrap break-words text-sm leading-6 text-muted-foreground">{selected.description || (pt ? 'A fonte não forneceu uma descrição.' : 'The source did not provide a description.')}</p></section>
-        <section><h3 className="intel-eyebrow">{pt ? 'Evidências e referências' : 'Evidence and references'}</h3><p className="mt-2 text-xs text-muted-foreground">{selected.source || '—'}</p><div className="mt-3 flex flex-wrap gap-2">{[[selected.permalink, pt ? 'Registro da fonte' : 'Source record'], [selected.screenshot, pt ? 'Abrir captura' : 'Open screenshot']].map(([url, label]) => safeLink(url) && <Button key={label} asChild variant="outline" size="sm"><a href={url} target="_blank" rel="noopener noreferrer">{label}<ExternalLink className="ml-2 h-3.5 w-3.5" /></a></Button>)}</div>
+        <section><h3 className="intel-eyebrow">{pt ? 'Evidências e referências' : 'Evidence and references'}</h3><p className="mt-2 text-xs text-muted-foreground">{selected.source || '—'}</p><div className="mt-3 flex flex-wrap gap-2">{[[selected.permalink, pt ? 'Registro da fonte' : 'Source record'], [selected.screenshot, pt ? 'Abrir captura' : 'Open screenshot'], [selected.ctiFyi?.permalink, 'CTI.fyi']].map(([url, label]) => safeLink(url) && <Button key={label} asChild variant="outline" size="sm"><a href={url} target="_blank" rel="noopener noreferrer">{label}<ExternalLink className="ml-2 h-3.5 w-3.5" /></a></Button>)}</div>
           {articles.length > 0 && <ul className="mt-4 space-y-2">{articles.map((article, index) => <li key={`${article.url}-${index}`}><a href={article.url} target="_blank" rel="noopener noreferrer" className="break-words text-sm text-primary hover:underline">{article.title}<ExternalLink className="ml-1 inline h-3 w-3" /></a></li>)}</ul>}
           {selected.press?.length && !articles.length ? <p className="mt-3 text-xs text-muted-foreground">{pt ? 'A fonte indica cobertura de imprensa, mas não forneceu links válidos.' : 'The source indicates press coverage but provided no valid links.'}</p> : null}
           {!safeLink(selected.permalink) && !safeLink(selected.screenshot) && !selected.press?.length && !selected.infostealer && <p className="mt-3 text-xs text-muted-foreground">{pt ? 'Sem referências adicionais neste registro.' : 'No additional references in this record.'}</p>}

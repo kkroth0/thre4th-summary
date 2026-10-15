@@ -28,6 +28,7 @@ import { createPhishingSources } from './phishingSources.js';
 import { createWhoisLookup } from './whoisLookup.js';
 import { createDomainIntelligence, domainTarget } from './domainIntelligence.js';
 import { createSimilarDomains } from './similarDomains.js';
+import { createCtiFyi, mergeCtiActors, ctiPublications, mergeRansomwareVictims, attachRansomwareActors } from './ctiFyi.js';
 import { createVulnerabilityCatalog } from './vulnerabilityCatalog.js';
 import { createVulnerabilityQueries, optimizeVulnerabilityCatalog } from './vulnerabilityQueries.js';
 import { createLookupCache } from './lookupCache.js';
@@ -832,7 +833,28 @@ app.post('/api/phishstats', scanLimiter, async (req, res) => {
 // continuam servidos por /api/intel/latam-threats e pelo mapa de ameaças, que
 // usam a mesma getRecentRansomwareVictims() logo abaixo.
 
+const ctiFyi = createCtiFyi({ http: axios,
+    read: () => JSON.parse(fs.readFileSync(path.join(__dirname, '.cti-fyi.json'), 'utf8')),
+    save: data => writeJsonAtomic(path.join(__dirname, '.cti-fyi.json'), data),
+});
+let ransomwareVictimsFlight = null;
+let ctiActorIndexVersion = '';
+async function refreshCtiFyi() {
+    await ctiFyi.refresh();
+    const version = ctiFyi.groupsVersion();
+    if (version && version !== ctiActorIndexVersion) { Object.assign(actorIndex, buildActorIndex(loadActors().actors)); ctiActorIndexVersion = version; softwareIndexCache = null; actorNameIndexCache = null; }
+}
 async function getRecentRansomwareVictims() {
+    void refreshCtiFyi().catch(() => console.warn('CTI.fyi actor index unavailable'));
+    const primary = await getRansomwareLiveVictims().catch(error => { if (!ctiFyi.victims().length) throw error; return []; });
+    return mergeRansomwareVictims(attachRansomwareActors(primary, loadActors().actors), attachRansomwareActors(ctiFyi.victims(), loadActors().actors));
+}
+async function getRansomwareLiveVictims() {
+    if (ransomwareVictimsFlight) return ransomwareVictimsFlight;
+    ransomwareVictimsFlight = fetchRansomwareLiveVictims().finally(() => { ransomwareVictimsFlight = null; });
+    return ransomwareVictimsFlight;
+}
+async function fetchRansomwareLiveVictims() {
     const now = Date.now();
     if (memoryCache.ransomwareVictims.data && memoryCache.ransomwareVictims.expiresAt > now) {
         return memoryCache.ransomwareVictims.data;
@@ -910,18 +932,23 @@ async function getSectorVictims(sector) {
 }
 
 // Fan out across the selected sectors and dedupe (a victim can be double-listed
-// if a group re-posts). Falls back to the global recent feed when the Pro key is
-// absent so the map is never empty.
+// if a group re-posts). When the Pro filter has no rows, filter the combined
+// recent evidence locally using the selected sector labels.
 async function getPriorityVictims(sectors) {
+    void refreshCtiFyi().catch(() => {});
     const batches = await Promise.all(sectors.map((sector) => getSectorVictims(sector)));
     const flat = batches.flat();
-    if (!flat.length) return getRecentRansomwareVictims();
+    if (!flat.length) {
+        const recent = await getRecentRansomwareVictims();
+        return recent.filter(row => row.sector && sectors.some(sector => row.sector.toLowerCase().includes(sector.toLowerCase()) || sector.toLowerCase().includes(row.sector.toLowerCase())));
+    }
     const seen = new Map();
     for (const victim of flat) {
         const id = victim.id || `${victim.name}@@${victim.group}@@${victim.discovered || victim.published || ''}`;
         if (!seen.has(id)) seen.set(id, victim);
     }
-    return [...seen.values()];
+    const matches = ctiFyi.victims().filter(row => sectors.some(sector => row.sector.toLowerCase().includes(sector.toLowerCase()) || sector.toLowerCase().includes(row.sector.toLowerCase()) && row.sector));
+    return mergeRansomwareVictims(attachRansomwareActors([...seen.values()], loadActors().actors), attachRansomwareActors(matches, loadActors().actors));
 }
 
 async function getSectorList() {
@@ -956,14 +983,12 @@ app.get('/api/intel/threat-map', async (req, res) => {
 
         const rawVictims = focus ? await getPriorityVictims(sectors) : await getRecentRansomwareVictims();
         const victims = focus ? filterByRegions(rawVictims, regions) : rawVictims;
-        const source = victims.some((victim) => victim.source === 'ransomware.live Pro')
-            ? 'ransomware.live Pro'
-            : 'ransomware.live';
-        res.json(buildThreatMapResponse(victims, {
+        const source = [...new Set(victims.flatMap(victim => victim.sources || [victim.source]))].join(' · ') || 'ransomware.live · CTI.fyi';
+        res.json({ ...buildThreatMapResponse(victims, {
             generatedAt: new Date().toISOString(),
             days,
             source,
-        }));
+        }), collectors: [ctiFyi.status()] });
     } catch (error) {
         const { status, message } = sanitizeError(error);
         res.status(status).json({ error: message });
@@ -973,10 +998,11 @@ app.get('/api/intel/threat-map', async (req, res) => {
 // Sector names (for the picker) + the fixed region catalog the focus map accepts.
 app.get('/api/intel/sectors', async (_req, res) => {
     try {
-        const sectors = await getSectorList().catch((err) => {
+        const primarySectors = await getSectorList().catch((err) => {
             console.warn(`Ransomware.live sector list fetch failed: ${err.message}`);
             return [];
         });
+        const sectors = [...new Map([...countBy(ctiFyi.victims(), row => row.sector), ...primarySectors].map(row => [row.name.toLowerCase(), row])).values()].sort((a,b) => a.name.localeCompare(b.name));
         res.json({
             sectors,
             regions: Object.entries(REGIONS).map(([key, region]) => ({ key, label: region.label })),
@@ -1000,7 +1026,7 @@ app.get('/api/intel/latam-threats', async (req, res) => {
         const latamVictims = victims.filter((v) => LATAM_COUNTRIES.has(v.country));
         res.json({
             generatedAt: new Date().toISOString(),
-            sources: ['ransomware.live', 'ThreatFox'],
+            sources: [...new Set([...victims.flatMap(row => row.sources || [row.source]), 'ThreatFox'])],
             victims: latamVictims.slice(0, 80),
             groups: countBy(latamVictims, (v) => v.group).slice(0, 12),
             sectors: countBy(latamVictims, (v) => v.sector).slice(0, 12),
@@ -3399,7 +3425,7 @@ app.get('/api/patch-tuesday/:id', async (req, res) => {
 // Loaded once — the JSON is static, so the actors list and its country facet are
 // computed a single time and cached for the process lifetime.
 let ACTORS_CACHE = null;
-const loadActors = () => {
+const loadBaseActors = () => {
     if (ACTORS_CACHE) return ACTORS_CACHE;
     let actors = [];
     try {
@@ -3422,6 +3448,20 @@ const loadActors = () => {
         targets: facet('targets'),
     };
     return ACTORS_CACHE;
+};
+let CTI_ACTORS_CACHE = null;
+const loadActors = () => {
+    const base = loadBaseActors(), version = ctiFyi.groupsVersion();
+    if (CTI_ACTORS_CACHE?.version === version) return CTI_ACTORS_CACHE.catalog;
+    const actors = mergeCtiActors(base.actors, ctiFyi.groups());
+    const catalog = { ...base, actors };
+    CTI_ACTORS_CACHE = { version, catalog }; return catalog;
+};
+let ctiPublicationCache = null;
+const ctiActorRows = () => {
+    const status = ctiFyi.status(), version = `${ctiFyi.groupsVersion()}:${status.lastSuccessfulAt}:${status.posts}`;
+    if (ctiPublicationCache?.version !== version) ctiPublicationCache = { version, rows: ctiPublications(ctiFyi.victims(), loadActors().actors) };
+    return ctiPublicationCache.rows;
 };
 
 // ─── Contexto da organização ───────────────────────────────────────────────
@@ -3550,8 +3590,9 @@ app.get('/api/actors/software-index', (req, res) => {
 app.get('/api/intelligence/status', requirePremium, (req,res) => {
     const own=accountIntelligenceCollector(req.user.sub);
     const statuses=own?.status()||[];
-    res.set('Cache-Control','private, no-store').json({ ...iocIntelligence.status(req.user.sub), collectors:intelligenceCollector.status().map(source=>statuses.find(row=>row.id===source.id&&row.configured)||source) });
+    res.set('Cache-Control','private, no-store').json({ ...iocIntelligence.status(req.user.sub), collectors:[...intelligenceCollector.status().map(source=>statuses.find(row=>row.id===source.id&&row.configured)||source), ctiFyi.status()] });
 });
+app.get('/api/intel/cti-fyi/status', (_req,res) => res.set('Cache-Control','no-store').json(ctiFyi.status()));
 app.get('/api/intelligence/export', requirePremium, (req,res) => {
     try {
         const options=newsExportQuery({...req.query,dataset:'iocs'});
@@ -3571,14 +3612,14 @@ app.get('/api/intelligence/ioc', requirePremium, (req,res) => {
 });
 app.get('/api/actors/activity', requirePremium, (req, res) => {
     res.set('Cache-Control', 'private, no-store');
-    res.json({ days: 180, activity: buildActorActivity(actorPublications([...newsArchiveStore.all(),...iocIntelligence.publications({owner:req.user.sub})], newsStoryStore.all())) });
+    res.json({ days: 180, activity: buildActorActivity(actorPublications([...newsArchiveStore.all(),...ctiActorRows(),...iocIntelligence.publications({owner:req.user.sub})], newsStoryStore.all())) });
 });
 app.get('/api/actors/:id/evidence', requirePremium, (req, res) => {
     if (!knownActorIds().has(req.params.id) && !iocIntelligence.entities('actor',req.user.sub).some(actor=>actor.id===req.params.id)) return res.status(404).json({ error: 'Actor not found' });
     const days = req.query.days == null ? 180 : Number(req.query.days);
     if (![0, 30, 90, 180, 365].includes(days)) return res.status(400).json({ error: 'Invalid time range' });
     res.set('Cache-Control', 'private, no-store');
-    res.json(buildActorEvidence(actorPublications([...newsArchiveStore.all(),...iocIntelligence.publications({owner:req.user.sub,kind:'actor',id:req.params.id})], newsStoryStore.all()), req.params.id, { days }));
+    res.json(buildActorEvidence(actorPublications([...newsArchiveStore.all(),...ctiActorRows(),...iocIntelligence.publications({owner:req.user.sub,kind:'actor',id:req.params.id})], newsStoryStore.all()), req.params.id, { days }));
 });
 app.get('/api/actors/:id', (req, res) => {
     const session=verifySession(getCookie(req,'ts_session'));
@@ -3920,6 +3961,8 @@ app.listen(PORT, () => {
     void iocIntelligence.ingestNews(newsArchiveStore.all()).catch(() => console.warn('IOC archive backfill failed'));
     setTimeout(() => { void runIntelligenceCollection(); }, 5000).unref();
     setInterval(() => { void runIntelligenceCollection(); }, 60000).unref();
+    setTimeout(() => { void refreshCtiFyi().catch(() => console.warn('CTI.fyi refresh failed')); }, 45000).unref();
+    setInterval(() => { void refreshCtiFyi().catch(() => console.warn('CTI.fyi refresh failed')); }, 60000).unref();
     setInterval(()=>{void weeklyReports.tick();},60000).unref();
     refreshNewsletterFeed();
     setInterval(refreshNewsletterFeed, memoryCache.newsletter.ttl);

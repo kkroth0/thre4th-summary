@@ -989,6 +989,14 @@ export const fetchJob = async (id: string): Promise<BoletimJob> => {
 };
 
 export interface RansomwareVictim {
+    actorId?: string;
+    sources?: string[];
+    claimStatus?: 'unverified';
+    domainRole?: 'victim';
+    metadataBasis?: string;
+    updated?: string | null;
+    publicationTimeKnown?: boolean;
+    ctiFyi?: { id: string; permalink: string; discovered: string; updated: string | null };
     id?: string;
     name: string;
     website?: string;

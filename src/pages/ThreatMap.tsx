@@ -7,6 +7,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { PageLayout } from "@/components/PageLayout";
+import { CtiFyiSource } from '@/components/CtiFyiSource';
 import { PageHeader } from "@/components/PageHeader";
 import { LoadingRows } from "@/components/LoadingState";
 import { RansomwareVictimsTable, type RansomwareVictimFilters } from "@/components/workbench/RansomwareVictimsTable";
@@ -283,7 +284,7 @@ const ThreatMap = () => {
         [pt ? 'Setor com mais registros' : 'Sector with most records', data.sectors[0]?.name || '—'],
         ['LATAM', `${data.latam.victims} ${pt ? 'reivindicações' : 'claims'}`],
       ].map(([label, value]) => <div key={label}><p className="intel-eyebrow">{label}</p><p className="mt-2 break-words">{value}</p></div>)}<p className="text-xs text-muted-foreground sm:col-span-2 xl:col-span-4">{data.delta.previousVictims > 0 ? `${pt ? 'Variação contra a janela anterior' : 'Change against previous window'}: ${data.delta.victims > 0 ? '+' : ''}${data.delta.victims} (${data.delta.percent}%). ${pt ? 'Registros na janela anterior' : 'Previous-window records'}: ${data.delta.previousVictims}.` : pt ? 'Comparação indisponível: a fonte não retornou registros na janela anterior.' : 'Comparison unavailable: the source returned no previous-window records.'}</p></div></details>
-      <RansomwareVictimsTable victims={data.victims} pt={pt} filters={victimFilters} onFiltersChange={setVictimFilters} />
+      <CtiFyiSource pt={pt} /><RansomwareVictimsTable victims={data.victims} pt={pt} filters={victimFilters} onFiltersChange={setVictimFilters} />
       <p className="text-xs leading-5 text-muted-foreground">{pt ? 'Totais referentes ao recorte recebido da fonte. Os filtros da tabela refinam os registros exibidos. Reivindicações não representam confirmação independente dos incidentes; o feed recente pode ter cobertura limitada.' : 'Totals refer to the selection returned by the source. Table filters refine displayed records. Claims are not independent confirmation of incidents; the recent feed may have limited coverage.'}</p>
     </div> : null}
   </PageLayout>;

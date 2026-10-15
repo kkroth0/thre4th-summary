@@ -65,3 +65,5 @@ server/.ioc-intelligence.sqlite*
 server/.weekly-reports.sqlite*
 
 .codex-weekly-template/
+
+server/.cti-fyi.json*
