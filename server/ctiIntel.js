@@ -376,10 +376,23 @@ const addUrl = (set, raw) => {
 // O que anuncia versão logo antes do número: a palavra, a notação da CISA
 // (`vers:intdot/`) e os comparadores que aparecem em "prior to <4.3.4.1".
 const RE_VERSION_BEFORE = /(?:vers(?:ions?|ao|ão)?|vers:intdot\/|firmware|release|build|update|patch|prior to|earlier than|before|through|バージョン|版本|版本号)\s*[:v<>=]*\s*$|(?:<|>|&lt;|&gt;|≤|≥)\s*$/i;
+function followsVersionList(text) {
+    const markers=[...text.matchAll(/\b(?:versions?|versões|versoes|firmware|releases?|builds?)\b|\bvers:intdot\//gi)];
+    const marker=markers.at(-1);
+    if(!marker)return false;
+    // A bounded, explicit list grammar rather than a broad "version nearby"
+    // heuristic. Ordinary prose/IOC labels terminate the version context.
+    const remaining=text.slice(marker.index+marker[0].length)
+        .replace(/\b\d+(?:\.\d+){1,8}(?:[a-z]\d+(?:[_-][a-z]+)?)?\b/gi,'')
+        .replace(/\b(?:and|or|prior|earlier|later|before|through|to|up|including|inclusive|respectively|v)\b/gi,'')
+        .replace(/[\s,;:()[\]<>=≤≥–—-]+/g,'');
+    return remaining.length===0;
+}
 export function isSoftwareVersionAt(text, index, value) {
     const before = text.slice(Math.max(0, index - 80), index);
     const after = text.slice(index + value.length, index + value.length + 40);
     return RE_VERSION_BEFORE.test(before)
+        || followsVersionList(text.slice(Math.max(0,index-240),index))
         || /\bv\s*$/i.test(before)
         || /(?:AiCloud|FortiOS|FortiClient|PAN-OS|Windows|firmware|software|OpenSSL|Rails|Ruby|\.NET|Java|JDK|Tomcat|Python|Django|Spring|Ubuntu|Debian|Android|iOS|Apache|OpenSSH|PHP|Jenkins|GitLab|Chrome|Firefox|Edge|Safari|Opera)\s+v?\s*$/i.test(before)
         || /^(?:[rpb]\d+(?:[_-](?:stable|release|build)\w*)?|[-_](?:stable|release|build|rc\d+|beta\d*|alpha\d*))(?![a-z0-9_])/i.test(after)

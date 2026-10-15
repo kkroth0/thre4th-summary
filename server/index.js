@@ -87,6 +87,7 @@ import { createFeedCache, createFeedCollector, canonicalArticleUrl, singleFlight
 import { collectArticleTexts } from './articleCollector.js';
 import { enrichFeedItemsAsync, mergeIocEvidence, applyVulnerabilityContext, EXTRACTION_VERSION } from './feedEnrichment.js';
 import { createFeedExtractionCache } from './feedExtractionCache.js';
+import { repairNewsVersionLists } from './repairNewsVersionLists.js';
 import { createStoryStore } from './newsStoryStore.js';
 import { createNewsArchiveStore } from './newsArchiveStore.js';
 import { durableArticleCache } from './newsPersistence.js';
@@ -1425,6 +1426,12 @@ const newsQualityReady=(async()=>{if (process.env.NODE_ENV !== 'test') try {
             await iocIntelligence.ingestNews(changed);
         }
         iocIntelligence.setState('news-table-v13',{at:new Date().toISOString(),revised:changed.length});
+    }
+    if(!iocIntelligence.state('news-version-lists-v1')){
+        const {updates,...stats}=await repairNewsVersionLists({archive:newsArchiveStore,stories:newsStoryStore,bodyFor:link=>articleCollectionCache.get(link)?.text||''});
+        // Mark only after the replacement observations have been persisted.
+        await iocIntelligence.ingestNews(newsArchiveStore.all());
+        iocIntelligence.setState('news-version-lists-v1',{at:new Date().toISOString(),...stats});
     }
 } catch (error) { console.error('news evidence review failed:', error.message); throw error; }})();
 void newsQualityReady.catch(()=>{});

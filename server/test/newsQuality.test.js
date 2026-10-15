@@ -37,6 +37,14 @@ test('a true IP remains when also mentioned independently of a software version'
   assert.deepEqual(reviewNewsEvidence({title:'Version 2.0.0.39. IOC 2.0.0.39',iocs:{ips:['2.0.0.39']}}).iocs.ips,['2.0.0.39']);
 });
 
+test('Ivanti affected/fixed version lists do not become IP infrastructure, including lists across lines',()=>{
+  const text='Ivanti Connect Secure versions 25.1.1.1 and prior, 25.1.2.2 and prior, 25.1.3.0, and 25.1.1.2 are affected.\nC2 IP: 108.165.147.64';
+  assert.deepEqual(extractIOCs(text).ips,['108.165.147.64']);
+  assert.deepEqual(extractIOCs('Fixed versions:\n25.1.1.1\n25.1.2.2\n25.1.3.1').ips,[]);
+  assert.deepEqual(extractIOCs(text+'\nSeparately, IOC: 25.1.2.2:443').ips,['108.165.147.64','25.1.2.2']);
+  assert.deepEqual(extractIOCs('Version 25.1.1.1 is affected. Attackers connect to 25.1.2.2.').ips,['25.1.2.2']);
+});
+
 test('inline table markup and old concatenated labels do not hide IPs or corrupt endpoints',()=>{
   const text=extractReadableText('<article><table><tr><td><strong>204.8.96.109</strong>Tor exit</td><td><code>/fz/x.js</code>Browser-based payload</td></tr></table></article>');
   assert.match(text,/204\.8\.96\.109 Tor exit/);assert.match(text,/\/fz\/x\.js Browser-based/);
