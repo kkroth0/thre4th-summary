@@ -1361,6 +1361,14 @@ const articleCollectionCache = createFeedCache({ directory: path.join(__dirname,
 // caches without issuing hundreds of historical requests on startup.
 const newsQualityReady=(async()=>{if (process.env.NODE_ENV !== 'test') try {
     await new Promise(resolve=>setImmediate(resolve));
+    if (!iocIntelligence.state('phishing-body-evidence-recovery-v1')) {
+        let backup = {};
+        try { backup = JSON.parse(fs.readFileSync(path.join(__dirname, '.news-quality-v16.bak.json'), 'utf8')); } catch { /* optional prior evidence */ }
+        const retained = [...newsStoryStore.all().flatMap(story => story.sources), ...(backup.archive || []), ...(backup.stories || []).flatMap(story => story.sources || [])];
+        writeJsonAtomic(path.join(__dirname, '.news-phishing-evidence-recovery.bak.json'), { archive: newsArchiveStore.all() });
+        const recovered = newsArchiveStore.restorePhishingEvidence(retained);
+        iocIntelligence.setState('phishing-body-evidence-recovery-v1', { at: new Date().toISOString(), recovered });
+    }
     newsArchiveStore.reclassifyPhishing({ bodyFor: link => articleCollectionCache.get(link)?.text || '' });
     if(!iocIntelligence.state('news-quality-v16')){
         writeJsonAtomic(path.join(__dirname,'.news-quality-v16.bak.json'),{archive:newsArchiveStore.all(),stories:newsStoryStore.all()});

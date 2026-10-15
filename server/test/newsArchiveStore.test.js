@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { createNewsArchiveStore } from '../newsArchiveStore.js';
+import { analyzePhishing } from '../phishingIntel.js';
 
 const writeJsonAtomic = (filePath, value) => fs.writeFileSync(filePath, JSON.stringify(value));
 const tempFile = () => path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'news-archive-')), '.news-archive.json');
@@ -11,6 +12,17 @@ const tempFile = () => path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'news-arc
 const row = (over = {}) => ({
     link: 'https://a.example/1', title: 'T', source: 'Feed', pubDate: '2026-08-01T00:00:00.000Z',
     categories: ['Ransomware'], primaryCategory: 'Ransomware', ...over,
+});
+
+test('recovery restores original body evidence only for the same publication revision and writes atomically', () => {
+    const source = row({ contentHash: 'same', description: 'Research summary', phishingIntel: analyzePhishing({ bodyText: 'Attackers use ClickFix phishing to steal credentials.' }) });
+    let fail = false;
+    const initial = [row({ contentHash: 'same', description: 'Research summary', phishingIntel: analyzePhishing({ title: 'Research findings' }) }), row({ link: 'https://a.example/changed', contentHash: 'new' })];
+    const store = createNewsArchiveStore({ filePath: 'unused', readFileSync: () => JSON.stringify(initial), writeJsonAtomic: () => { if (fail) throw Error('disk'); } });
+    fail = true; assert.throws(() => store.restorePhishingEvidence([source]), /disk/); assert.equal(store.all()[0].phishingIntel.detected, false);
+    fail = false; assert.equal(store.restorePhishingEvidence([source, { ...source, link: 'https://a.example/changed', contentHash: 'old' }]), 1);
+    assert.equal(store.all()[0].phishingIntel.detected, true); assert.ok(store.all()[0].phishingIntel.evidence.some(e => e.field === 'body'));
+    assert.equal(store.all()[1].phishingIntel, undefined); assert.equal(store.restorePhishingEvidence([source]), 0);
 });
 
 test('phishing migration reclassifies cached body, removes generic labels and preserves history', () => {

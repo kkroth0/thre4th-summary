@@ -16,6 +16,26 @@ export function createNewsArchiveStore({ filePath, readFileSync, writeJsonAtomic
     return {
         all: () => rows,
         size: () => rows.length,
+        /** Recover retained body evidence for the same publication revision. */
+        restorePhishingEvidence(candidates) {
+            const byLink = new Map();
+            for (const source of candidates || []) {
+                if (source?.phishingIntel?.version !== PHISHING_VERSION || !source.phishingIntel.detected || !source.phishingIntel.evidence?.some(e => e.field === 'body')) continue;
+                const previous = byLink.get(source.link);
+                if (!previous || source.phishingIntel.evidence.length > previous.phishingIntel.evidence.length) byLink.set(source.link, source);
+            }
+            let changed = 0;
+            const next = rows.map(row => {
+                const source = byLink.get(row.link);
+                const sameRevision = source && (row.contentHash && source.contentHash ? row.contentHash === source.contentHash : row.title === source.title && row.pubDate === source.pubDate && (row.description || row.text || '') === (source.description || source.text || ''));
+                if (!sameRevision || row.phishingIntel?.evidence?.some(e => e.field === 'body')) return row;
+                const categories = [...new Set([...(row.categories || []), 'Phishing'])];
+                changed++;
+                return { ...row, phishingIntel: source.phishingIntel, phishingTechniques: source.phishingIntel.techniques, categories };
+            });
+            if (changed) { writeJsonAtomic(filePath, next); rows = next; }
+            return changed;
+        },
         /** Upsert extracted metadata without duplicating the publication. */
         add(items) {
             const next = [...rows];
