@@ -34,7 +34,7 @@ report.versionContexts=db.prepare("SELECT id,payload FROM news_documents WHERE k
     const saved=db.prepare('SELECT payload FROM news_body_versions WHERE link=? ORDER BY collected DESC,rowid DESC LIMIT 1').get(record.id);
     const body=saved?JSON.parse(saved.payload).text||'':'';
     const text=[row.title,row.text||row.description,body].filter(Boolean).join('\n');
-    return {source:row.source,title:row.title,ips:row.iocs?.ips||[],matches:[...text.matchAll(/25\.1\.2\.2/g)].slice(0,8).map(match=>({version:isSoftwareVersionAt(text,match.index,match[0]),context:text.slice(Math.max(0,match.index-100),match.index+70)}))};
+    return {source:row.source,title:row.title,ips:row.iocs?.ips||[],matches:[...text.matchAll(/\b25\.1\.(?:1\.[12]|2\.2|3\.[01])\b/g)].filter(match=>!isSoftwareVersionAt(text,match.index,match[0])).slice(0,20).map(match=>({value:match[0],context:text.slice(Math.max(0,match.index-140),match.index+80)}))};
 });
 db.close();
 report.code = Object.fromEntries(['feedEnrichment.js','feedExtractionCache.js'].map(name => [name,createHash('sha256').update(fs.readFileSync(path.join(root,'server',name))).digest('hex')]));
