@@ -7,7 +7,7 @@ próprias condições de uso.
 
 ## Fluxo principal
 
-Feed → coleções → relatórios. CVEs, atores, ransomware e consulta de indicadores
+Feed → publicações salvas → relatórios. CVEs, atores, ransomware e consulta de indicadores
 fornecem contexto para a pesquisa. A navegação e a entrada do produto priorizam
 esse fluxo. A instância hospedada mantém os controles atuais de acesso por conta;
 a licença do código não concede acesso automático a ela ou às APIs de terceiros.
@@ -26,8 +26,11 @@ A implementação e seus limites estão em [ETL v2](./etl-v2.md). Esta etapa cor
 perda de evidências e inconsistências de agrupamento; a qualidade semântica ainda
 precisa ser medida em um conjunto de eventos reais rotulados.
 
-Não estão entregues: correlação semântica entre idiomas, registro global de
-entidades, grafo persistente de ameaças e integração com CTINexus.
+O registro de nomes/aliases de entidades e o espelhamento de notícias/stories
+no SQLite estão disponíveis, com isolamento das observações privadas e auditoria
+de igualdade; detalhes em [persistência e sugestões](./news-persistence-and-watch-suggestions.md).
+Não estão ativados: correlação semântica entre idiomas, grafo persistente de
+ameaças e integração com CTINexus. A avaliação semântica offline não muda os merges.
 
 ## Prioridade: o mesmo evento aparece em vários cards
 

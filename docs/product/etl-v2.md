@@ -166,10 +166,11 @@ Boletins de kernel também chegam individualmente à correlação no backend.
 | Local | Conteúdo | Limite |
 | --- | --- | --- |
 | `server/.feed-cache/rss/` | Itens parseados, validadores, snapshot do feed | 200 arquivos; 100 itens/fonte, 30 dias |
-| `server/.feed-cache/articles/` | Texto de artigos e tentativas | 1.500 arquivos; até 32 mil caracteres/corpo |
+| `server/.feed-cache/articles/` | Texto de artigos e tentativas | 1.500 arquivos; até 64 mil caracteres/corpo |
 | `server/.news-stories.json` | Histórias, evidências por fonte e aliases | 60 dias |
 | `server/.news-archive.json` | Metadados das publicações e extração | Sem poda automática |
 | `server/.news-monitoring.json` | Fornecedores selecionados por conta | Até 525 IDs/conta |
+| `server/.ioc-intelligence.sqlite` | Cópias auditadas de publicações/stories, revisões, corpos e nomes de entidades | Corpo por URL/hash; cache em disco pode ser podado |
 
 A seleção de fornecedores filtra a resposta do feed para cada conta, após a
 correlação. Basta uma fonte citar um fornecedor selecionado para manter a
@@ -178,12 +179,16 @@ o score. O deploy preserva essas preferências; o cache do navegador é separado
 por conta e seleção. Configuração em **Configurações → Monitoramento**.
 
 O arquivo permanente faz upsert por link, atualiza evidências/categorias e
-preserva `archivedAt`. O texto fica nos caches e não é entregue no payload
+preserva `archivedAt`. O texto fica nos caches e no histórico SQLite e não é entregue no payload
 normal do feed. Os caches não são um arquivo bruto permanente: respostas XML
 e HTML originais não são preservadas integralmente, e a poda remove cache antigo.
 O snapshot permite servir a última versão após reinício, sinalizada como stale,
 até a próxima coleta. Gravações usam arquivo temporário e rename; os diferentes
 arquivos do ETL não participam de uma transação única.
+O espelhamento de archive/stories no SQLite usa uma transação para os dois
+snapshots e compara IDs, aliases, payloads e hashes. As leituras principais
+continuam nos JSON enquanto a migração é auditada; ver
+[persistência e sugestões](./news-persistence-and-watch-suggestions.md).
 
 O workflow de deploy preserva `.feed-cache/` em envio e rollback. O diretório
 está no `.gitignore`. Considere os caches e o arquivo permanente no backup dos

@@ -57,6 +57,9 @@ das notícias e das observações de provedores. A origem e o escopo são preser
 globais/da própria conta. Alias compartilhado mantém múltiplos IDs possíveis;
 não mescla entidades, não atribui um ator ao IOC e não confere reputação maliciosa.
 O registro é histórico de nomes observados, não uma confirmação independente.
+Uma migração única também inclui os nomes já presentes em `entity_links` antes
+da criação do registro, mantendo o escopo da observação. Consultas agrupam por
+ID estável; variações de nome não criam uma nova identidade.
 
 ## Avaliação PT/EN antes de novas uniões
 
