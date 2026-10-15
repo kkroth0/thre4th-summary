@@ -404,6 +404,9 @@ function inVersionTable(text,index) {
 export function isSoftwareVersionAt(text, index, value) {
     const before = text.slice(Math.max(0, index - 80), index);
     const after = text.slice(index + value.length, index + value.length + 40);
+    // An explicit network field wins over a neighboring table column such as
+    // "Firmware" or "Version" after the address.
+    if(/\b(?:ip(?:v[46])?(?: address)?|ioc|c2)\s*[:=]\s*$/i.test(before))return false;
     return RE_VERSION_BEFORE.test(before)
         || followsVersionList(text.slice(Math.max(0,index-240),index))
         || inVersionTable(text,index)

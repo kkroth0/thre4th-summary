@@ -72,6 +72,7 @@ test('an alphanumeric firmware build anchors the rest of its version list',()=>{
   assert.deepEqual(extractIOCs(text).ips,[]);
   assert.deepEqual(extractIOCs(text+'\nC2 IP: 108.165.147.64\nIP IOC: 25.1.3.1:443').ips,['108.165.147.64','25.1.3.1']);
   assert.deepEqual(reviewNewsEvidence({title:'Gateway security update',description:text,iocs:{ips:['25.1.1.2','25.1.3.0','25.1.3.1']}}).iocs.ips,[]);
+  assert.deepEqual(extractIOCs('IPv4: 154.81.156.10 Firmware 22.8R2.5\nIP address: 108.165.147.64 Version 3').ips,['154.81.156.10','108.165.147.64']);
 });
 
 test('inline table markup and old concatenated labels do not hide IPs or corrupt endpoints',()=>{
