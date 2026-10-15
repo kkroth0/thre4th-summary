@@ -4,6 +4,22 @@ Proposta avaliada em 15/10/2026 contra `orgProfiles`, `orgThreatModel`,
 `weeklyReports` e o escopo das observações de `iocIntelligence`. Este documento
 registra decisões propostas; não habilita IA, canais de entrega nem novos acessos.
 
+## Prontidão de integração verificada em 15/10/2026
+
+- **IA já implementada:** análise sob demanda de notícias e narrativa da edição
+  diária via OpenRouter, além da geração de boletins pelo worker. A análise tem
+  fallback quando a chave/provedor não está disponível. Código implementado não
+  comprova que todas as chamadas em produção estejam usando um LLM.
+- **Semanal implementado:** ranking de candidatas, escolha humana e exportação;
+  isso ainda não é o agente editorial por cliente proposto neste documento.
+- **Piloto editorial dentro da plataforma:** a base de notícias, evidências e
+  seleção já permite avançar. Validar provedor, citações e custo em amostra antes
+  de ampliar o uso; não bloquear coleta ou correlação pela disponibilidade da IA.
+- **Telegram não implementado:** não há conector de envio, destinos configurados,
+  aprovação de entrega, outbox com idempotência nem registro de confirmação de envio.
+  Relatórios ainda usam conta/semana; separar por perfil/workspace antes de
+  atender clientes diferentes. Não habilitar envio externo a partir deste status.
+
 ## Direção
 
 Coleta e enriquecimento públicos compartilhados; cálculo local de relevância por

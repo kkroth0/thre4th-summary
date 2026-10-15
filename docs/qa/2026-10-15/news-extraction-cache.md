@@ -155,3 +155,59 @@ uma seção própria com todas as CVEs e links ao catálogo interno. O agrupamen
 a busca e as exportações continuam recebendo a lista completa. Nenhum LLM é
 necessário para listar as CVEs no drawer. Validação visual de produção registrada
 após o deploy desta revisão.
+
+Release da interface `b3d1c8b`: [CI 38793728563](https://github.com/kkroth0/thre4th-summary/actions/runs/38793728563)
+aprovada (741 backend, 255 frontend/marca), TypeScript/build aprovados e 16 avisos
+de lint existentes. [VPS 38794040214](https://github.com/kkroth0/thre4th-summary/actions/runs/38794040214)
+e [Cloudflare 38794039987](https://github.com/kkroth0/thre4th-summary/actions/runs/38794039987)
+concluídos. Na mesma busca de Patch Tuesday, a linha do SOCRadar com 22 CVEs
+passou de 1.320 para 165 px. A prévia exibiu três CVEs e +19; o drawer trouxe os
+22 links. Em cards, três links recolhido, 22 expandido e novamente três ao
+recolher. Evidências em `news-cve-preview-production.png` e
+`news-cve-details-production.png`.
+
+A conferência de busca por uma das CVEs ocultas detectou um problema anterior:
+o filtro só consultava título, resumo e fonte. A revisão `989f552` acrescenta a
+lista completa de CVEs extraídas à busca, sem mudar período/gravidade/fonte.
+Teste com a 22ª CVE fora do título e do resumo aprovado.
+
+## Segunda revisão da classificação de versões
+
+O marcador v1 concluiu às 19:30:50Z: sete publicações corrigidas, 17 menções
+retiradas e quatro eventos reconstruídos. A auditoria seguinte mostrou casos
+adicionais em tabelas e narrativa; não foi uma comprovação de limpeza completa.
+O inventário continuou com os 32 hashes de C2Agent, assim como histórico/evento.
+
+`0717dd6` cobre comparadores em português, versões alfanuméricas, colunas de
+versões em tabelas Markdown, listas de correções e referências narrativas ao
+mesmo número de versão. Uma ocorrência independente como IP/IOC, endpoint,
+linha de indicador ou conexão de rede continua válida. A classificação exige
+evidência explícita de versão, sem bloquear faixas numéricas inteiras.
+O marcador `news-version-lists-v2` reaplica a revisão ao histórico/eventos e ao
+inventário usando a mesma transação e preservando escopos das APIs.
+744 testes backend locais aprovados; o novo teste cobre a coleta seguinte com
+suplementos antigos, preservação dos 32 hashes e IP real.
+
+[Integridade 38819248330](https://github.com/kkroth0/thre4th-summary/actions/runs/38819248330),
+22:45:57Z, geração 44: 7.746 publicações e 5.241 eventos. Zero ausências,
+diferenças, fontes órfãs/duplicadas ou aliases conflitantes; cópia JSON igual.
+Esse resultado precede v2 e não comprova a precisão semântica das correlações.
+
+Release `989f552`: [CI 38820560778](https://github.com/kkroth0/thre4th-summary/actions/runs/38820560778)
+aprovada, 744 backend e 256 frontend/marca; TypeScript/build aprovados, sem erros
+de lint (16 avisos existentes). [VPS 38820799993](https://github.com/kkroth0/thre4th-summary/actions/runs/38820799993)
+e [Cloudflare 38820800053](https://github.com/kkroth0/thre4th-summary/actions/runs/38820800053)
+concluídos. Busca de CVE-2026-69435 passou a encontrar a publicação SOCRadar e a
+do Cisco Talos, ausentes antes; o drawer do Talos exibiu todos os 182 links.
+
+[Auditoria 38821161842](https://github.com/kkroth0/thre4th-summary/actions/runs/38821161842)
+confirmou v2 concluída às 23:01:11Z: 11 publicações, 30 menções retiradas e três
+eventos reconstruídos. Os 32 hashes de C2Agent permanecem no histórico, evento
+e inventário. A amostra consultada por presença de 25.1.2.2 ficou sem versões
+como IPs; isso não cobre todas as publicações que mencionam outras versões.
+O detalhe ampliado de Ivanti ainda exibiu 25.1.1.2 e 25.1.3.1 como evidências
+compartilhadas, exigindo comparar fontes do evento com o histórico mais amplo.
+
+[Integridade 38821157046](https://github.com/kkroth0/thre4th-summary/actions/runs/38821157046),
+23:04:50Z, geração 47: 7.746 publicações e 5.241 eventos, comparação canônica e
+backup iguais, sem ausências, diferenças, órfãos, duplicatas ou aliases conflitantes.
