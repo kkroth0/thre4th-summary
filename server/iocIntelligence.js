@@ -42,6 +42,13 @@ export function createIocIntelligence({filePath=':memory:',now=()=>Date.now()}={
     CREATE TABLE IF NOT EXISTS observation_revisions(id INTEGER PRIMARY KEY,observation TEXT NOT NULL,at TEXT NOT NULL,payload TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS intelligence_state(id TEXT PRIMARY KEY,value TEXT NOT NULL);`);
   const news = createNewsPersistence(db, { now });
+  // Existing provider/news links predate the name registry. Backfill their
+  // own scopes and IDs once, without changing links or promoting reputation.
+  if (!db.prepare("SELECT 1 FROM intelligence_state WHERE id='entity-name-backfill-v1'").get()) db.transaction(() => {
+    const names = db.prepare('SELECT DISTINCT o.scope,e.kind,e.entity id,e.name,o.provider source FROM entity_links e JOIN observations o ON o.id=e.observation').all();
+    for (const entity of names) news.registerEntities([entity], entity.scope, entity.source);
+    db.prepare('INSERT INTO intelligence_state VALUES(?,?)').run('entity-name-backfill-v1', JSON.stringify({ at: new Date(now()).toISOString(), names: names.length }));
+  })();
   const putIoc=db.prepare('INSERT OR IGNORE INTO indicators VALUES(?,?,?)');
   const putObservation=db.prepare('INSERT INTO observations VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET published=excluded.published,collected=excluded.collected,details=excluded.details');
   const clearLinks=db.prepare('DELETE FROM entity_links WHERE observation=?');

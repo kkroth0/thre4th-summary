@@ -3,6 +3,9 @@ import assert from 'node:assert/strict';
 import Database from 'better-sqlite3';
 import { createNewsPersistence, durableArticleCache } from '../newsPersistence.js';
 import { createIocIntelligence } from '../iocIntelligence.js';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 
 const publication = { link: 'https://research.example/report', title: 'Report', contentHash: 'original', phishingIntel: { detected: true, evidence: [{ field: 'body', snippet: 'original evidence' }] }, actors: [{ id: 'G1', name: 'One', aliases: ['Alias'] }], iocs: { hashes: ['a'.repeat(64)] } };
 const story = { id: 'ST1', aliases: ['ST0'], sources: [{ link: publication.link, iocs: publication.iocs }] };
@@ -60,4 +63,24 @@ test('entity aliases preserve ambiguity and private provider names never cross o
   assert.equal(store.news.entities({owner:'owner-one',query:'private alias'}).length,1);
   assert.equal(store.news.entities({owner:'owner-two',query:'private alias'}).length,0);
   store.close();
+});
+
+test('legacy provider links backfill into the name registry after restart with their original private scope', async () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(),'news-entity-backfill-')), filePath = path.join(directory,'inventory.sqlite');
+  let store = createIocIntelligence({filePath});
+  try {
+    await store.ingest([{value:'9.9.9.9',scope:'private-owner',provider:'OTX',malwares:[{id:'private-family',name:'PrivateFamily'}]}]);
+    store.close(); store = null;
+    const legacy = new Database(filePath);
+    legacy.exec("DELETE FROM intelligence_entity_names; DELETE FROM intelligence_state WHERE id='entity-name-backfill-v1'"); legacy.close();
+    store = createIocIntelligence({filePath});
+    assert.equal(store.news.entities({owner:'private-owner',query:'PrivateFamily'}).length,1);
+    assert.equal(store.news.entities({owner:'another-owner',query:'PrivateFamily'}).length,0);
+    assert.equal(store.state('entity-name-backfill-v1').names,1);
+    assert.equal(store.detail('9.9.9.9','private-owner').evidence[0].entities[0].id,'private-family');
+  } finally {
+    store?.close();
+    for (const suffix of ['', '-wal', '-shm']) fs.rmSync(filePath+suffix,{force:true});
+    fs.rmdirSync(directory);
+  }
 });
