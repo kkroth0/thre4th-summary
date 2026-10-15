@@ -25,6 +25,15 @@ test("keeps matching advisories from different months", () => {
   assert.deepEqual(result.map((item) => item.title), ["July item", "June item"]);
 });
 
+test('CVE search finds evidence extracted from the body, including CVEs outside the compact preview',()=>{
+  const cves=Array.from({length:22},(_,i)=>`CVE-2026-${69414+i}`);
+  const advisories=[{title:'Monthly security update',description:'Vendor fixes',source:'Research',pubDate:'2026-10-14',cves},
+    {title:'Unrelated security news',description:'Another topic',source:'Research',pubDate:'2026-10-14'}];
+  const result=filterNewsletterAdvisories(advisories,{search:'cve-2026-69435',severity:'all',kevOnly:false,sortByRelevance:false});
+  assert.deepEqual(result.map(item=>item.title),['Monthly security update']);
+  assert.deepEqual(result[0].cves,cves);
+});
+
 test("source filtra por fonte exata; 'all' não filtra nada", () => {
   const advisories = [
     { title: "A", description: "", source: "BleepingComputer", pubDate: "2026-07-01", severity: "High" },

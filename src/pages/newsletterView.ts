@@ -9,6 +9,7 @@ export interface NewsletterFilterItem {
   severity?: string;
   kev?: boolean;
   score?: number;
+  cves?: string[];
 }
 
 // "all" nunca filtra — as demais são uma janela em horas a partir de `now`.
@@ -63,7 +64,8 @@ export const filterNewsletterAdvisories = <T extends NewsletterFilterItem>(
   const filtered = advisories.filter((item) => {
     const matchesSearch = item.title.toLowerCase().includes(query)
       || item.description.toLowerCase().includes(query)
-      || item.source.toLowerCase().includes(query);
+      || item.source.toLowerCase().includes(query)
+      || (item.cves ?? []).some(cve => cve.toLowerCase().includes(query));
 
     if (!matchesSearch) return false;
     if (options.severity !== "all" && item.severity !== options.severity) return false;
