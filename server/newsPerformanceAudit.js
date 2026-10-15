@@ -16,6 +16,14 @@ report.cycles = db.prepare('SELECT at,status,payload FROM phishing_collection_cy
 report.generation = JSON.parse(db.prepare("SELECT payload FROM news_storage_state WHERE id='primary'").get()?.payload || 'null')?.generation;
 db.close();
 report.code = Object.fromEntries(['feedEnrichment.js','feedExtractionCache.js'].map(name => [name,createHash('sha256').update(fs.readFileSync(path.join(root,'server',name))).digest('hex')]));
+report.processes = execFileSync('ps',['-eo','pid=,ppid=,pcpu=,rss=,comm=,wchan='],{encoding:'utf8',timeout:10000}).trim().split('\n').flatMap(line=>{
+    const [pid,ppid,cpu,rss,command,wait]=line.trim().split(/\s+/);
+    return /^(node|npm|nodejs)/.test(command)?[{pid:Number(pid),ppid:Number(ppid),cpu:Number(cpu),rssKiB:Number(rss),command,wait}]:[];
+});
+report.diskCaches = Object.fromEntries(['rss','articles'].map(kind=>{
+    const times=fs.readdirSync(path.join(root,'server/.feed-cache',kind)).filter(file=>/^[a-f0-9]{64}\.json$/.test(file)).map(file=>fs.statSync(path.join(root,'server/.feed-cache',kind,file)).mtimeMs);
+    return [kind,{files:times.length,updatedLast5m:times.filter(time=>Date.now()-time<300000).length,latest:new Date(Math.max(...times)).toISOString()}];
+}));
 if (service) {
     try {
         const state = execFileSync('systemctl', ['show', service, '--property=ActiveState,ExecMainStartTimestamp'], { encoding: 'utf8', timeout: 10000, stdio: ['ignore','pipe','ignore'] });
