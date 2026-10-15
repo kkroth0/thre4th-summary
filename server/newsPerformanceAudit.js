@@ -16,6 +16,7 @@ report.cycles = db.prepare('SELECT at,status,payload FROM phishing_collection_cy
 report.generation = JSON.parse(db.prepare("SELECT payload FROM news_storage_state WHERE id='primary'").get()?.payload || 'null')?.generation;
 report.currentCycle = JSON.parse(db.prepare("SELECT value FROM intelligence_state WHERE id='news-current-cycle'").get()?.value || 'null');
 report.versionRepair = JSON.parse(db.prepare("SELECT value FROM intelligence_state WHERE id='news-version-lists-v1'").get()?.value || 'null');
+report.versionRepairV2 = JSON.parse(db.prepare("SELECT value FROM intelligence_state WHERE id='news-version-lists-v2'").get()?.value || 'null');
 report.versionSamples = db.prepare("SELECT payload FROM news_documents WHERE kind='archive' AND payload LIKE '%25.1.2.2%'").all().map(row=>JSON.parse(row.payload)).reduce((counts,row)=>{
     counts.publications++;
     counts.retainedIpMentions+=(row.iocs?.ips||[]).filter(ip=>['25.1.2.2','25.1.1.1','25.1.3.0','25.1.1.2','25.1.3.1'].includes(ip)).length;
@@ -29,7 +30,7 @@ report.c2Agent = db.prepare("SELECT kind,payload FROM news_documents WHERE paylo
 });
 report.c2AgentInventory = db.prepare("SELECT COUNT(DISTINCT o.indicator) hashes FROM observations o JOIN entity_links e ON e.observation=o.id JOIN indicators i ON i.id=o.indicator WHERE o.scope='global' AND e.kind='malware' AND e.name='C2Agent' AND i.type='hash'").get();
 const {isSoftwareVersionAt}=await import(pathToFileURL(path.join(root,'server/ctiIntel.js')));
-report.versionContexts=db.prepare("SELECT id,payload FROM news_documents WHERE kind='archive' AND payload LIKE '%25.1.2.2%'").all().map(record=>{
+report.versionContexts=db.prepare("SELECT id,payload FROM news_documents WHERE kind='archive' AND payload LIKE '%25.1.2.2%'").all().filter(record=>(JSON.parse(record.payload).iocs?.ips||[]).some(ip=>/^25\.1\./.test(ip))).map(record=>{
     const row=JSON.parse(record.payload);
     const saved=db.prepare('SELECT payload FROM news_body_versions WHERE link=? ORDER BY collected DESC,rowid DESC LIMIT 1').get(record.id);
     const body=saved?JSON.parse(saved.payload).text||'':'';
