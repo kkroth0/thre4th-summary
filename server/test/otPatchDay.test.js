@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { OT_CATALOG, OT_SOURCES, allowedOtDocument, createOtPatchDay, defaultOtMonth, matchOtAssets, mergeOtAdvisories, normalizeOtCsaf, parseCiscoOtFeed, parseOtRolie, parseRockwellOtIndex, parseSchneiderOtIndex, validOtMonth } from '../otPatchDay.js';
+import { identifyOtEquipment, OT_EQUIPMENT_TYPES } from '../otEquipment.js';
 
 const docUrl = 'https://raw.githubusercontent.com/cisagov/CSAF/develop/csaf_files/OT/white/2026/icsa-26-100-01.json';
 function csaf() { return {
@@ -119,9 +120,101 @@ test('daily source caching, single flight, persisted restart, stale fallback and
     assert.ok(result.sources.some(s => s.status === 'stale')); assert.equal(restart.query({ month: '2026-04' }).rows.length, 1);
 });
 test('catalog contains no installed firmware inventory or site-specific labels', () => {
-    assert.equal(OT_CATALOG.vendors.length, 18);
+    assert.equal(OT_CATALOG.vendors.length, 20);
     assert.equal(OT_CATALOG.vendors.filter(v => /rockwell|allen/i.test(v.vendor)).length, 1);
     assert.ok(OT_CATALOG.vendors.some(v => v.vendor === 'ABB' && v.review.some(m => m.includes('fabricante a confirmar'))));
     const data = JSON.stringify(OT_CATALOG);
     assert.doesNotMatch(data, /"firmware"|"client"|"cliente"|do R3|Raytek W[12]/i);
+});
+
+const siemensUrl = 'https://cert-portal.siemens.com/productcert/csaf/ssa-580366.json';
+const abbUrl = 'https://psirt.abb.com/csaf/2026/7paa025438.json';
+const vendorFeed = (source, id, url, updated = '2026-10-15T00:00:00Z') => ({ feed: { entry: [{ id, title: source, published: updated, updated, content: { src: url } }] } });
+
+test('Siemens and ABB ROLIE feeds preserve revisions and restrict documents to the originating manufacturer', () => {
+    const feed = vendorFeed('Siemens', 'SSA-580366', siemensUrl);
+    feed.feed.entry[0].published = '2025-01-01T00:00:00Z';
+    feed.feed.entry.push({ ...feed.feed.entry[0], id: 'bad', content: { src: docUrl } });
+    const rows = parseOtRolie(feed, 'siemens');
+    assert.equal(rows.length, 1); assert.equal(rows[0].source, 'siemens');
+    assert.ok(rows[0].published.startsWith('2025-01')); assert.ok(rows[0].updated.startsWith('2026-10'));
+    assert.equal(parseOtRolie(vendorFeed('ABB', '7paa025438', abbUrl), 'abb')[0].source, 'abb');
+    for (const url of [siemensUrl + '?download=other', siemensUrl.replace('cert-portal.siemens.com', 'cert-portal.siemens.com.evil.test'), 'https://cert-portal.siemens.com/private.json', 'https://psirt.abb.com/csaf/2026/../../../private.json']) assert.equal(allowedOtDocument(url), false);
+    assert.equal(allowedOtDocument(siemensUrl, 'abb'), false);
+    assert.throws(() => parseOtRolie({ feed: { entry: [] } }, 'siemens'));
+});
+
+test('Siemens product family differs from an exact model and partial product names do not match', () => {
+    const family = matchOtAssets({ vendors: ['Siemens AG'], products: [{ name: 'SIMATIC S7-1500 CPU with firmware < V3.1.7' }] })[0];
+    assert.equal(family.vendor, 'Siemens'); assert.equal(family.level, 'family'); assert.deepEqual(family.models, []);
+    const exact = matchOtAssets({ vendors: ['Siemens'], products: [{ name: 'CPU', modelNumbers: ['6ES7518-4AX00-1AB0'] }] })[0];
+    assert.equal(exact.level, 'model'); assert.ok(exact.models.includes('6ES7518-4AX00-1AB0'));
+    assert.equal(matchOtAssets({ vendors: ['Siemens'], products: [{ name: '6ES7518-4AX00-1AB09' }] })[0].level, 'vendor');
+});
+
+test('CSAF retains comparison operators, expands remediation groups and distinguishes mixed product status', () => {
+    const doc = csaf();
+    doc.product_tree.product_groups = [{ group_id: 'g', product_ids: ['affected', 'fixed'] }];
+    doc.vulnerabilities[0].remediations = [{ category: 'vendor_fix', details: 'Affected >= 1.0 < 2.0; update to >= 2.0', group_ids: ['g'] }];
+    doc.vulnerabilities.push({ cve: 'CVE-2026-12346', product_status: { known_affected: ['fixed'] } });
+    const row = normalizeOtCsaf(doc, 'cisa', docUrl);
+    assert.match(row.remediations[0].details, /< 2.0.*>= 2.0/);
+    assert.equal(row.remediations[0].products.length, 2);
+    assert.equal(row.products.find(p => p.id === 'fixed').status, 'mixed');
+    doc.vulnerabilities.push({ remediations: [{ category: 'none_available', details: 'No fix for this product' }] });
+    assert.equal(normalizeOtCsaf(doc, 'cisa', docUrl).partialFix, true);
+    doc.vulnerabilities = [{ cve: 'CVE-2026-12345', remediations: [{ category: 'none_available', details: 'Fix expected next week' }, { category: 'mitigation', details: 'Restrict access' }] }];
+    assert.equal(normalizeOtCsaf(doc, 'siemens', siemensUrl).patch, 'mitigation');
+});
+
+test('all manufacturers make progress, unchanged documents are reused and changed indexes use conditional requests', async () => {
+    let time = Date.parse('2026-10-16T12:00:00Z'), revision = '2026-10-15T00:00:00Z'; const calls = [];
+    const http = { get: async (url, options) => {
+        calls.push({ url, options });
+        const source = OT_SOURCES.find(s => s.url === url);
+        if (source?.id === 'cisa') return { status: 200, data: rolie(), headers: {} };
+        if (source?.id === 'siemens') return { status: 200, data: vendorFeed('Siemens', 'SSA-580366', siemensUrl, revision), headers: {} };
+        if (source?.id === 'abb') return { status: 200, data: vendorFeed('ABB', '7paa025438', abbUrl, revision), headers: {} };
+        if (source) throw { response: { status: 503 } };
+        if (url === siemensUrl && options.headers['If-None-Match']) return { status: 304, headers: {} };
+        const doc = csaf(); doc.document.tracking.id = url === siemensUrl ? 'SSA-580366' : url === abbUrl ? '7PAA025438' : 'ICSA-26-100-01';
+        doc.product_tree.branches[0].name = url === siemensUrl ? 'Siemens' : url === abbUrl ? 'ABB' : 'Schneider Electric';
+        return { status: 200, data: doc, headers: { etag: 'document-v1' } };
+    } };
+    const service = createOtPatchDay({ http, now: () => time, batchSize: 3 });
+    service.query({ month: '2026-10' }); await service.sync();
+    const result = service.query({ month: '2026-10' });
+    assert.equal(result.rows.length, 3); assert.equal(result.status.pending, 0);
+    assert.ok(result.rows.some(r => r.vendors.includes('Siemens'))); assert.ok(result.rows.some(r => r.vendors.includes('ABB')));
+    const count = calls.length; await service.sync(); assert.equal(calls.length, count);
+    time += 86400001; revision = '2026-10-16T00:00:00Z'; await service.sync();
+    assert.equal(calls.filter(c => c.url === siemensUrl).at(-1).options.headers['If-None-Match'], 'document-v1');
+    assert.equal(service.query({ month: '2026-10' }).status.pending, 0);
+});
+
+test('equipment explanations identify product roles without guessing an unknown model type', () => {
+    assert.ok(OT_EQUIPMENT_TYPES.every(t => t.description.length > 40 && t.patchContext.length > 40));
+    assert.deepEqual(identifyOtEquipment(['SIMATIC S7-1500']), ['plc']);
+    assert.deepEqual(identifyOtEquipment(['PanelView Plus 1000']), ['hmi']);
+    assert.deepEqual(identifyOtEquipment(['SCALANCE']), ['network']);
+    assert.deepEqual(identifyOtEquipment(['SCADAPack']), ['rtu']);
+    assert.deepEqual(identifyOtEquipment(['PCM600']), ['engineering']);
+    assert.deepEqual(identifyOtEquipment(['Unknown model 123']), []);
+    const data = createOtPatchDay().query({ month: '2026-10' });
+    assert.ok(data.catalog.find(v => v.vendor === 'Siemens').equipmentTypes.includes('plc'));
+    assert.ok(data.equipmentTypes.some(t => t.id === 'relay'));
+});
+
+test('large manufacturer indexes cannot starve other sources within a bounded batch', async () => {
+    const fetched = [];
+    const http = { get: async url => {
+        const source = OT_SOURCES.find(s => s.url === url);
+        if (source?.id === 'cisa') return { status: 200, headers: {}, data: { feed: { entry: Array.from({ length: 50 }, (_, i) => ({ id: `ICSA-26-100-${String(i + 1).padStart(2, '0')}`, updated: '2026-10-16T00:00:00Z', content: { src: docUrl.replace('01.json', `${String(i + 1).padStart(2, '0')}.json`) } })) } } };
+        if (source?.id === 'siemens') return { status: 200, headers: {}, data: vendorFeed('Siemens', 'SSA-580366', siemensUrl) };
+        if (source?.id === 'abb') return { status: 200, headers: {}, data: vendorFeed('ABB', '7paa025438', abbUrl) };
+        if (!source) fetched.push(url);
+        throw { response: { status: 503 } };
+    } };
+    const service = createOtPatchDay({ http, batchSize: 3 }); service.query({ month: '2026-10' }); await service.sync();
+    assert.equal(fetched.length, 3); assert.ok(fetched.includes(siemensUrl)); assert.ok(fetched.includes(abbUrl));
 });

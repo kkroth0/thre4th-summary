@@ -61,3 +61,14 @@ test('multiline source text is fully readable in continuation rows rather than c
   assert.ok(parts.length >= 4); assert.equal(parts.join(''), summary);
   assert.ok(JSON.stringify(wb.getWorksheet('Fontes e critérios')!.getSheetValues()).includes('Em atualização'));
 });
+
+test('OT report explains equipment roles and family matching without asserting an exact model or a complete fix', () => {
+  const advisory = row({ vendors: ['Siemens'], source: 'siemens', patch: 'available', partialFix: true, matches: [{ vendor: 'Siemens', level: 'family', models: [], families: ['SIMATIC S7-1500'] }], products: [{ id: 'p', name: 'CPU', vendor: 'Siemens', status: 'mixed' }] });
+  const assessment = assessOtPatch(advisory);
+  assert.deepEqual(assessment.modelMatches, []); assert.match(assessment.applicability, /Família de produto citada.*Conferir o modelo exato/);
+  assert.equal(assessment.patchLabel, 'Correção parcial publicada'); assert.match(assessment.action, /itens sem correção/);
+  const wb = buildNewsExcelWorkbook({ dataset: 'ot-patches', report: { equipmentTypes: [{ id: 'plc', name: 'CLP / PLC', nameEn: 'PLC', description: 'Controla máquinas e processos.', descriptionEn: 'Controls machines and processes.', patchContext: 'Conferir firmware e compatibilidade.' }], equipmentReference: 'https://csrc.nist.gov/pubs/sp/800/82/r3/final' }, range: { from: '2026-10-01', to: '2026-10-31' }, rows: [advisory] }, Excel);
+  assert.equal(wb.getWorksheet('Plano de ação')!.getCell('I6').value, 'Família de produto');
+  assert.equal(wb.getWorksheet('Produtos e versões')!.getCell('E6').value, 'Varia conforme a CVE');
+  assert.ok(JSON.stringify(wb.getWorksheet('Fontes e critérios')!.getSheetValues()).includes('Controla máquinas e processos.'));
+});

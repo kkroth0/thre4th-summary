@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import * as cheerio from 'cheerio';
 import axios from 'axios';
+import { identifyOtEquipment, OT_EQUIPMENT_REFERENCE, OT_EQUIPMENT_TYPES } from './otEquipment.js';
 
 export const OT_CATALOG = JSON.parse(fs.readFileSync(new URL('./otAssetCatalog.json', import.meta.url), 'utf8'));
 export const OT_SOURCES = [
@@ -9,9 +10,12 @@ export const OT_SOURCES = [
     { id: 'rockwell', name: 'Rockwell Automation', url: 'https://www.rockwellautomation.com/en-us/trust-center/security-advisories.html', coverage: 'Portal oficial: produtos, CVEs, correção e workaround.' },
     { id: 'cisco', name: 'Cisco · CSAF', url: 'https://sec.cloudapps.cisco.com/security/center/csaf_20.xml', coverage: 'Feed recente do fabricante; não constitui arquivo histórico completo.' },
     { id: 'schneider', name: 'Schneider Electric · CSAF', url: 'https://www.se.com/.well-known/csaf/changes.csv', metadataUrl: 'https://www.se.com/.well-known/csaf/provider-metadata.json', coverage: 'Distribuição CSAF oficial: índice de revisões e arquivos JSON, independente do portal HTML.' },
+    { id: 'siemens', name: 'Siemens ProductCERT · CSAF', url: 'https://cert-portal.siemens.com/productcert/csaf/ssa-feed-tlp-white.json', coverage: 'Arquivo oficial de Security Advisories (SSA): publicações e revisões, produtos e versões, CVEs, correções e medidas compensatórias.' },
+    { id: 'abb', name: 'ABB PSIRT · CSAF', url: 'https://psirt.abb.com/csaf/abb-csaf-feed-tlp-white.json', coverage: 'Avisos oficiais ABB e B&R publicados no feed PSIRT: produtos afetados, versões corrigidas e restrições de atualização.' },
 ];
 const DAY = 86400000;
-const clean = value => String(value ?? '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+const DOCUMENT_VERSION = 2;
+const clean = value => String(value ?? '').replace(/\s+/g, ' ').trim();
 const unique = values => [...new Set(values.filter(Boolean))];
 const iso = value => { const time = Date.parse(value); return Number.isFinite(time) ? new Date(time).toISOString() : ''; };
 const keyText = value => clean(value).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
@@ -28,13 +32,15 @@ const cisaAdvisoryUrl = id => {
 };
 const vendorFor = name => OT_CATALOG.vendors.find(v => v.aliases.some(alias => keyText(name) === keyText(alias)))?.vendor || clean(name);
 function safeUrl(value, base) { try { const u = new URL(value, base); return u.protocol === 'https:' && !u.username && !u.password ? u.href : ''; } catch { return ''; } }
-export function allowedOtDocument(value) {
+export function allowedOtDocument(value, source) {
     try {
         const u = new URL(value);
-        if (u.protocol !== 'https:' || u.username || u.password || u.port) return false;
-        return u.hostname === 'raw.githubusercontent.com' && u.pathname.startsWith('/cisagov/CSAF/develop/csaf_files/OT/') && u.pathname.endsWith('.json')
-            || u.hostname === 'sec.cloudapps.cisco.com' && u.pathname.startsWith('/security/center/content/CiscoSecurityAdvisory/') && u.pathname.endsWith('.json')
-            || u.hostname === 'www.se.com' && /^\/\.well-known\/csaf\/20\d{2}\/(?:sevd|sesb)-20\d{2}-\d{3}-\d{2}\.json$/.test(u.pathname);
+        if (u.protocol !== 'https:' || u.username || u.password || u.port || u.search || u.hash) return false;
+        return (!source || source === 'cisa') && u.hostname === 'raw.githubusercontent.com' && u.pathname.startsWith('/cisagov/CSAF/develop/csaf_files/OT/') && u.pathname.endsWith('.json')
+            || (!source || source === 'cisco') && u.hostname === 'sec.cloudapps.cisco.com' && u.pathname.startsWith('/security/center/content/CiscoSecurityAdvisory/') && u.pathname.endsWith('.json')
+            || (!source || source === 'schneider') && u.hostname === 'www.se.com' && /^\/\.well-known\/csaf\/20\d{2}\/(?:sevd|sesb)-20\d{2}-\d{3}-\d{2}\.json$/.test(u.pathname)
+            || (!source || source === 'siemens') && u.hostname === 'cert-portal.siemens.com' && /^\/productcert\/csaf\/ssa-\d{6}\.json$/.test(u.pathname)
+            || (!source || source === 'abb') && u.hostname === 'psirt.abb.com' && /^\/csaf\/20\d{2}\/[a-z0-9-]{4,40}\.json$/.test(u.pathname);
     } catch { return false; }
 }
 
@@ -48,7 +54,11 @@ export function matchOtAssets(row) {
             const tokens = keyText(model).match(/[a-z0-9]+/g) || [];
             return tokens.join('').length >= 6 && new RegExp('(?<![a-z0-9])' + tokens.join('[\\s./-]*') + '(?![a-z0-9])').test(haystack);
         });
-        return { vendor: v.vendor, level: models.length ? 'model' : 'vendor', models };
+        const families = (v.families || []).filter(family => {
+            const tokens = keyText(family).match(/[a-z0-9]+/g) || [];
+            return tokens.length && new RegExp('(?<![a-z0-9])' + tokens.join('[\\s./-]*') + '(?![a-z0-9])').test(haystack);
+        });
+        return { vendor: v.vendor, level: models.length ? 'model' : families.length ? 'family' : 'vendor', models, ...(families.length ? { families } : {}) };
     });
 }
 
@@ -70,6 +80,7 @@ export function normalizeOtCsaf(input, source, url) {
         const p = r.full_product_name;
         if (p?.product_id) products.set(p.product_id, { id: p.product_id, name: clean(p.name), vendor: '' });
     }
+    const groups = new Map((input.product_tree?.product_groups || []).map(g => [g.group_id, g.product_ids || []]));
     const affected = new Set(), fixed = new Set(), remediations = [], cves = [], scores = [];
     for (const v of input.vulnerabilities || []) {
         if (/^CVE-\d{4}-\d{4,}$/i.test(v.cve || '')) cves.push(v.cve.toUpperCase());
@@ -80,7 +91,7 @@ export function normalizeOtCsaf(input, source, url) {
             const n = s.cvss_v3?.baseScore ?? s.cvss_v4?.baseScore ?? s.cvss_v2?.baseScore;
             if (Number.isFinite(n) && n >= 0 && n <= 10) scores.push(n);
         }
-        for (const r of v.remediations || []) remediations.push({ category: clean(r.category), details: clean(r.details), url: safeUrl(r.url), products: (r.product_ids || []).map(id => products.get(id)?.name || id), cve: v.cve || '' });
+        for (const r of v.remediations || []) remediations.push({ category: clean(r.category), details: clean(r.details), url: safeUrl(r.url), products: unique([...(r.product_ids || []), ...(r.group_ids || []).flatMap(id => groups.get(id) || [])]).map(id => products.get(id)?.name || id), cve: v.cve || '' });
     }
     const dedupRemediations = [...new Map(remediations.map(r => [JSON.stringify(r), r])).values()];
     const references = unique([url, ...(doc.references || []).map(r => safeUrl(r.url))]);
@@ -90,18 +101,21 @@ export function normalizeOtCsaf(input, source, url) {
     const mitigation = dedupRemediations.some(r => ['mitigation', 'workaround'].includes(r.category));
     return {
         id: clean(tracking.id), title: clean(doc.title), source, url: primaryUrl,
-        references: unique([primaryUrl, ...references]), vendors: unique(vendors.length ? vendors : [source === 'cisco' ? 'Cisco' : source === 'schneider' ? 'Schneider Electric' : doc.publisher?.name]),
+        references: unique([primaryUrl, ...references]), vendors: unique((vendors.length ? vendors : [({ cisco: 'Cisco', schneider: 'Schneider Electric', siemens: 'Siemens', abb: 'ABB' })[source] || doc.publisher?.name]).map(vendorFor)),
         published: iso(tracking.initial_release_date), updated: iso(tracking.current_release_date), revision: clean(tracking.version),
         summary: clean((doc.notes || []).find(n => n.category === 'summary')?.text), cves: unique(cves), cvss: scores.length ? Math.max(...scores) : null,
-        products: [...products.values()].map(p => ({ ...p, status: fixed.has(p.id) ? 'fixed' : affected.has(p.id) ? 'affected' : 'mentioned' })),
+        products: [...products.values()].map(p => ({ ...p, status: fixed.has(p.id) && affected.has(p.id) ? 'mixed' : fixed.has(p.id) ? 'fixed' : affected.has(p.id) ? 'affected' : 'mentioned' })),
         remediations: dedupRemediations, patch: fixes ? 'available' : mitigation ? 'mitigation' : 'unconfirmed',
+        partialFix: fixes && dedupRemediations.some(r => r.category === 'none_available'),
     };
 }
 
-export function parseOtRolie(input) {
-    if (!Array.isArray(input?.feed?.entry)) throw Error('Invalid CISA OT feed');
-    return input.feed.entry.map(e => ({ id: clean(e.id), title: clean(e.title), source: 'cisa', published: iso(e.published), updated: iso(e.updated), url: e.content?.src }))
-        .filter(e => e.id && e.updated && allowedOtDocument(e.url));
+export function parseOtRolie(input, source = 'cisa') {
+    if (!Array.isArray(input?.feed?.entry)) throw Error('Invalid OT ROLIE feed');
+    const rows = input.feed.entry.map(e => ({ id: clean(e.id), title: clean(e.title), source, published: iso(e.published), updated: iso(e.updated), url: e.content?.src }))
+        .filter(e => e.id && e.updated && allowedOtDocument(e.url, source));
+    if (!rows.length) throw Error('OT ROLIE feed contains no allowed advisories');
+    return [...new Map(rows.map(e => [e.id.toLowerCase(), e])).values()];
 }
 export function parseCiscoOtFeed(xml) {
     const $ = cheerio.load(xml, { xmlMode: true }); const rows = [];
@@ -131,7 +145,7 @@ export function parseSchneiderOtIndex(csv) {
     return rows;
 }
 function htmlText(value) {
-    return clean(value).replace(/&(?:#(x[0-9a-f]+|\d+)|([a-z]+));/gi, (whole, numeric, name) => {
+    return clean(String(value ?? '').replace(/<[^>]*>/g, ' ')).replace(/&(?:#(x[0-9a-f]+|\d+)|([a-z]+));/gi, (whole, numeric, name) => {
         if (numeric) { const n = numeric[0].toLowerCase() === 'x' ? parseInt(numeric.slice(1), 16) : Number(numeric); return n > 0 && n <= 0x10ffff ? String.fromCodePoint(n) : whole; }
         return ({ amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ', reg: '®', trade: '™', copy: '©' })[name.toLowerCase()] || whole;
     });
@@ -202,7 +216,7 @@ export function createOtPatchDay({ filePath, http = axios, now = () => Date.now(
         } catch { cacheError = true; }
     };
     const request = async (url, etag) => http.get(url, { timeout: 15000, maxRedirects: 0, maxContentLength: 12 * 1024 * 1024, headers: { 'User-Agent': 'ThreatSumm4ry OT Patch Day (+https://threatsumm4ry.app)', ...(etag ? { 'If-None-Match': etag } : {}) }, validateStatus: s => s === 200 || s === 304, responseType: 'text' });
-    const candidates = () => Object.entries(state.index).filter(([source]) => source !== 'rockwell').flatMap(([, entries]) => entries).filter(e => state.months.some(m => inMonth(e, m)) && (!state.documents[e.source + ':' + e.id] || state.documents[e.source + ':' + e.id].indexedUpdated !== e.updated));
+    const candidates = () => Object.entries(state.index).filter(([source]) => source !== 'rockwell').flatMap(([, entries]) => entries).filter(e => state.months.some(m => inMonth(e, m)) && (!state.documents[e.source + ':' + e.id]?.row || state.documents[e.source + ':' + e.id].indexedUpdated !== e.updated || state.documents[e.source + ':' + e.id].version !== DOCUMENT_VERSION));
     function sync() {
         if (flight) return flight;
         flight = (async () => {
@@ -215,7 +229,7 @@ export function createOtPatchDay({ filePath, http = axios, now = () => Date.now(
                     const response = await request(source.url, old.etag);
                     if (response.status !== 304) {
                         const body = typeof response.data === 'string' ? response.data : JSON.stringify(response.data);
-                        const parsed = source.id === 'cisa' ? parseOtRolie(JSON.parse(body)) : source.id === 'cisco' ? parseCiscoOtFeed(body) : source.id === 'rockwell' ? parseRockwellOtIndex(body) : parseSchneiderOtIndex(body);
+                        const parsed = ['cisa', 'siemens', 'abb'].includes(source.id) ? parseOtRolie(JSON.parse(body), source.id) : source.id === 'cisco' ? parseCiscoOtFeed(body) : source.id === 'rockwell' ? parseRockwellOtIndex(body) : parseSchneiderOtIndex(body);
                         state.index[source.id] = parsed;
                     }
                     state.sources[source.id] = { status: 'ok', checkedAt: new Date(now()).toISOString(), lastSuccess: new Date(now()).toISOString(), nextAt: now() + DAY, etag: response.headers?.etag || old.etag || '' };
@@ -224,15 +238,26 @@ export function createOtPatchDay({ filePath, http = axios, now = () => Date.now(
                 }
                 await new Promise(resolve => setImmediate(resolve));
             }
-            const queue = candidates().filter(e => (state.documents[e.source + ':' + e.id]?.retryAt || 0) <= now()).sort((a, b) => b.updated.localeCompare(a.updated)).slice(0, batchSize);
+            // Round-robin sources so a large CISA/Siemens revision cannot hold
+            // back all other manufacturers. Keep remote requests sequential.
+            const ready = candidates().filter(e => (state.documents[e.source + ':' + e.id]?.retryAt || 0) <= now());
+            const buckets = OT_SOURCES.map(s => ready.filter(e => e.source === s.id).sort((a, b) => b.updated.localeCompare(a.updated)));
+            const queue = [];
+            while (queue.length < batchSize && buckets.some(b => b.length)) for (const bucket of buckets) { if (bucket.length && queue.length < batchSize) queue.push(bucket.shift()); }
             for (const e of queue) {
                 changed = true;
                 const key = e.source + ':' + e.id, old = state.documents[key];
                 try {
-                    if (!allowedOtDocument(e.url)) throw Error('Disallowed CSAF URL');
-                    const response = await request(e.url);
+                    if (!allowedOtDocument(e.url, e.source)) throw Error('Disallowed CSAF URL');
+                    const response = await request(e.url, old?.version === DOCUMENT_VERSION ? old.etag : undefined);
+                    if (response.status === 304) {
+                        if (!old?.row) throw Error('CSAF 304 without cached document');
+                        state.documents[key] = { ...old, indexedUpdated: e.updated, fetchedAt: new Date(now()).toISOString(), error: false, retryAt: 0 };
+                        continue;
+                    }
                     const row = normalizeOtCsaf(typeof response.data === 'string' ? JSON.parse(response.data) : response.data, e.source, e.url);
-                    state.documents[key] = { row, indexedUpdated: e.updated, fetchedAt: new Date(now()).toISOString() };
+                    if (row.id.toLowerCase() !== e.id.toLowerCase()) throw Error('CSAF document ID differs from index');
+                    state.documents[key] = { row, version: DOCUMENT_VERSION, etag: response.headers?.etag || '', indexedUpdated: e.updated, fetchedAt: new Date(now()).toISOString() };
                 } catch { state.documents[key] = { ...old, retryAt: now() + 3600000, error: true }; }
                 await new Promise(resolve => setImmediate(resolve));
             }
@@ -250,7 +275,7 @@ export function createOtPatchDay({ filePath, http = axios, now = () => Date.now(
     }
     function query({ month = defaultOtMonth(new Date(now())), vendor = '', scope = 'all' } = {}) {
         if (!validOtMonth(month)) throw Error('Invalid month');
-        if (!state.months.includes(month)) state.months = [...state.months, month].slice(-24);
+        if (!state.months.includes(month)) { state.months = [...state.months, month].slice(-24); needsSave = true; }
         const native = (state.index.rockwell || []).filter(r => inMonth(r, month));
         const docs = Object.values(state.documents).flatMap(d => d.row && inMonth(d.row, month) ? [{ ...d.row, documentStale: Boolean(d.error) }] : [])
             .filter(row => row.source !== 'cisco' || /\b(?:Catalyst|Industrial|IOS XE)\b/i.test(row.title + ' ' + row.products.map(p => p.name).join(' ')));
@@ -264,7 +289,7 @@ export function createOtPatchDay({ filePath, http = axios, now = () => Date.now(
         rows.sort((a, b) => Number(b.kev) - Number(a.kev) || (b.cvss ?? -1) - (a.cvss ?? -1) || b.updated.localeCompare(a.updated));
         const pending = candidates().filter(e => inMonth(e, month));
         return {
-            month, rows, catalog: OT_CATALOG.vendors, sources: OT_SOURCES.map(s => ({ ...s, ...state.sources[s.id] })),
+            month, rows, catalog: OT_CATALOG.vendors.map(v => ({ ...v, equipmentTypes: identifyOtEquipment([...(v.models || []), ...(v.families || [])]) })), equipmentTypes: OT_EQUIPMENT_TYPES, equipmentReference: OT_EQUIPMENT_REFERENCE, sources: OT_SOURCES.map(s => ({ ...s, ...state.sources[s.id] })),
             status: { running: Boolean(flight), pending: pending.length, failed: pending.filter(e => state.documents[e.source + ':' + e.id]?.error).length, initialized: OT_SOURCES.every(s => state.sources[s.id]?.checkedAt), cadenceHours: 24, persistenceError: cacheError },
             summary: { advisories: rows.length, patches: rows.filter(r => r.patch === 'available').length, mitigations: rows.filter(r => r.patch === 'mitigation').length, kev: rows.filter(r => r.kev).length, matched: rows.filter(r => r.matches.some(m => m.level === 'model')).length },
         };

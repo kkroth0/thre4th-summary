@@ -4,6 +4,8 @@ export interface OtReportContext {
   domain?: 'ot' | 'ai';
   sources?: OtPatchData['sources'];
   status?: OtPatchData['status'];
+  equipmentTypes?: OtPatchData['equipmentTypes'];
+  equipmentReference?: string;
   filters?: { manufacturer: string; matching: string; remediation: string; query: string };
 }
 export interface OtAssessment {
@@ -31,11 +33,13 @@ export function assessOtPatch(input: Record<string, unknown> | OtPatchRow, domai
   const modelMatches = unique(row.matches.flatMap(m => m.level === 'model' ? m.models || [] : []));
   const shownModels = modelMatches.slice(0, 4).join(', ').slice(0, 350);
   const modelLabel = shownModels + (modelMatches.length > 4 || shownModels.length < modelMatches.slice(0, 4).join(', ').length ? '; lista completa em Produtos e versões e na base técnica' : '');
+  const families = unique(row.matches.flatMap(m => m.families || []));
   const signals = [kev ? 'Há sinal de exploração conhecida em pelo menos uma CVE do aviso.' : '', cvss != null ? `Maior CVSS informado: ${cvss.toFixed(1).replace('.', ',')}.` : 'Severidade técnica ainda não informada.', epss != null ? `Maior EPSS disponível: ${percentPt(epss)}.` : 'EPSS não disponível para esta seleção.', modelMatches.length ? `O catálogo contém modelo citado: ${modelLabel}.` : ''];
   let applicability = modelMatches.length ? `Modelo citado no catálogo: ${modelLabel}. Conferir a versão instalada e as condições do aviso antes de concluir aplicabilidade.`
-    : row.matches.length ? 'Correspondência somente de fabricante. O modelo e a versão instalados ainda precisam ser confrontados com o aviso.'
+    : families.length ? `Família de produto citada: ${families.join(', ')}. Conferir o modelo exato e a versão instalada antes de concluir aplicabilidade.`
+      : row.matches.length ? 'Correspondência somente de fabricante. O modelo e a versão instalados ainda precisam ser confrontados com o aviso.'
       : 'Sem correspondência explícita com o catálogo de referência. Verificar se os produtos afetados fazem parte do ambiente.';
-  const patchLabel = row.patch === 'available' ? 'Correção publicada' : row.patch === 'mitigation' ? 'Mitigação sem correção confirmada' : 'Correção não confirmada';
+  const patchLabel = row.patch === 'available' ? (row.partialFix ? 'Correção parcial publicada' : 'Correção publicada') : row.patch === 'mitigation' ? 'Mitigação sem correção confirmada' : 'Correção não confirmada';
   let action = row.patch === 'available' ? 'Validar produto e versão; homologar a atualização indicada pelo fabricante e planejar a janela operacional. Registrar a verificação após a mudança.'
     : row.patch === 'mitigation' ? 'Validar produto e versão; avaliar e aplicar as medidas compensatórias indicadas pelo fabricante. Acompanhar a disponibilização de correção.'
       : 'Confirmar o estado da correção no aviso oficial e avaliar as orientações de proteção disponíveis. Manter acompanhamento até haver uma solução validada.';
@@ -43,6 +47,7 @@ export function assessOtPatch(input: Record<string, unknown> | OtPatchRow, domai
     applicability = applicability.replace(/Modelo/g, 'Pacote').replace(/modelo/g, 'pacote').replace(/fabricante/g, 'ferramenta');
     action = action.replace(/fabricante/g, 'mantenedor').replace('janela operacional', 'implantação e reversão');
   }
+  if (row.partialFix) action += ' O aviso também contém itens sem correção: conferir a orientação de cada produto e CVE.';
   return { row, priority, priorityLabel: OT_PRIORITY_LABELS[priority], cvss, epss, kev, modelMatches, reason: signals.filter(Boolean).join(' ').replace(domain === 'ai' ? /modelo/g : /$^/, 'pacote'), applicability, action, patchLabel };
 }
 export function analyzeOtReport(rows: Record<string, unknown>[], context?: OtReportContext) {

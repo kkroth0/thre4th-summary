@@ -5,7 +5,7 @@ import { analyzeOtReport, OT_PRIORITY_CRITERIA, OT_PRIORITY_LABELS, percentPt } 
 
 const C = { ink: '14283F', blue: '2563EB', pale: 'EFF5FD', muted: '596B80', line: 'D9E2EE', white: 'FFFFFF', red: 'B42318', amber: '9A6700', green: '176B43' };
 const text = (v: unknown) => scrubXml(String(v ?? ''));
-const sourceName = (id: string) => ({ cisa: 'CISA OT · CSAF', rockwell: 'Rockwell Automation', cisco: 'Cisco · CSAF', schneider: 'Schneider Electric · CSAF' })[id] || id || 'Fonte não informada';
+const sourceName = (id: string) => ({ cisa: 'CISA OT · CSAF', rockwell: 'Rockwell Automation', cisco: 'Cisco · CSAF', schneider: 'Schneider Electric · CSAF', siemens: 'Siemens ProductCERT · CSAF', abb: 'ABB PSIRT · CSAF' })[id] || id || 'Fonte não informada';
 const safeLink = (url: unknown) => { try { const u = new URL(String(url)); return u.protocol === 'https:' || u.protocol === 'http:' ? u.href : ''; } catch { return ''; } };
 const split = (value: string, max = 1500) => {
   const result: string[] = []; let remaining = text(value);
@@ -156,7 +156,7 @@ export function addOtPatchClientSheets(wb: ExcelJS.Workbook, payload: NewsExcelP
   paragraph(executive, r, 'Critério de leitura.', 'As prioridades são uma regra editorial de triagem baseada em KEV, CVSS e EPSS; não representam risco confirmado do cliente nem prazos de SLA. O texto reflete o snapshot da exportação. Os trechos dos fabricantes são preservados no idioma original nas evidências técnicas.');
   executive.pageSetup.printArea = `B2:M${executive.rowCount}`;
 
-  const planRows = a.assessments.map((item, i) => ({ rank: i + 1, priority: item.priority, id: item.row.id, vendor: item.row.vendors.join('\n'), reason: item.reason, action: item.action, applicability: item.applicability, patch: item.patchLabel, match: item.modelMatches.length ? matchedLabel : item.row.matches.length ? 'Somente fabricante' : 'Não identificado', kev: item.kev ? 'Com sinal' : 'Sem sinal positivo', cvss: item.cvss, epss: item.epss, url: item.row.url }));
+  const planRows = a.assessments.map((item, i) => ({ rank: i + 1, priority: item.priority, id: item.row.id, vendor: item.row.vendors.join('\n'), reason: item.reason, action: item.action, applicability: item.applicability, patch: item.patchLabel, match: item.modelMatches.length ? matchedLabel : item.row.matches.some(m => m.families?.length) ? 'Família de produto' : item.row.matches.length ? 'Somente fabricante' : 'Não identificado', kev: item.kev ? 'Com sinal' : 'Sem sinal positivo', cvss: item.cvss, epss: item.epss, url: item.row.url }));
   const planSheet = readableTable(wb, 'Plano de ação', 'Ordem de triagem e decisões recomendadas para os avisos desta seleção.', [
     { key: 'rank', label: '#', width: 6 }, { key: 'priority', label: 'Prioridade', width: 12 }, { key: 'id', label: 'Aviso', width: 23 }, { key: 'vendor', label: ai ? 'Ferramenta' : 'Fabricante', width: 27 }, { key: 'reason', label: 'Justificativa', width: 56 }, { key: 'action', label: 'Ação recomendada', width: 58 }, { key: 'applicability', label: 'Validação de aplicabilidade', width: 54 }, { key: 'patch', label: 'Situação da correção', width: 27 }, { key: 'match', label: 'Catálogo', width: 22 }, { key: 'kev', label: 'Exploração conhecida', width: 22 }, { key: 'cvss', label: 'Maior CVSS', width: 13, format: '0.0' }, { key: 'epss', label: 'Maior EPSS', width: 14, format: '0.00%' }, { key: 'url', label: 'Fonte', width: 30 },
   ], planRows, false);
@@ -164,7 +164,7 @@ export function addOtPatchClientSheets(wb: ExcelJS.Workbook, payload: NewsExcelP
 
   readableTable(wb, 'Produtos e versões', 'Produtos mencionados nas fontes; versões instaladas no ambiente não foram avaliadas.', [
     { key: 'id', label: 'Aviso', width: 25 }, { key: 'vendor', label: ai ? 'Ferramenta' : 'Fabricante', width: 28 }, { key: 'product', label: 'Produto e versão informados', width: 83 }, { key: 'model', label: ai ? 'Pacotes' : 'Códigos de modelo', width: 40 }, { key: 'status', label: 'Estado na fonte', width: 24 }, { key: 'url', label: 'Referência', width: 30 },
-  ], a.assessments.flatMap(item => item.row.products.length ? item.row.products.map(p => ({ id: item.row.id, vendor: p.vendor || item.row.vendors.join(', '), product: p.name, model: (p.modelNumbers || []).join('\n'), status: p.status === 'affected' ? 'Afetado na fonte' : p.status === 'fixed' ? 'Versão corrigida' : 'Mencionado na fonte', url: item.row.url })) : [{ id: item.row.id, vendor: item.row.vendors.join(', '), product: 'Produto/versão não estruturados; consultar o aviso oficial.', model: '', status: 'Não informado', url: item.row.url }]));
+  ], a.assessments.flatMap(item => item.row.products.length ? item.row.products.map(p => ({ id: item.row.id, vendor: p.vendor || item.row.vendors.join(', '), product: p.name, model: (p.modelNumbers || []).join('\n'), status: p.status === 'affected' ? 'Afetado na fonte' : p.status === 'fixed' ? 'Versão corrigida' : p.status === 'mixed' ? 'Varia conforme a CVE' : 'Mencionado na fonte', url: item.row.url })) : [{ id: item.row.id, vendor: item.row.vendors.join(', '), product: 'Produto/versão não estruturados; consultar o aviso oficial.', model: '', status: 'Não informado', url: item.row.url }]));
   const remediationNames: Record<string, string> = { vendor_fix: 'Correção do fabricante', mitigation: 'Mitigação', workaround: 'Contorno', reference: 'Referência', no_fix_planned: 'Sem correção planejada', none_available: 'Solução não disponível' };
   readableTable(wb, 'Correções e evidências', 'Textos das fontes no idioma original. Trechos longos continuam nas linhas seguintes.', [
     { key: 'id', label: 'Aviso', width: 25 }, { key: 'cve', label: 'CVE', width: 24 }, { key: 'category', label: 'Tipo de informação', width: 28 }, { key: 'details', label: 'Texto da fonte', width: 100 }, { key: 'products', label: 'Produtos associados', width: 72 }, { key: 'url', label: 'Referência', width: 30 },
@@ -190,6 +190,14 @@ export function addOtPatchClientSheets(wb: ExcelJS.Workbook, payload: NewsExcelP
   }
   for (const [label, url] of [['EPSS · FIRST', 'https://www.first.org/epss/'], ['CVSS · FIRST', 'https://www.first.org/cvss/'], ['CISA · KEV', 'https://www.cisa.gov/known-exploited-vulnerabilities-catalog']]) {
     const cell = merged(sources, r++, 2, 13, { text: label, hyperlink: url }); cell.font = { name: 'Calibri', size: 11, color: { argb: C.blue }, underline: true }; sources.getRow(r - 1).height = 22;
+  }
+  if (!ai && payload.report?.equipmentTypes?.length) {
+    section(sources, ++r, 'Entenda os tipos de equipamentos'); r++;
+    for (const type of payload.report.equipmentTypes) r = paragraph(sources, r, type.name + '.', `${type.description} Na atualização: ${type.patchContext}`);
+    if (safeLink(payload.report.equipmentReference)) {
+      const cell = merged(sources, r++, 2, 13, { text: 'Referência: guia de segurança OT do NIST', hyperlink: safeLink(payload.report.equipmentReference) });
+      cellStyle(cell); cell.font = { ...cell.font, color: { argb: C.blue }, underline: true }; sources.getRow(r - 1).height = 24;
+    }
   }
   for (const item of a.assessments) {
     r = paragraph(sources, ++r, item.row.id + '.', `${sourceName(item.row.source)} · publicação ${item.row.published || 'não informada'} · última revisão ${item.row.updated || 'não informada'}.`);

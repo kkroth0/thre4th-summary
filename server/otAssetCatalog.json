@@ -7,11 +7,19 @@
       "aliases": [
         "ABB"
       ],
+      "families": ["System 800xA", "AC500", "AC 800PEC", "Automation Builder", "My Control System", "Edgenius", "PCM600", "Freelance", "Symphony Plus"],
       "models": [],
       "review": [
         "Descrição sem modelo validado",
         "XV-460-57TQB-1-10 (fabricante a confirmar)"
       ]
+    },
+    {
+      "vendor": "B&R Industrial Automation",
+      "aliases": ["B&R", "B&R Industrial Automation", "B&R Industrial Automation GmbH", "B&R Industrial Automation GmbH (ABB Group)"],
+      "families": ["Automation Studio", "Automation Runtime", "APROL", "mapp Services", "X20"],
+      "models": [],
+      "review": []
     },
     {
       "vendor": "Bihl+Wiedemann",
@@ -122,6 +130,7 @@
     },
     {
       "vendor": "Rockwell Automation",
+      "families": ["ControlLogix", "CompactLogix", "MicroLogix", "Micro800", "PanelView", "FactoryTalk", "PowerFlex", "Stratix"],
       "aliases": [
         "Rockwell",
         "Rockwell Automation",
@@ -248,6 +257,7 @@
     },
     {
       "vendor": "Schneider Electric",
+      "families": ["Modicon M340", "Modicon M580", "EcoStruxure", "PowerLogic", "Triconex", "SCADAPack", "Altivar"],
       "aliases": [
         "Schneider",
         "Schneider Electric"
@@ -288,6 +298,13 @@
       "review": [
         "Descrição sem modelo validado"
       ]
+    },
+    {
+      "vendor": "Siemens",
+      "aliases": ["Siemens", "Siemens AG", "Siemens ProductCERT"],
+      "families": ["SIMATIC", "SIMATIC S7-1200", "SIMATIC S7-1500", "SIPLUS", "WinCC", "PCS 7", "PCS neo", "TIA Portal", "SINUMERIK", "SINAMICS", "SCALANCE", "RUGGEDCOM", "SIPROTEC", "DIGSI", "SENTRON", "Desigo", "SINEC"],
+      "models": ["6ES7518-4AX00-1AB0", "6ES7518-4AX00-1AC0", "6ES7518-4FX00-1AB0", "6ES7518-4FX00-1AC0", "6AG1518-4AX00-4AC0"],
+      "review": []
     },
     {
       "vendor": "Spectrum",

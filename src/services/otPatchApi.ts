@@ -5,13 +5,17 @@ export interface OtPatchRow {
   patch: 'available' | 'mitigation' | 'unconfirmed'; kev: boolean; revised: boolean; stale: boolean;
   products: { id: string; name: string; vendor: string; status: string; modelNumbers?: string[] }[];
   remediations: { category: string; details: string; url: string; products: string[]; cve: string }[];
-  matches: { vendor: string; level: 'model' | 'vendor'; models: string[] }[];
+  matches: { vendor: string; level: 'model' | 'family' | 'vendor'; models: string[]; families?: string[] }[];
   cveSignals: { id: string; kev: boolean | null; epss: number | null; cvss: number | null }[];
   alsoReportedBy?: string[];
+  partialFix?: boolean;
 }
+export interface OtEquipmentType { id: string; name: string; nameEn: string; description: string; descriptionEn: string; patchContext: string }
 export interface OtPatchData {
   month: string; rows: OtPatchRow[];
-  catalog: { vendor: string; aliases: string[]; models: string[]; review: string[]; category?: string }[];
+  catalog: { vendor: string; aliases: string[]; models: string[]; review: string[]; category?: string; families?: string[]; equipmentTypes?: string[] }[];
+  equipmentTypes?: OtEquipmentType[];
+  equipmentReference?: string;
   categories?: string[];
   coverage?: { catalogTools: number; githubAdvisories: number; historicalImportPending: boolean; truncated: boolean; policy: string };
   sources: { id: string; name: string; url: string; coverage: string; status?: string; lastSuccess?: string; checkedAt?: string; error?: string }[];
