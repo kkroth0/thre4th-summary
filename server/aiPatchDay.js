@@ -145,7 +145,7 @@ export function createAiPatchDay({ filePath, http = axios, queryCatalog, now = (
                 summary: { advisories: rows.length, patches: rows.filter(r => r.patch === 'available').length, mitigations: 0, kev: rows.filter(r => r.kev).length, matched: rows.filter(r => r.matches.some(m => m.level === 'model')).length },
                 coverage: { initialFrom: state.since, categories: AI_CATEGORIES.length, catalogTools: AI_TOOL_CATALOG.length, githubAdvisories: state.rows.length, truncated: Boolean(local.truncated || state.truncated), historicalImportPending: Boolean(state.next || state.known.next), policy: 'Catálogo ampliável e descoberta por evidência. Produtos proprietários entram quando há aviso público nas fontes; presença no catálogo não garante cobertura integral.' },
             };
-            monthly.set(month, { at: now(), data }); if (monthly.size > 24) monthly.delete(monthly.keys().next().value);
+            monthly.set(month, { at: now() - (catalogError ? 285000 : 0), data }); if (monthly.size > 24) monthly.delete(monthly.keys().next().value);
             return data;
         })().finally(() => monthsInFlight.delete(month));
         monthsInFlight.set(month, pending); return pending;

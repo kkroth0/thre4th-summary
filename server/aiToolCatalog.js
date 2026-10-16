@@ -89,9 +89,12 @@ const bounded = (text, term) => {
     if (!patterns.has(term)) patterns.set(term, new RegExp('(^|[^a-z0-9])' + term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/[-_ ]/g, '[-_ ]') + '([^a-z0-9]|$)', 'i'));
     return patterns.get(term).test(text);
 };
-// FTS narrows dated candidates before the strict classifier. Do not match on
-// "AI" alone: it is both noisy and prohibitively expensive in a large corpus.
-export const AI_SEARCH_QUERY = [...new Set([...AI_TOOL_CATALOG.flatMap(t => [t.name, ...t.packages]).filter(t => t.length >= 4 && !['Continue','Claude','datasets','notebook','distributed','accelerate','cursor','streamlit'].includes(t)), 'MCP', 'LLM', 'large language model', 'generative AI', 'AI agent', 'model inference', 'retrieval augmented generation'])].map(t => '"' + t.replace(/"/g, '""') + '"').join(' OR ');
+// A single cheap prefilter precedes strict identity checks. A large FTS OR
+// intersection paged the production corpus heavily; date-index streaming keeps
+// the read bounded and avoids loading a second full-text posting list.
+const candidateTerms = [...new Set([...AI_TOOL_CATALOG.flatMap(t => [t.name, ...t.packages, t.repo]).filter(t => t.length >= 3 && !['Continue','Jan','datasets','notebook','distributed','accelerate'].includes(t)), 'MCP', 'LLM', 'large language', 'generative AI', 'AI agent', 'model inference', 'retrieval augmented'])];
+const candidatePattern = new RegExp(candidateTerms.sort((a, b) => b.length - a.length).map(t => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/[-_ ]/g, '[-_ ]')).join('|'), 'i');
+export const possibleAiTool = row => candidatePattern.test(`${row.product || ''} ${row.description || ''} ${row.references_json || ''}`);
 function affectedSubject(value) {
     const intro = value.trim().slice(0, 700)
         .replace(/^.*?\bvulnerability (?:was (?:found|identified|determined|discovered) )?in\s+/i, '')
