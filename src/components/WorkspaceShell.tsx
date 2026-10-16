@@ -36,7 +36,7 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
   const sections = [
     { label: pt ? 'Plataforma' : 'Platform', paths: ['/dashboard', '/analyzer', '/bulk', '/knowledge', '/relatorios'] },
     { label: pt ? 'Inteligência de ameaças' : 'Threat hunting', paths: ['/newsletter', '/atores', '/malware', '/cves', '/phishing-analyzer', '/domain-monitoring', '/attack-surface', '/threat-map'] },
-    { label: pt ? 'Correções' : 'Patches', paths: ['/patch-tuesday', '/sap-patch', '/ot-patch-day'] },
+    { label: pt ? 'Correções' : 'Patches', paths: ['/patch-tuesday', '/sap-patch', '/ot-patch-day', '/ai-patch-day'] },
   ];
   const toggle = () => setCollapsed(value => {
     try { localStorage.setItem(STORAGE_KEY, String(!value)); } catch { /* navigation remains usable without storage */ }

@@ -2,11 +2,13 @@ import type ExcelJS from 'exceljs';
 import { SHEET_TAB, scrubXml, styleHeaderRow, workbookMetadata } from './deckTemplate';
 import { bulkField, type BulkRow } from './bulkEnrichment';
 import { detectAnalyzerQueryType } from './iocExtract';
+import { addOtPatchClientSheets } from './otPatchClientWorkbook';
+import type { OtReportContext } from './otPatchIntelligence';
 
 type RecordRow = Record<string, unknown>;
 type Column = [string, string, number];
 type ExcelFactory = { Workbook: new () => ExcelJS.Workbook };
-export interface NewsExcelPayload { dataset: string; range: { from: string; to: string }; rows: RecordRow[]; generatedAt?: string }
+export interface NewsExcelPayload { dataset: string; range: { from: string; to: string }; rows: RecordRow[]; generatedAt?: string; report?: OtReportContext }
 const valueText = (value: unknown): string => value == null ? '' : typeof value === 'object'
   ? Array.isArray(value) && value.every(item => typeof item === 'string') ? value.join(' | ') : JSON.stringify(value)
   : String(value);
@@ -60,11 +62,15 @@ const common: Column[] = [['title', 'Publicação', 65], ['source', 'Fonte', 26]
 export function buildNewsExcelWorkbook(payload: NewsExcelPayload, ExcelLib: ExcelFactory) {
   if (!Array.isArray(payload.rows)) throw Error('Resposta de exportação inválida.');
   const wb = new ExcelLib.Workbook();
-  workbookMetadata(wb, payload.dataset === 'ot-patches' ? 'OT/ICS Patch Day' : 'Notícias e IOCs', payload.generatedAt || new Date().toISOString(), 'IOC, fontes, evidências');
+  const patchReport = ['ot-patches', 'ai-patches'].includes(payload.dataset), rawName = payload.dataset === 'ai-patches' ? 'AI Tools Patch Day' : 'OT ICS Patch Day';
+  workbookMetadata(wb, patchReport ? (payload.dataset === 'ai-patches' ? 'AI Tools Patch Day' : 'OT/ICS Patch Day') : 'Notícias e IOCs', patchReport ? payload.range.from : payload.generatedAt || new Date().toISOString(), 'IOC, fontes, evidências');
   const table = tables(wb), isIocs = payload.dataset === 'iocs';
-  if (payload.dataset === 'ot-patches') {
-    table('OT ICS Patch Day', [['id', 'Aviso', 25], ['title', 'Título', 65], ['vendors', 'Fabricantes', 30], ['products', 'Produtos e versões da fonte', 80], ['patchLabel', 'Situação da correção', 28], ['cvss', 'CVSS', 12], ['kev', 'KEV', 12], ['cves', 'CVEs', 35], ['cveSignals', 'Sinais do catálogo de CVEs', 60], ['published', 'Publicação inicial', 28], ['updated', 'Última revisão', 28], ['source', 'Fonte', 20], ['url', 'Aviso oficial', 65], ['remediations', 'Correções e mitigações', 100], ['matches', 'Correspondências do catálogo (não confirma exposição)', 60], ['references', 'Referências', 80], ['stale', 'Cache anterior', 15], ['sourceCoverage', 'Estado e cobertura das fontes na exportação', 80]], payload.rows);
-    table('Resumo', [['label', 'Campo', 40], ['value', 'Valor', 100]], [{ label: 'Período', value: `${payload.range.from} a ${payload.range.to}` }, { label: 'Avisos exportados', value: payload.rows.length }, { label: 'Aplicabilidade', value: 'Correspondência de modelo/fabricante não confirma a versão instalada nem vulnerabilidade. Validar o aviso original e planejar a atualização OT.' }]);
+  if (patchReport) {
+    addOtPatchClientSheets(wb, payload);
+    table(rawName, [['id', 'Aviso', 25], ['title', 'Título', 65], ['vendors', 'Fabricantes', 30], ['products', 'Produtos e versões da fonte', 80], ['patchLabel', 'Situação da correção', 28], ['cvss', 'CVSS', 12], ['kev', 'KEV', 12], ['cves', 'CVEs', 35], ['cveSignals', 'Sinais do catálogo de CVEs', 60], ['published', 'Publicação inicial', 28], ['updated', 'Última revisão', 28], ['source', 'Fonte', 20], ['url', 'Aviso oficial', 65], ['remediations', 'Correções e mitigações', 100], ['matches', 'Correspondências do catálogo (não confirma exposição)', 60], ['references', 'Referências', 80], ['stale', 'Cache anterior', 15], ['sourceCoverage', 'Estado e cobertura das fontes na exportação', 80]], payload.rows);
+    const raw = wb.getWorksheet(rawName)!;
+    raw.views = [{ state: 'frozen', ySplit: 1, xSplit: 1, showGridLines: false }];
+    raw.eachRow((row, i) => { row.eachCell(cell => { cell.font = { name: 'Calibri', size: 11, color: { argb: i === 1 ? 'FFFFFF' : '14283F' }, bold: i === 1 }; cell.alignment = { vertical: 'top', wrapText: true }; if (i === 1) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '14283F' } }; }); if (i === 1) row.height = 34; });
     return wb;
   }
   table(isIocs ? 'IOCs' : 'Publicações', isIocs

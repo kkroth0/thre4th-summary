@@ -57,6 +57,7 @@ import { detectQueryType, sanitizeQuery } from './iocValidation.js';
 import { isEarlyDoc, normalizeCvrf } from './patchTuesday.js';
 import { parseSapNotes, latestPatchMonth, monthUrl, summarize as summarizeSap, sortNotes as sortSapNotes } from './sapPatch.js';
 import { createOtPatchDay } from './otPatchDay.js';
+import { createAiPatchDay } from './aiPatchDay.js';
 import {
     asArray,
     buildThreatMapResponse,
@@ -3220,6 +3221,18 @@ async function queryVulnerabilities(method, params) {
     if (data?.status) data.status = vulnerabilityCatalog.status();
     return data;
 }
+const aiPatchDay = createAiPatchDay({
+    filePath: process.env.NODE_ENV === 'test' ? undefined : path.join(__dirname, '.feed-cache', 'ai-patch-day.json'),
+    queryCatalog: params => queryVulnerabilities('aiPatches', params),
+    token: process.env.NODE_ENV === 'test' ? '' : process.env.GITHUB_API_TOKEN || process.env.GITHUB_TOKEN || '',
+});
+app.get('/api/ai-patch-day', async (req, res) => {
+    const month = req.query.month;
+    if (month !== undefined && (typeof month !== 'string' || !/^20\d{2}-(0[1-9]|1[0-2])$/.test(month))) return res.status(400).json({ error: 'Mês inválido. Use AAAA-MM.' });
+    try { res.set('Cache-Control', 'no-store').json(await aiPatchDay.query({ month })); }
+    catch { res.status(503).json({ error: 'O AI Tools Patch Day está temporariamente indisponível.' }); }
+    if (process.env.NODE_ENV !== 'test') void aiPatchDay.sync();
+});
 
 const knowledgeAssistant = createKnowledgeAssistant({
     getNews: () => newsArchiveStore.all(),
@@ -4150,6 +4163,8 @@ app.listen(PORT, () => {
     const refreshOtPatches = () => { otPatchDay.query(); void otPatchDay.sync(); };
     setTimeout(refreshOtPatches, 120000).unref();
     setInterval(refreshOtPatches, 60000).unref();
+    setTimeout(() => { void aiPatchDay.sync(); }, 150000).unref();
+    setInterval(() => { void aiPatchDay.sync(); }, 60000).unref();
     // Prime the newsletter RSS feed cache and schedule background updates
     void iocIntelligence.ingestNews(newsArchiveStore.all()).catch(() => console.warn('IOC archive backfill failed'));
     setTimeout(() => { void runIntelligenceCollection(); }, 5000).unref();

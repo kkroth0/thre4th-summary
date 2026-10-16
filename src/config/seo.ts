@@ -144,6 +144,15 @@ export const PUBLIC_SEO_ROUTES: SeoRoute[] = [
     },
   },
   {
+    path: "/ai-patch-day",
+    priority: "0.7",
+    changefreq: "daily",
+    metadata: {
+      pt: { title: "AI Tools Patch Day | ThreatSumm4ry", description: "Avisos de segurança e correções de LLMs, agentes, MCP e ferramentas de IA, com versões afetadas, prioridades e relatório mensal." },
+      en: { title: "AI Tools Security Patch Day | ThreatSumm4ry", description: "Security advisories and fixes for LLMs, agents, MCP and AI tools, with affected versions, priorities and monthly intelligence reports." },
+    },
+  },
+  {
     path: "/sap-patch",
     priority: "0.7",
     changefreq: "monthly",

@@ -92,6 +92,7 @@ export function useNavCatalog() {
           icon: ShieldCheck,
         },
         { path: '/ot-patch-day', label: 'OT/ICS Patch Day', description: pt ? 'Correções industriais por mês e fabricante.' : 'Industrial fixes by month and manufacturer.', icon: CalendarCheck },
+        { path: '/ai-patch-day', label: 'AI Tools Patch Day', description: pt ? 'Segurança de LLMs, agentes, MCP e ferramentas de IA.' : 'LLM, agent, MCP and AI tool security.', icon: CalendarCheck },
       ],
     },
     {

@@ -64,6 +64,7 @@ const App = () => (
                 <Route path="/patch-tuesday" element={<PatchTuesday />} />
                 <Route path="/sap-patch" element={<SapPatch />} />
                 <Route path="/ot-patch-day" element={<OtPatchDay />} />
+                <Route path="/ai-patch-day" element={<OtPatchDay domain="ai" />} />
                 <Route path="/latam-threats" element={<Navigate to="/threat-map" replace />} />
                 <Route path="/threat-map" element={<ThreatMap />} />
 

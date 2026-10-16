@@ -77,5 +77,5 @@ test('OT Patch Day Excel retains versions, fixes, matches, source status and per
   assert.equal(sheet.rowCount, 2); assert.equal(sheet.getCell('B2').type, Excel.ValueType.String);
   const text = JSON.stringify(sheet.getSheetValues());
   for (const value of ['BMXNOE0110', 'Upgrade to 6.80', 'model', 'schneider', 'CVE-2025-6625']) assert.ok(text.includes(value));
-  assert.ok(JSON.stringify(restored.getWorksheet('Resumo')!.getSheetValues()).includes('2026-08-31'));
+  assert.ok(JSON.stringify(restored.getWorksheet('Fontes e critérios')!.getSheetValues()).includes('2026-08-31'));
 });

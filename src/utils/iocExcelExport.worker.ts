@@ -1,5 +1,6 @@
 import ExcelJS from 'exceljs';
 import { buildNewsExcelWorkbook, type NewsExcelPayload } from './iocExcelWorkbook';
+import { addOtPatchExcelCharts } from './otPatchExcelCharts';
 
 const scope = self as unknown as {
   onmessage: (event: MessageEvent<NewsExcelPayload>) => void;
@@ -8,7 +9,8 @@ const scope = self as unknown as {
 scope.onmessage = async event => {
   try {
     const workbook = buildNewsExcelWorkbook(event.data, ExcelJS);
-    const bytes = new Uint8Array(await workbook.xlsx.writeBuffer());
+    let bytes = new Uint8Array(await workbook.xlsx.writeBuffer());
+    if (['ot-patches', 'ai-patches'].includes(event.data.dataset)) bytes = await addOtPatchExcelCharts(bytes, event.data);
     scope.postMessage({ buffer: bytes.buffer }, [bytes.buffer]);
   } catch (error) {
     scope.postMessage({ error: error instanceof Error ? error.message : 'Não foi possível gerar o arquivo Excel.' });
