@@ -91,7 +91,7 @@ export function createTelegramIntegration({ filePath = ':memory:', http, encrypt
             .run(+value.aiEnabled, +value.dailyEnabled, value.dailyHour, now(), String(owner));
         return status(owner);
     }
-    function authorize(owner, until) { db.prepare('UPDATE telegram_connections SET access_until=? WHERE owner=?').run(Number(until) || 0, String(owner)); }
+    function authorize(owner, until) { const expires = Number(until) || 0; db.prepare('UPDATE telegram_connections SET access_until=? WHERE owner=? AND access_until<>?').run(expires, String(owner), expires); }
     function validWebhook(botId, secret) {
         if (!/^\d{5,16}$/.test(String(botId)) || typeof secret !== 'string' || secret.length > 256) return false;
         const row = db.prepare('SELECT secret_hash FROM telegram_connections WHERE bot_id=?').get(String(botId));

@@ -32,6 +32,12 @@ Token cifrado com a chave-mestra existente; nunca retorna ao navegador.
 - /ioc valor: observações públicas e da própria conta, referências e entidades,
   sem chamar novamente VT/OTX/AbuseIPDB/etc.
 - /ator nome, /malware nome: entidades reconhecidas e evidências por fonte.
+- Rótulos de malware exatamente iguais reúnem os IDs das fontes na consulta,
+  com IOCs/referências deduplicados; não mescla identidades no banco. Variantes
+  ELF/Windows/etc. com nomes distintos permanecem separadas. Atores priorizam
+  um match único do catálogo; ambiguidade oferece /ator id:... ou /malware
+  id:..., sem unir atores por nome compartilhado. Busca agrupada de evidências
+  usa um único filtro SQL por conjunto de IDs e mantém o escopo da conta.
 - /cve identificador: catálogo local de vulnerabilidades.
 - /status: contagens e última sincronização. Perguntas sobre malwares/atores
   mais citados/recentes produzem um ranking local das menções na semana.

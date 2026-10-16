@@ -13,6 +13,20 @@ const matchActors=text=>/lazarus/i.test(text)?[actor]:[];
 const matchMalware=text=>/vidar/i.test(text)?[{id:'win.vidar',name:'Vidar'}]:[];
 const tf={query_status:'ok',data:[{id:'123',ioc:'46.101.130.1:443',ioc_type:'ip:port',malware:'win.vidar',malware_printable:'Vidar',first_seen:'2026-10-12 12:00:00 UTC',tags:['Lazarus'],reporter:'AnotherActor'}]};
 
+test('batched entity evidence deduplicates source observations, preserves owner scope and rejects empty ID filters', async()=>{
+  const store=createIocIntelligence({now});
+  await store.ingest([{value:'8.8.8.8',provider:'OTX',externalId:'shared',link:'https://otx.alienvault.com/pulse/shared',malwares:[{id:'one',name:'Mirai'},{id:'two',name:'Mirai'}]},
+    {value:'9.9.9.9',provider:'OTX',externalId:'private',link:'https://otx.alienvault.com/pulse/private',scope:'other',malwares:[{id:'two',name:'Mirai'}]}]);
+  const rows=store.publications({owner:'me',kind:'malware',ids:['one','two']});
+  assert.equal(rows.length,1);assert.deepEqual(rows[0].iocs.ips,['8.8.8.8']);
+  assert.deepEqual(store.publications({owner:'me',kind:'malware',ids:[]}),[]);
+  store.news.registerEntities([{kind:'actor',id:'canonical',name:'Catalog Actor'}],'global','catalog');
+  store.news.registerEntities([{kind:'actor',id:'private-actor',name:'Private Actor'}],'other','OTX');
+  assert.equal(store.news.entities({owner:'me',kind:'actor',id:'canonical'})[0].catalogued,1);
+  assert.equal(store.news.entities({owner:'me',kind:'actor',id:'private-actor'}).length,0);
+  store.close();
+});
+
 test('evidence pagination preserves every record and excludes other accounts',async()=>{
   const store=createIocIntelligence({now});
   await store.ingest(Array.from({length:205},(_,i)=>({value:'46.101.130.1',provider:'news',externalId:String(i)})));

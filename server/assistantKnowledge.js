@@ -6,7 +6,13 @@ const safeUrl = value => { try { const u = new URL(value); return /^https?:$/.te
 const clean = (value, max = 700) => String(value || '').replace(/[\u0000-\u001f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, max);
 const stampDate = value => new Date(value).toISOString();
 // Editorial freshness requires a publication date, not a first-collected date.
-const editorialCandidate = row => row.dateInferred !== true && row.securityRelevant !== false;
+const editorialCandidate = row => row.dateInferred !== true && row.publicationDateBasis !== 'collected' && row.securityRelevant !== false;
+const sourceDate = row => {
+    const collected = row.dateInferred === true || row.publicationDateBasis === 'collected';
+    const label = collected ? 'Coleta' : row.publicationDateBasis === 'updated' ? 'Atualização' : 'Publicação';
+    const dayOnly = !collected && (row.publicationTimeKnown === false || /^\d{4}-\d{2}-\d{2}$/.test(row.pubDate));
+    return label + ' ' + (dayOnly ? String(row.pubDate).slice(0, 10) + ' · horário não informado' : new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Fortaleza', dateStyle: 'short', timeStyle: 'short' }).format(new Date(row.pubDate)));
+};
 const editorialKey = row => {
     const focus = [...new Set((String(row.title || '').match(/CVE-\d{4}-\d{4,}/gi) || row.topicCves || []).map(id => id.toUpperCase()))].sort();
     return row.storyId ? row.storyId + (focus.length ? ':' + focus.join(',') : '') : row.link;
@@ -84,11 +90,17 @@ export function createKnowledgeAssistant({ getNews, getRevision = () => '', getI
         if (['actor', 'malware'].includes(request.kind)) {
             const entities = getEntities(owner, request.kind, request.query);
             const exact = entities.filter(row => [row.name, ...(row.aliases || [])].some(name => fold(name) === fold(request.query)));
-            const found = exact.length === 1 ? exact[0] : entities.length === 1 ? entities[0] : null;
-            if (!found) return { text: entities.length ? 'Mais de uma entidade encontrada. Refine a consulta:\n' + entities.slice(0, 8).map(row => row.name).join('\n') : 'Entidade não encontrada na base salva. O reconhecimento depende dos nomes e aliases cadastrados.' };
-            const evidence = getEntityEvidence(owner, request.kind, found.id);
+            const catalogued = exact.filter(row => row.catalogued);
+            const sameMalwareLabel = request.kind === 'malware' && exact.length > 1 && exact.every(row => fold(row.name) === fold(request.query));
+            const found = catalogued.length === 1 ? catalogued[0] : sameMalwareLabel ? exact[0] : exact.length === 1 ? exact[0] : entities.length === 1 ? entities[0] : null;
+            if (!found) return { text: entities.length ? 'Mais de uma entidade encontrada. Consulte um ID explícito:\n' + entities.slice(0, 8).map(row => row.name + '\n/' + (request.kind === 'actor' ? 'ator' : 'malware') + ' id:' + row.id).join('\n\n') : 'Entidade não encontrada na base salva. O reconhecimento depende dos nomes e aliases cadastrados.' };
+            const equivalentIds = sameMalwareLabel ? [...new Set(exact.map(row => row.id))] : [found.id];
+            const evidence = getEntityEvidence(owner, request.kind, found.id, { equivalentIds });
+            const variants = request.kind === 'malware' ? [...new Set(entities.filter(row => /\s*\((?:ELF|Windows|Linux|Android|OS ?X|macOS)\)\s*$/i.test(row.name) && fold(row.name.replace(/\s*\([^)]*\)\s*$/, '')) === fold(found.name)).map(row => row.name))] : [];
             return { text: found.name + '\nIPs: ' + evidence.counts.ips + ' · Domínios: ' + evidence.counts.domains + ' · SHA256: ' + evidence.counts.hashes
-                + ' · Publicações/referências: ' + evidence.counts.posts + '\nMenções e vínculos das fontes, sem inferir autoria por IP compartilhado.\n\n'
+                + ' · Publicações/referências: ' + evidence.counts.posts + (equivalentIds.length > 1 ? '\nMesmo rótulo de malware em ' + equivalentIds.length + ' IDs de fonte; indicadores deduplicados.' : '')
+                + (variants.length ? '\nVariantes separadas: ' + variants.join(', ') + '. Consulte /malware seguido do nome completo.' : '')
+                + '\nMenções e vínculos das fontes, sem inferir autoria por IP compartilhado.\n\n'
                 + evidence.publications.slice(0, 4).map(row => clean(row.title, 180) + '\n' + safeUrl(row.link)).join('\n\n'), aiUsed: false };
         }
         if (request.kind === 'cve') {
@@ -131,7 +143,7 @@ export function createKnowledgeAssistant({ getNews, getRevision = () => '', getI
         const refs = selected.map((row, i) => ({ id: 'N' + (i + 1), row })).filter(row => used.has(row.id));
         return { text: (request.kind === 'briefing' ? 'Briefing · ' + (request.days === 7 ? 'últimos 7 dias' : 'últimas 24 horas') : 'Consulta à base salva')
             + '\n' + (aiUsed ? 'Síntese por IA com fontes.' : aiFallback ? 'Resumo local; IA indisponível nesta consulta.' : 'Resumo local com fontes.')
-            + '\n\n' + bullets.join('\n\n') + '\n\nFontes:\n' + refs.map(({ id, row }) => '[' + id + '] ' + new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Fortaleza', dateStyle: 'short', timeStyle: 'short' }).format(new Date(row.pubDate)) + '\n' + safeUrl(row.link)).join('\n')
+            + '\n\n' + bullets.join('\n\n') + '\n\nFontes:\n' + refs.map(({ id, row }) => '[' + id + '] ' + sourceDate(row) + '\n' + safeUrl(row.link)).join('\n')
             + '\n\nColeta disponível; menções não confirmam autoria. Gerado em ' + new Date(now()).toISOString(), aiUsed, aiFallback };
     }
     async function answer(owner, text, options = {}) {

@@ -3206,10 +3206,12 @@ const knowledgeAssistant = createKnowledgeAssistant({
     getNews: () => newsArchiveStore.all(),
     getRevision: () => iocIntelligence.news.generation() + ':' + newsArchiveStore.size(),
     getIoc: (owner, value) => iocIntelligence.detail(value, owner, { size: 20 }),
-    getEntities: (owner, kind, query) => iocIntelligence.news.entities({ owner, kind, query }),
-    getEntityEvidence: (owner, kind, id) => {
-        const rows = actorPublications([...newsArchiveStore.all(), ...iocIntelligence.publications({ owner, kind, id })], []);
-        return buildActorEvidence(kind === 'actor' ? rows : rows.map(row => ({ ...row, actors: row.malware || [] })), id, { days: 0 });
+    getEntities: (owner, kind, query) => query.startsWith('id:') ? (query.slice(3).trim() ? iocIntelligence.news.entities({ owner, kind, id: query.slice(3).trim() }) : []) : iocIntelligence.news.entities({ owner, kind, query }),
+    getEntityEvidence: (owner, kind, id, { equivalentIds = [id] } = {}) => {
+        const ids = new Set(equivalentIds);
+        const rows = actorPublications([...newsArchiveStore.all(), ...iocIntelligence.publications({ owner, kind, ids: [...ids] })], []);
+        const related = rows.filter(row => (row[kind === 'actor' ? 'actors' : 'malware'] || []).some(entity => ids.has(entity.id)));
+        return buildActorEvidence(related.map(row => ({ ...row, actors: [{ id, name: kind === 'actor' ? (row.actors || []).find(entity => ids.has(entity.id))?.name || id : id }] })), id, { days: 0 });
     },
     getCve: id => queryVulnerabilities('detail', id),
     getStatus: owner => ({ ...iocIntelligence.status(owner), publications: newsArchiveStore.size(), updatedAt: iocIntelligence.state('news-sync')?.lastSuccessfulAt }),

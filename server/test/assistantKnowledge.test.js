@@ -34,7 +34,8 @@ test('undated collected pages remain searchable but cannot become new briefings 
   const service = assistant({ getNews: () => [news(), news({ title: 'Undated product promotion', link: 'https://vendor.example/promotion', dateInferred: true, score: 100, kev: true, malware: [{ id: 'other', name: 'UndatedFamily' }] }),
     news({ title: 'Not security relevant', link: 'https://vendor.example/unrelated', securityRelevant: false, score: 100 })] });
   assert.doesNotMatch((await service.answer('me', '/briefing')).text, /Undated product|Not security/);
-  assert.match((await service.answer('me', '/buscar Undated')).text, /Undated product/);
+  const searched = await service.answer('me', '/buscar Undated');
+  assert.match(searched.text, /Undated product/); assert.match(searched.text, /Coleta/);
   assert.doesNotMatch((await service.answer('me', 'Quais malwares mais recentes?')).text, /UndatedFamily/);
 });
 test('a broad stored event cannot hide distinct explicitly identified vulnerability topics', async () => {
@@ -78,6 +79,24 @@ test('IOC, actor and malware queries preserve owner scope and never send private
   for (const query of ['/ioc 8.8.8.8', '/ator Actor A', '/malware Mirai']) assert.equal((await service.answer('private-owner', query, { aiEnabled: true, claimAi: () => true })).aiUsed, false);
   assert.ok(scopes.every(row => row[0] === 'private-owner'));
   assert.match((await service.answer('private-owner', '/ioc 8.8.8.8')).text, /Private investigation/);
+});
+test('same exact malware label gathers source IDs while platform variants stay explicit', async () => {
+  let passed;
+  const service = assistant({
+    getEntities: () => [{ id: 'one', name: 'Mirai' }, { id: 'two', name: 'Mirai' }, { id: 'elf', name: 'Mirai (ELF)', catalogued: 1 }, { id: 'windows', name: 'Mirai (Windows)', catalogued: 1 }],
+    getEntityEvidence: (owner, kind, id, options) => { passed = { owner, kind, id, options }; return { counts: { ips: 1, domains: 1, hashes: 1, posts: 2 }, publications: [] }; },
+  });
+  const result = await service.answer('me', '/malware Mirai');
+  assert.deepEqual(passed.options.equivalentIds, ['one', 'two']); assert.equal(passed.owner, 'me');
+  assert.match(result.text, /Mesmo rótulo.*2 IDs/); assert.match(result.text, /Variantes separadas: Mirai \(ELF\), Mirai \(Windows\)/);
+});
+test('actor ambiguity returns actionable IDs and a unique catalog match is preferred without merging actors', async () => {
+  const ambiguous = assistant({ getEntities: () => [{ id: 'A', name: 'Actor A', aliases: ['Shared'] }, { id: 'B', name: 'Actor B', aliases: ['Shared'] }] });
+  assert.match((await ambiguous.answer('me', '/ator Shared')).text, /\/ator id:A/);
+  let ids;
+  const canonical = assistant({ getEntities: () => [{ id: 'A', name: 'Lazarus Group', aliases: ['Lazarus'], catalogued: 1 }, { id: 'source', name: 'Lazarus' }],
+    getEntityEvidence: (_owner, _kind, _id, options) => { ids = options.equivalentIds; return { counts: { ips: 1, domains: 1, hashes: 0, posts: 1 }, publications: [] }; } });
+  assert.match((await canonical.answer('me', '/ator Lazarus')).text, /Lazarus Group/); assert.deepEqual(ids, ['A']);
 });
 test('no match is not a clean verdict and missing terms cannot enumerate all IOC evidence', async () => {
   assert.match((await assistant().answer('me', '/ioc 9.9.9.9')).text, /não significa.*seguro/);

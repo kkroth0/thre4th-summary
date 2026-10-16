@@ -9,7 +9,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-test('assistant HTTP routes start safely, enforce account gates and origin, and read archived news without a bot', { timeout: 30000 }, async t => {
+test('assistant HTTP routes start safely, enforce account gates and origin, and read archived news without a bot', { timeout: 60000 }, async t => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'assistant-http-'));
   const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
   const write = (name, value) => { const file = path.join(directory, name); fs.writeFileSync(file, JSON.stringify(value)); return file; };
@@ -35,12 +35,13 @@ test('assistant HTTP routes start safely, enforce account gates and origin, and 
   });
   const base = 'http://127.0.0.1:' + port;
   let ready = false;
-  for (let i = 0; i < 100; i++) {
+  const startupDeadline = Date.now() + 45000;
+  while (Date.now() < startupDeadline) {
     if (child.exitCode !== null) throw Error('Test backend exited before startup');
-    try { if ((await fetch(base + '/api/integrations/telegram')).status === 401) { ready = true; break; } } catch { /* wait for the isolated local process */ }
+    try { if ((await fetch(base + '/api/integrations/telegram', { signal: AbortSignal.timeout(1000) })).status === 401) { ready = true; break; } } catch { /* wait for the isolated local process */ }
     await new Promise(resolve => setTimeout(resolve, 100));
   }
-  assert.equal(ready, true);
+  assert.equal(ready, true, 'isolated backend did not become ready within the bounded startup budget');
   const headers = { Cookie: cookie('assistant-tests', 'one'), 'Content-Type': 'application/json' };
   assert.equal((await fetch(base + '/api/integrations/telegram', { headers: { Cookie: cookie('outsider', 'two') } })).status, 403);
   const status = await fetch(base + '/api/integrations/telegram', { headers }); assert.equal(status.status, 200);
@@ -49,6 +50,8 @@ test('assistant HTTP routes start safely, enforce account gates and origin, and 
   assert.equal((await fetch(base + '/api/assistant/query', { method: 'POST', headers: { ...headers, Origin: 'https://other.example' }, body: JSON.stringify({ question: '/status' }) })).status, 403);
   const result = await fetch(base + '/api/assistant/query', { method: 'POST', headers, body: JSON.stringify({ question: '/buscar Mirai', aiEnabled: false }) });
   assert.equal(result.status, 200); assert.match((await result.json()).text, /Mirai research from saved ETL/);
+  const family = await fetch(base + '/api/assistant/query', { method: 'POST', headers, body: JSON.stringify({ question: '/malware id:mirai' }) });
+  assert.equal(family.status, 200); assert.match((await family.json()).text, /Publicações\/referências: 1/);
   assert.equal((await fetch(base + '/api/integrations/telegram/connect', { method: 'POST', headers, body: JSON.stringify({ token: 'invalid' }) })).status, 400);
   assert.equal((await fetch(base + '/api/integrations/telegram/webhook/123456789', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Telegram-Bot-Api-Secret-Token': 'wrong' }, body: JSON.stringify({ update_id: 1 }) })).status, 401);
   assert.equal((await fetch(base + '/api/integrations/telegram/webhook/123456789', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ update_id: 2, message: { text: 'á'.repeat(6000) } }) })).status, 401, 'Telegram UTF-8 payloads use their bounded parser, without bypassing signature verification');

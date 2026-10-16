@@ -167,12 +167,13 @@ export function createNewsPersistence(db, { now = () => Date.now() } = {}) {
       return { mode: state('primary') ? 'sqlite' : 'shadow', generation: state('primary')?.generation || 0, backup: state('backup'), latest: row ? JSON.parse(row.payload) : null,
         bodies: db.prepare('SELECT COUNT(*) n FROM news_body_versions').get().n, revisions: db.prepare('SELECT COUNT(*) n FROM news_document_revisions').get().n };
     },
-    entities: ({ owner = '', kind = '', query = '', limit = 50 } = {}) => {
+    entities: ({ owner = '', kind = '', query = '', id = '', limit = 50 } = {}) => {
       const scopes = owner ? ['global', String(owner)] : ['global'];
       const clauses = [`scope IN (${scopes.map(() => '?').join(',')})`], args = [...scopes];
       if (kind) { clauses.push('kind=?'); args.push(kind); }
+      if (id) { clauses.push('entity=?'); args.push(String(id)); }
       if (query) { clauses.push("alias LIKE ? ESCAPE '\\'"); args.push('%' + aliasKey(query).slice(0, 180).replace(/[\\%_]/g, '\\$&') + '%'); }
-      return db.prepare(`SELECT kind,entity id,COALESCE(MAX(CASE WHEN source='catalog' THEN name END),MIN(name)) name,json_group_array(DISTINCT alias) aliases FROM intelligence_entity_names WHERE ${clauses.join(' AND ')} GROUP BY kind,entity ORDER BY name,entity LIMIT ?`).all(...args, Math.min(100, Math.max(1, Number(limit) || 50))).map(row => ({ ...row, aliases: JSON.parse(row.aliases) }));
+      return db.prepare(`SELECT kind,entity id,COALESCE(MAX(CASE WHEN source='catalog' THEN name END),MIN(name)) name,MAX(source='catalog') catalogued,json_group_array(DISTINCT alias) aliases FROM intelligence_entity_names WHERE ${clauses.join(' AND ')} GROUP BY kind,entity ORDER BY name,entity LIMIT ?`).all(...args, Math.min(100, Math.max(1, Number(limit) || 50))).map(row => ({ ...row, aliases: JSON.parse(row.aliases) }));
     },
   };
 }

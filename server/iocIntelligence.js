@@ -97,9 +97,11 @@ export function createIocIntelligence({filePath=':memory:',now=()=>Date.now()}={
     const observations=db.prepare(`SELECT o.* FROM observations o WHERE o.indicator=? AND ${scope.sql} ORDER BY published DESC,id LIMIT ? OFFSET ?`).all(key,...scope.args,size,offset);
     return {...indicator,id:key,total,offset,size,evidence:observations.map(row=>({...JSON.parse(row.details),provider:row.provider,published:row.published,collectedAt:row.collected,entities:db.prepare('SELECT kind,entity id,name,relation FROM entity_links WHERE observation=?').all(row.id)}))};
   }
-  function publications({owner='',kind,id}={}){
+  function publications({owner='',kind,id,ids}={}){
     const scope=scopeSql(owner),args=[...scope.args],clauses=[scope.sql];
-    if(kind&&id){clauses.push('EXISTS(SELECT 1 FROM entity_links e WHERE e.observation=o.id AND e.kind=? AND e.entity=?)');args.push(kind,id);}
+    const matchingIds=ids===undefined?(id?[String(id)]:[]):[...new Set((Array.isArray(ids)?ids:[]).filter(value=>typeof value==='string'&&value.length>0&&value.length<=180))].slice(0,50);
+    if(ids!==undefined&&(!kind||!matchingIds.length))return [];
+    if(kind&&matchingIds.length){clauses.push('EXISTS(SELECT 1 FROM entity_links e WHERE e.observation=o.id AND e.kind=? AND e.entity IN ('+matchingIds.map(()=>'?').join(',')+'))');args.push(kind,...matchingIds);}
     // Catalog correlation needs reference metadata, not full provider payloads.
     // Iterate all matching evidence so older relationships survive growth beyond 10k.
     const records=db.prepare(`SELECT o.provider,o.external_id,o.published,json_extract(o.details,'$.link') link,json_extract(o.details,'$.title') title,i.type,i.value,
