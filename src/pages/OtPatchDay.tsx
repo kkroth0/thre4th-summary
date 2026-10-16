@@ -45,7 +45,7 @@ export default function OtPatchDay() {
       && (patch === 'all' || row.patch === patch)
       && (scope !== 'baseline' || row.matches.length > 0)
       && (scope !== 'models' || row.matches.some(m => m.level === 'model'))
-      && (!q || `${row.id} ${row.title} ${row.cves.join(' ')} ${row.products.map(p => p.name).join(' ')}`.toLowerCase().includes(q)));
+      && (!q || `${row.id} ${row.title} ${row.cves.join(' ')} ${row.products.map(p => [p.name, ...(p.modelNumbers || [])].join(' ')).join(' ')}`.toLowerCase().includes(q)));
   }, [data, vendor, patch, scope, search]);
   const pages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
   const visible = rows.slice((Math.min(page, pages) - 1) * PAGE_SIZE, Math.min(page, pages) * PAGE_SIZE);

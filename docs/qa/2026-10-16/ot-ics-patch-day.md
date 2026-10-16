@@ -27,4 +27,21 @@
   externas como texto literal. Typecheck e build passaram. Lint: zero erros,
   16 avisos preexistentes.
 
-Validação da implantação e dos cliques em produção: pendente.
+## Implantação e cliques
+
+- Release `a2dc980`: CI `38911010490`, VPS `38911331416` e Cloudflare
+  `38911332217` aprovados; SHA confirmado. A varredura de dependências separada
+  permanece com os achados preexistentes, sem mudança de manifests.
+- Quatro índices disponíveis na VPS, incluindo Schneider às 10:56:03 de
+  Fortaleza. Coleta de outubro concluiu com 32 avisos, 4 sinais KEV e sem
+  arquivos pendentes/falhos. Filtro Schneider mostrou exatamente os três
+  documentos esperados; datas inicial/revisão e produto/versão SAGE exibidos.
+  EPSS de 0,15% veio do catálogo local e apareceu no detalhe.
+- Excel real baixado pela interface e reaberto: três avisos, duas abas,
+  23 colunas, versões SAGE, EPSS e datas preservados; zero fórmulas.
+- Conferência encontrou link de um CISA apontando a orientação genérica em
+  vez do advisory. Correção usa o identificador oficial, cobre ICSMA e
+  repara os links já persistidos sem refazer a coleta. A busca também passa
+  a incluir os códigos de modelo do CSAF além do nome comercial.
+
+Conferência da correção final em produção: pendente.

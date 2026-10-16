@@ -21,6 +21,11 @@ export const defaultOtMonth = (date = new Date()) => {
 };
 export function validOtMonth(month) { return typeof month === 'string' && /^20\d{2}-(0[1-9]|1[0-2])$/.test(month); }
 const inMonth = (row, month) => row.published?.startsWith(month) || row.updated?.startsWith(month);
+const cisaAdvisoryUrl = id => {
+    const value = String(id).toLowerCase();
+    return /^icsa-\d{2}-\d{3}-\d{2}$/.test(value) ? `https://www.cisa.gov/news-events/ics-advisories/${value}`
+        : /^icsma-\d{2}-\d{3}-\d{2}$/.test(value) ? `https://www.cisa.gov/news-events/ics-medical-advisories/${value}` : '';
+};
 const vendorFor = name => OT_CATALOG.vendors.find(v => v.aliases.some(alias => keyText(name) === keyText(alias)))?.vendor || clean(name);
 function safeUrl(value, base) { try { const u = new URL(value, base); return u.protocol === 'https:' && !u.username && !u.password ? u.href : ''; } catch { return ''; } }
 export function allowedOtDocument(value) {
@@ -79,11 +84,13 @@ export function normalizeOtCsaf(input, source, url) {
     }
     const dedupRemediations = [...new Map(remediations.map(r => [JSON.stringify(r), r])).values()];
     const references = unique([url, ...(doc.references || []).map(r => safeUrl(r.url))]);
+    const cisaWeb = cisaAdvisoryUrl(tracking.id);
+    const primaryUrl = source === 'cisa' && cisaWeb ? cisaWeb : references.find(r => !r.endsWith('.json')) || url;
     const fixes = dedupRemediations.some(r => r.category === 'vendor_fix') || fixed.size > 0;
     const mitigation = dedupRemediations.some(r => ['mitigation', 'workaround'].includes(r.category));
     return {
-        id: clean(tracking.id), title: clean(doc.title), source, url: references.find(r => r.includes('cisa.gov/news-events/')) || references.find(r => !r.endsWith('.json')) || url,
-        references, vendors: unique(vendors.length ? vendors : [source === 'cisco' ? 'Cisco' : source === 'schneider' ? 'Schneider Electric' : doc.publisher?.name]),
+        id: clean(tracking.id), title: clean(doc.title), source, url: primaryUrl,
+        references: unique([primaryUrl, ...references]), vendors: unique(vendors.length ? vendors : [source === 'cisco' ? 'Cisco' : source === 'schneider' ? 'Schneider Electric' : doc.publisher?.name]),
         published: iso(tracking.initial_release_date), updated: iso(tracking.current_release_date), revision: clean(tracking.version),
         summary: clean((doc.notes || []).find(n => n.category === 'summary')?.text), cves: unique(cves), cvss: scores.length ? Math.max(...scores) : null,
         products: [...products.values()].map(p => ({ ...p, status: fixed.has(p.id) ? 'fixed' : affected.has(p.id) ? 'affected' : 'mentioned' })),
@@ -170,7 +177,7 @@ export function mergeOtAdvisories(rows) {
 }
 
 export function createOtPatchDay({ filePath, http = axios, now = () => Date.now(), getCve = () => null, batchSize = 40 } = {}) {
-    let state = { version: 1, sources: {}, index: {}, documents: {}, months: [] }, flight = null, cacheError = false;
+    let state = { version: 1, sources: {}, index: {}, documents: {}, months: [] }, flight = null, cacheError = false, needsSave = false;
     const signals = new Map();
     const cveSignal = id => {
         const cached = signals.get(id);
@@ -180,12 +187,18 @@ export function createOtPatchDay({ filePath, http = axios, now = () => Date.now(
         signals.set(id, { value, until: now() + 300000 }); return value;
     };
     if (filePath) try { if (fs.statSync(filePath).size > 24 * 1024 * 1024) throw Error('Oversized OT cache'); const s = JSON.parse(fs.readFileSync(filePath, 'utf8')); if (s.version === 1 && s.documents && s.index && s.sources && Array.isArray(s.months)) state = s; } catch { /* fresh or invalid cache: rebuild */ }
+    // Repair links already cached by the initial release without downloading
+    // unchanged documents or erasing retained evidence.
+    for (const doc of Object.values(state.documents)) {
+        const url = doc.row?.source === 'cisa' && cisaAdvisoryUrl(doc.row.id);
+        if (url && doc.row.url !== url) { doc.row = { ...doc.row, url, references: unique([url, ...(doc.row.references || [])]) }; needsSave = true; }
+    }
     const persist = () => {
         if (!filePath) return;
         try {
             fs.mkdirSync(path.dirname(filePath), { recursive: true });
             const temp = filePath + '.tmp';
-            fs.writeFileSync(temp, JSON.stringify(state), { mode: 0o600 }); fs.renameSync(temp, filePath); cacheError = false;
+            fs.writeFileSync(temp, JSON.stringify(state), { mode: 0o600 }); fs.renameSync(temp, filePath); cacheError = false; needsSave = false;
         } catch { cacheError = true; }
     };
     const request = async (url, etag) => http.get(url, { timeout: 15000, maxRedirects: 0, maxContentLength: 12 * 1024 * 1024, headers: { 'User-Agent': 'ThreatSumm4ry OT Patch Day (+https://threatsumm4ry.app)', ...(etag ? { 'If-None-Match': etag } : {}) }, validateStatus: s => s === 200 || s === 304, responseType: 'text' });
@@ -193,7 +206,7 @@ export function createOtPatchDay({ filePath, http = axios, now = () => Date.now(
     function sync() {
         if (flight) return flight;
         flight = (async () => {
-            let changed = cacheError;
+            let changed = cacheError || needsSave;
             for (const source of OT_SOURCES) {
                 const old = state.sources[source.id] || {};
                 if ((old.nextAt || 0) > now()) continue;

@@ -28,6 +28,13 @@ test('CSAF preserves initial/revision dates, affected/fixed versions and vendor 
     assert.deepEqual(row.cves, ['CVE-2026-12345']);
     assert.ok(matchOtAssets(row).some(m => m.level === 'model' && m.models.includes('BMXP342020')));
 });
+test('CISA advisory links target the actual advisory instead of a generic recommended-practices alert', () => {
+    const input = csaf();
+    input.document.references.unshift({ category: 'external', url: 'https://www.cisa.gov/news-events/ics-alerts/ics-alert-10-301-01' });
+    assert.equal(normalizeOtCsaf(input, 'cisa', docUrl).url, 'https://www.cisa.gov/news-events/ics-advisories/icsa-26-100-01');
+    input.document.tracking.id = 'ICSMA-26-288-02';
+    assert.equal(normalizeOtCsaf(input, 'cisa', docUrl).url, 'https://www.cisa.gov/news-events/ics-medical-advisories/icsma-26-288-02');
+});
 test('mitigation is not a published patch, and manufacturer matching is not model matching', () => {
     const input = csaf(); delete input.vulnerabilities[0].product_status.fixed;
     input.vulnerabilities[0].remediations = [{ category: 'mitigation', details: 'Restrict access' }];
@@ -101,7 +108,11 @@ test('daily source caching, single flight, persisted restart, stale fallback and
     assert.equal(result.rows.length, 2); assert.equal(result.status.pending, 0); assert.equal(result.summary.kev, 2);
     assert.ok(result.rows.every(r => r.cveSignals.every(c => c.epss === 0.92)));
     const initialCalls = calls.length; await service.sync(); assert.equal(calls.length, initialCalls);
+    const oldCache = JSON.parse(fs.readFileSync(options.filePath, 'utf8'));
+    oldCache.documents['cisa:ICSA-26-100-01'].row.url = 'https://www.cisa.gov/news-events/ics-alerts/ics-alert-10-301-01';
+    fs.writeFileSync(options.filePath, JSON.stringify(oldCache));
     const restart = createOtPatchDay(options); assert.equal(restart.query({ month: '2026-10' }).rows.length, 2);
+    assert.equal(restart.query({ month: '2026-10' }).rows.find(r => r.source === 'cisa').url, 'https://www.cisa.gov/news-events/ics-advisories/icsa-26-100-01');
     await restart.sync(); assert.equal(calls.length, initialCalls);
     time += 86400001; broken = true; await restart.sync();
     result = restart.query({ month: '2026-10' }); assert.equal(result.rows.length, 2); assert.ok(result.rows.every(r => r.stale));
