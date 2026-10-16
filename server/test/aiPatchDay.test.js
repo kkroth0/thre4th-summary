@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import Database from 'better-sqlite3';
 import { AI_TOOL_CATALOG, AI_CATEGORIES, classifyAiTool } from '../aiToolCatalog.js';
 import { createAiPatchDay, mergeAiPatches, normalizeAiAdvisory, normalizeAiNvd } from '../aiPatchDay.js';
 import { createVulnerabilityCatalog } from '../vulnerabilityCatalog.js';
@@ -100,4 +101,31 @@ test('local NVD query selects monthly AI CVEs and joined older GHSA CVEs without
         assert.deepEqual(data.rows.map(r => r.id), ['CVE-2025-44444','CVE-2026-11111','CVE-2026-22222']);
         assert.equal(normalizeAiNvd(data.rows[1]).patch, 'unconfirmed');
     } finally { catalog.close(); }
+});
+
+test('durable AI index resumes legacy backfill and ingestion removes reclassified or rejected CVEs', async () => {
+    const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'ai-index-test-')), filePath = path.join(directory, 'catalog.sqlite');
+    const cve = (id, description, extra = {}) => ({ cve: { id, descriptions: [{ lang: 'en', value: description }], published: '2026-10-01T00:00:00', lastModified: '2026-10-02T00:00:00', references: [], ...extra } });
+    let catalog = createVulnerabilityCatalog({ filePath, years: [] });
+    try {
+        catalog.ingest([cve('CVE-2026-10001', 'Langflow allows unauthorized access.'), cve('CVE-2026-10002', 'Ollama has a denial of service issue.'), cve('CVE-2026-10003', 'Ordinary HTTP service issue.')]);
+        catalog.close();
+        const legacy = new Database(filePath), state = JSON.parse(legacy.prepare("SELECT value FROM metadata WHERE key='ai-index'").get().value);
+        legacy.exec('DELETE FROM ai_vulnerabilities');
+        legacy.prepare("UPDATE metadata SET value=? WHERE key='ai-index'").run(JSON.stringify({ ...state, maximum: 3, cursor: 0, complete: false })); legacy.close();
+        catalog = createVulnerabilityCatalog({ filePath, years: [] });
+        assert.equal(catalog.aiPatches({ month: '2026-10' }).indexPending, true);
+        const partial = await catalog.backfillAiIndex({ batchSize: 1, maxBatches: 1 }); assert.equal(partial.cursor, 1); assert.equal(partial.complete, false);
+        catalog.close(); catalog = createVulnerabilityCatalog({ filePath, years: [] });
+        const complete = await catalog.backfillAiIndex({ batchSize: 1 }); assert.equal(complete.complete, true); assert.equal(complete.indexed, 2);
+        assert.equal(catalog.aiPatches({ month: '2026-10' }).rows.length, 2);
+        const signals = new Database(filePath);
+        signals.exec("INSERT INTO kev VALUES('CVE-2026-10001','Langflow','Langflow','Issue','2026-10-04','','Update',0); INSERT INTO epss VALUES('CVE-2026-10001',0,0,'2026-10-16')");
+        const enriched = catalog.aiPatches({ month: '2026-10' }).rows.find(r => r.id === 'CVE-2026-10001');
+        assert.equal(enriched.kev, true); assert.equal(enriched.epss, 0);
+        signals.exec("UPDATE epss SET score=0.75 WHERE cve='CVE-2026-10001'"); signals.close();
+        assert.equal(catalog.aiPatches({ month: '2026-10' }).rows.find(r => r.id === 'CVE-2026-10001').epss, 0.75);
+        catalog.ingest([cve('CVE-2026-10001', 'Ordinary HTTP service issue.', { lastModified: '2026-10-03T00:00:00' }), cve('CVE-2026-10002', 'Ollama issue was rejected.', { lastModified: '2026-10-03T00:00:00', vulnStatus: 'Rejected' })]);
+        assert.equal(catalog.aiPatches({ month: '2026-10' }).rows.length, 0);
+    } finally { catalog.close(); await fs.rm(directory, { recursive: true, force: true }); }
 });

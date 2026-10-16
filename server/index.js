@@ -30,7 +30,7 @@ import { createDomainIntelligence, domainTarget } from './domainIntelligence.js'
 import { createSimilarDomains } from './similarDomains.js';
 import { createCtiFyi, mergeCtiActors, ctiPublications, mergeRansomwareVictims, attachRansomwareActors } from './ctiFyi.js';
 import { createVulnerabilityCatalog } from './vulnerabilityCatalog.js';
-import { createVulnerabilityQueries, optimizeVulnerabilityCatalog } from './vulnerabilityQueries.js';
+import { createVulnerabilityQueries, optimizeVulnerabilityCatalog, startAiPatchIndex } from './vulnerabilityQueries.js';
 import { createNewsEpssLookup } from './newsEpss.js';
 import { createNewsFeedResponse } from './newsFeedResponse.js';
 import { createLookupCache } from './lookupCache.js';
@@ -3215,6 +3215,7 @@ app.get('/api/ot-patch-day', (req, res) => {
     if (process.env.NODE_ENV !== 'test') void otPatchDay.sync();
 });
 const vulnerabilityOptimization = process.env.NODE_ENV === 'test' ? Promise.resolve() : optimizeVulnerabilityCatalog(path.join(__dirname, '.vulnerability-catalog.sqlite')).catch(error => { console.warn('Catalog optimization failed:', error.code || error.name); });
+if (process.env.NODE_ENV !== 'test') void vulnerabilityOptimization.then(() => startAiPatchIndex(path.join(__dirname, '.vulnerability-catalog.sqlite')));
 async function queryVulnerabilities(method, params) {
     await vulnerabilityOptimization;
     const data = vulnerabilityQueries ? await vulnerabilityQueries.query(method, params) : vulnerabilityCatalog[method](params);

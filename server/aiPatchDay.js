@@ -29,7 +29,7 @@ export function normalizeAiAdvisory(advisory) {
 }
 export function normalizeAiNvd(row) {
     const tools = row.tools || [], names = [...new Set(tools.map(t => t.name))];
-    return { id: row.id, title: `${names.join(', ')} · ${row.id}`, summary: row.description, source: 'NVD', url: `https://nvd.nist.gov/vuln/detail/${row.id}`, references: refs((row.references || []).map(r => r.url || r)),
+    return { id: row.id, title: `${names.join(', ')} · ${row.id}`, summary: row.description, source: row.source || 'NVD', url: `https://nvd.nist.gov/vuln/detail/${row.id}`, references: refs((row.references || []).map(r => r.url || r)),
         vendors: names, tools, categories: [...new Set(tools.map(t => t.category))], published: nvdTime(row.published), updated: nvdTime(row.modified), revision: nvdTime(row.modified), cves: [row.id], cvss: row.cvss, patch: 'unconfirmed', kev: row.kev, revised: row.modified !== row.published, stale: false,
         products: [{ id: row.product, name: row.product || names.join(', '), vendor: row.vendor, status: 'mentioned' }], remediations: [],
         matches: names.map(name => ({ vendor: name, level: 'vendor', models: [] })), cveSignals: [{ id: row.id, kev: row.kev, epss: row.epss, cvss: row.cvss }],
@@ -42,7 +42,7 @@ export function mergeAiPatches(github, nvd) {
         matches.forEach(r => used.add(r.id));
         const updated = [row.updated, ...matches.map(r => r.updated)].filter(Boolean).sort().at(-1) || row.updated;
         return { ...row, updated, revision: updated, revisionOrigins: { github: row.updated, nvd: matches.map(r => ({ cve: r.id, updated: r.updated })) }, cvss: score([row.cvss, ...matches.map(r => r.cvss)]), kev: row.kev || matches.some(r => r.kev),
-            references: refs([...row.references, ...matches.flatMap(r => [r.url, ...r.references])]), alsoReportedBy: matches.length ? ['NVD'] : [],
+            references: refs([...row.references, ...matches.flatMap(r => [r.url, ...r.references])]), alsoReportedBy: [...new Set(matches.map(r => r.source))],
             cveSignals: row.cveSignals.map(signal => matches.find(r => r.id === signal.id)?.cveSignals[0] || signal),
         };
     });
@@ -126,26 +126,27 @@ export function createAiPatchDay({ filePath, http = axios, queryCatalog, now = (
         if (monthsInFlight.has(month)) return monthsInFlight.get(month);
         const pending = (async () => {
             let local = { rows: [], status: { sources: {} } }, catalogError = false;
-            const monthGithub = state.rows.filter(r => r.published.startsWith(month) || r.updated.startsWith(month));
+            const githubSnapshot = state.rows;
+            const monthGithub = githubSnapshot.filter(r => r.published.startsWith(month) || r.updated.startsWith(month));
             try { local = await queryCatalog({ month, ids: monthGithub.flatMap(r => r.cves) }); } catch { catalogError = true; }
             const nvd = local.rows.map(normalizeAiNvd);
             // Include the GHSA even when only its linked NVD entry was revised
             // this month, retaining known patched versions and avoiding duplicates.
             const nvdIds = new Set(nvd.map(r => r.id));
-            const github = state.rows.filter(r => r.published.startsWith(month) || r.updated.startsWith(month) || r.cves.some(c => nvdIds.has(c)));
+            const github = githubSnapshot.filter(r => r.published.startsWith(month) || r.updated.startsWith(month) || r.cves.some(c => nvdIds.has(c)));
             const rows = mergeAiPatches(github, nvd), sourceStatus = local.status?.sources || {};
             const sources = [
                 { id: 'github', name: 'GitHub Security Advisories', url: 'https://github.com/advisories', coverage: `Avisos revisados, versões afetadas e corrigidas. Consulta em lote aos pacotes do catálogo e descoberta global de novos componentes MCP/IA nos últimos 12 meses; ${state.pages} páginas processadas.${state.next || state.known.next ? ' Importação histórica em andamento; a coleta diária continua em paralelo.' : ''}${state.truncated ? ' O cache atingiu o limite; registros mais antigos podem não estar disponíveis.' : ''}`, status: state.error ? state.rows.length ? 'stale' : 'error' : state.truncated ? 'stale' : !state.lastSuccess || state.next || state.recent.next || state.known.next ? 'pending' : 'ok', lastSuccess: state.recent.lastSuccess || state.lastSuccess, checkedAt: state.checkedAt, error: state.error },
-                ...['nvd', 'kev', 'epss'].map(id => ({ id, name: { nvd: 'NVD', kev: 'CISA KEV', epss: 'FIRST EPSS' }[id], url: { nvd: 'https://nvd.nist.gov/', kev: 'https://www.cisa.gov/known-exploited-vulnerabilities-catalog', epss: 'https://www.first.org/epss/' }[id], coverage: id === 'nvd' ? 'Catálogo unificado local: CVEs publicadas ou revisadas no mês, filtradas pelo componente de IA.' : 'Sinais do catálogo unificado, vinculados pelo identificador CVE.', status: !catalogError && sourceStatus[id]?.status === 'ready' ? 'ok' : catalogError || sourceStatus[id]?.status === 'error' ? 'error' : 'stale', lastSuccess: sourceStatus[id]?.at, error: catalogError ? 'Catálogo temporariamente indisponível.' : sourceStatus[id]?.error || '' })),
+                ...['nvd', 'kev', 'epss'].map(id => ({ id, name: { nvd: 'NVD', kev: 'CISA KEV', epss: 'FIRST EPSS' }[id], url: { nvd: 'https://nvd.nist.gov/', kev: 'https://www.cisa.gov/known-exploited-vulnerabilities-catalog', epss: 'https://www.first.org/epss/' }[id], coverage: id === 'nvd' ? `Catálogo unificado local: CVEs publicadas ou revisadas no mês, filtradas pelo componente de IA.${local.indexPending ? ' O índice histórico de IA está sendo preparado; novas ingestões já o atualizam automaticamente.' : ''}` : 'Sinais do catálogo unificado, vinculados pelo identificador CVE.', status: id === 'nvd' && local.indexPending ? 'pending' : !catalogError && sourceStatus[id]?.status === 'ready' ? 'ok' : catalogError || sourceStatus[id]?.status === 'error' ? 'error' : 'stale', lastSuccess: sourceStatus[id]?.at, error: catalogError ? 'Catálogo temporariamente indisponível.' : sourceStatus[id]?.error || '' })),
             ];
             const discovered = rows.flatMap(r => r.tools).filter(t => t.evidence === 'discovery');
             const catalog = [...AI_TOOL_CATALOG.map(t => ({ vendor: t.name, aliases: t.packages, models: t.packages, review: [], category: t.category, repo: t.repo })), ...discovered.filter((t, i, all) => all.findIndex(x => x.name === t.name) === i).map(t => ({ vendor: t.name, aliases: [], models: [t.name], review: ['Componente identificado no texto do aviso; conferir o pacote e a aplicabilidade.'], category: t.category, repo: '' }))];
             const data = { month, rows, catalog, categories: [...new Set([...AI_CATEGORIES, ...rows.flatMap(r => r.categories)])], sources,
-                status: { running: Boolean(flight), pending: state.next || state.known.next || state.recent.next || !state.recent.lastSuccess ? 1 : 0, failed: state.error || catalogError ? 1 : 0, initialized: Boolean(state.recent.lastSuccess) && !local.truncated, cadenceHours: 24, persistenceError: state.persistenceError },
+                status: { running: Boolean(flight), pending: state.next || state.known.next || state.recent.next || !state.recent.lastSuccess || local.indexPending ? 1 : 0, failed: state.error || catalogError ? 1 : 0, initialized: Boolean(state.recent.lastSuccess) && !local.truncated && !local.indexPending, cadenceHours: 24, persistenceError: state.persistenceError },
                 summary: { advisories: rows.length, patches: rows.filter(r => r.patch === 'available').length, mitigations: 0, kev: rows.filter(r => r.kev).length, matched: rows.filter(r => r.matches.some(m => m.level === 'model')).length },
-                coverage: { initialFrom: state.since, categories: AI_CATEGORIES.length, catalogTools: AI_TOOL_CATALOG.length, githubAdvisories: state.rows.length, truncated: Boolean(local.truncated || state.truncated), historicalImportPending: Boolean(state.next || state.known.next), policy: 'Catálogo ampliável e descoberta por evidência. Produtos proprietários entram quando há aviso público nas fontes; presença no catálogo não garante cobertura integral.' },
+                coverage: { initialFrom: state.since, categories: AI_CATEGORIES.length, catalogTools: AI_TOOL_CATALOG.length, githubAdvisories: state.rows.length, truncated: Boolean(local.truncated || state.truncated), historicalImportPending: Boolean(state.next || state.known.next || local.indexPending), policy: 'Catálogo ampliável e descoberta por evidência. Produtos proprietários entram quando há aviso público nas fontes; presença no catálogo não garante cobertura integral.' },
             };
-            monthly.set(month, { at: now() - (catalogError ? 285000 : 0), data }); if (monthly.size > 24) monthly.delete(monthly.keys().next().value);
+            monthly.set(month, { at: now() - (catalogError || local.indexPending ? 285000 : 0), data }); if (monthly.size > 24) monthly.delete(monthly.keys().next().value);
             return data;
         })().finally(() => monthsInFlight.delete(month));
         monthsInFlight.set(month, pending); return pending;

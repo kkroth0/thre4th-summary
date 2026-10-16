@@ -4,7 +4,7 @@
 - Monthly AI security view alongside OT/ICS Patch Day, with catalog coverage across inference/LLMs, interfaces, agents, MCP, RAG/vector data, model libraries/MLOps, gateways/observability, coding assistants, and hosted services.
 - Seed catalog plus evidence-based discovery of previously unknown AI/MCP components. Catalog inclusion is not a promise of exhaustive vendor disclosure coverage.
 - GitHub global security advisories retain affected ranges, first patched versions, references and withdrawn status. Local NVD CVEs are joined by CVE with KEV/EPSS. A CVE alone does not confirm a patch.
-- NVD candidate selection uses FTS and indexed publication/modification dates in the query worker, with five-minute monthly single-flight caching. No per-tool NVD HTTP fan-out on page views.
+- NVD ingestion maintains a compact AI index in the unified SQLite database. A resumable background worker prepares historical rows; monthly queries read this index and join current KEV/EPSS by CVE, with five-minute single-flight caching. No per-tool NVD HTTP fan-out on page views.
 - Separate durable daily and historical GitHub cursors; 5 pages per batch, hourly continuation during backfill, daily incremental checks after completion. Twelve months of initial GHSA history, bounded cache and explicit partial coverage. Daily arrivals continue during the historical import.
 - GitHub and NVD references are combined; separate GHSA/package advisories remain distinct even when they share a CVE.
 
@@ -29,4 +29,6 @@
 
 - Semantic review also separated third-party ChatGPT/Claude plugins from the underlying hosted products: the affected component name is retained, and the referenced AI product remains a related tool. A regression test rejects brand mentions that occur only in researcher credits.
 
-- Final production validation found the large FTS/date intersection exceeding the catalog query timeout on the VPS. The final implementation replaces that intersection with indexed date streaming, a single compiled prefilter and strict classification; KEV/EPSS/exploit joins run only for matched CVEs. Reads are capped at 50,000 dated candidates and 5,000 results, with an explicit partial-coverage flag. Catalog errors expire from the response cache after 15 seconds rather than poisoning it for five minutes.
+- Final production validation found the large FTS/date intersection exceeding the catalog query timeout on the VPS. Date streaming was also insufficient on the 917 MB production catalog. The final implementation maintains a compact AI index during ingestion, with strict classification and a source-code revision fingerprint. A resumable background worker handles historical rows without holding page requests. Monthly reads are capped at 5,000 AI results, with an explicit partial-coverage flag. Catalog errors expire from the response cache after 15 seconds rather than poisoning it for five minutes.
+
+- Historical index preparation persists a row cursor, yields between batches, resumes after restart and retries busy writers. Ingestion removes rejected/reclassified entries atomically. Tests verify those transitions and fresh KEV/EPSS signals, including a genuine zero EPSS, without rebuilding the index.
