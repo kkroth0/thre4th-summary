@@ -39,7 +39,8 @@ report.versionContexts=db.prepare("SELECT id,payload FROM news_documents WHERE k
     return {source:row.source,title:row.title,ips:row.iocs?.ips||[],classifiedVersionValues:[...softwareVersionIpValues(text)],matches:[...text.matchAll(/\b25\.1\.(?:1\.[12]|2\.2|3\.[01])\b/g)].filter(match=>!isSoftwareVersionAt(text,match.index,match[0])).slice(0,20).map(match=>({value:match[0],context:text.slice(Math.max(0,match.index-140),match.index+80)}))};
 });
 report.storyVersionIps=db.prepare("SELECT payload FROM news_documents WHERE kind='stories' AND payload LIKE '%25.1.%'").all().flatMap(record=>JSON.parse(record.payload).sources||[]).filter(row=>(row.iocs?.ips||[]).some(ip=>/^25\.1\./.test(ip))).map(row=>({source:row.source,title:row.title,ips:row.iocs.ips,archiveIps:JSON.parse(db.prepare("SELECT payload FROM news_documents WHERE kind='archive' AND id=?").get(row.link)?.payload||'null')?.iocs?.ips||[]}));
-db.close();
+report.storageSizes={news:db.prepare('SELECT kind,COUNT(*) documents,SUM(length(payload)) bytes,MAX(length(payload)) largest FROM news_documents GROUP BY kind').all(),bodies:db.prepare('SELECT COUNT(*) versions,SUM(length(payload)) bytes,MAX(length(payload)) largest FROM news_body_versions').get(),observations:db.prepare('SELECT COUNT(*) observations,SUM(length(details)) bytes FROM observations').get()};
+ db.close();
 try {
     const {createPersistentFeedExtractionCache}=await import(pathToFileURL(path.join(root,'server/persistentFeedExtractionCache.js')));
     let errors=0;
@@ -51,7 +52,9 @@ if(service) try {
  const logs=execFileSync('journalctl',['-u',service,'--since','24 hours ago','--grep','Main process exited|Scheduled restart job|heap out of memory|Killed|oom-kill|Failed with result', '-n','100','-o','json','--no-pager'],{encoding:'utf8',timeout:10000,maxBuffer:1024*1024,stdio:['ignore','pipe','ignore']}).trim().split('\n').filter(Boolean).map(line=>JSON.parse(line));
  report.restartHealth={properties:Object.fromEntries(properties.trim().split('\n').map(line=>{const i=line.indexOf('=');return [line.slice(0,i),line.slice(i+1)];})),signals:logs.map(row=>({at:new Date(Number(row.__REALTIME_TIMESTAMP)/1000).toISOString(),message:row.MESSAGE})).filter(row=>/Main process exited|Scheduled restart job|heap out of memory|oom-kill|Failed with result/.test(row.message))};
 }catch{report.restartHealth={unavailable:true};}
-report.code = Object.fromEntries(['feedEnrichment.js','feedExtractionCache.js'].map(name => [name,createHash('sha256').update(fs.readFileSync(path.join(root,'server',name))).digest('hex')]));
+try {const text=execFileSync('systemctl',['show',service,'--property=ExecStart,Environment'],{encoding:'utf8',timeout:10000,stdio:['ignore','pipe','ignore']});report.heapFlags=text.match(/--max[-_]old[-_]space[-_]size(?:=|\s+)\d+/g)||[];}catch{}
+ const os=await import('node:os');report.hostMemory={totalBytes:os.totalmem(),freeBytes:os.freemem()};
+ report.code = Object.fromEntries(['feedEnrichment.js','feedExtractionCache.js'].map(name => [name,createHash('sha256').update(fs.readFileSync(path.join(root,'server',name))).digest('hex')]));
 try {
     const data=JSON.parse(fs.readFileSync(path.join(root,'server/.cti-fyi.json'),'utf8'));
     const names=(data.groups||[]).flatMap(row=>[row.name,...(row.aliases||[])]).filter(value=>typeof value==='string');
