@@ -50,7 +50,7 @@ export function NewsExportDialog({ pt, view }: { pt: boolean; view: string }) {
     } finally { setBusy(false); }
   };
 
-  return <Dialog open={open} onOpenChange={value => { setOpen(value); if (value) setDataset(view === 'posts' ? 'news' : 'iocs'); }}>
+  return <Dialog open={open} onOpenChange={value => { if (busy) return; setOpen(value); if (value) setDataset(view === 'posts' ? 'news' : 'iocs'); }}>
     <DialogTrigger asChild><Button variant="outline" size="sm" className="h-9 gap-1.5 px-3 text-xs"><Download className="h-3.5 w-3.5" />{l('Exportar por período', 'Export by date')}</Button></DialogTrigger>
     <DialogContent className="max-w-lg">
       <DialogHeader><DialogTitle>{l('Exportar notícias e IOCs', 'Export news and IOCs')}</DialogTitle><DialogDescription>{view === 'iocs' ? l('Exporte as evidências da base unificada no período, incluindo notícias e fontes externas disponíveis na sua conta.', 'Export unified inventory evidence for this period, including news and external sources available to your account.') : l('Baixe o histórico coletado no período, conforme os fornecedores monitorados. Inclui todas as páginas de resultados.', 'Download the collected archive for this period, respecting monitored vendors. Includes every result page.')}</DialogDescription></DialogHeader>
@@ -65,6 +65,7 @@ export function NewsExportDialog({ pt, view }: { pt: boolean; view: string }) {
       </div>
       <p className="rounded-md border bg-muted/30 p-3 text-xs text-muted-foreground">{dataset === 'iocs' ? l('IPs, domínios, hashes e URLs, com a notícia, fonte, data e entidades citadas em cada evidência.', 'IPs, domains, hashes and URLs, with publication, source, date and mentioned entities for each evidence record.') : l('Título, link, fonte, data, categorias, CVEs, atores, malware e indicadores extraídos.', 'Title, link, source, date, categories, CVEs, actors, malware and extracted indicators.')}</p>
       {!valid && <p role="alert" className="text-xs text-destructive">{l('Informe um período válido; a data final não pode preceder a inicial.', 'Enter a valid range; the end date cannot precede the start.')}</p>}
+      {busy && <p role="status" className="text-xs text-muted-foreground">{l('Preparando todas as evidências do período. Arquivos grandes podem levar alguns segundos.', 'Preparing all evidence for this period. Large files may take a few seconds.')}</p>}
       <Button onClick={download} disabled={busy || !valid} className="gap-2">{busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}{busy ? l('Preparando arquivo…', 'Preparing file…') : l('Baixar arquivo', 'Download file')}</Button>
     </DialogContent>
   </Dialog>;

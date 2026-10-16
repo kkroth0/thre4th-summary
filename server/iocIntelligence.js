@@ -193,8 +193,8 @@ export function createIocIntelligence({filePath=':memory:',now=()=>Date.now()}={
   return {ingest,list,detail,publications,replayProviderPayloads,news,watchSuggestions:createWatchSuggestions(db),phishing:createPhishingEvolution(db,{now}),
     exportRows:({owner='',from,to})=>{
       const scope=scopeSql(owner);
-      return db.prepare(`SELECT o.*,i.value,i.type FROM observations o JOIN indicators i ON i.id=o.indicator WHERE ${scope.sql} AND o.published>=? AND o.published<=? ORDER BY o.published DESC,o.id`).all(...scope.args,from,to).map(row=>{
-        const details=JSON.parse(row.details),entities=db.prepare('SELECT kind,entity id,name FROM entity_links WHERE observation=?').all(row.id);
+      return db.prepare(`SELECT o.*,i.value,i.type,(SELECT json_group_array(json_object('kind',e.kind,'id',e.entity,'name',e.name)) FROM entity_links e WHERE e.observation=o.id) entities FROM observations o JOIN indicators i ON i.id=o.indicator WHERE ${scope.sql} AND o.published>=? AND o.published<=? ORDER BY o.published DESC,o.id`).all(...scope.args,from,to).map(row=>{
+        const details=JSON.parse(row.details),entities=JSON.parse(row.entities);
         return {type:row.type,indicator:row.value,title:details.title,source:row.provider,url:details.link,date:row.published,dateBasis:'source-observation',storyId:details.storyId||'',categories:[],
           actors:entities.filter(entity=>entity.kind==='actor').map(entity=>entity.name),malware:entities.filter(entity=>entity.kind==='malware').map(entity=>entity.name),cves:entities.filter(entity=>entity.kind==='cve').map(entity=>entity.id)};
       });

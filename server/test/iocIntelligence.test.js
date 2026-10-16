@@ -93,6 +93,27 @@ test('private account observations and private OTX pulses never leak into shared
   store.close();
 });
 
+test('inventory export keeps source-specific entities, dates and account scope in the same SQL read', async () => {
+  const store = createIocIntelligence({now});
+  const published = '2026-10-13T12:34:56.000Z';
+  await store.ingest([
+    { value:'46.101.130.1',provider:'news',externalId:'report',published,title:'Report',link:'https://lab.example/report',actors:[{id:'A',name:'Reported actor'}],malwares:[{id:'M',name:'Reported family'}],cves:[{id:'CVE-2026-12345',name:'CVE-2026-12345'}] },
+    { value:'46.101.130.1',provider:'ThreatFox',externalId:'api',published,malwares:[{id:'M2',name:'API family'}] },
+    { value:'46.101.130.1',provider:'OTX',scope:'owner-one',externalId:'private',published,actors:[{id:'private',name:'Private actor'}] },
+    { value:'46.101.130.2',provider:'AbuseIPDB',published:'2025-01-01T00:00:00Z' },
+  ]);
+  const range = { from: '2026-10-13T00:00:00.000Z', to: '2026-10-13T23:59:59.999Z' };
+  const rows = store.exportRows({ owner:'owner-two', ...range });
+  assert.equal(rows.length, 2);
+  const news = rows.find(row => row.source === 'news');
+  assert.deepEqual(news.actors, ['Reported actor']); assert.deepEqual(news.malware, ['Reported family']);
+  assert.deepEqual(news.cves, ['CVE-2026-12345']); assert.equal(news.date, published);
+  assert.deepEqual(rows.find(row => row.source === 'ThreatFox').actors, []);
+  assert.equal(store.exportRows({ owner:'owner-one', ...range }).length, 3);
+  assert.ok(!JSON.stringify(rows).includes('Private actor'));
+  store.close();
+});
+
 test('normalization rejects internal/malformed indicators and accepts defanged domains and IPv6',()=>{
   assert.equal(normalizeIndicator('10.0.0.1'),null);assert.equal(normalizeIndicator('file:///etc/passwd'),null);
   assert.equal(normalizeIndicator('https://user:password@evil.com'),null);

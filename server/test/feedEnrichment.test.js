@@ -101,6 +101,40 @@ test('full RSS content avoids a body download even when there are no IOCs', asyn
     assert.equal(result.stats.fetched, 0);
 });
 
+test('body budget reaches other publishers and unattempted reports before repeated failures', async () => {
+    const storage = cache(), fetched = [];
+    const blocked = Array.from({ length: 5 }, (_, n) => item({ link: `https://blocked.example/${n}`, pubDate: new Date(NOW.getTime() - n * 1000).toISOString() }));
+    const other = item({ link: 'https://research.example/old', pubDate: '2026-10-01T00:00:00Z' });
+    const options = { cache: storage, now: NOW, maxFetches: 2, concurrency: 1, fetchText: async url => { fetched.push(url); throw Error('blocked'); } };
+    await collectArticleTexts([...blocked, other], options);
+    assert.deepEqual(fetched, [blocked[0].link, other.link]);
+    const next = await collectArticleTexts([...blocked, other], { ...options, now: new Date(NOW.getTime() + 3600001) });
+    assert.deepEqual(fetched.slice(2), [blocked[1].link, blocked[2].link]);
+    assert.equal(next.stats.deferred, 4);
+});
+
+test('body retry backoff grows to 24h, preserves good evidence and resets on changed RSS or success', async () => {
+    const storage = cache(); let at = NOW.getTime(), calls = 0, fail = false;
+    const run = (raw = item()) => collectArticleTexts([raw], { cache: storage, now: new Date(at), fetchText: async () => {
+        calls++; if (fail) throw Error('blocked'); return 'Malware at 193.143.1.131, CVE-2026-12345';
+    } });
+    await run(); fail = true; at += 86400001;
+    for (const hours of [1, 2, 4, 8, 16, 24]) {
+        const failed = await run();
+        assert.ok(failed.texts.get(item().link).includes('193.143.1.131'));
+        const before = calls; at += hours * 3600000 - 1;
+        await run(); assert.equal(calls, before);
+        at += 2;
+    }
+    await run();
+    const before = calls;
+    const changed = item({ text: 'Updated report' });
+    await run(changed); assert.equal(calls, before + 1, 'changed inputs do not inherit a long backoff');
+    assert.equal(storage.get(item().link).failures, 1);
+    fail = false; at += 3600001; await run(changed);
+    assert.equal(storage.get(item().link).failures, 0);
+});
+
 test('an expired body keeps its evidence while waiting for the next fetch budget', async () => {
     const storage = cache();
     await collectArticleTexts([item()], { cache: storage, now: NOW, fetchText: async () => 'CVE-2026-12345 exploited in the wild' });

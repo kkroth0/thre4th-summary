@@ -55,6 +55,26 @@ test('body revisions survive cache eviction while failed fingerprints never reus
   assert.equal(store.body(publication.link).text, 'body two'); db.close();
 });
 
+test('article failure retry state survives disk pruning and a new cache instance without replacing retained bodies', () => {
+  const db = new Database(':memory:'), persistence = createNewsPersistence(db), entries = new Map();
+  const makeCache = () => durableArticleCache({ get: key => entries.get(key), set: (key, value) => entries.set(key, value) }, createNewsPersistence(db));
+  let cache = makeCache();
+  const good = { version: 2, fingerprint: 'original', attemptedAt: '2026-10-15T00:00:00Z', collectedAt: '2026-10-15T00:00:00Z', text: 'CVE-2026-12345 at 193.143.1.131', supplementalIocs: { hashes: ['a'.repeat(64)] } };
+  cache.set(publication.link, good);
+  cache.set(publication.link, { ...good, error: 'blocked', failures: 5, attemptedAt: '2026-10-16T00:00:00Z' });
+  entries.clear(); cache = makeCache();
+  assert.equal(cache.get(publication.link).failures, 5);
+  assert.equal(cache.get(publication.link).error, 'blocked');
+  assert.deepEqual(cache.get(publication.link).supplementalIocs, good.supplementalIocs);
+  cache.set(publication.link, { version: 2, fingerprint: 'changed', error: 'blocked', failures: 1, attemptedAt: '2026-10-16T01:00:00Z' });
+  entries.clear(); cache = makeCache();
+  assert.equal(cache.get(publication.link).text, undefined);
+  assert.equal(cache.get(publication.link).fingerprint, 'changed');
+  assert.equal(persistence.body(publication.link).text, good.text);
+  assert.equal(persistence.status().bodies, 1);
+  db.close();
+});
+
 test('entity aliases preserve ambiguity and private provider names never cross owners', async () => {
   const store = createIocIntelligence();
   store.news.registerEntities([{kind:'actor',id:'G1',name:'One',aliases:['Shared']},{kind:'actor',id:'G2',name:'Two',aliases:['Shared']}], 'global', 'catalog');

@@ -87,6 +87,7 @@ import { createFeedCache, createFeedCollector, canonicalArticleUrl, singleFlight
 import { collectArticleTexts } from './articleCollector.js';
 import { enrichFeedItemsAsync, mergeIocEvidence, applyVulnerabilityContext, EXTRACTION_VERSION } from './feedEnrichment.js';
 import { createFeedExtractionCache } from './feedExtractionCache.js';
+import { createPersistentFeedExtractionCache, extractionCatalogRevision } from './persistentFeedExtractionCache.js';
 import { repairNewsVersionLists } from './repairNewsVersionLists.js';
 import { createStoryStore } from './newsStoryStore.js';
 import { createNewsArchiveStore } from './newsArchiveStore.js';
@@ -1355,7 +1356,10 @@ function effectiveFeeds() {
 
 // Background newsletter feed refresher
 const rssCollectionCache = createFeedCache({ directory: path.join(__dirname, '.feed-cache', 'rss'), fs, writeJsonAtomic });
-const feedExtractionCache = createFeedExtractionCache();
+const feedExtractionCache = process.env.NODE_ENV === 'test' ? createFeedExtractionCache() : createPersistentFeedExtractionCache({
+    directory: __dirname, file: path.join(__dirname, '.feed-cache', 'extraction.bin'),
+    onError: () => console.warn('Extraction cache unavailable; unchanged evidence will be recomputed.'),
+});
 const articleCollectionCache = durableArticleCache(createFeedCache({ directory: path.join(__dirname, '.feed-cache', 'articles'), fs, writeJsonAtomic }), iocIntelligence.news, error => console.warn('Article body persistence failed:', error.message));
 // Reclassify metadata only; preserve publications and reuse existing body
 // caches without issuing hundreds of historical requests on startup.
@@ -1525,11 +1529,12 @@ const refreshNewsletterFeed = singleFlightRefresh(async () => {
         let unifiedFeed = await enrichFeedItemsAsync(rawItems, {
             texts: bodies.texts, supplementalIocs: bodies.supplementalIocs, actors: (text) => matchActors(text, extractionActors),
             malware: (text) => matchMalware(text, malwareIndex, {news:true}), campaigns: (text) => matchCampaigns(text, campaignIndex),
-            seller: extractSellerHandle, categorize, extractionCache: feedExtractionCache, catalogRevision: ctiActorIndexVersion || 'boot',
+            seller: extractSellerHandle, categorize, extractionCache: feedExtractionCache, catalogRevision: extractionCatalogRevision(extractionActors, malwareIndex, campaignIndex),
         });
         const extractionAfter = feedExtractionCache.stats();
         const extraction = { reused: extractionAfter.hits - extractionBefore.hits, recomputed: extractionAfter.misses - extractionBefore.misses,
-            evictions: extractionAfter.evictions - extractionBefore.evictions, entries: extractionAfter.entries, bytes: extractionAfter.bytes };
+            evictions: extractionAfter.evictions - extractionBefore.evictions, entries: extractionAfter.entries, bytes: extractionAfter.bytes, restored: extractionAfter.restored };
+        feedExtractionCache.flush?.();
         const allCves = [...new Set(unifiedFeed.flatMap((item) => item.cves))];
         stage('vulnerabilities');
         const [kevMap, epssMap] = await Promise.all([getKevMap(), getEpssMap(allCves)]);

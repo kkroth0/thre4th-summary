@@ -155,9 +155,16 @@ export function createNewsPersistence(db, { now = () => Date.now() } = {}) {
     const digest = hash(entry.text), payload = JSON.stringify({ ...entry, link, contentHash: digest });
     db.prepare('INSERT INTO news_body_versions VALUES(?,?,?,?) ON CONFLICT(link,hash) DO UPDATE SET payload=excluded.payload,collected=excluded.collected WHERE payload<>excluded.payload').run(link, digest, payload, entry.collectedAt || at());
   });
+  const readAttempt = db.prepare('SELECT payload FROM news_storage_state WHERE id=?');
+  const writeAttempt = db.prepare('INSERT INTO news_storage_state VALUES(?,?) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload WHERE payload<>excluded.payload');
   const registerTransaction = db.transaction(registerEntities);
   return { reconcile: snapshot => { if (state('primary')) throw Error('Shadow reconciliation cannot overwrite active SQLite storage'); return reconcile(snapshot); }, compare, saveBody, activate, commit, readSnapshot,
     generation: () => state('primary')?.generation || 0,
+    attempt: link => { const row = readAttempt.get('article-attempt:' + hash(link)); return row ? JSON.parse(row.payload) : null; },
+    saveAttempt: (link, entry) => {
+      const { version, fingerprint, attemptedAt, error, failures } = entry;
+      if (fingerprint && attemptedAt) writeAttempt.run('article-attempt:' + hash(link), JSON.stringify({ version, fingerprint, attemptedAt, error, failures }));
+    },
     recordBackup: error => setState('backup', { at: at(), ok: !error, generation: state('primary')?.generation || 0, ...(error ? { message: 'JSON recovery copy could not be updated' } : {}) }),
     registerEntities: (...args) => db.inTransaction ? registerEntities(...args) : registerTransaction(...args),
     body: link => { const row = db.prepare('SELECT payload FROM news_body_versions WHERE link=? ORDER BY collected DESC,rowid DESC LIMIT 1').get(link); return row ? JSON.parse(row.payload) : null; },
@@ -186,8 +193,13 @@ export function durableArticleCache(cache, persistence, onError = () => {}) {
       const disk = cache.get(key);
       if (disk?.text) { try { persistence.saveBody(key, disk); } catch (error) { onError(error); } return disk; }
       if (disk) return disk;
-      try { return persistence.body(key); } catch (error) { onError(error); return null; }
+      try {
+        const body = persistence.body(key), attempt = persistence.attempt?.(key);
+        // A pruned failed attempt must not turn into a never-attempted URL.
+        // Retain a good body only for the same RSS fingerprint and extractor.
+        return attempt ? { ...(body?.fingerprint === attempt.fingerprint && body?.version === attempt.version ? body : {}), ...attempt } : body;
+      } catch (error) { onError(error); return null; }
     },
-    set(key, value) { cache.set(key, value); try { persistence.saveBody(key, value); } catch (error) { onError(error); } },
+    set(key, value) { cache.set(key, value); try { persistence.saveBody(key, value); persistence.saveAttempt?.(key, value); } catch (error) { onError(error); } },
   };
 }
