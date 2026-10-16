@@ -44,4 +44,16 @@
   repara os links já persistidos sem refazer a coleta. A busca também passa
   a incluir os códigos de modelo do CSAF além do nome comercial.
 
-Conferência da correção final em produção: pendente.
+## Conferência final
+
+- Release `a2f2d50`: CI `38912118052` aprovado (799 backend, 250 frontend
+  unitários e 7 de marca). VPS `38912352059` e Cloudflare `38912351826`
+  aprovados; SHA da VPS confirmado. API devolveu 32 avisos de outubro,
+  as quatro fontes com estado `ok`, zero pendências/falhas e sem erro de
+  persistência. Link corrigido de ICSA-26-281-02 confirmado na resposta real.
+- Seletor nativo de mês testado em agosto de 2026: 50 avisos, um com modelo
+  explícito do catálogo. Filtro de modelos e busca `BMXNOE0110` encontraram
+  SEVD-2025-224-05, com publicação em 12/08/2025 e revisão em 11/08/2026.
+- Segundo Excel real baixado e reaberto: uma linha, ID e código BMXNOE0110
+  completos, CVE-2025-6625 e versão corrigida 6.80 preservados. Captura
+  local da interface foi mantida fora do commit por incluir a sessão da conta.
