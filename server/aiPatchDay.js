@@ -7,6 +7,7 @@ import { defaultOtMonth, validOtMonth } from './otPatchDay.js';
 const DAY = 86400000, SOURCE = 'https://api.github.com/advisories';
 const advisoryPage = (from, to, known = false) => SOURCE + '?' + new URLSearchParams({ type: 'reviewed', ...(from ? { modified: `${from.slice(0, 10)}..${to.slice(0, 10)}` } : {}), ...(known ? { affects: [...new Set(AI_TOOL_CATALOG.filter(t => t.repo).flatMap(t => t.packages))].join(',') } : {}), sort: 'updated', direction: 'desc', per_page: '100' });
 const refs = values => [...new Set(values.filter(url => typeof url === 'string' && /^https:\/\//.test(url)))];
+const nvdTime = value => /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?$/.test(value || '') ? value + 'Z' : value || '';
 const score = values => { const scores = values.filter(v => typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= 10); return scores.length ? Math.max(...scores) : null; };
 export function normalizeAiAdvisory(advisory) {
     if (advisory.withdrawn_at || advisory.type && advisory.type !== 'reviewed' || !/^GHSA-[a-z0-9-]+$/i.test(advisory.ghsa_id || '')) return null;
@@ -29,7 +30,7 @@ export function normalizeAiAdvisory(advisory) {
 export function normalizeAiNvd(row) {
     const tools = row.tools || [], names = [...new Set(tools.map(t => t.name))];
     return { id: row.id, title: `${names.join(', ')} · ${row.id}`, summary: row.description, source: 'NVD', url: `https://nvd.nist.gov/vuln/detail/${row.id}`, references: refs((row.references || []).map(r => r.url || r)),
-        vendors: names, tools, categories: [...new Set(tools.map(t => t.category))], published: row.published, updated: row.modified, revision: row.modified, cves: [row.id], cvss: row.cvss, patch: 'unconfirmed', kev: row.kev, revised: row.modified !== row.published, stale: false,
+        vendors: names, tools, categories: [...new Set(tools.map(t => t.category))], published: nvdTime(row.published), updated: nvdTime(row.modified), revision: nvdTime(row.modified), cves: [row.id], cvss: row.cvss, patch: 'unconfirmed', kev: row.kev, revised: row.modified !== row.published, stale: false,
         products: [{ id: row.product, name: row.product || names.join(', '), vendor: row.vendor, status: 'mentioned' }], remediations: [],
         matches: names.map(name => ({ vendor: name, level: 'vendor', models: [] })), cveSignals: [{ id: row.id, kev: row.kev, epss: row.epss, cvss: row.cvss }],
     };

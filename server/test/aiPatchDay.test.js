@@ -44,6 +44,8 @@ test('CVE join deduplicates NVD evidence while preserving distinct GHSA/package 
     assert.equal(rows.length, 1); assert.equal(rows[0].kev, true); assert.equal(rows[0].cveSignals[0].epss, 0);
     assert.equal(rows[0].patch, 'available'); assert.equal(rows[0].cvss, 9.8);
     assert.equal(mergeAiPatches([gh, { ...gh, id: 'GHSA-aaaa-bbbb-cccc' }], [nvd]).length, 2);
+    const time = normalizeAiNvd({ ...nvd, id: 'CVE-2026-55555', published: '2026-10-31T23:30:00.000', modified: '2026-10-31T23:59:00.000' });
+    assert.equal(time.published, '2026-10-31T23:30:00.000Z'); assert.equal(time.updated, '2026-10-31T23:59:00.000Z');
 });
 
 test('global source uses bounded single-flight pages, durable cursor, no per-view calls, and retains cache on failure', async () => {
