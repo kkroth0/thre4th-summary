@@ -46,6 +46,11 @@ try {
     const cache=createPersistentFeedExtractionCache({directory:path.join(root,'server'),file:path.join(root,'server/.feed-cache/extraction.bin'),onError:()=>errors++});
     report.extractionCacheRestore={...cache.stats(),errors};
 }catch{report.extractionCacheRestore={unavailable:true};}
+if(service) try {
+ const properties=execFileSync('systemctl',['show',service,'--property=NRestarts,MemoryPeak,MemoryMax,MemorySwapMax,ExecMainCode,ExecMainStatus,OOMPolicy'],{encoding:'utf8',timeout:10000,stdio:['ignore','pipe','ignore']});
+ const logs=execFileSync('journalctl',['-u',service,'--since','24 hours ago','--grep','Main process exited|Scheduled restart job|heap out of memory|Killed|oom-kill|Failed with result', '-n','100','-o','json','--no-pager'],{encoding:'utf8',timeout:10000,maxBuffer:1024*1024,stdio:['ignore','pipe','ignore']}).trim().split('\n').filter(Boolean).map(line=>JSON.parse(line));
+ report.restartHealth={properties:Object.fromEntries(properties.trim().split('\n').map(line=>{const i=line.indexOf('=');return [line.slice(0,i),line.slice(i+1)];})),signals:logs.map(row=>({at:new Date(Number(row.__REALTIME_TIMESTAMP)/1000).toISOString(),message:row.MESSAGE})).filter(row=>/Main process exited|Scheduled restart job|heap out of memory|oom-kill|Failed with result/.test(row.message))};
+}catch{report.restartHealth={unavailable:true};}
 report.code = Object.fromEntries(['feedEnrichment.js','feedExtractionCache.js'].map(name => [name,createHash('sha256').update(fs.readFileSync(path.join(root,'server',name))).digest('hex')]));
 try {
     const data=JSON.parse(fs.readFileSync(path.join(root,'server/.cti-fyi.json'),'utf8'));
