@@ -459,8 +459,8 @@ const PatchTuesday = () => {
                                 </div>
 
                                 {/* Filter bar */}
-                                <div className="p-4 border-b grid gap-2 sm:grid-cols-2 xl:grid-cols-[minmax(180px,1fr)_150px_140px_180px_170px]">
-                                    <div className="relative flex-1 min-w-[180px]">
+                                <div className="p-4 border-b grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                                    <div className="relative min-w-0 sm:col-span-2 xl:col-span-4">
                                         <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground/60" />
                                         <Input
                                             type="text"
