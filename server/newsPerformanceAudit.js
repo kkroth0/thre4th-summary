@@ -40,6 +40,12 @@ report.versionContexts=db.prepare("SELECT id,payload FROM news_documents WHERE k
 });
 report.storyVersionIps=db.prepare("SELECT payload FROM news_documents WHERE kind='stories' AND payload LIKE '%25.1.%'").all().flatMap(record=>JSON.parse(record.payload).sources||[]).filter(row=>(row.iocs?.ips||[]).some(ip=>/^25\.1\./.test(ip))).map(row=>({source:row.source,title:row.title,ips:row.iocs.ips,archiveIps:JSON.parse(db.prepare("SELECT payload FROM news_documents WHERE kind='archive' AND id=?").get(row.link)?.payload||'null')?.iocs?.ips||[]}));
 db.close();
+try {
+    const {createPersistentFeedExtractionCache}=await import(pathToFileURL(path.join(root,'server/persistentFeedExtractionCache.js')));
+    let errors=0;
+    const cache=createPersistentFeedExtractionCache({directory:path.join(root,'server'),file:path.join(root,'server/.feed-cache/extraction.bin'),onError:()=>errors++});
+    report.extractionCacheRestore={...cache.stats(),errors};
+}catch{report.extractionCacheRestore={unavailable:true};}
 report.code = Object.fromEntries(['feedEnrichment.js','feedExtractionCache.js'].map(name => [name,createHash('sha256').update(fs.readFileSync(path.join(root,'server',name))).digest('hex')]));
 try {
     const data=JSON.parse(fs.readFileSync(path.join(root,'server/.cti-fyi.json'),'utf8'));
