@@ -108,8 +108,8 @@ Interface de produção atualizada e conferida na conta autorizada:
   informado, referências Cisco/CISA. A primeira espera curta do seletor de
   navegador expirou; a consulta concluiu e a interface apresentou a resposta.
 - /briefing após a correção: Unit 42, inclusões CISA KEV, Silent Lynx e resposta
-  a incidente no Cisco Secure Email Gateway; páginas estáticas sem data
-  inferida não apareceram. Data de coleta não foi promovida a publicação.
+  a incidente no Cisco Secure Email Gateway; páginas estáticas com data
+  inferida da coleta não apareceram. Data de coleta não foi promovida a publicação.
 - Contador de IA manteve uma chamada após os reinícios/deploys.
 - Webhook público sem segredo: 401 após publicação, sem desafio/intersticial
   do proxy. Uma chamada durante o restart havia respondido 502; a verificação
