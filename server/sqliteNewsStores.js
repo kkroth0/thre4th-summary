@@ -4,7 +4,8 @@ import { createStoryStore } from './newsStoryStore.js';
 // One process owns news writes. Async publications are serialized; SQLite's
 // generation guard also rejects updates computed before a synchronous migration.
 export function createSqliteNewsStores({ persistence, archive, stories, writeBackup = () => {}, onBackupError = () => {} }) {
-  if (!persistence.activate({ archive: archive.all(), stories: stories.all() })) return { archive, stories };
+  const initial = persistence.generation() ? persistence.readSnapshot() : null;
+  if (!initial && !persistence.activate({ archive: archive.all(), stories: stories.all() })) return { archive, stories };
   let snapshot, archiveView, storyView, pending = Promise.resolve();
   function backup() {
     let failure;
@@ -27,12 +28,16 @@ export function createSqliteNewsStores({ persistence, archive, stories, writeBac
     // Detach drafts exactly as persisted JSON before advancing the database.
     // The transaction verifies payloads and relationships; a second full read
     // after that successful commit provided no additional integrity guarantee.
-    const detached = JSON.parse(JSON.stringify(next));
+    // Detach one document at a time, avoiding a second corpus-sized JSON string
+    // alongside the old snapshot, draft and SQLite comparison payloads.
+    const detached = { generation: next.generation,
+      archive: next.archive.map(row => JSON.parse(JSON.stringify(row))),
+      stories: next.stories.map(row => JSON.parse(JSON.stringify(row))) };
     const result = persistence.commit(detached, detached.generation);
     install({ ...detached, generation: result.generation });
     backup();
   }
-  refresh();
+  if (initial) install(initial); else refresh();
   // Restarts repair a stale/missing JSON copy from verified SQLite, never the
   // reverse. A failed backup does not roll back an already committed database.
   backup();

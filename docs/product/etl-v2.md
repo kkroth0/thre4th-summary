@@ -46,9 +46,9 @@ fontes com data declarada podem importar publicações já na primeira coleta.
 Listagens sem links reconhecidos são tratadas como falha, incluindo páginas de
 bloqueio que devolvem HTTP 200.
 
-Há três tentativas para erros transitórios, com esperas de um e três segundos;
-cada requisição RSS tem timeout de oito segundos, até três redirecionamentos e
-resposta limitada a 8 MB. A concorrência padrão é seis, limitada a dezesseis.
+Há uma tentativa por fonte/ciclo, com preservação do último resultado válido.
+DNS, HTTP e até três redirecionamentos compartilham prazo total de doze
+segundos; a resposta é limitada a 8 MB. A concorrência padrão é seis, limitada a dezesseis.
 O parser processa até duzentas entradas mais recentes por resposta. Cada fonte
 retém até cem publicações dos últimos trinta dias. Esses limites controlam custo
 e memória: fontes de volume muito alto podem ter publicações omitidas.
@@ -68,12 +68,15 @@ distintas com conteúdo republicado: isso continua dependendo da correlação.
 `server/articleCollector.js` complementa notícias e pesquisas (`layer: 2` e `3`)
 quando o feed fornece menos de 1.500 caracteres. A presença de IOC não decide
 se o texto deve ser coletado: um documento pode trazer atores ou CVEs sem IOCs.
-O coletor prioriza publicações recentes e baixa no máximo quarenta corpos por
-ciclo, com concorrência três. O HTML é limitado a 2 MB; o texto, a 32 mil
+O coletor prioriza publicações ainda não tentadas/alteradas, alterna os sites
+e baixa no máximo quarenta corpos por ciclo, com concorrência três. Entre
+entradas sem tentativa, prioriza as recentes; entre retentativas, a tentativa
+mais antiga. O HTML é limitado a 2 MB; o texto, a 64 mil
 caracteres. Não executa JavaScript para contornar páginas bloqueadas.
 
 Texto de artigo tem cache de 24 horas, invalidado por mudança do título/texto
-do feed. Falhas têm janela de nova tentativa de uma hora. Texto anterior do
+do feed. Falhas repetidas têm janela progressiva de uma até 24 horas. O estado
+das tentativas fica no SQLite e sobrevive à poda do cache de arquivos. Texto anterior do
 mesmo conteúdo continua disponível quando a atualização falha ou aguarda o
 orçamento do próximo ciclo. Um feed com corpo suficientemente longo dispensa
 essa requisição adicional.
@@ -86,7 +89,16 @@ usando título, conteúdo do feed e texto coletado. Cada publicação recebe:
 - categorias de navegação e sinais usados no score;
 - fornecedores/projetos reconhecidos, com ID, nome canônico e alias mencionado;
 - `topicCves`, separado de todos os CVEs mencionados, para identificar o foco;
-- `contentHash` SHA-256 do texto processado e `extractionVersion: feed-v6`.
+- `contentHash` SHA-256 do texto processado e `extractionVersion: feed-v13`.
+
+Evidências derivadas têm cache de até 6.000 entradas / 32 MiB, persistido em
+`.feed-cache/extraction.bin`. A chave inclui publicação original, corpo,
+suplementos de IOCs, versão da extração e conteúdo dos três índices de
+entidades. O snapshot é invalidado por mudanças nas dependências locais do
+backend e manifests de pacotes. Uma renovação de data do catálogo com os
+mesmos índices preserva o reaproveitamento; mudanças em nomes/IDs/aliases
+forçam recálculo. Falhas de leitura ou escrita do cache não impedem a extração.
+KEV e EPSS permanecem fora desse cache e são aplicados com o contexto atual.
 
 A extração prefere o contêiner do corpo do artigo e remove blocos de notícias
 relacionadas. Aliases comuns como Action, Play, INC, Expand e Power exigem nome

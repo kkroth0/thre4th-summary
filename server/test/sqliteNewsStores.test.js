@@ -151,3 +151,24 @@ test('restart still rejects invalid cross-document relationships even with match
     db.close();
   }
 });
+
+test('restart validates the SQLite corpus once and does not read legacy JSON views after cutover', () => {
+  const db = new Database(':memory:'), persistence = createNewsPersistence(db);
+  createSqliteNewsStores({ persistence, ...legacy([row()]) });
+  let reads = 0;
+  const measured = { ...persistence, readSnapshot: () => { reads++; return persistence.readSnapshot(); }, activate: () => { throw Error('must not reactivate'); } };
+  const unused = { all: () => { throw Error('must not load legacy copy'); } };
+  const stores = createSqliteNewsStores({ persistence: measured, archive: unused, stories: unused });
+  assert.equal(reads, 1); assert.equal(stores.archive.size(), 1);
+  assert.equal(reads, 1); db.close();
+});
+
+test('streaming comparison detects tampered unchanged payloads and rolls back the entire publication', () => {
+  const db = new Database(':memory:'), persistence = createNewsPersistence(db);
+  createSqliteNewsStores({ persistence, ...legacy([row()]) });
+  const before = persistence.readSnapshot();
+  db.prepare("UPDATE news_documents SET payload=? WHERE kind='archive'").run(JSON.stringify({ ...row(), title:'tampered' }));
+  assert.throws(() => persistence.commit(before, before.generation), /conflicting identities/);
+  assert.equal(persistence.generation(), before.generation);
+  assert.throws(() => persistence.readSnapshot(), /integrity/); db.close();
+});

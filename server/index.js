@@ -88,6 +88,7 @@ import { collectArticleTexts } from './articleCollector.js';
 import { enrichFeedItemsAsync, mergeIocEvidence, applyVulnerabilityContext, EXTRACTION_VERSION } from './feedEnrichment.js';
 import { createFeedExtractionCache } from './feedExtractionCache.js';
 import { createPersistentFeedExtractionCache, extractionCatalogRevision } from './persistentFeedExtractionCache.js';
+import { writeNewsBackupAtomic } from './newsBackup.js';
 import { repairNewsVersionLists } from './repairNewsVersionLists.js';
 import { createStoryStore } from './newsStoryStore.js';
 import { createNewsArchiveStore } from './newsArchiveStore.js';
@@ -180,13 +181,13 @@ const DAILY_SUMMARIES_PATH = path.join(__dirname, '.daily-summaries.json');
 const dailyEditionStore = createEditionStore({ filePath: DAILY_SUMMARIES_PATH, writeJsonAtomic });
 
 const NEWS_STORIES_PATH = process.env.NEWS_STORIES_PATH || path.join(__dirname, '.news-stories.json');
-const legacyNewsStories = createStoryStore({ filePath: NEWS_STORIES_PATH, readFileSync: fs.readFileSync, writeJsonAtomic });
 const NEWS_ARCHIVE_PATH = process.env.NEWS_ARCHIVE_PATH || path.join(__dirname, '.news-archive.json');
-const legacyNewsArchive = createNewsArchiveStore({ filePath: NEWS_ARCHIVE_PATH, readFileSync: fs.readFileSync, writeJsonAtomic });
 const iocIntelligence = createIocIntelligence({ filePath: process.env.IOC_INTELLIGENCE_PATH || (process.env.NODE_ENV === 'test' ? ':memory:' : path.join(__dirname, '.ioc-intelligence.sqlite')) });
 const { archive: newsArchiveStore, stories: newsStoryStore } = createSqliteNewsStores({
-    persistence: iocIntelligence.news, archive: legacyNewsArchive, stories: legacyNewsStories,
-    writeBackup: snapshot => { writeJsonAtomic(NEWS_ARCHIVE_PATH, snapshot.archive); writeJsonAtomic(NEWS_STORIES_PATH, snapshot.stories); },
+    persistence: iocIntelligence.news,
+    archive: createNewsArchiveStore({ filePath: NEWS_ARCHIVE_PATH, readFileSync: fs.readFileSync, writeJsonAtomic, initialRows: iocIntelligence.news.generation() ? [] : undefined }),
+    stories: createStoryStore({ filePath: NEWS_STORIES_PATH, readFileSync: fs.readFileSync, writeJsonAtomic, initialRows: iocIntelligence.news.generation() ? [] : undefined }),
+    writeBackup: snapshot => { writeNewsBackupAtomic(NEWS_ARCHIVE_PATH, snapshot.archive); writeNewsBackupAtomic(NEWS_STORIES_PATH, snapshot.stories); },
     onBackupError: () => console.warn('News SQLite committed; JSON recovery copy needs repair'),
 });
 function registerCatalogEntities(rows, kind) {
@@ -1469,9 +1470,9 @@ const feedCollector = createFeedCollector({
 const refreshNewsletterFeed = singleFlightRefresh(async () => {
     await newsQualityReady;
     const startedAt = Date.now();
-    const stages = {};
+    const stages = {}, memory = {};
     let stageStartedAt = startedAt, activeStage = 'feeds';
-    const recordProgress = () => { try { iocIntelligence.setState('news-current-cycle', { startedAt: new Date(startedAt).toISOString(), updatedAt: new Date().toISOString(), phase: activeStage, stages }); } catch { /* diagnostics must not fail collection */ } };
+    const recordProgress = () => { try { const usage = process.memoryUsage(); memory[activeStage] = { rss: usage.rss, heapUsed: usage.heapUsed, external: usage.external }; iocIntelligence.setState('news-current-cycle', { startedAt: new Date(startedAt).toISOString(), updatedAt: new Date().toISOString(), phase: activeStage, stages, memory }); } catch { /* diagnostics must not fail collection */ } };
     const stage = next => { const at = Date.now(); stages[activeStage] = at - stageStartedAt; activeStage = next; stageStartedAt = at; recordProgress(); };
     try {
         recordProgress();

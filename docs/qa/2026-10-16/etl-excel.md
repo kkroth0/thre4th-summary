@@ -53,6 +53,33 @@ SophosLabs e WithSecureLabs. A coleta dedicada continua em Unit 42 e Arctic
 Wolf; as sete candidatas não foram ativadas. Não confundir fonte de notícias
 já cadastrada com parser dos arquivos do repositório implementado.
 
-Validação de implantação e de integridade após a publicação: pendente.
+## Implantação inicial e investigação de memória
+
+- Release `3a1a8d1`: CI `38904432345`, VPS `38904669142` e Cloudflare
+  `38904669215` concluídos com sucesso. SHA confirmado no deploy.
+- Excel da base unificada baixado novamente na versão publicada, sem erro
+  exibido. A mensagem original do usuário continua sem reprodução.
+- Auditoria `38905057571` identificou vários encerramentos anteriores por
+  `JavaScript heap out of memory`, inclusive em 16/10 às 05:43, 09:37 e 09:51
+  de Fortaleza. Isso também fazia a extração começar fria após cada reinício.
+  Atribuir o recálculo observado exclusivamente à data do catálogo seria
+  incorreto: os reinícios foram confirmados pelos logs.
+- Auditoria `38905391627`: host com 1.000.542.208 bytes de RAM. Publicações
+  e eventos somam 26.934.038 bytes de JSON no SQLite (7.976 / 5.422 documentos).
+  Não foram impressos dados brutos, segredos ou evidências privadas.
+- Segunda otimização: evitar ler a cópia JSON legada quando SQLite já é a
+  fonte primária; validar o snapshot uma vez no boot; ler/verificar payloads
+  SQLite com iteradores; manter somente IDs/hashes antigos no reconciliador;
+  destacar documentos um a um; escrever cópias de recuperação em blocos de
+  aproximadamente 256 KiB, com rename atômico e preservação da versão anterior
+  em caso de falha. Revisões, hashes e transação conjunta continuam verificados.
+- Ensaio sintético com 8.000 publicações, 5.400 eventos e 27.146.825 bytes de
+  JSON, heap limitado a 256 MiB: pico de RSS 452.416 → 399.944 KiB (redução
+  de 11,6%); duração 968 → 1.044 ms. Integridade aprovada em ambas as versões.
+  É uma medição local do caminho de persistência, não prova de eliminação de
+  todos os encerramentos em produção. Telemetria por fase foi acrescentada
+  ao diagnóstico do ciclo para acompanhar os próximos picos.
+
+Validação da segunda implantação e integridade após a publicação: pendente.
 Não se conclui precisão semântica de todas as atribuições ou cobertura
 integral de textos bloqueados a partir de uma auditoria de persistência.

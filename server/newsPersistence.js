@@ -28,7 +28,8 @@ function relationships(archive, stories) {
 function comparePrepared(db, expectedPairs, archive, stories) {
   const result = {};
   for (const [kind, expected] of expectedPairs) {
-    const stored = new Map(db.prepare('SELECT id,hash,payload FROM news_documents WHERE kind=?').all(kind).map(row => [row.id, hash(row.payload) === row.hash ? row.hash : 'invalid-payload']));
+    const stored = new Map();
+    for (const row of db.prepare('SELECT id,hash,payload FROM news_documents WHERE kind=?').iterate(kind)) stored.set(row.id, hash(row.payload) === row.hash ? row.hash : 'invalid-payload');
     result[kind] = { source: expected.size, stored: stored.size, missing: 0, changed: 0, extra: 0 };
     for (const [id, row] of expected) { if (!stored.has(id)) result[kind].missing++; else if (stored.get(id) !== row.hash) result[kind].changed++; }
     for (const id of stored.keys()) if (!expected.has(id)) result[kind].extra++;
@@ -51,12 +52,13 @@ export function readPrimaryNewsSnapshot(db) {
   const manifest = JSON.parse(db.prepare("SELECT payload FROM news_storage_state WHERE id='order'").get()?.payload || 'null');
   const snapshot = {};
   for (const kind of ['archive', 'stories']) {
-    const documents = new Map(db.prepare('SELECT id,hash,payload FROM news_documents WHERE kind=?').all(kind).map(row => {
+    const documents = new Map();
+    for (const row of db.prepare('SELECT id,hash,payload FROM news_documents WHERE kind=?').iterate(kind)) {
       if (hash(row.payload) !== row.hash) throw Error('SQLite news payload integrity check failed');
       const value = JSON.parse(row.payload);
       if (value[kind === 'archive' ? 'link' : 'id'] !== row.id) throw Error('SQLite news identity integrity check failed');
-      return [row.id, value];
-    }));
+      documents.set(row.id, value);
+    }
     const order = manifest?.[kind];
     if (!Array.isArray(order) || new Set(order).size !== order.length || order.length !== documents.size || order.some(id => !documents.has(id))) throw Error('SQLite news manifest integrity check failed');
     snapshot[kind] = order.map(id => documents.get(id));
@@ -102,16 +104,20 @@ export function createNewsPersistence(db, { now = () => Date.now() } = {}) {
     const publications = new Map(archive.map(row => [row.link, row]));
     const desiredPairs = pairs(archive, stories);
     for (const [kind, desired] of desiredPairs) {
-      const previous = new Map(db.prepare('SELECT * FROM news_documents WHERE kind=?').all(kind).map(row => [row.id, row]));
+      const previous = new Map(db.prepare('SELECT id,hash FROM news_documents WHERE kind=?').all(kind).map(row => [row.id, row]));
+      const oldPayload = db.prepare('SELECT payload FROM news_documents WHERE kind=? AND id=?');
       for (const [id, row] of desired) {
         const old = previous.get(id);
-        if (old?.hash === row.hash && old.payload === row.payload) continue;
-        if (old) revise.run(kind, id, old.hash, old.payload, at(), 'updated');
+        // The full payload hash is verified below, including unchanged rows.
+        // Retain only identities/hashes of the old corpus in memory.
+        if (old?.hash === row.hash) { row.payload = undefined; continue; }
+        if (old) revise.run(kind, id, old.hash, oldPayload.get(kind, id).payload, at(), 'updated');
         put.run(kind, id, row.hash, row.payload, at()); changed++;
+        row.payload = undefined;
         if (kind === 'archive') changedPublications.push(publications.get(id));
       }
       for (const [id, old] of previous) if (!desired.has(id)) {
-        revise.run(kind, id, old.hash, old.payload, at(), 'source-retention');
+        revise.run(kind, id, old.hash, oldPayload.get(kind, id).payload, at(), 'source-retention');
         db.prepare('DELETE FROM news_documents WHERE kind=? AND id=?').run(kind, id); changed++;
       }
     }
