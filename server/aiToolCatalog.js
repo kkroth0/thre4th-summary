@@ -92,6 +92,13 @@ const bounded = (text, term) => {
 // FTS narrows dated candidates before the strict classifier. Do not match on
 // "AI" alone: it is both noisy and prohibitively expensive in a large corpus.
 export const AI_SEARCH_QUERY = [...new Set([...AI_TOOL_CATALOG.flatMap(t => [t.name, ...t.packages]).filter(t => t.length >= 4 && !['Continue','Claude','datasets','notebook','distributed','accelerate','cursor','streamlit'].includes(t)), 'MCP', 'LLM', 'large language model', 'generative AI', 'AI agent', 'model inference', 'retrieval augmented generation'])].map(t => '"' + t.replace(/"/g, '""') + '"').join(' OR ');
+function affectedSubject(value) {
+    const intro = value.trim().slice(0, 700)
+        .replace(/^.*?\bvulnerability (?:was (?:found|identified|determined|discovered) )?in\s+/i, '')
+        .replace(/^A security flaw has been discovered in\s+/i, '').replace(/^The\s+/i, '');
+    const subject = intro.split(/\s+(?:is|are|allows?|contains?|has|through|up to|before|prior to|versions?|suffers|via|using)\b|\.\s/i)[0].trim();
+    return subject.length >= 3 && subject.length <= 200 ? subject : '';
+}
 export function classifyAiTool({ packages = [], repository = '', text = '', summary = '', references = [], product = '' } = {}) {
     const repo = repository.toLowerCase().replace(/^https?:\/\/github.com\//, '').replace(/\/$/, '');
     const identities = packages.filter(p => p && (typeof p === 'string' || p.name)).map(p => normalize(typeof p === 'string' ? p : p.name));
@@ -104,7 +111,20 @@ export function classifyAiTool({ packages = [], repository = '', text = '', summ
     const matches = AI_TOOL_CATALOG.filter(tool => (!packages.length && bounded(prose.slice(0, 4000), tool.name) && !ambiguous.includes(tool.name))
         || normalize(product) === normalize(tool.name)
         || tool.packages.some(p => p.length > 4 && normalize(product) === normalize(p)));
-    if (matches.length) return matches.map(tool => ({ name: tool.name, category: tool.category, evidence: 'catalog' }));
+    if (matches.length) {
+        const direct = matches.filter(tool => normalize(product) === normalize(tool.name) || tool.packages.some(p => normalize(product) === normalize(p)));
+        if (direct.length) return direct.map(tool => ({ name: tool.name, category: tool.category, evidence: 'catalog' }));
+        const subject = affectedSubject(prose), named = matches.filter(tool => bounded(subject, tool.name));
+        if (subject && named.length && !/\b(?:reported|discovered by|credits?|researcher)\b/i.test(subject)) {
+            const canonical = named.find(tool => normalize(subject) === normalize(tool.name));
+            return canonical ? [{ name: canonical.name, category: canonical.category, evidence: 'catalog' }]
+                : [{ name: subject, category: /\b(?:plugin|extension|assistant|chatbot)\b/i.test(subject) ? 'Interfaces e plataformas' : named[0].category, evidence: 'discovery', relatedTools: named.map(t => t.name) }];
+        }
+        // A brand in credits or integrations must not turn a third-party
+        // plugin vulnerability into a vulnerability of ChatGPT/Claude itself.
+        const specific = matches.filter(tool => tool.category !== 'Serviços e assistentes de IA');
+        if (specific.length) return specific.map(tool => ({ name: tool.name, category: tool.category, evidence: 'catalog' }));
+    }
     // MCP must mean Model Context Protocol, not an unrelated acronym/product.
     const heading = `${summary} ${product} ${identities.join(' ')}`;
     const mcp = /model context protocol|\bmcp[- _](?:server|sdk|proxy|gateway|inspector|client|tool)|(?:^|[-/@])mcp(?:$|[-/_])|@modelcontextprotocol\//i.test(heading)

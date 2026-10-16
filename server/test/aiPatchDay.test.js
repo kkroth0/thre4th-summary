@@ -19,6 +19,10 @@ test('AI coverage spans inference, agents, MCP, data, ML frameworks and coding a
     assert.deepEqual(classifyAiTool({ text: 'Railway email contains a cursor and a jan calendar. MCP controller does not work.' }), []);
     assert.deepEqual(classifyAiTool({ text: 'Arbitrary file read in ordinary HTTP server', product: 'mailserver' }), []);
     assert.deepEqual(classifyAiTool({ packages: [{ name: 'ordinary-http-server' }], summary: 'Server bug', text: 'Continue processing requests. Reported by Claude. Transformers deliver power to the facility.' }), []);
+    const plugin = classifyAiTool({ text: 'The S2B AI Assistant – ChatBot, ChatGPT, OpenAI plugin for WordPress is vulnerable to arbitrary uploads.' });
+    assert.equal(plugin[0].name, 'S2B AI Assistant – ChatBot, ChatGPT, OpenAI plugin for WordPress');
+    assert.equal(plugin[0].evidence, 'discovery'); assert.notEqual(plugin[0].name, 'ChatGPT');
+    assert.deepEqual(classifyAiTool({ text: 'Ordinary HTTP Server is vulnerable to file disclosure. Reported by ChatGPT.' }), []);
 });
 
 test('GHSA preserves exact affected and fixed versions; CVE presence alone never confirms a patch', () => {
