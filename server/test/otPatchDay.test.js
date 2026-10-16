@@ -218,3 +218,35 @@ test('large manufacturer indexes cannot starve other sources within a bounded ba
     const service = createOtPatchDay({ http, batchSize: 3 }); service.query({ month: '2026-10' }); await service.sync();
     assert.equal(fetched.length, 3); assert.ok(fetched.includes(siemensUrl)); assert.ok(fetched.includes(abbUrl));
 });
+
+test('transient document failures recover promptly, preserve retry-after and survive restart without a request storm', async t => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ot-retry-test-')); t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+    let time = Date.parse('2026-10-16T12:00:00Z'), requests = 0;
+    const filePath = path.join(dir, 'cache.json');
+    const http = { get: async url => {
+        if (url === OT_SOURCES.find(s => s.id === 'siemens').url) return { status: 200, data: vendorFeed('Siemens', 'SSA-580366', siemensUrl), headers: {} };
+        if (url === siemensUrl) {
+            requests++;
+            if (requests === 1) throw { code: 'ECONNABORTED' };
+            if (requests === 2) throw { response: { status: 429, headers: { 'retry-after': '120' } } };
+            const doc = csaf(); doc.document.tracking.id = 'SSA-580366'; doc.product_tree.branches[0].name = 'Siemens';
+            return { status: 200, data: doc, headers: {} };
+        }
+        throw { response: { status: 403 } };
+    } };
+    const options = { filePath, http, now: () => time }; let service = createOtPatchDay(options);
+    service.query({ month: '2026-10' }); await service.sync();
+    let data = service.query({ month: '2026-10' }); assert.equal(data.status.failedDocuments[0].reason, 'ECONNABORTED');
+    assert.equal(Date.parse(data.status.failedDocuments[0].retryAt) - time, 30000);
+    service = createOtPatchDay(options); service.query({ month: '2026-10' }); await service.sync(); assert.equal(requests, 1);
+    time += 30001; await service.sync(); data = service.query({ month: '2026-10' });
+    assert.equal(data.status.failedDocuments[0].reason, 'HTTP 429'); assert.equal(Date.parse(data.status.failedDocuments[0].retryAt) - time, 120000);
+    time += 119999; await service.sync(); assert.equal(requests, 2);
+    time += 2; await service.sync(); data = service.query({ month: '2026-10' });
+    assert.equal(requests, 3); assert.equal(data.status.failed, 0); assert.equal(data.rows.length, 1);
+    const legacy = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+    legacy.documents['siemens:SSA-580366'] = { error: true, retryAt: time + 3600000 };
+    fs.writeFileSync(filePath, JSON.stringify(legacy));
+    service = createOtPatchDay(options); service.query({ month: '2026-10' }); await service.sync();
+    assert.equal(requests, 4); assert.equal(service.query({ month: '2026-10' }).status.failed, 0);
+});

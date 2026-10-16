@@ -206,6 +206,9 @@ export function createOtPatchDay({ filePath, http = axios, now = () => Date.now(
     for (const doc of Object.values(state.documents)) {
         const url = doc.row?.source === 'cisa' && cisaAdvisoryUrl(doc.row.id);
         if (url && doc.row.url !== url) { doc.row = { ...doc.row, url, references: unique([url, ...(doc.row.references || [])]) }; needsSave = true; }
+        // Upgrade the old one-hour catch-all retry once; subsequent restarts
+        // retain the backoff (including provider Retry-After instructions).
+        if (doc.error && doc.retryPolicy !== 2) { doc.retryAt = now(); doc.retryPolicy = 2; needsSave = true; }
     }
     const persist = () => {
         if (!filePath) return;
@@ -252,13 +255,23 @@ export function createOtPatchDay({ filePath, http = axios, now = () => Date.now(
                     const response = await request(e.url, old?.version === DOCUMENT_VERSION ? old.etag : undefined);
                     if (response.status === 304) {
                         if (!old?.row) throw Error('CSAF 304 without cached document');
-                        state.documents[key] = { ...old, indexedUpdated: e.updated, fetchedAt: new Date(now()).toISOString(), error: false, retryAt: 0 };
+                        state.documents[key] = { ...old, indexedUpdated: e.updated, fetchedAt: new Date(now()).toISOString(), error: false, retryAt: 0, attempts: 0 };
                         continue;
                     }
                     const row = normalizeOtCsaf(typeof response.data === 'string' ? JSON.parse(response.data) : response.data, e.source, e.url);
                     if (row.id.toLowerCase() !== e.id.toLowerCase()) throw Error('CSAF document ID differs from index');
                     state.documents[key] = { row, version: DOCUMENT_VERSION, etag: response.headers?.etag || '', indexedUpdated: e.updated, fetchedAt: new Date(now()).toISOString() };
-                } catch { state.documents[key] = { ...old, retryAt: now() + 3600000, error: true }; }
+                } catch (error) {
+                    const status = error.response?.status, attempts = (old?.attempts || 0) + 1;
+                    const invalid = error instanceof SyntaxError || /Invalid CSAF|document ID differs|Disallowed CSAF|304 without/.test(error.message || '');
+                    const transient = !invalid && (!status || [408, 425, 429, 500, 502, 503, 504].includes(status));
+                    const retryAfter = error.response?.headers?.['retry-after'];
+                    const instruction = /^\d+$/.test(String(retryAfter)) ? Number(retryAfter) * 1000 : Math.max(0, Date.parse(retryAfter) - now()) || 0;
+                    const instructed = Number.isFinite(instruction) ? Math.min(7 * DAY, instruction) : DAY;
+                    const delay = transient ? Math.min(3600000, 30000 * 2 ** Math.min(attempts - 1, 7)) : 3600000;
+                    const reason = status ? `HTTP ${status}` : ['ECONNABORTED', 'ETIMEDOUT', 'ECONNRESET', 'ENOTFOUND', 'ERR_NETWORK', 'ERR_BAD_RESPONSE'].includes(error.code) ? error.code : 'Documento inválido ou indisponível';
+                    state.documents[key] = { ...old, retryAt: now() + Math.max(delay, instructed), retryPolicy: 2, attempts, failureReason: reason, error: true };
+                }
                 await new Promise(resolve => setImmediate(resolve));
             }
             // Retain compact normalized advisories, never full source DOMs.
@@ -290,7 +303,7 @@ export function createOtPatchDay({ filePath, http = axios, now = () => Date.now(
         const pending = candidates().filter(e => inMonth(e, month));
         return {
             month, rows, catalog: OT_CATALOG.vendors.map(v => ({ ...v, equipmentTypes: identifyOtEquipment([...(v.models || []), ...(v.families || [])]) })), equipmentTypes: OT_EQUIPMENT_TYPES, equipmentReference: OT_EQUIPMENT_REFERENCE, sources: OT_SOURCES.map(s => ({ ...s, ...state.sources[s.id] })),
-            status: { running: Boolean(flight), pending: pending.length, failed: pending.filter(e => state.documents[e.source + ':' + e.id]?.error).length, initialized: OT_SOURCES.every(s => state.sources[s.id]?.checkedAt), cadenceHours: 24, persistenceError: cacheError },
+            status: { running: Boolean(flight), pending: pending.length, failed: pending.filter(e => state.documents[e.source + ':' + e.id]?.error).length, failedDocuments: pending.filter(e => state.documents[e.source + ':' + e.id]?.error).map(e => { const d = state.documents[e.source + ':' + e.id]; return { id: e.id, source: e.source, reason: d.failureReason || 'Nova tentativa agendada', retryAt: new Date(d.retryAt).toISOString() }; }), initialized: OT_SOURCES.every(s => state.sources[s.id]?.checkedAt), cadenceHours: 24, persistenceError: cacheError },
             summary: { advisories: rows.length, patches: rows.filter(r => r.patch === 'available').length, mitigations: rows.filter(r => r.patch === 'mitigation').length, kev: rows.filter(r => r.kev).length, matched: rows.filter(r => r.matches.some(m => m.level === 'model')).length },
         };
     }

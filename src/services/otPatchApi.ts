@@ -19,7 +19,7 @@ export interface OtPatchData {
   categories?: string[];
   coverage?: { catalogTools: number; githubAdvisories: number; historicalImportPending: boolean; truncated: boolean; policy: string };
   sources: { id: string; name: string; url: string; coverage: string; status?: string; lastSuccess?: string; checkedAt?: string; error?: string }[];
-  status: { running: boolean; pending: number; failed: number; initialized: boolean; cadenceHours: number; persistenceError: boolean };
+  status: { running: boolean; pending: number; failed: number; initialized: boolean; cadenceHours: number; persistenceError: boolean; failedDocuments?: { id: string; source: string; reason: string; retryAt: string }[] };
   summary: { advisories: number; patches: number; mitigations: number; kev: number; matched: number };
 }
 export function otCurrentMonth(date = new Date()) {
