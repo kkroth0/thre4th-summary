@@ -7,7 +7,10 @@ const metricTone = (tone?: string): MetricTone =>
     : /emerald|green/.test(tone) ? "positive"
     : "neutral";
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, Download, ExternalLink, RefreshCw, Search, ShieldCheck } from "lucide-react";
+import { AlertTriangle, Download, ExternalLink, Search } from "lucide-react";
+import { useSearchParams } from "react-router-dom";
+import { PatchDayToolbar, PatchDayTabs } from "@/components/PatchDayToolbar";
+import { otCurrentMonth } from "@/services/otPatchApi";
 import { PageLayout } from "@/components/PageLayout";
 import { EmptyState } from "@/components/EmptyState";
 import { LoadingRows } from "@/components/LoadingState";
@@ -54,6 +57,9 @@ export default function SapPatch() {
     const pt = language === "pt";
     const { toast } = useToast();
 
+    const [params, setParams] = useSearchParams();
+    const month = /^20\d{2}-(0[1-9]|1[0-2])$/.test(params.get('month') || '') ? params.get('month')! : otCurrentMonth();
+    const [revision, setRevision] = useState(0), [tab, setTab] = useState('advisories');
     const [data, setData] = useState<SapPatchSummary | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -64,15 +70,13 @@ export default function SapPatch() {
     const [search, setSearch] = useState("");
     const [page, setPage] = useState(1);
 
-    const load = () => {
-        setLoading(true);
-        setError(null);
-        fetchSapPatch()
-            .then(setData)
-            .catch((e) => setError(e.message || "Erro ao carregar"))
-            .finally(() => setLoading(false));
-    };
-    useEffect(load, []);
+    useEffect(() => {
+        const controller = new AbortController(); setLoading(true); setError(null); setData(null);
+        fetchSapPatch(month, controller.signal).then(next => { if (!controller.signal.aborted) setData(next); })
+            .catch(e => { if (!controller.signal.aborted) setError(e.message || 'Erro ao carregar'); })
+            .finally(() => { if (!controller.signal.aborted) setLoading(false); });
+        return () => controller.abort();
+    }, [month, revision]);
 
     const filtered = useMemo(() => {
         if (!data) return [] as SapNote[];
@@ -86,7 +90,7 @@ export default function SapPatch() {
         });
     }, [data, fPriority, fCvss, search]);
 
-    useEffect(() => setPage(1), [fPriority, fCvss, search]);
+    useEffect(() => setPage(1), [fPriority, fCvss, search, month]);
 
     const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
     const pageRows = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
@@ -130,44 +134,12 @@ export default function SapPatch() {
     ] : [];
 
     return (
-        <PageLayout width="max-w-6xl">
-            {/* Header */}
-            <div className="page-head">
-                <div>
-                    <h1 className="page-title">{pt ? "Correções SAP" : "SAP Fixes"}</h1>
-                    <div className="page-lede flex flex-wrap items-center gap-2">
-                        <span>{pt
-                            ? "Notas de segurança do patch day mensal da SAP, com severidade e produto afetado."
-                            : "Security notes from SAP's monthly patch day, with severity and affected product."}</span>
-                        {data?.releaseDate && (
-                            <Badge variant="outline">
-                                {new Date(data.releaseDate).toLocaleDateString(pt ? "pt-BR" : "en-US", { day: "2-digit", month: "long", year: "numeric", timeZone: "UTC" })}
-                            </Badge>
-                        )}
-                    </div>
-                </div>
-                <div className="flex items-center gap-2">
-                    <Button variant="outline" size="sm" onClick={load} disabled={loading} className="rounded-lg">
-                        <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
-                        {pt ? "Atualizar" : "Refresh"}
-                    </Button>
-                    <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                            <Button size="sm" disabled={!canExportSapPatch(data) || !!exporting} className="rounded-lg">
-                                <Download className="h-4 w-4" />
-                                {exporting ? "Exportando…" : "Exportar"}
-                            </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => runExport("pdf")}>PDF</DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => runExport("pptx")}>PowerPoint</DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => runExport("excel")}>Excel</DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => runExport("json")}>JSON (CTIFLOW)</DropdownMenuItem>
-                        </DropdownMenuContent>
-                    </DropdownMenu>
-                </div>
-            </div>
-
+        <PageLayout width="max-w-7xl">
+            <div className="page-head"><div><h1 className="page-title">SAP Patch Day</h1><p className="page-lede">{pt ? 'Notas de segurança SAP organizadas por mês, com CVEs, prioridade e referências oficiais.' : 'Monthly SAP security notes with CVEs, priority and official references.'}</p></div></div>
+            <PatchDayToolbar month={month} onMonthChange={value => setParams({ month: value })} onRefresh={() => setRevision(v => v + 1)} loading={loading} pt={pt} min="2018-01" actions={<>
+                <Button disabled={!canExportSapPatch(data) || !!exporting} onClick={() => void runExport('excel')}><Download className="h-4 w-4" />{exporting === 'excel' ? (pt ? 'Preparando…' : 'Preparing…') : (pt ? 'Relatório Excel' : 'Excel report')}</Button>
+                <DropdownMenu><DropdownMenuTrigger asChild><Button variant="outline" disabled={!canExportSapPatch(data) || !!exporting}>{pt ? 'Mais formatos' : 'More formats'}</Button></DropdownMenuTrigger><DropdownMenuContent align="end"><DropdownMenuItem onClick={() => void runExport('pdf')}>PDF</DropdownMenuItem><DropdownMenuItem onClick={() => void runExport('pptx')}>PowerPoint</DropdownMenuItem><DropdownMenuItem onClick={() => void runExport('json')}>JSON (CTIFLOW)</DropdownMenuItem></DropdownMenuContent></DropdownMenu>
+            </>} />
             {error && (
                 <div className="mt-4 flex items-center gap-3 p-4 rounded-lg border border-red-500/20 bg-red-500/5 text-sm text-red-500">
                     <AlertTriangle className="h-4 w-4 shrink-0" /> {error}
@@ -176,31 +148,34 @@ export default function SapPatch() {
 
             {/* KPIs */}
             {data && (
-                <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+                <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-5">
                     {kpis.map((k) => (
-                        <MetricCard key={k.label} label={k.label} value={k.value} tone={metricTone(k.accent)} />
+                        <MetricCard size="sm" key={k.label} label={k.label} value={k.value} tone={metricTone(k.accent)} />
                     ))}
                 </div>
             )}
 
+            <PatchDayTabs value={tab} onChange={setTab} label="SAP Patch Day" tabs={[{ id: 'advisories', label: pt ? 'Avisos e correções' : 'Advisories and fixes' }, { id: 'coverage', label: pt ? 'Catálogo e cobertura' : 'Catalog and coverage' }]} />
+            {data?.stale && <p role="status" className="mb-4 rounded-lg border border-amber-500/30 p-3 text-sm">{pt ? 'A fonte não respondeu nesta atualização. Exibindo o último resultado salvo para este mês.' : 'The source did not respond. Showing the last saved result for this month.'}</p>}
+            {tab === 'coverage' && <section className="grid gap-3 md:grid-cols-2"><div className="rounded-lg border bg-card p-4"><a className="font-semibold text-primary" href={data?.url || 'https://support.sap.com/en/my-support/knowledge-base/security-notes-news.html'} target="_blank" rel="noreferrer">SAP Security Notes</a><p className="mt-2 text-sm text-muted-foreground">{pt ? 'Publicação oficial do mês: notas SAP e avisos GitHub referenciados pela SAP, com CVEs e versões descritas pelo fabricante.' : 'Official monthly publication: SAP notes and linked GitHub advisories, with CVEs and vendor version details.'}</p><p className="mt-2 text-xs text-muted-foreground">{pt ? 'Publicação' : 'Published'}: {data?.releaseDate || '—'}</p></div></section>}
             {/* Filters */}
-            {data && (
-                <div className="mt-4 flex flex-col sm:flex-row items-stretch sm:items-center gap-3 bg-muted/40 border border-border/50 p-4 rounded-lg">
+            {data && tab === 'advisories' && (
+                <div className="mb-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-[minmax(240px,1fr)_200px_200px]">
                     <div className="relative flex-1">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                         <Input value={search} onChange={(e) => setSearch(e.target.value)}
                             placeholder={pt ? "Buscar nota, título ou CVE…" : "Search note, title or CVE…"}
-                            className="pl-9 h-9 text-sm rounded-lg bg-background border-border/50" />
+                            className="pl-9" />
                     </div>
                     <Select value={fPriority} onValueChange={setFPriority}>
-                        <SelectTrigger className="w-full sm:w-[170px] h-9 rounded-lg bg-background border-border/50"><SelectValue /></SelectTrigger>
+                        <SelectTrigger aria-label={pt ? "Prioridade SAP" : "SAP priority"} className="w-full"><SelectValue /></SelectTrigger>
                         <SelectContent>
                             <SelectItem value="ALL">{pt ? "Toda prioridade" : "Any priority"}</SelectItem>
                             {priorities.map((p) => <SelectItem key={p} value={p}>{p}</SelectItem>)}
                         </SelectContent>
                     </Select>
                     <Select value={fCvss} onValueChange={setFCvss}>
-                        <SelectTrigger className="w-full sm:w-[150px] h-9 rounded-lg bg-background border-border/50"><SelectValue /></SelectTrigger>
+                        <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
                         <SelectContent>
                             <SelectItem value="0">{pt ? "Qualquer CVSS" : "Any CVSS"}</SelectItem>
                             <SelectItem value="9">CVSS ≥ 9.0</SelectItem>
@@ -212,40 +187,42 @@ export default function SapPatch() {
             )}
 
             {/* Table */}
-            {data && (
-                <div className="mt-4 rounded-lg border border-border/50 bg-muted/40 overflow-hidden">
+            {data && tab === 'advisories' && (
+                <div className="overflow-hidden rounded-lg border">
                     <div className="overflow-x-auto">
                         <table className="w-full text-sm">
-                            <thead className="bg-muted/60 text-xs uppercase tracking-wide text-muted-foreground">
+                            <thead className="bg-muted/40 text-xs text-muted-foreground">
                                 <tr>
-                                    <th className="text-left font-medium px-4 py-2.5">Note#</th>
-                                    <th className="text-left font-medium px-4 py-2.5">{pt ? "Título" : "Title"}</th>
-                                    <th className="text-left font-medium px-4 py-2.5">CVE</th>
-                                    <th className="text-left font-medium px-4 py-2.5">{pt ? "Prioridade" : "Priority"}</th>
-                                    <th className="text-right font-medium px-4 py-2.5">CVSS</th>
+                                    <th className="text-left font-medium p-4">Note#</th>
+                                    <th className="text-left font-medium p-4">{pt ? "Título" : "Title"}</th>
+                                    <th className="text-left font-medium p-4">CVE</th>
+                                    <th className="text-left font-medium p-4">{pt ? "Prioridade" : "Priority"}</th>
+                                    <th className="text-right font-medium p-4">CVSS</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {pageRows.map((n) => (
                                     <tr key={n.note} className="border-t border-border/40 hover:bg-muted/40">
-                                        <td className="px-4 py-2.5 align-top whitespace-nowrap">
+                                        <td className="p-4 align-top whitespace-nowrap">
                                             <a href={n.noteUrl} target="_blank" rel="noopener noreferrer" className="font-mono text-primary hover:underline inline-flex items-center gap-1">
                                                 {n.note} <ExternalLink className="h-3 w-3" />
                                             </a>
                                         </td>
-                                        <td className="px-4 py-2.5 align-top max-w-[520px]">
-                                            {n.title}
+                                        <td className="p-4 align-top max-w-[520px]">
+                                            <span className="line-clamp-2">{n.title}</span>
+                                            <details className="mt-3 text-xs"><summary className="cursor-pointer font-medium text-primary">{pt ? 'Produtos, CVEs e orientações' : 'Products, CVEs and guidance'}</summary><div className="mt-3 space-y-3 rounded-md border bg-background p-4"><p>{n.title}</p><div className="flex flex-wrap gap-2">{n.cves.map(c => <a key={c} href={`https://nvd.nist.gov/vuln/detail/${c}`} target="_blank" rel="noreferrer" className="font-mono text-primary">{c}</a>)}</div><a href={n.noteUrl} target="_blank" rel="noreferrer" className="text-primary underline">{pt ? 'Consultar orientação oficial' : 'Official guidance'}</a></div></details>
                                                 {n.isUpdate && <Badge variant="outline" className="ml-2 text-[10px] border-border/60">{pt ? "atualizada" : "updated"}</Badge>}
                                         </td>
-                                        <td className="px-4 py-2.5 align-top">
+                                        <td className="p-4 align-top">
                                             <div className="flex flex-wrap gap-1">
-                                                    {n.cves.map((c) => <span key={c} className="font-mono text-xs text-muted-foreground">{c}</span>)}
+                                                    {n.cves.length > 3 && <span className="text-xs">+{n.cves.length - 3}</span>}
+                                                    {n.cves.slice(0, 3).map((c) => <span key={c} className="font-mono text-xs text-muted-foreground">{c}</span>)}
                                             </div>
                                         </td>
-                                        <td className="px-4 py-2.5 align-top">
+                                        <td className="p-4 align-top">
                                             <Badge variant="outline" className={cn("rounded-md text-[10px] font-bold", priorityClass(n.priority))}>{n.priority}</Badge>
                                         </td>
-                                        <td className={cn("px-4 py-2.5 align-top text-right tabular-nums", cvssClass(n.cvss))}>
+                                        <td className={cn("p-4 align-top text-right tabular-nums", cvssClass(n.cvss))}>
                                             {n.cvss ?? "—"}
                                         </td>
                                     </tr>

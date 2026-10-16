@@ -3,6 +3,13 @@ import path from 'node:path';
 import * as cheerio from 'cheerio';
 import axios from 'axios';
 import { identifyOtEquipment, OT_EQUIPMENT_REFERENCE, OT_EQUIPMENT_TYPES } from './otEquipment.js';
+import { buildOtProductBase, describeOtProduct, enrichOtVendorCatalog } from './otProductCatalog.js';
+
+export const OT_VENDOR_FEEDS = [
+    ['phoenixcontact', 'Phoenix Contact'], ['wago', 'WAGO'], ['weidmueller', 'Weidmüller'],
+    ['festo', 'Festo'], ['pilz', 'Pilz'], ['pepperl-fuchs', 'Pepperl+Fuchs'],
+    ['turck', 'Turck'], ['codesys', 'CODESYS'], ['beckhoff', 'Beckhoff'],
+].map(([id, vendor]) => ({ id, vendor, host: `${id}.csaf-tp.certvde.com` }));
 
 export const OT_CATALOG = JSON.parse(fs.readFileSync(new URL('./otAssetCatalog.json', import.meta.url), 'utf8'));
 export const OT_SOURCES = [
@@ -12,6 +19,7 @@ export const OT_SOURCES = [
     { id: 'schneider', name: 'Schneider Electric · CSAF', url: 'https://www.se.com/.well-known/csaf/changes.csv', metadataUrl: 'https://www.se.com/.well-known/csaf/provider-metadata.json', coverage: 'Distribuição CSAF oficial: índice de revisões e arquivos JSON, independente do portal HTML.' },
     { id: 'siemens', name: 'Siemens ProductCERT · CSAF', url: 'https://cert-portal.siemens.com/productcert/csaf/ssa-feed-tlp-white.json', coverage: 'Arquivo oficial de Security Advisories (SSA): publicações e revisões, produtos e versões, CVEs, correções e medidas compensatórias.' },
     { id: 'abb', name: 'ABB PSIRT · CSAF', url: 'https://psirt.abb.com/csaf/abb-csaf-feed-tlp-white.json', coverage: 'Avisos oficiais ABB e B&R publicados no feed PSIRT: produtos afetados, versões corrigidas e restrições de atualização.' },
+    ...OT_VENDOR_FEEDS.map(v => ({ id: v.id, name: `${v.vendor} · CSAF / CERT@VDE`, url: `https://${v.host}/.well-known/csaf/white/csaf-feed-tlp-white.json`, bootstrapDocuments: 5, coverage: 'Avisos oficiais distribuídos pelo CERT@VDE, com produtos, versões e correções. Os cinco avisos mais recentes também alimentam a base acumulada de ativos.' })),
 ];
 const DAY = 86400000;
 const DOCUMENT_VERSION = 2;
@@ -40,7 +48,8 @@ export function allowedOtDocument(value, source) {
             || (!source || source === 'cisco') && u.hostname === 'sec.cloudapps.cisco.com' && u.pathname.startsWith('/security/center/content/CiscoSecurityAdvisory/') && u.pathname.endsWith('.json')
             || (!source || source === 'schneider') && u.hostname === 'www.se.com' && /^\/\.well-known\/csaf\/20\d{2}\/(?:sevd|sesb)-20\d{2}-\d{3}-\d{2}\.json$/.test(u.pathname)
             || (!source || source === 'siemens') && u.hostname === 'cert-portal.siemens.com' && /^\/productcert\/csaf\/ssa-\d{6}\.json$/.test(u.pathname)
-            || (!source || source === 'abb') && u.hostname === 'psirt.abb.com' && /^\/csaf\/20\d{2}\/[a-z0-9-]{4,40}\.json$/.test(u.pathname);
+            || (!source || source === 'abb') && u.hostname === 'psirt.abb.com' && /^\/csaf\/20\d{2}\/[a-z0-9-]{4,40}\.json$/.test(u.pathname)
+            || OT_VENDOR_FEEDS.some(v => (!source || source === v.id) && u.hostname === v.host && /^\/\.well-known\/csaf\/white\/20\d{2}\/[a-z0-9_-]{4,100}\.json$/.test(u.pathname));
     } catch { return false; }
 }
 
@@ -66,26 +75,33 @@ export function normalizeOtCsaf(input, source, url) {
     const doc = input?.document, tracking = doc?.tracking;
     if (!tracking?.id || !doc.title || !iso(tracking.current_release_date)) throw Error('Invalid CSAF document');
     const products = new Map(), vendors = [];
-    function walk(branches, vendor = '') {
+    function walk(branches, vendor = '', context = {}) {
         for (const b of branches || []) {
             const current = b.category === 'vendor' ? vendorFor(b.name) : vendor;
             if (b.category === 'vendor') vendors.push(current);
-            if (b.product?.product_id) products.set(b.product.product_id, { id: b.product.product_id, name: clean(b.product.name || b.name), vendor: current, modelNumbers: (b.product.product_identification_helper?.model_numbers || []).map(clean) });
-            walk(b.branches, current);
+            const next = { ...context };
+            if (b.category === 'product_family') next.family = clean(b.name);
+            if (b.category === 'product_name') next.platform = clean(b.name);
+            if (['product_version', 'product_version_range'].includes(b.category)) { next.version = clean(b.name); next.versionKind = b.category === 'product_version_range' ? 'range' : 'exact'; next.versionOrigin = 'csaf_tree'; }
+            if (b.product?.product_id) products.set(b.product.product_id, describeOtProduct({ id: b.product.product_id, name: clean(b.product.name || b.name), vendor: current, ...next, cpe: clean(b.product.product_identification_helper?.cpe), modelNumbers: (b.product.product_identification_helper?.model_numbers || []).map(clean) }));
+            walk(b.branches, current, next);
         }
     }
     walk(input.product_tree?.branches);
-    for (const p of input.product_tree?.full_product_names || []) products.set(p.product_id, { id: p.product_id, name: clean(p.name), vendor: '' });
+    for (const p of input.product_tree?.full_product_names || []) products.set(p.product_id, describeOtProduct({ id: p.product_id, name: clean(p.name), vendor: '', cpe: clean(p.product_identification_helper?.cpe), modelNumbers: (p.product_identification_helper?.model_numbers || []).map(clean) }));
     for (const r of input.product_tree?.relationships || []) {
         const p = r.full_product_name;
-        if (p?.product_id) products.set(p.product_id, { id: p.product_id, name: clean(p.name), vendor: '' });
+        if (p?.product_id) {
+            const software = products.get(r.product_reference), hardware = products.get(r.relates_to_product_reference);
+            products.set(p.product_id, describeOtProduct({ ...software, id: p.product_id, name: clean(p.name), vendor: hardware?.vendor || software?.vendor || '', family: hardware?.family || software?.family || '', platform: hardware?.platform || hardware?.name || '', cpe: clean(p.product_identification_helper?.cpe || software?.cpe), modelNumbers: unique([...(p.product_identification_helper?.model_numbers || []), ...(hardware?.modelNumbers || [])]) }));
+        }
     }
     const groups = new Map((input.product_tree?.product_groups || []).map(g => [g.group_id, g.product_ids || []]));
-    const affected = new Set(), fixed = new Set(), remediations = [], cves = [], scores = [];
+    const affected = new Set(), fixed = new Set(), remediations = [], cves = [], scores = [], affectedCves = new Map(), fixedCves = new Map();
     for (const v of input.vulnerabilities || []) {
         if (/^CVE-\d{4}-\d{4,}$/i.test(v.cve || '')) cves.push(v.cve.toUpperCase());
-        for (const id of v.product_status?.known_affected || []) affected.add(id);
-        for (const id of v.product_status?.fixed || []) fixed.add(id);
+        for (const id of v.product_status?.known_affected || []) { affected.add(id); if (v.cve) affectedCves.set(id, unique([...(affectedCves.get(id) || []), v.cve])); }
+        for (const id of v.product_status?.fixed || []) { fixed.add(id); if (v.cve) fixedCves.set(id, unique([...(fixedCves.get(id) || []), v.cve])); }
         for (const s of v.scores || []) {
             // Prefer CVSS v3 for comparison with the local vulnerability catalog.
             const n = s.cvss_v3?.baseScore ?? s.cvss_v4?.baseScore ?? s.cvss_v2?.baseScore;
@@ -104,7 +120,7 @@ export function normalizeOtCsaf(input, source, url) {
         references: unique([primaryUrl, ...references]), vendors: unique((vendors.length ? vendors : [({ cisco: 'Cisco', schneider: 'Schneider Electric', siemens: 'Siemens', abb: 'ABB' })[source] || doc.publisher?.name]).map(vendorFor)),
         published: iso(tracking.initial_release_date), updated: iso(tracking.current_release_date), revision: clean(tracking.version),
         summary: clean((doc.notes || []).find(n => n.category === 'summary')?.text), cves: unique(cves), cvss: scores.length ? Math.max(...scores) : null,
-        products: [...products.values()].map(p => ({ ...p, status: fixed.has(p.id) && affected.has(p.id) ? 'mixed' : fixed.has(p.id) ? 'fixed' : affected.has(p.id) ? 'affected' : 'mentioned' })),
+        products: [...products.values()].map(p => ({ ...p, affectedCves: affectedCves.get(p.id) || [], fixedCves: fixedCves.get(p.id) || [], status: fixed.has(p.id) && affected.has(p.id) ? 'mixed' : fixed.has(p.id) ? 'fixed' : affected.has(p.id) ? 'affected' : 'mentioned' })),
         remediations: dedupRemediations, patch: fixes ? 'available' : mitigation ? 'mitigation' : 'unconfirmed',
         partialFix: fixes && dedupRemediations.some(r => r.category === 'none_available'),
     };
@@ -193,6 +209,7 @@ export function mergeOtAdvisories(rows) {
 export function createOtPatchDay({ filePath, http = axios, now = () => Date.now(), getCve = () => null, batchSize = 40 } = {}) {
     let state = { version: 1, sources: {}, index: {}, documents: {}, months: [] }, flight = null, cacheError = false, needsSave = false;
     const signals = new Map();
+    let productBaseCache = null, bootstrapCache = null;
     const cveSignal = id => {
         const cached = signals.get(id);
         if (cached && cached.until > now()) return cached.value;
@@ -219,7 +236,19 @@ export function createOtPatchDay({ filePath, http = axios, now = () => Date.now(
         } catch { cacheError = true; }
     };
     const request = async (url, etag) => http.get(url, { timeout: 15000, maxRedirects: 0, maxContentLength: 12 * 1024 * 1024, headers: { 'User-Agent': 'ThreatSumm4ry OT Patch Day (+https://threatsumm4ry.app)', ...(etag ? { 'If-None-Match': etag } : {}) }, validateStatus: s => s === 200 || s === 304, responseType: 'text' });
-    const candidates = () => Object.entries(state.index).filter(([source]) => source !== 'rockwell').flatMap(([, entries]) => entries).filter(e => state.months.some(m => inMonth(e, m)) && (!state.documents[e.source + ':' + e.id]?.row || state.documents[e.source + ':' + e.id].indexedUpdated !== e.updated || state.documents[e.source + ':' + e.id].version !== DOCUMENT_VERSION));
+    const bootstrap = () => {
+        if (bootstrapCache) return bootstrapCache;
+        const selected = new Set();
+        for (const source of OT_SOURCES) for (const entry of [...(state.index[source.id] || [])].sort((a, b) => b.updated.localeCompare(a.updated)).slice(0, source.bootstrapDocuments || 0)) selected.add(entry.source + ':' + entry.id);
+        const recent = [...(state.index.cisa || [])].filter(e => Date.parse(e.updated) >= now() - 366 * DAY).sort((a, b) => b.updated.localeCompare(a.updated));
+        for (const vendor of OT_CATALOG.vendors) {
+            const aliases = vendor.aliases.filter(a => a.length >= 4).map(keyText);
+            const entry = recent.find(e => aliases.some(a => new RegExp('(?:^|[^a-z0-9])' + a.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?:$|[^a-z0-9])').test(keyText(e.title))));
+            if (entry) selected.add('cisa:' + entry.id);
+        }
+        bootstrapCache = selected; return selected;
+    };
+    const candidates = () => { const base = bootstrap(); return Object.entries(state.index).filter(([source]) => source !== 'rockwell').flatMap(([, entries]) => entries).filter(e => (state.months.some(m => inMonth(e, m)) || base.has(e.source + ':' + e.id)) && (!state.documents[e.source + ':' + e.id]?.row || state.documents[e.source + ':' + e.id].indexedUpdated !== e.updated || state.documents[e.source + ':' + e.id].version !== DOCUMENT_VERSION)); };
     function sync() {
         if (flight) return flight;
         flight = (async () => {
@@ -232,8 +261,10 @@ export function createOtPatchDay({ filePath, http = axios, now = () => Date.now(
                     const response = await request(source.url, old.etag);
                     if (response.status !== 304) {
                         const body = typeof response.data === 'string' ? response.data : JSON.stringify(response.data);
-                        const parsed = ['cisa', 'siemens', 'abb'].includes(source.id) ? parseOtRolie(JSON.parse(body), source.id) : source.id === 'cisco' ? parseCiscoOtFeed(body) : source.id === 'rockwell' ? parseRockwellOtIndex(body) : parseSchneiderOtIndex(body);
+                        const parsed = ['cisa', 'siemens', 'abb', ...OT_VENDOR_FEEDS.map(v => v.id)].includes(source.id) ? parseOtRolie(JSON.parse(body), source.id) : source.id === 'cisco' ? parseCiscoOtFeed(body) : source.id === 'rockwell' ? parseRockwellOtIndex(body) : parseSchneiderOtIndex(body);
                         state.index[source.id] = parsed;
+                        bootstrapCache = null;
+                        productBaseCache = null;
                     }
                     state.sources[source.id] = { status: 'ok', checkedAt: new Date(now()).toISOString(), lastSuccess: new Date(now()).toISOString(), nextAt: now() + DAY, etag: response.headers?.etag || old.etag || '' };
                 } catch (error) {
@@ -261,6 +292,7 @@ export function createOtPatchDay({ filePath, http = axios, now = () => Date.now(
                     const row = normalizeOtCsaf(typeof response.data === 'string' ? JSON.parse(response.data) : response.data, e.source, e.url);
                     if (row.id.toLowerCase() !== e.id.toLowerCase()) throw Error('CSAF document ID differs from index');
                     state.documents[key] = { row, version: DOCUMENT_VERSION, etag: response.headers?.etag || '', indexedUpdated: e.updated, fetchedAt: new Date(now()).toISOString() };
+                    productBaseCache = null;
                 } catch (error) {
                     const status = error.response?.status, attempts = (old?.attempts || 0) + 1;
                     const invalid = error instanceof SyntaxError || /Invalid CSAF|document ID differs|Disallowed CSAF|304 without/.test(error.message || '');
@@ -281,6 +313,7 @@ export function createOtPatchDay({ filePath, http = axios, now = () => Date.now(
             for (const [key, value] of entries) {
                 if (remaining <= 2000 && bytes <= 16 * 1024 * 1024) break;
                 bytes -= Buffer.byteLength(JSON.stringify(value)); remaining--; delete state.documents[key]; changed = true;
+                productBaseCache = null;
             }
             if (changed) persist();
         })().catch(() => { /* expose stale data; the next tick retries */ }).finally(() => { flight = null; });
@@ -300,10 +333,12 @@ export function createOtPatchDay({ filePath, http = axios, now = () => Date.now(
         if (scope === 'baseline') rows = rows.filter(r => r.matches.length);
         if (scope === 'models') rows = rows.filter(r => r.matches.some(m => m.level === 'model'));
         rows.sort((a, b) => Number(b.kev) - Number(a.kev) || (b.cvss ?? -1) - (a.cvss ?? -1) || b.updated.localeCompare(a.updated));
-        const pending = candidates().filter(e => inMonth(e, month));
+        const allPending = candidates(), pending = allPending.filter(e => inMonth(e, month));
+        if (!productBaseCache) productBaseCache = buildOtProductBase([...(state.index.rockwell || []), ...Object.values(state.documents).flatMap(d => d.row ? [d.row] : [])], { canonicalVendor: vendorFor });
+        const catalog = enrichOtVendorCatalog(OT_CATALOG.vendors, productBaseCache).map(v => ({ ...v, equipmentTypes: identifyOtEquipment([...(v.models || []), ...(v.families || []), ...v.observedFamilies]) }));
         return {
-            month, rows, catalog: OT_CATALOG.vendors.map(v => ({ ...v, equipmentTypes: identifyOtEquipment([...(v.models || []), ...(v.families || [])]) })), equipmentTypes: OT_EQUIPMENT_TYPES, equipmentReference: OT_EQUIPMENT_REFERENCE, sources: OT_SOURCES.map(s => ({ ...s, ...state.sources[s.id] })),
-            status: { running: Boolean(flight), pending: pending.length, failed: pending.filter(e => state.documents[e.source + ':' + e.id]?.error).length, failedDocuments: pending.filter(e => state.documents[e.source + ':' + e.id]?.error).map(e => { const d = state.documents[e.source + ':' + e.id]; return { id: e.id, source: e.source, reason: d.failureReason || 'Nova tentativa agendada', retryAt: new Date(d.retryAt).toISOString() }; }), initialized: OT_SOURCES.every(s => state.sources[s.id]?.checkedAt), cadenceHours: 24, persistenceError: cacheError },
+            month, rows, catalog, productBase: productBaseCache, equipmentTypes: OT_EQUIPMENT_TYPES, equipmentReference: OT_EQUIPMENT_REFERENCE, sources: OT_SOURCES.map(s => ({ ...s, ...state.sources[s.id] })),
+            status: { running: Boolean(flight), pending: pending.length, catalogPending: allPending.length, catalogFailed: allPending.filter(e => state.documents[e.source + ':' + e.id]?.error).length, failed: pending.filter(e => state.documents[e.source + ':' + e.id]?.error).length, failedDocuments: pending.filter(e => state.documents[e.source + ':' + e.id]?.error).map(e => { const d = state.documents[e.source + ':' + e.id]; return { id: e.id, source: e.source, reason: d.failureReason || 'Nova tentativa agendada', retryAt: new Date(d.retryAt).toISOString() }; }), initialized: OT_SOURCES.every(s => state.sources[s.id]?.checkedAt), cadenceHours: 24, persistenceError: cacheError },
             summary: { advisories: rows.length, patches: rows.filter(r => r.patch === 'available').length, mitigations: rows.filter(r => r.patch === 'mitigation').length, kev: rows.filter(r => r.kev).length, matched: rows.filter(r => r.matches.some(m => m.level === 'model')).length },
         };
     }

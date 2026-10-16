@@ -55,7 +55,7 @@ import { addKnowledgeItem, normalizeKnowledgeInput } from './knowledge.js';
 import { createWatchlistStore, runDueExposureSnapshots, runExposureSnapshot } from './exposureWatchlist.js';
 import { detectQueryType, sanitizeQuery } from './iocValidation.js';
 import { isEarlyDoc, normalizeCvrf } from './patchTuesday.js';
-import { parseSapNotes, latestPatchMonth, monthUrl, summarize as summarizeSap, sortNotes as sortSapNotes } from './sapPatch.js';
+import { createSapPatchService } from './sapPatchService.js';
 import { createOtPatchDay } from './otPatchDay.js';
 import { createAiPatchDay } from './aiPatchDay.js';
 import {
@@ -1238,12 +1238,6 @@ const memoryCache = {
     patchTuesday: {
         store: new Map(),
         ttl: 24 * 60 * 60 * 1000 // 24 hours
-    },
-    // Latest SAP Security Patch Day (monthly), scraped from support.sap.com.
-    sapPatch: {
-        data: null,
-        expiresAt: 0,
-        ttl: 24 * 60 * 60 * 1000 // 24 hours (Patch Day is monthly)
     },
     ransomwareVictims: {
         data: null,
@@ -3386,60 +3380,13 @@ app.get('/api/cves/exploited', async (req, res) => {
 //  SAP Security Patch Day (scraped monthly HTML)
 // ============================================================
 
-// Fetch the latest available SAP Patch Day page and normalize it. Tries the
-// latest patch month; if its page 404s (not published yet), falls back one month
-// so we always serve the most recent notes that exist.
-async function fetchSapPatch() {
-    const primary = latestPatchMonth();
-    const prevMonth = primary.month === 0 ? 11 : primary.month - 1;
-    const prevYear = primary.month === 0 ? primary.year - 1 : primary.year;
-    const candidates = [primary.url, monthUrl(prevYear, prevMonth)];
-
-    let lastErr = null;
-    for (const url of candidates) {
-        try {
-            const resp = await axios.get(url, {
-                headers: {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                    Accept: 'text/html,application/xhtml+xml',
-                },
-                timeout: 15000,
-                maxRedirects: 3,
-                responseType: 'text',
-            });
-            const { releaseDate, notes } = parseSapNotes(resp.data);
-            if (!notes.length) { lastErr = new Error('SAP page had no parseable notes'); continue; }
-            const sorted = sortSapNotes(notes);
-            return { url, releaseDate, notes: sorted, summary: summarizeSap(sorted) };
-        } catch (err) {
-            lastErr = err;
-            // A non-404 failure (timeout, block, 5xx) won't be fixed by trying an
-            // older month — stop and surface it (or serve stale cache upstream).
-            if (err.response?.status && err.response.status !== 404) break;
-        }
-    }
-    throw lastErr || new Error('SAP patch fetch failed');
-}
-
-// Latest SAP Security Patch Day. Recomputed monthly on demand; cached 24h.
+const sapPatchService = createSapPatchService({ filePath: process.env.NODE_ENV === 'test' ? undefined : path.join(__dirname, '.feed-cache', 'sap-patch-day.json') });
 app.get('/api/sap-patch', async (req, res) => {
-    const now = Date.now();
-    if (memoryCache.sapPatch.data && memoryCache.sapPatch.expiresAt > now) {
-        res.set('Cache-Control', 'public, max-age=3600');
-        return res.json(memoryCache.sapPatch.data);
-    }
     try {
-        const data = await fetchSapPatch();
-        memoryCache.sapPatch.data = data;
-        memoryCache.sapPatch.expiresAt = now + memoryCache.sapPatch.ttl;
-        res.set('Cache-Control', 'public, max-age=3600');
+        const data = await sapPatchService.query(req.query.month);
+        res.set('Cache-Control', data.stale ? 'public, max-age=60' : 'public, max-age=3600');
         res.json(data);
-    } catch (error) {
-        // Degrade to stale cache when the live fetch fails; else a clear error.
-        if (memoryCache.sapPatch.data) return res.json(memoryCache.sapPatch.data);
-        const { status, message } = sanitizeError(error);
-        res.status(status).json({ error: message });
-    }
+    } catch (error) { res.status(error.status || 502).json({ error: error.message }); }
 });
 
 // ============================================================

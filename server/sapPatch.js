@@ -39,11 +39,11 @@ export const monthUrl = (year, month) =>
 const CVE_RE = /CVE-\d{4}-\d{4,}/gi;
 const clean = (s) => (s || '').replace(/\s+/g, ' ').trim();
 const normalizeNoteUrl = (href, note) => {
-    const fallback = `https://me.sap.com/notes/${note}`;
-    if (!href) return `https://me.sap.com/notes/${note}`;
+    const fallback = /^GHSA-/i.test(note) ? `https://github.com/advisories/${note}` : `https://me.sap.com/notes/${note}`;
+    if (!href) return fallback;
     try {
         const url = new URL(href, 'https://me.sap.com');
-        return url.protocol === 'https:' && url.hostname === 'me.sap.com' ? url.href : fallback;
+        return url.protocol === 'https:' && (url.hostname === 'me.sap.com' || /^GHSA-[a-z0-9-]+$/i.test(note) && url.hostname === 'github.com' && url.pathname.endsWith('/' + note)) ? url.href : fallback;
     } catch {
         return fallback;
     }
@@ -76,9 +76,10 @@ export function parseSapNotes(html) {
         table.find('tr').each((_, tr) => {
             const cells = $(tr).find('td, th');
             if (cells.length < 4) return;
-            const noteLink = $(cells[0]).find('a[href*="/notes/"], a[href*="me.sap.com"]').first();
-            const note = clean(noteLink.text()) || clean($(cells[0]).text());
-            if (!/^\d{6,}$/.test(note)) return; // header/non-note rows
+            const noteLink = $(cells[0]).find('a[href*="/notes/"], a[href*="me.sap.com"], a[href*="/advisories/GHSA-"]').first();
+            const rawNote = clean(noteLink.text()) || clean($(cells[0]).text());
+            const note = rawNote.match(/^GHSA-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}/i)?.[0] || rawNote;
+            if (!/^\d{6,}$/.test(note) && !/^GHSA-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}$/i.test(note)) return;
 
             const titleCell = $(cells[1]);
             const titleText = clean(titleCell.text());

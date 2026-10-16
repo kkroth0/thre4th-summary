@@ -29,8 +29,8 @@ test('parseSapNotes extracts the month notes with their fields', () => {
 test('parseSapNotes flags re-release rows and drops non-note rows', () => {
     const update = notes.find((n) => n.note === '3727078');
     assert.ok(update && update.isUpdate, 'note 3727078 flagged as update');
-    // Every parsed row is a real SAP note number (header row excluded).
-    assert.ok(notes.every((n) => /^\d{6,}$/.test(n.note)));
+    // Official SAP pages also reference GitHub security advisories.
+    assert.ok(notes.every((n) => /^(?:\d{6,}|GHSA-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4})$/i.test(n.note)));
 });
 
 test('parseSapNotes never throws on junk input', () => {

@@ -15,6 +15,7 @@ export interface SapNote {
 
 export interface SapPatchSummary {
     url: string;
+    stale?: boolean;
     releaseDate: string | null; // YYYY-MM-DD (SAP Patch Day)
     notes: SapNote[];
     summary: {
@@ -27,8 +28,8 @@ export interface SapPatchSummary {
     };
 }
 
-export const fetchSapPatch = async (): Promise<SapPatchSummary> => {
-    const res = await fetch('/api/sap-patch');
+export const fetchSapPatch = async (month?: string, signal?: AbortSignal): Promise<SapPatchSummary> => {
+    const res = await fetch('/api/sap-patch' + (month ? '?' + new URLSearchParams({ month }) : ''), { signal });
     if (!res.ok) {
         let detail = '';
         try { detail = (await res.json())?.error || ''; } catch { /* ignore */ }

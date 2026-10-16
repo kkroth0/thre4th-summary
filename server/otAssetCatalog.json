@@ -7,7 +7,17 @@
       "aliases": [
         "ABB"
       ],
-      "families": ["System 800xA", "AC500", "AC 800PEC", "Automation Builder", "My Control System", "Edgenius", "PCM600", "Freelance", "Symphony Plus"],
+      "families": [
+        "System 800xA",
+        "AC500",
+        "AC 800PEC",
+        "Automation Builder",
+        "My Control System",
+        "Edgenius",
+        "PCM600",
+        "Freelance",
+        "Symphony Plus"
+      ],
       "models": [],
       "review": [
         "Descrição sem modelo validado",
@@ -15,9 +25,52 @@
       ]
     },
     {
+      "vendor": "Advantech",
+      "aliases": [
+        "Advantech",
+        "Advantech Co., Ltd."
+      ],
+      "families": [],
+      "models": [],
+      "review": []
+    },
+    {
       "vendor": "B&R Industrial Automation",
-      "aliases": ["B&R", "B&R Industrial Automation", "B&R Industrial Automation GmbH", "B&R Industrial Automation GmbH (ABB Group)"],
-      "families": ["Automation Studio", "Automation Runtime", "APROL", "mapp Services", "X20"],
+      "aliases": [
+        "B&R",
+        "B&R Industrial Automation",
+        "B&R Industrial Automation GmbH",
+        "B&R Industrial Automation GmbH (ABB Group)"
+      ],
+      "families": [
+        "Automation Studio",
+        "Automation Runtime",
+        "APROL",
+        "mapp Services",
+        "X20"
+      ],
+      "models": [],
+      "review": []
+    },
+    {
+      "vendor": "Beckhoff",
+      "aliases": [
+        "Beckhoff",
+        "Beckhoff Automation",
+        "Beckhoff Automation GmbH & Co. KG"
+      ],
+      "families": [],
+      "models": [],
+      "review": []
+    },
+    {
+      "vendor": "Belden / Hirschmann",
+      "aliases": [
+        "Belden",
+        "Hirschmann",
+        "Hirschmann Automation and Control"
+      ],
+      "families": [],
       "models": [],
       "review": []
     },
@@ -30,6 +83,16 @@
       "models": [
         "BWU1833"
       ],
+      "review": []
+    },
+    {
+      "vendor": "Bosch Rexroth",
+      "aliases": [
+        "Bosch Rexroth",
+        "Bosch Rexroth AG"
+      ],
+      "families": [],
+      "models": [],
       "review": []
     },
     {
@@ -53,7 +116,20 @@
         "Catalyst 2960-X Series",
         "Catalyst 9200 24"
       ],
-      "review": ["Gateway (modelo a confirmar)"]
+      "review": [
+        "Gateway (modelo a confirmar)"
+      ]
+    },
+    {
+      "vendor": "CODESYS",
+      "aliases": [
+        "CODESYS",
+        "CODESYS GmbH",
+        "CODESYS Development GmbH"
+      ],
+      "families": [],
+      "models": [],
+      "review": []
     },
     {
       "vendor": "DALOG",
@@ -66,6 +142,16 @@
       ]
     },
     {
+      "vendor": "Danfoss",
+      "aliases": [
+        "Danfoss",
+        "Danfoss A/S"
+      ],
+      "families": [],
+      "models": [],
+      "review": []
+    },
+    {
       "vendor": "Dell",
       "aliases": [
         "Dell"
@@ -73,6 +159,99 @@
       "models": [
         "Dell S4128-T"
       ],
+      "review": []
+    },
+    {
+      "vendor": "Delta Electronics",
+      "aliases": [
+        "Delta Electronics",
+        "Delta Electronics, Inc."
+      ],
+      "families": [],
+      "models": [],
+      "review": []
+    },
+    {
+      "vendor": "Eaton",
+      "aliases": [
+        "Eaton",
+        "Eaton Corporation"
+      ],
+      "families": [],
+      "models": [],
+      "review": []
+    },
+    {
+      "vendor": "Emerson",
+      "aliases": [
+        "Emerson",
+        "Emerson Automation Solutions"
+      ],
+      "families": [],
+      "models": [],
+      "review": []
+    },
+    {
+      "vendor": "Endress+Hauser",
+      "aliases": [
+        "Endress+Hauser",
+        "Endress and Hauser"
+      ],
+      "families": [],
+      "models": [],
+      "review": []
+    },
+    {
+      "vendor": "Festo",
+      "aliases": [
+        "Festo",
+        "Festo SE & Co. KG"
+      ],
+      "families": [],
+      "models": [],
+      "review": []
+    },
+    {
+      "vendor": "GE Vernova",
+      "aliases": [
+        "GE Vernova",
+        "GE Grid Solutions"
+      ],
+      "families": [],
+      "models": [],
+      "review": []
+    },
+    {
+      "vendor": "Hitachi Energy",
+      "aliases": [
+        "Hitachi Energy",
+        "Hitachi ABB Power Grids",
+        "ABB Power Grids"
+      ],
+      "families": [],
+      "models": [],
+      "review": []
+    },
+    {
+      "vendor": "HMS Networks",
+      "aliases": [
+        "HMS Networks",
+        "HMS",
+        "HMS Industrial Networks",
+        "HMS Industrial Networks AB"
+      ],
+      "families": [],
+      "models": [],
+      "review": []
+    },
+    {
+      "vendor": "Honeywell",
+      "aliases": [
+        "Honeywell",
+        "Honeywell International"
+      ],
+      "families": [],
+      "models": [],
       "review": []
     },
     {
@@ -119,6 +298,73 @@
       "review": []
     },
     {
+      "vendor": "Mitsubishi Electric",
+      "aliases": [
+        "Mitsubishi Electric",
+        "Mitsubishi Electric Corporation"
+      ],
+      "families": [],
+      "models": [],
+      "review": []
+    },
+    {
+      "vendor": "Moxa",
+      "aliases": [
+        "Moxa",
+        "Moxa Inc."
+      ],
+      "families": [],
+      "models": [],
+      "review": []
+    },
+    {
+      "vendor": "Omron",
+      "aliases": [
+        "Omron",
+        "OMRON Corporation"
+      ],
+      "families": [],
+      "models": [],
+      "review": []
+    },
+    {
+      "vendor": "Pepperl+Fuchs",
+      "aliases": [
+        "Pepperl+Fuchs",
+        "Pepperl+Fuchs SE",
+        "Pepperl & Fuchs"
+      ],
+      "families": [],
+      "models": [],
+      "review": []
+    },
+    {
+      "vendor": "Phoenix Contact",
+      "aliases": [
+        "Phoenix Contact",
+        "Phoenix Contact GmbH & Co. KG"
+      ],
+      "families": [
+        "PLCnext",
+        "CHARX",
+        "FL MGUARD",
+        "FL SWITCH",
+        "IOL MA8"
+      ],
+      "models": [],
+      "review": []
+    },
+    {
+      "vendor": "Pilz",
+      "aliases": [
+        "Pilz",
+        "Pilz GmbH & Co. KG"
+      ],
+      "families": [],
+      "models": [],
+      "review": []
+    },
+    {
       "vendor": "Raytek",
       "aliases": [
         "Raytek"
@@ -130,7 +376,16 @@
     },
     {
       "vendor": "Rockwell Automation",
-      "families": ["ControlLogix", "CompactLogix", "MicroLogix", "Micro800", "PanelView", "FactoryTalk", "PowerFlex", "Stratix"],
+      "families": [
+        "ControlLogix",
+        "CompactLogix",
+        "MicroLogix",
+        "Micro800",
+        "PanelView",
+        "FactoryTalk",
+        "PowerFlex",
+        "Stratix"
+      ],
       "aliases": [
         "Rockwell",
         "Rockwell Automation",
@@ -246,18 +501,26 @@
       ]
     },
     {
-      "vendor": "SKF",
+      "vendor": "Schmersal",
       "aliases": [
-        "SKF"
+        "Schmersal",
+        "K.A. Schmersal"
       ],
+      "families": [],
       "models": [],
-      "review": [
-        "ANYBUS IMX8 (identificação a confirmar)"
-      ]
+      "review": []
     },
     {
       "vendor": "Schneider Electric",
-      "families": ["Modicon M340", "Modicon M580", "EcoStruxure", "PowerLogic", "Triconex", "SCADAPack", "Altivar"],
+      "families": [
+        "Modicon M340",
+        "Modicon M580",
+        "EcoStruxure",
+        "PowerLogic",
+        "Triconex",
+        "SCADAPack",
+        "Altivar"
+      ],
       "aliases": [
         "Schneider",
         "Schneider Electric"
@@ -300,11 +563,59 @@
       ]
     },
     {
-      "vendor": "Siemens",
-      "aliases": ["Siemens", "Siemens AG", "Siemens ProductCERT"],
-      "families": ["SIMATIC", "SIMATIC S7-1200", "SIMATIC S7-1500", "SIPLUS", "WinCC", "PCS 7", "PCS neo", "TIA Portal", "SINUMERIK", "SINAMICS", "SCALANCE", "RUGGEDCOM", "SIPROTEC", "DIGSI", "SENTRON", "Desigo", "SINEC"],
-      "models": ["6ES7518-4AX00-1AB0", "6ES7518-4AX00-1AC0", "6ES7518-4FX00-1AB0", "6ES7518-4FX00-1AC0", "6AG1518-4AX00-4AC0"],
+      "vendor": "SICK",
+      "aliases": [
+        "SICK",
+        "SICK AG"
+      ],
+      "families": [],
+      "models": [],
       "review": []
+    },
+    {
+      "vendor": "Siemens",
+      "aliases": [
+        "Siemens",
+        "Siemens AG",
+        "Siemens ProductCERT"
+      ],
+      "families": [
+        "SIMATIC",
+        "SIMATIC S7-1200",
+        "SIMATIC S7-1500",
+        "SIPLUS",
+        "WinCC",
+        "PCS 7",
+        "PCS neo",
+        "TIA Portal",
+        "SINUMERIK",
+        "SINAMICS",
+        "SCALANCE",
+        "RUGGEDCOM",
+        "SIPROTEC",
+        "DIGSI",
+        "SENTRON",
+        "Desigo",
+        "SINEC"
+      ],
+      "models": [
+        "6ES7518-4AX00-1AB0",
+        "6ES7518-4AX00-1AC0",
+        "6ES7518-4FX00-1AB0",
+        "6ES7518-4FX00-1AC0",
+        "6AG1518-4AX00-4AC0"
+      ],
+      "review": []
+    },
+    {
+      "vendor": "SKF",
+      "aliases": [
+        "SKF"
+      ],
+      "models": [],
+      "review": [
+        "ANYBUS IMX8 (identificação a confirmar)"
+      ]
     },
     {
       "vendor": "Spectrum",
@@ -315,6 +626,16 @@
       "review": [
         "Descrição sem modelo validado"
       ]
+    },
+    {
+      "vendor": "Turck",
+      "aliases": [
+        "Turck",
+        "TURCK GmbH"
+      ],
+      "families": [],
+      "models": [],
+      "review": []
     },
     {
       "vendor": "Ubiquiti",
@@ -328,6 +649,22 @@
       ]
     },
     {
+      "vendor": "WAGO",
+      "aliases": [
+        "WAGO",
+        "WAGO GmbH & Co. KG",
+        "WAGO Kontakttechnik"
+      ],
+      "families": [
+        "PFC100",
+        "PFC200",
+        "CC100",
+        "TP600"
+      ],
+      "models": [],
+      "review": []
+    },
+    {
       "vendor": "WEG",
       "aliases": [
         "WEG"
@@ -336,6 +673,27 @@
       "review": [
         "ANYBUS MVW (identificação a confirmar)"
       ]
+    },
+    {
+      "vendor": "Weidmüller",
+      "aliases": [
+        "Weidmüller",
+        "Weidmueller",
+        "Weidmueller Interface GmbH & Co. KG"
+      ],
+      "families": [],
+      "models": [],
+      "review": []
+    },
+    {
+      "vendor": "Yokogawa",
+      "aliases": [
+        "Yokogawa",
+        "Yokogawa Electric Corporation"
+      ],
+      "families": [],
+      "models": [],
+      "review": []
     }
   ]
 }

@@ -30,6 +30,10 @@ import {
     Copy,
     Chrome,
 } from "lucide-react";
+import { useSearchParams } from "react-router-dom";
+import { PatchDayToolbar, PatchDayTabs } from "@/components/PatchDayToolbar";
+import { msrcPatchMonth } from "@/services/otPatchApi";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { PageLayout } from "@/components/PageLayout";
 import { EmptyState } from "@/components/EmptyState";
 import { LoadingRows } from "@/components/LoadingState";
@@ -74,6 +78,8 @@ const PatchTuesday = () => {
     const { toast } = useToast();
     const isPt = language === "pt";
 
+    const [params, setParams] = useSearchParams();
+    const [tab, setTab] = useState("advisories"), [revision, setRevision] = useState(0);
     const [months, setMonths] = useState<PatchTuesdayMonth[]>([]);
     const [selectedId, setSelectedId] = useState<string>("");
     const [summary, setSummary] = useState<PatchTuesdaySummary | null>(null);
@@ -101,7 +107,7 @@ const PatchTuesday = () => {
             try {
                 const list = await fetchPatchTuesdayMonths();
                 setMonths(list);
-                if (list.length) setSelectedId(list[0].id);
+                if (list.length) { const requested = new URLSearchParams(window.location.search).get('month'); setSelectedId(list.find(m => msrcPatchMonth(m.id) === requested)?.id || list[0].id); }
             } catch (e) {
                 setError(e instanceof Error ? e.message : "Failed to load months");
             } finally {
@@ -110,6 +116,9 @@ const PatchTuesday = () => {
         })();
     }, []);
 
+    useEffect(() => { const requested = params.get('month'); const entry = months.find(m => msrcPatchMonth(m.id) === requested); if (entry) setSelectedId(entry.id); }, [months, params]);
+    const selectedMonth = msrcPatchMonth(selectedId);
+    const chooseMonth = (month: string) => { const entry = months.find(m => msrcPatchMonth(m.id) === month); if (entry) { setSelectedId(entry.id); setParams({ month }); } };
     // Load summary whenever the selected month changes
     useEffect(() => {
         if (!selectedId) return;
@@ -132,7 +141,7 @@ const PatchTuesday = () => {
         return () => {
             cancelled = true;
         };
-    }, [selectedId]);
+    }, [selectedId, revision]);
 
     const maxFamily = useMemo(
         () => (summary ? Math.max(1, ...summary.byFamily.map((f) => f.count)) : 1),
@@ -274,80 +283,15 @@ const PatchTuesday = () => {
         }
     };
 
-    const exportButtons: { kind: ExportKind; label: string; icon: typeof FileText; cls: string }[] = [
-        { kind: "pdf", label: "PDF", icon: FileText, cls: "bg-red-500/10 text-red-500 hover:bg-red-500/20 border-red-500/20" },
-        { kind: "pptx", label: "PowerPoint", icon: Presentation, cls: "bg-orange-500/10 text-orange-500 hover:bg-orange-500/20 border-orange-500/20" },
-        { kind: "xlsx", label: "Excel", icon: Sheet, cls: "bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20 border-emerald-500/20" },
-        { kind: "json", label: "JSON (CTIFLOW)", icon: FileJson, cls: "bg-sky-500/10 text-sky-500 hover:bg-sky-500/20 border-sky-500/20" },
-    ];
-
     return (
-        <PageLayout bare>
-            <div className="flex-1 p-4 md:p-8">
-                <div className="max-w-6xl mx-auto space-y-6">
-                    {/* Title + month selector */}
-                    <div className="page-head">
-                        <div>
-                            <h1 className="page-title">
-                                {isPt ? "Patch Tuesday Microsoft" : "Microsoft Patch Tuesday"}
-                            </h1>
-                            <p className="page-lede max-w-xl">
-                                {isPt
-                                    ? "Correções do ciclo mensal da Microsoft, direto da API do MSRC, com exportação em PDF, PPTX, Excel e JSON para o CTIFLOW."
-                                    : "Fixes from Microsoft's monthly cycle, straight from the MSRC API, exportable to PDF, PPTX, Excel and CTIFLOW JSON."}
-                            </p>
-                            <Badge variant="outline" className="mt-3 font-normal">MSRC</Badge>
-                        </div>
-
-                        <div className="flex items-center gap-2 w-full lg:w-auto">
-                            <Select value={selectedId} onValueChange={setSelectedId} disabled={loadingMonths || !months.length}>
-                                <SelectTrigger className="w-full lg:w-[260px] h-10 rounded-lg bg-background border-border/50">
-                                    <SelectValue placeholder={loadingMonths ? (isPt ? "Carregando meses..." : "Loading months...") : isPt ? "Selecione o mês" : "Select month"} />
-                                </SelectTrigger>
-                                <SelectContent className="max-h-[320px]">
-                                    {months.map((m) => (
-                                        <SelectItem key={m.id} value={m.id}>
-                                            {m.title}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                        </div>
-                    </div>
-
-                    {/* Export bar */}
-                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-muted/40 border border-border/50 p-4 rounded-lg">
-                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                            <Download className="h-4 w-4 text-primary" />
-                            <span className="font-semibold text-foreground">
-                                {isPt ? "Exportar relatório consolidado" : "Export consolidated report"}
-                            </span>
-                            {summary && (
-                                <span className="hidden md:inline text-muted-foreground/70">
-                                    · {summary.title}
-                                </span>
-                            )}
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                            {exportButtons.map(({ kind, label, icon: Icon, cls }) => (
-                                <Button
-                                    key={kind}
-                                    variant="outline"
-                                    onClick={() => runExport(kind)}
-                                    disabled={!summary || loadingSummary || exporting !== null}
-                                    className={cn("h-9 rounded-lg text-xs font-semibold border gap-2", cls)}
-                                >
-                                    {exporting === kind ? (
-                                        <Loader2 className="h-4 w-4 animate-spin" />
-                                    ) : (
-                                        <Icon className="h-4 w-4" />
-                                    )}
-                                    {label}
-                                </Button>
-                            ))}
-                        </div>
-                    </div>
-
+        <PageLayout width="max-w-7xl">
+            <div className="min-w-0">
+                <div className="space-y-5">
+                    <div className="page-head"><div><h1 className="page-title">{isPt ? 'Patch Tuesday Microsoft' : 'Microsoft Patch Tuesday'}</h1><p className="page-lede">{isPt ? 'Correções Microsoft organizadas por mês, com CVEs, exploração conhecida e referências oficiais do MSRC.' : 'Monthly Microsoft fixes with CVEs, known exploitation and official MSRC references.'}</p></div></div>
+                    <PatchDayToolbar month={selectedMonth} availableMonths={months.map(m => msrcPatchMonth(m.id)).filter(Boolean)} onMonthChange={chooseMonth} onRefresh={() => setRevision(v => v + 1)} loading={loadingMonths || loadingSummary} pt={isPt} actions={<>
+                        <Button disabled={!summary || loadingSummary || !!exporting} onClick={() => void runExport('xlsx')}><Download className="h-4 w-4" />{exporting === 'xlsx' ? (isPt ? 'Preparando…' : 'Preparing…') : (isPt ? 'Relatório Excel' : 'Excel report')}</Button>
+                        <DropdownMenu><DropdownMenuTrigger asChild><Button variant="outline" disabled={!summary || loadingSummary || !!exporting}>{isPt ? 'Mais formatos' : 'More formats'}</Button></DropdownMenuTrigger><DropdownMenuContent align="end"><DropdownMenuItem onClick={() => void runExport('pdf')}>PDF</DropdownMenuItem><DropdownMenuItem onClick={() => void runExport('pptx')}>PowerPoint</DropdownMenuItem><DropdownMenuItem onClick={() => void runExport('json')}>JSON (CTIFLOW)</DropdownMenuItem></DropdownMenuContent></DropdownMenu>
+                    </>} />
                     {/* Error state */}
                     {error && !loadingSummary && (
                         <div className="flex items-center gap-3 p-4 rounded-lg border border-red-500/20 bg-red-500/5 text-sm text-red-500">
@@ -385,12 +329,15 @@ const PatchTuesday = () => {
                             </div>
 
                             {/* KPI cards */}
-                            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+                            <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
                                 {kpis.map((k) => (
-                                    <MetricCard key={k.label} label={k.label} value={k.value} icon={k.icon} tone={metricTone(k.color)} />
+                                    <MetricCard size="sm" key={k.label} label={k.label} value={k.value} icon={k.icon} tone={metricTone(k.color)} />
                                 ))}
                             </div>
 
+                            <PatchDayTabs value={tab} onChange={setTab} label="Patch Tuesday" tabs={[{ id: 'advisories', label: isPt ? 'Avisos e correções' : 'Advisories and fixes' }, { id: 'overview', label: isPt ? 'Panorama do mês' : 'Monthly overview' }, { id: 'coverage', label: isPt ? 'Catálogo e cobertura' : 'Catalog and coverage' }]} />
+                            {tab === 'coverage' && <section className="grid gap-3 md:grid-cols-2"><article className="rounded-lg border bg-card p-4"><a href="https://msrc.microsoft.com/update-guide" target="_blank" rel="noreferrer" className="font-semibold text-primary">Microsoft Security Response Center</a><p className="mt-2 text-sm text-muted-foreground">{isPt ? 'Dados oficiais CVRF: CVEs, severidade, produtos, referências KB e avaliação de exploração. Republicações de componentes externos aparecem separadamente.' : 'Official CVRF data: CVEs, severity, products, KB references and exploitation assessment. Upstream republications are shown separately.'}</p></article><article className="rounded-lg border bg-card p-4"><h2 className="font-semibold">{isPt ? 'Famílias de produtos no mês' : 'Monthly product families'}</h2><ul className="mt-3 space-y-2 text-sm text-muted-foreground">{summary.byFamily.map(f => <li key={f.name} className="flex justify-between gap-2"><span>{f.name}</span><Badge variant="outline">{f.count}</Badge></li>)}</ul></article></section>}
+                            {tab === 'overview' && <>
                             {/* Upstream noise, reported apart from the headline numbers */}
                             {t && t.upstream > 0 && (
                                 <div className="flex items-center gap-2.5 px-3.5 py-2.5 rounded-lg border border-border/50 bg-muted/30 text-xs text-muted-foreground">
@@ -478,11 +425,13 @@ const PatchTuesday = () => {
                                 />
                             </div>
 
+                            </>}
                             {/* CVE Explorer */}
-                            <div className="rounded-lg border border-border/50 bg-muted/40 overflow-hidden">
+                            {tab === 'advisories' && <>
+                            <div className="overflow-hidden rounded-lg border">
                                 <div className="px-5 py-3.5 border-b border-border/50 flex flex-wrap items-center gap-2">
                                     <ShieldAlert className="h-4 w-4 text-primary" />
-                                    <h2 className="text-sm font-bold">{isPt ? "Explorador de CVEs" : "CVE Explorer"}</h2>
+                                    <h2 className="text-sm font-bold">{isPt ? "Avisos e correções" : "Advisories and fixes"}</h2>
                                     <span className="text-[11px] text-muted-foreground">
                                         {isPt
                                             ? `${filtered.length} de ${showUpstream ? summary.vulnerabilities.length : summary.totals.total} CVEs`
@@ -510,20 +459,20 @@ const PatchTuesday = () => {
                                 </div>
 
                                 {/* Filter bar */}
-                                <div className="px-4 py-3 border-b border-border/50 bg-muted/40 flex flex-wrap items-center gap-2">
+                                <div className="p-4 border-b grid gap-2 sm:grid-cols-2 xl:grid-cols-[minmax(180px,1fr)_150px_140px_180px_170px]">
                                     <div className="relative flex-1 min-w-[180px]">
-                                        <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground/60" />
+                                        <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground/60" />
                                         <Input
                                             type="text"
                                             placeholder={isPt ? "Buscar CVE ou título..." : "Search CVE or title..."}
                                             value={search}
                                             onChange={(e) => setSearch(e.target.value)}
-                                            className="pl-9 h-9 text-xs rounded-lg bg-background border-border/50"
+                                            className="pl-9"
                                         />
                                     </div>
 
                                     <Select value={fSeverity} onValueChange={setFSeverity}>
-                                        <SelectTrigger className="w-[140px] h-9 text-xs rounded-lg bg-background border-border/50">
+                                        <SelectTrigger className="w-full">
                                             <SelectValue placeholder={isPt ? "Severidade" : "Severity"} />
                                         </SelectTrigger>
                                         <SelectContent>
@@ -537,7 +486,7 @@ const PatchTuesday = () => {
                                     </Select>
 
                                     <Select value={fCvss} onValueChange={setFCvss}>
-                                        <SelectTrigger className="w-[130px] h-9 text-xs rounded-lg bg-background border-border/50">
+                                        <SelectTrigger className="w-full">
                                             <SelectValue placeholder="CVSS" />
                                         </SelectTrigger>
                                         <SelectContent>
@@ -549,7 +498,7 @@ const PatchTuesday = () => {
                                     </Select>
 
                                     <Select value={fImpact} onValueChange={setFImpact}>
-                                        <SelectTrigger className="w-[170px] h-9 text-xs rounded-lg bg-background border-border/50">
+                                        <SelectTrigger className="w-full">
                                             <SelectValue placeholder={isPt ? "Impacto" : "Impact"} />
                                         </SelectTrigger>
                                         <SelectContent>
@@ -563,7 +512,7 @@ const PatchTuesday = () => {
                                     </Select>
 
                                     <Select value={fStatus} onValueChange={setFStatus}>
-                                        <SelectTrigger className="w-[160px] h-9 text-xs rounded-lg bg-background border-border/50">
+                                        <SelectTrigger className="w-full">
                                             <SelectValue placeholder="Status" />
                                         </SelectTrigger>
                                         <SelectContent>
@@ -590,23 +539,23 @@ const PatchTuesday = () => {
 
                                 {/* Table */}
                                 <div className="overflow-x-auto">
-                                    <table className="w-full text-xs">
-                                        <thead>
+                                    <table className="w-full text-left text-sm">
+                                        <thead className="bg-muted/40 text-xs text-muted-foreground">
                                             <tr className="text-left text-muted-foreground/70 border-b border-border/50">
-                                                <th className="px-4 py-2.5 font-semibold">CVE</th>
-                                                <th className="px-4 py-2.5 font-semibold">{isPt ? "Severidade" : "Severity"}</th>
-                                                <th className="px-4 py-2.5 font-semibold">CVSS</th>
-                                                <th className="px-4 py-2.5 font-semibold hidden md:table-cell">{isPt ? "Impacto" : "Impact"}</th>
-                                                <th className="px-4 py-2.5 font-semibold hidden xl:table-cell">{isPt ? "Família" : "Family"}</th>
-                                                <th className="px-4 py-2.5 font-semibold hidden lg:table-cell">Status</th>
-                                                <th className="px-4 py-2.5 font-semibold">{isPt ? "Título" : "Title"}</th>
-                                                <th className="px-4 py-2.5 font-semibold">Links</th>
+                                                <th className="p-4 font-semibold">CVE</th>
+                                                <th className="p-4 font-semibold">{isPt ? "Severidade" : "Severity"}</th>
+                                                <th className="p-4 font-semibold">CVSS</th>
+                                                <th className="p-4 font-semibold hidden md:table-cell">{isPt ? "Impacto" : "Impact"}</th>
+                                                <th className="p-4 font-semibold hidden xl:table-cell">{isPt ? "Família" : "Family"}</th>
+                                                <th className="p-4 font-semibold hidden lg:table-cell">Status</th>
+                                                <th className="p-4 font-semibold">{isPt ? "Título" : "Title"}</th>
+                                                <th className="p-4 font-semibold">Links</th>
                                             </tr>
                                         </thead>
                                         <tbody>
                                             {pageRows.map((v) => (
                                                 <tr key={v.cve} className="border-b border-border/50 last:border-0 hover:bg-muted/20">
-                                                    <td className="px-4 py-2.5 font-mono font-semibold whitespace-nowrap">
+                                                    <td className="p-4 font-mono font-semibold whitespace-nowrap">
                                                         <a
                                                             href={`https://msrc.microsoft.com/update-guide/vulnerability/${v.cve}`}
                                                             target="_blank"
@@ -616,15 +565,15 @@ const PatchTuesday = () => {
                                                             {v.cve}
                                                         </a>
                                                     </td>
-                                                    <td className="px-4 py-2.5">
+                                                    <td className="p-4">
                                                         <Badge variant="outline" className={cn("text-[10px] font-semibold", SEV_STYLES[v.severity] || SEV_STYLES.Unknown)}>
                                                             {v.severity}
                                                         </Badge>
                                                     </td>
-                                                    <td className="px-4 py-2.5 font-semibold tabular-nums">{v.cvss ?? "—"}</td>
-                                                    <td className="px-4 py-2.5 hidden md:table-cell text-muted-foreground">{v.impact}</td>
-                                                    <td className="px-4 py-2.5 hidden xl:table-cell text-muted-foreground">{v.family}</td>
-                                                    <td className="px-4 py-2.5 hidden lg:table-cell">
+                                                    <td className="p-4 font-semibold tabular-nums">{v.cvss ?? "—"}</td>
+                                                    <td className="p-4 hidden md:table-cell text-muted-foreground">{v.impact}</td>
+                                                    <td className="p-4 hidden xl:table-cell text-muted-foreground">{v.family}</td>
+                                                    <td className="p-4 hidden lg:table-cell">
                                                         <div className="flex gap-1">
                                                             {v.exploited && (
                                                                 <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-red-500/15 text-red-500">EXPLOITED</span>
@@ -640,10 +589,10 @@ const PatchTuesday = () => {
                                                             )}
                                                         </div>
                                                     </td>
-                                                    <td className="px-4 py-2.5 text-muted-foreground max-w-[340px] truncate" title={v.title}>
+                                                    <td className="p-4 text-muted-foreground max-w-[340px] truncate" title={v.title}>
                                                         {v.title}
                                                     </td>
-                                                    <td className="px-4 py-2.5">
+                                                    <td className="p-4">
                                                         <div className="flex items-center gap-1.5">
                                                             <a
                                                                 href={`https://msrc.microsoft.com/update-guide/vulnerability/${v.cve}`}
@@ -721,6 +670,7 @@ const PatchTuesday = () => {
                                     </div>
                                 </div>
                             </div>
+                            </>}
                         </>
                     )}
 

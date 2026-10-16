@@ -87,7 +87,7 @@ export function useNavCatalog() {
         },
         {
           path: "/sap-patch",
-          label: tr({ pt: "Correções SAP", en: "SAP Fixes", es: "Correcciones SAP", fr: "Correctifs SAP" }),
+          label: tr({ pt: "SAP Patch Day", en: "SAP Patch Day", es: "SAP Patch Day", fr: "SAP Patch Day" }),
           description: pt ? "Notas de segurança mensais da SAP." : "Monthly SAP security notes.",
           icon: ShieldCheck,
         },

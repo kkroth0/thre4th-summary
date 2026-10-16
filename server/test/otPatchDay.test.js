@@ -120,7 +120,7 @@ test('daily source caching, single flight, persisted restart, stale fallback and
     assert.ok(result.sources.some(s => s.status === 'stale')); assert.equal(restart.query({ month: '2026-04' }).rows.length, 1);
 });
 test('catalog contains no installed firmware inventory or site-specific labels', () => {
-    assert.equal(OT_CATALOG.vendors.length, 20);
+    assert.equal(OT_CATALOG.vendors.length, 47);
     assert.equal(OT_CATALOG.vendors.filter(v => /rockwell|allen/i.test(v.vendor)).length, 1);
     assert.ok(OT_CATALOG.vendors.some(v => v.vendor === 'ABB' && v.review.some(m => m.includes('fabricante a confirmar'))));
     const data = JSON.stringify(OT_CATALOG);

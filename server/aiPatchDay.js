@@ -1,5 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { readFileSync } from 'node:fs';
+const toolGlossary = new Map(JSON.parse(readFileSync(new URL('./aiToolGlossary.json', import.meta.url), 'utf8')).map(t => [t.name, t]));
 import axios from 'axios';
 import { AI_TOOL_CATALOG, AI_CATEGORIES, classifyAiTool } from './aiToolCatalog.js';
 import { defaultOtMonth, validOtMonth } from './otPatchDay.js';
@@ -140,7 +142,7 @@ export function createAiPatchDay({ filePath, http = axios, queryCatalog, now = (
                 ...['nvd', 'kev', 'epss'].map(id => ({ id, name: { nvd: 'NVD', kev: 'CISA KEV', epss: 'FIRST EPSS' }[id], url: { nvd: 'https://nvd.nist.gov/', kev: 'https://www.cisa.gov/known-exploited-vulnerabilities-catalog', epss: 'https://www.first.org/epss/' }[id], coverage: id === 'nvd' ? `Catálogo unificado local: CVEs publicadas ou revisadas no mês, filtradas pelo componente de IA.${local.indexPending ? ' O índice histórico de IA está sendo preparado; novas ingestões já o atualizam automaticamente.' : ''}` : 'Sinais do catálogo unificado, vinculados pelo identificador CVE.', status: id === 'nvd' && local.indexPending ? 'pending' : !catalogError && sourceStatus[id]?.status === 'ready' ? 'ok' : catalogError || sourceStatus[id]?.status === 'error' ? 'error' : 'stale', lastSuccess: sourceStatus[id]?.at, error: catalogError ? 'Catálogo temporariamente indisponível.' : sourceStatus[id]?.error || '' })),
             ];
             const discovered = rows.flatMap(r => r.tools).filter(t => t.evidence === 'discovery');
-            const catalog = [...AI_TOOL_CATALOG.map(t => ({ vendor: t.name, aliases: t.packages, models: t.packages, review: [], category: t.category, repo: t.repo })), ...discovered.filter((t, i, all) => all.findIndex(x => x.name === t.name) === i).map(t => ({ vendor: t.name, aliases: [], models: [t.name], review: ['Componente identificado no texto do aviso; conferir o pacote e a aplicabilidade.'], category: t.category, repo: '' }))];
+            const catalog = [...AI_TOOL_CATALOG.map(t => ({ vendor: t.name, aliases: t.packages, models: t.packages, review: [], category: t.category, repo: t.repo, ...toolGlossary.get(t.name) })), ...discovered.filter((t, i, all) => all.findIndex(x => x.name === t.name) === i).map(t => ({ vendor: t.name, aliases: [], models: [t.name], review: ['Componente identificado no texto do aviso; conferir o pacote e a aplicabilidade.'], category: t.category, repo: '' }))];
             const data = { month, rows, catalog, categories: [...new Set([...AI_CATEGORIES, ...rows.flatMap(r => r.categories)])], sources,
                 status: { running: Boolean(flight), pending: state.next || state.known.next || state.recent.next || !state.recent.lastSuccess || local.indexPending ? 1 : 0, failed: state.error || catalogError ? 1 : 0, initialized: Boolean(state.recent.lastSuccess) && !local.truncated && !local.indexPending, cadenceHours: 24, persistenceError: state.persistenceError },
                 summary: { advisories: rows.length, patches: rows.filter(r => r.patch === 'available').length, mitigations: 0, kev: rows.filter(r => r.kev).length, matched: rows.filter(r => r.matches.some(m => m.level === 'model')).length },

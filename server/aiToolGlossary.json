@@ -1,0 +1,1202 @@
+[
+  {
+    "name": "Ollama",
+    "category": "LLMs e inferência",
+    "description": "Executa e disponibiliza modelos de linguagem em computadores e servidores.",
+    "descriptionEn": "Get up and running with Kimi, GLM, MiniMax, DeepSeek, gpt-oss, Qwen, Gemma and other models.",
+    "url": "https://github.com/ollama/ollama",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "vLLM",
+    "category": "LLMs e inferência",
+    "description": "Servidor de inferência para atender várias solicitações a modelos de linguagem com uso eficiente de memória.",
+    "descriptionEn": "A high-throughput and memory-efficient inference and serving engine for LLMs",
+    "url": "https://github.com/vllm-project/vllm",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "llama.cpp",
+    "category": "LLMs e inferência",
+    "description": "Implementação em C/C++ para executar modelos de linguagem em diferentes tipos de hardware.",
+    "descriptionEn": "LLM inference in C/C++",
+    "url": "https://github.com/ggml-org/llama.cpp",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "LocalAI",
+    "category": "LLMs e inferência",
+    "description": "Servidor para executar modelos de texto, imagem, voz e outras modalidades em infraestrutura própria.",
+    "descriptionEn": "LocalAI is the open-source AI engine. Run any model - LLMs, vision, voice, image, video - on any hardware. No GPU required.",
+    "url": "https://github.com/mudler/localai",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "SGLang",
+    "category": "LLMs e inferência",
+    "description": "Framework para servir modelos de linguagem e modelos multimodais.",
+    "descriptionEn": "SGLang is a high-performance serving framework for large language models and multimodal models.",
+    "url": "https://github.com/sgl-project/sglang",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "LMDeploy",
+    "category": "LLMs e inferência",
+    "description": "Conjunto de ferramentas para otimizar e colocar modelos de linguagem em produção.",
+    "descriptionEn": "LMDeploy is a toolkit for compressing, deploying, and serving LLMs.",
+    "url": "https://github.com/internlm/lmdeploy",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "TGI",
+    "category": "LLMs e inferência",
+    "description": "Servidor da Hugging Face para disponibilizar geração de texto por modelos de linguagem.",
+    "descriptionEn": "Large Language Model Text Generation Inference",
+    "url": "https://github.com/huggingface/text-generation-inference",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "TensorRT-LLM",
+    "category": "LLMs e inferência",
+    "description": "Biblioteca da NVIDIA para otimizar a inferência de modelos de linguagem em GPUs.",
+    "descriptionEn": "TensorRT LLM provides users with an easy-to-use Python API to define Large Language Models (LLMs) and supports state-of-the-art optimizations to perform inference efficiently on",
+    "url": "https://github.com/nvidia/tensorrt-llm",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "BentoML",
+    "category": "LLMs e inferência",
+    "description": "Plataforma para transformar modelos e aplicações de IA em serviços e APIs.",
+    "descriptionEn": "The easiest way to serve AI apps and models - Build Model Inference APIs, Job queues, LLM apps, Multi-model pipelines, and more!",
+    "url": "https://github.com/bentoml/bentoml",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "Xinference",
+    "category": "LLMs e inferência",
+    "description": "Serviço para executar e disponibilizar diferentes modelos de IA por uma interface de API.",
+    "descriptionEn": "Swap GPT for any LLM by changing a single line of code. Xinference lets you run open-source, speech, and multimodal models on cloud, on-prem,",
+    "url": "https://github.com/xorbitsai/inference",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "Ray Serve",
+    "category": "LLMs e inferência",
+    "description": "Componente do Ray para disponibilizar aplicações e modelos em uma infraestrutura distribuída.",
+    "descriptionEn": "Ray is an AI compute engine. Ray consists of a core distributed runtime and a set of AI Libraries for accelerating ML workloads.",
+    "url": "https://github.com/ray-project/ray",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "Open WebUI",
+    "category": "Interfaces e plataformas",
+    "description": "Interface web de conversa que conecta usuários a modelos e servidores de IA.",
+    "descriptionEn": "User-friendly AI Interface (Supports Ollama, OpenAI API, ...)",
+    "url": "https://github.com/open-webui/open-webui",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "LibreChat",
+    "category": "Interfaces e plataformas",
+    "description": "Aplicação de conversa que reúne provedores de modelos, agentes e integrações.",
+    "descriptionEn": "Enhanced ChatGPT Clone: Features Agents, MCP, Skills, DeepSeek, Anthropic, AWS, OpenAI, Responses API, Azure, Groq, o1, GPT-5, Mistral, OpenRouter, Vertex AI, Gemini, Artifacts, AI",
+    "url": "https://github.com/danny-avila/librechat",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "AnythingLLM",
+    "category": "Interfaces e plataformas",
+    "description": "Ambiente para conversar com documentos, criar agentes e usar modelos em infraestrutura própria.",
+    "descriptionEn": "Stop renting your intelligence. Own it with AnythingLLM. Everything you need for a powerful local-first agent experience ",
+    "url": "https://github.com/mintplex-labs/anything-llm",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "Dify",
+    "category": "Interfaces e plataformas",
+    "description": "Plataforma visual para criar aplicações de IA, fluxos com agentes e consultas a documentos.",
+    "descriptionEn": "Build Agentic workflows, RAG pipelines, with rich AI model and tool support on one collaborative workspace. Deploy on cloud, VPC, or self-hosted, so teams",
+    "url": "https://github.com/langgenius/dify",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "Flowise",
+    "category": "Interfaces e plataformas",
+    "description": "Construtor visual de agentes e fluxos de processamento com modelos de linguagem.",
+    "descriptionEn": "Build AI Agents, Visually",
+    "url": "https://github.com/flowiseai/flowise",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "Langflow",
+    "category": "Interfaces e plataformas",
+    "description": "Editor visual para criar e publicar agentes e fluxos de aplicações de IA.",
+    "descriptionEn": "Langflow is a powerful tool for building and deploying AI-powered agents and workflows.",
+    "url": "https://github.com/langflow-ai/langflow",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "LobeChat",
+    "category": "Interfaces e plataformas",
+    "description": "Interface e ambiente de trabalho para organizar conversas, agentes e integrações de IA.",
+    "descriptionEn": "🤯 LobeHub is your Chief Agent Operator, organizing your agents into 7×24 operations by hiring, scheduling, and reporting on your entire AI team.",
+    "url": "https://github.com/lobehub/lobe-chat",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "Jan",
+    "category": "Interfaces e plataformas",
+    "description": "Aplicação para conversar com modelos de linguagem executados no computador.",
+    "descriptionEn": "Jan is an open source alternative to ChatGPT that runs 100% offline on your computer.",
+    "url": "https://github.com/menloresearch/jan",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "KoboldCpp",
+    "category": "Interfaces e plataformas",
+    "description": "Aplicação para executar modelos no formato GGUF com uma interface de conversa.",
+    "descriptionEn": "KoboldCpp - Run GGUF AI models locally with a KoboldAI UI. One File. Zero Install.",
+    "url": "https://github.com/lostruins/koboldcpp",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "text-generation-webui",
+    "category": "Interfaces e plataformas",
+    "description": "Interface para executar e interagir com modelos de linguagem locais.",
+    "descriptionEn": "Open-source desktop app for local LLMs. Text, vision, tool-calling, OpenAI/Anthropic-compatible API. 100% private.",
+    "url": "https://github.com/oobabooga/text-generation-webui",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "ComfyUI",
+    "category": "Interfaces e plataformas",
+    "description": "Ambiente visual de nós para montar fluxos de geração de imagens e outros conteúdos com IA.",
+    "descriptionEn": "The most powerful and modular diffusion model GUI, api and backend with a graph/nodes interface. The fastest local inference engine in the world.",
+    "url": "https://github.com/comfyanonymous/comfyui",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "AUTOMATIC1111",
+    "category": "Interfaces e plataformas",
+    "description": "Interface web para gerar e editar imagens com modelos Stable Diffusion.",
+    "descriptionEn": "Stable Diffusion web UI",
+    "url": "https://github.com/automatic1111/stable-diffusion-webui",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "InvokeAI",
+    "category": "Interfaces e plataformas",
+    "description": "Ambiente de criação de imagens com modelos de difusão e ferramentas de edição.",
+    "descriptionEn": "Invoke is a leading creative engine for Stable Diffusion models, empowering professionals, artists, and enthusiasts to generate and create visual media using the latest",
+    "url": "https://github.com/invoke-ai/invokeai",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "Fooocus",
+    "category": "Interfaces e plataformas",
+    "description": "Aplicação de geração de imagens centrada na descrição do resultado desejado.",
+    "descriptionEn": "Focus on prompting and generating",
+    "url": "https://github.com/lllyasviel/fooocus",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "Gradio",
+    "category": "Interfaces e plataformas",
+    "description": "Biblioteca Python para criar interfaces e demonstrações de modelos e aplicações de IA.",
+    "descriptionEn": "Build and share delightful machine learning apps, all in Python. 🌟 Star to support our work!",
+    "url": "https://github.com/gradio-app/gradio",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "Streamlit",
+    "category": "Interfaces e plataformas",
+    "description": "Framework Python para construir aplicações de dados e interfaces interativas.",
+    "descriptionEn": "Streamlit — A faster way to build and share data apps.",
+    "url": "https://github.com/streamlit/streamlit",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "LangChain",
+    "category": "Agentes e orquestração",
+    "description": "Framework para conectar modelos de linguagem a dados, ferramentas e fluxos de aplicações.",
+    "descriptionEn": "The agent engineering platform.",
+    "url": "https://github.com/langchain-ai/langchain",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "LangGraph",
+    "category": "Agentes e orquestração",
+    "description": "Framework para construir agentes com estado e fluxos de execução controlados.",
+    "descriptionEn": "Build resilient agents.",
+    "url": "https://github.com/langchain-ai/langgraph",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "LlamaIndex",
+    "category": "Agentes e orquestração",
+    "description": "Framework para preparar documentos e conectar dados a aplicações de IA.",
+    "descriptionEn": "LlamaIndex is the document processing platform for AI",
+    "url": "https://github.com/run-llama/llama_index",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "AutoGen",
+    "category": "Agentes e orquestração",
+    "description": "Framework para desenvolver aplicações e fluxos que envolvem agentes de IA.",
+    "descriptionEn": "A programming framework for agentic AI",
+    "url": "https://github.com/microsoft/autogen",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "CrewAI",
+    "category": "Agentes e orquestração",
+    "description": "Framework para coordenar agentes que desempenham papéis e tarefas em conjunto.",
+    "descriptionEn": "Framework for orchestrating role-playing, autonomous AI agents. By fostering collaborative intelligence, CrewAI empowers agents to work together seamlessly, tackling complex tasks.",
+    "url": "https://github.com/crewaiinc/crewai",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "Semantic Kernel",
+    "category": "Agentes e orquestração",
+    "description": "SDK para integrar modelos, funções e agentes em aplicações.",
+    "descriptionEn": "Integrate cutting-edge LLM technology quickly and easily into your apps",
+    "url": "https://github.com/microsoft/semantic-kernel",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "Haystack",
+    "category": "Agentes e orquestração",
+    "description": "Framework para construir pipelines de busca, documentos e aplicações com modelos de linguagem.",
+    "descriptionEn": "Open-source AI orchestration framework for building context-engineered, production-ready LLM applications. Design modular pipelines and agent workflows with explicit control over retrieval, routing, memory, and",
+    "url": "https://github.com/deepset-ai/haystack",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "AutoGPT",
+    "category": "Agentes e orquestração",
+    "description": "Plataforma para criar e executar agentes que automatizam tarefas.",
+    "descriptionEn": "AutoGPT is the vision of accessible AI for everyone, to use and to build on. Our mission is to provide the tools, so that",
+    "url": "https://github.com/significant-gravitas/autogpt",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "OpenHands",
+    "category": "Agentes e orquestração",
+    "description": "Agente de desenvolvimento de software que trabalha com código e ferramentas de programação.",
+    "descriptionEn": "🙌 OpenHands: AI-Driven Development",
+    "url": "https://github.com/all-hands-ai/openhands",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "OpenAI Agents SDK",
+    "category": "Agentes e orquestração",
+    "description": "SDK para criar agentes e coordenar fluxos com várias etapas ou agentes.",
+    "descriptionEn": "A lightweight, powerful framework for multi-agent workflows",
+    "url": "https://github.com/openai/openai-agents-python",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "Pydantic AI",
+    "category": "Agentes e orquestração",
+    "description": "Framework Python para agentes com estruturas de dados tipadas e validação.",
+    "descriptionEn": "How Python does AI. Agents, realtime voice, image generation, embeddings. Every model, every interface, typed end to end.",
+    "url": "https://github.com/pydantic/pydantic-ai",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "smolagents",
+    "category": "Agentes e orquestração",
+    "description": "Biblioteca para criar agentes que usam código e ferramentas para realizar tarefas.",
+    "descriptionEn": "🤗 smolagents: a barebones library for agents that think in code.",
+    "url": "https://github.com/huggingface/smolagents",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "Agno",
+    "category": "Agentes e orquestração",
+    "description": "Framework e infraestrutura para construir, executar e gerenciar agentes.",
+    "descriptionEn": "Build, run, and manage agent platforms.",
+    "url": "https://github.com/agno-agi/agno",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "Mastra",
+    "category": "Agentes e orquestração",
+    "description": "Framework TypeScript para desenvolver aplicações e agentes de IA.",
+    "descriptionEn": "Mastra is the modern TypeScript framework for AI-powered applications and agents.",
+    "url": "https://github.com/mastra-ai/mastra",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "n8n",
+    "category": "Agentes e orquestração",
+    "description": "Plataforma de automação de fluxos que conecta serviços, dados e recursos de IA.",
+    "descriptionEn": "Fair-code workflow automation platform with native AI capabilities. Combine visual building with custom code, self-host or cloud, 400+ integrations.",
+    "url": "https://github.com/n8n-io/n8n",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "GitHub MCP Server",
+    "category": "MCP e integrações",
+    "description": "Servidor MCP que permite a agentes interagir com recursos do GitHub.",
+    "descriptionEn": "GitHub's official MCP Server",
+    "url": "https://github.com/github/github-mcp-server",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "Playwright MCP",
+    "category": "MCP e integrações",
+    "description": "Servidor MCP para interagir com páginas e automatizar tarefas em navegadores.",
+    "descriptionEn": "Playwright MCP server",
+    "url": "https://github.com/microsoft/playwright-mcp",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "Browser Use",
+    "category": "MCP e integrações",
+    "description": "Biblioteca para criar agentes que usam um navegador na execução de tarefas.",
+    "descriptionEn": "Open-source Python library for AI browser agents, plus Browser Use Cloud: stealth browsers and a hosted agent API.",
+    "url": "https://github.com/browser-use/browser-use",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "Crawl4AI",
+    "category": "MCP e integrações",
+    "description": "Coletor de páginas que prepara conteúdo web para uso por modelos e agentes.",
+    "descriptionEn": "Open-source web crawler and scraper for LLMs and AI agents: any website into clean, LLM-ready Markdown. Run it yourself, or use Crawl4AI Cloud with",
+    "url": "https://github.com/unclecode/crawl4ai",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "Firecrawl",
+    "category": "MCP e integrações",
+    "description": "Serviço e ferramentas para coletar páginas e transformar conteúdo web em dados utilizáveis.",
+    "descriptionEn": "Supercharge your AI agents with data from the web and beyond. Building the library for superintelligence. 🔥",
+    "url": "https://github.com/firecrawl/firecrawl",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "Context7 MCP",
+    "category": "MCP e integrações",
+    "description": "Integração que fornece documentação de bibliotecas e projetos ao contexto dos agentes.",
+    "descriptionEn": "Context7 Platform -- Up-to-date docs for AI agents",
+    "url": "https://github.com/upstash/context7",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "Chrome DevTools MCP",
+    "category": "MCP e integrações",
+    "description": "Integração MCP que disponibiliza recursos do Chrome DevTools para agentes.",
+    "descriptionEn": "Chrome DevTools for coding agents",
+    "url": "https://github.com/chromedevtools/chrome-devtools-mcp",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "MCP Python SDK",
+    "category": "MCP e integrações",
+    "description": "SDK para criar clientes e servidores do Model Context Protocol em Python.",
+    "descriptionEn": "The official Python SDK for Model Context Protocol servers and clients",
+    "url": "https://github.com/modelcontextprotocol/python-sdk",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "MCP TypeScript SDK",
+    "category": "MCP e integrações",
+    "description": "SDK para criar clientes e servidores do Model Context Protocol em TypeScript.",
+    "descriptionEn": "The official TypeScript SDK for Model Context Protocol servers and clients",
+    "url": "https://github.com/modelcontextprotocol/typescript-sdk",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "MCP servidores de referência",
+    "category": "MCP e integrações",
+    "description": "Implementações de servidores que demonstram integrações pelo Model Context Protocol.",
+    "descriptionEn": "Model Context Protocol Servers",
+    "url": "https://github.com/modelcontextprotocol/servers",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "MCP Inspector",
+    "category": "MCP e integrações",
+    "description": "Ferramenta visual para testar e inspecionar servidores e conexões MCP.",
+    "descriptionEn": "Visual testing tool for MCP servers",
+    "url": "https://github.com/modelcontextprotocol/inspector",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "FastMCP",
+    "category": "MCP e integrações",
+    "description": "Framework Python para criar servidores e clientes MCP.",
+    "descriptionEn": "🚀 The fast, Pythonic way to build MCP servers and clients.",
+    "url": "https://github.com/jlowin/fastmcp",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "MCP Go",
+    "category": "MCP e integrações",
+    "description": "Implementação do protocolo MCP para aplicações escritas em Go.",
+    "descriptionEn": "A Go implementation of the Model Context Protocol (MCP), enabling seamless integration between LLM applications and external data sources and tools.",
+    "url": "https://github.com/mark3labs/mcp-go",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "MCP Java SDK",
+    "category": "MCP e integrações",
+    "description": "SDK para criar clientes e servidores do Model Context Protocol em Java.",
+    "descriptionEn": "The official Java SDK for Model Context Protocol servers and clients. Maintained in collaboration with Spring AI",
+    "url": "https://github.com/modelcontextprotocol/java-sdk",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "MCP Rust SDK",
+    "category": "MCP e integrações",
+    "description": "SDK para criar clientes e servidores do Model Context Protocol em Rust.",
+    "descriptionEn": "The official Rust SDK for the Model Context Protocol",
+    "url": "https://github.com/modelcontextprotocol/rust-sdk",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "MCP C# SDK",
+    "category": "MCP e integrações",
+    "description": "SDK para criar clientes e servidores do Model Context Protocol em C#.",
+    "descriptionEn": "The official C# SDK for Model Context Protocol servers and clients. Maintained in collaboration with Microsoft.",
+    "url": "https://github.com/modelcontextprotocol/csharp-sdk",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "MCP Supergateway",
+    "category": "MCP e integrações",
+    "description": "Ponte entre formas de transporte usadas por servidores e clientes MCP.",
+    "descriptionEn": "Run MCP stdio servers over HTTP streamable, SSE and SSE over stdio. AI gateway.",
+    "url": "https://github.com/supercorp-ai/supergateway",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "MCP Proxy",
+    "category": "MCP e integrações",
+    "description": "Proxy para intermediar e adaptar conexões entre clientes e servidores MCP.",
+    "descriptionEn": "A bridge between Streamable HTTP and stdio MCP transports",
+    "url": "https://github.com/sparfenyuk/mcp-proxy",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "MCP Remote",
+    "category": "MCP e integrações",
+    "description": "Adaptador para conectar clientes MCP locais a servidores remotos.",
+    "descriptionEn": "Connect an MCP Client that only supports local (stdio) servers to a Remote MCP Server.",
+    "url": "https://github.com/geelen/mcp-remote",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "MCP ContextForge",
+    "category": "MCP e integrações",
+    "description": "Gateway para organizar o acesso a ferramentas, servidores e integrações MCP.",
+    "descriptionEn": "An AI Gateway, registry, and proxy that sits in front of any MCP, A2A, or REST/gRPC APIs, exposing a unified endpoint with centralized discovery,",
+    "url": "https://github.com/ibm/mcp-context-forge",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "Chroma",
+    "category": "RAG, busca e dados",
+    "description": "Banco de dados de embeddings para busca por similaridade e aplicações de recuperação de informação.",
+    "descriptionEn": "Search infrastructure for AI",
+    "url": "https://github.com/chroma-core/chroma",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "Qdrant",
+    "category": "RAG, busca e dados",
+    "description": "Banco vetorial para armazenar embeddings e realizar busca por similaridade.",
+    "descriptionEn": "Qdrant - High-performance, massive-scale Vector Database and Vector Search Engine for the next generation of AI. Also available in the cloud https://cloud.qdrant.io/",
+    "url": "https://github.com/qdrant/qdrant",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "Milvus",
+    "category": "RAG, busca e dados",
+    "description": "Banco de dados vetorial para busca e recuperação de informações em grande escala.",
+    "descriptionEn": "Milvus is a high-performance, cloud-native vector database built for scalable vector ANN search",
+    "url": "https://github.com/milvus-io/milvus",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "Weaviate",
+    "category": "RAG, busca e dados",
+    "description": "Banco de dados com busca vetorial e recursos para aplicações de IA.",
+    "descriptionEn": "Weaviate is an open-source vector database that stores both objects and vectors, allowing for the combination of vector search with structured filtering with the",
+    "url": "https://github.com/weaviate/weaviate",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "LanceDB",
+    "category": "RAG, busca e dados",
+    "description": "Banco vetorial voltado a dados multimodais e aplicações de IA.",
+    "descriptionEn": "Developer-friendly OSS embedded retrieval library for multimodal AI. Search More; Manage Less.",
+    "url": "https://github.com/lancedb/lancedb",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "FAISS",
+    "category": "RAG, busca e dados",
+    "description": "Biblioteca para indexar vetores e realizar buscas por similaridade.",
+    "descriptionEn": "A library for efficient similarity search and clustering of dense vectors.",
+    "url": "https://github.com/facebookresearch/faiss",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "RAGFlow",
+    "category": "RAG, busca e dados",
+    "description": "Plataforma para preparar documentos e construir aplicações de busca com geração de respostas.",
+    "descriptionEn": "RAGFlow is a leading open-source Retrieval-Augmented Generation (RAG) engine that fuses cutting-edge RAG with Agent capabilities to create a superior context layer for LLMs",
+    "url": "https://github.com/infiniflow/ragflow",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "RAGAnything",
+    "category": "RAG, busca e dados",
+    "description": "Framework de recuperação de informação para documentos e conteúdos multimodais.",
+    "descriptionEn": "\"RAG-Anything: All-in-One RAG Framework\"",
+    "url": "https://github.com/hkuds/rag-anything",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "LightRAG",
+    "category": "RAG, busca e dados",
+    "description": "Implementação de recuperação de informação para complementar respostas de modelos com dados externos.",
+    "descriptionEn": "[EMNLP2025] LightRAG: Simple and Fast Retrieval-Augmented Generation",
+    "url": "https://github.com/hkuds/lightrag",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "Unstructured",
+    "category": "RAG, busca e dados",
+    "description": "Ferramentas para extrair e transformar conteúdo de documentos em dados para aplicações.",
+    "descriptionEn": "Convert documents to structured data effortlessly. Unstructured is open-source ETL solution for transforming complex documents into clean, structured formats for language models. Visit our",
+    "url": "https://github.com/unstructured-io/unstructured",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "Docling",
+    "category": "RAG, busca e dados",
+    "description": "Biblioteca para converter documentos em representações estruturadas utilizadas por aplicações de IA.",
+    "descriptionEn": "Get your documents ready for gen AI",
+    "url": "https://github.com/docling-project/docling",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "Vanna",
+    "category": "RAG, busca e dados",
+    "description": "Assistente que usa modelos para ajudar a consultar bancos de dados em linguagem natural.",
+    "descriptionEn": "🤖 Chat with your SQL database 📊. Accurate Text-to-SQL Generation via LLMs using Agentic Retrieval 🔄.",
+    "url": "https://github.com/vanna-ai/vanna",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "DB-GPT",
+    "category": "RAG, busca e dados",
+    "description": "Plataforma de agentes e aplicações de IA voltadas a bancos de dados.",
+    "descriptionEn": "open-source agentic AI data assistant for the next generation of AI + Data products.",
+    "url": "https://github.com/eosphoros-ai/db-gpt",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "Embedchain",
+    "category": "RAG, busca e dados",
+    "description": "Framework para criar aplicações com recuperação de dados; o repositório associado também abriga o ecossistema Mem0.",
+    "descriptionEn": "The Memory Layer for AI Agents - Drop-in memory infrastructure for AI agents and apps. Context that persists. Built for production.",
+    "url": "https://github.com/mem0ai/mem0",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "PyTorch",
+    "category": "Modelos, treinamento e MLOps",
+    "description": "Framework para construir, treinar e executar modelos de aprendizado de máquina.",
+    "descriptionEn": "Tensors and Dynamic neural networks in Python with strong GPU acceleration",
+    "url": "https://github.com/pytorch/pytorch",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "TensorFlow",
+    "category": "Modelos, treinamento e MLOps",
+    "description": "Framework para desenvolver e executar modelos de aprendizado de máquina.",
+    "descriptionEn": "An Open Source Machine Learning Framework for Everyone",
+    "url": "https://github.com/tensorflow/tensorflow",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "Keras",
+    "category": "Modelos, treinamento e MLOps",
+    "description": "API de alto nível para construir e treinar redes neurais.",
+    "descriptionEn": "Deep Learning for humans",
+    "url": "https://github.com/keras-team/keras",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "Transformers",
+    "category": "Modelos, treinamento e MLOps",
+    "description": "Biblioteca de modelos e ferramentas para tarefas de texto, imagem, áudio e outras modalidades.",
+    "descriptionEn": "🤗 Transformers: the model-definition framework for state-of-the-art machine learning models in text, vision, audio, and multimodal models, for both inference and training. ",
+    "url": "https://github.com/huggingface/transformers",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "Diffusers",
+    "category": "Modelos, treinamento e MLOps",
+    "description": "Biblioteca para executar e desenvolver modelos de difusão, usados na geração de conteúdo.",
+    "descriptionEn": "🤗 Diffusers: State-of-the-art diffusion models for image, video, and audio generation in PyTorch.",
+    "url": "https://github.com/huggingface/diffusers",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "Datasets",
+    "category": "Modelos, treinamento e MLOps",
+    "description": "Biblioteca para acessar e preparar conjuntos de dados de aprendizado de máquina.",
+    "descriptionEn": "🤗 The largest hub of ready-to-use datasets for AI models with fast, easy-to-use and efficient data manipulation tools",
+    "url": "https://github.com/huggingface/datasets",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "Hugging Face Hub",
+    "category": "Modelos, treinamento e MLOps",
+    "description": "Cliente e ferramentas para acessar modelos, conjuntos de dados e repositórios do Hugging Face Hub.",
+    "descriptionEn": "The official CLI and Python client for the Hugging Face Hub.",
+    "url": "https://github.com/huggingface/huggingface_hub",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "Safetensors",
+    "category": "Modelos, treinamento e MLOps",
+    "description": "Formato e biblioteca para armazenar e distribuir tensores de modelos.",
+    "descriptionEn": "Simple, safe way to store and distribute tensors",
+    "url": "https://github.com/huggingface/safetensors",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "Tokenizers",
+    "category": "Modelos, treinamento e MLOps",
+    "description": "Biblioteca para dividir textos em tokens usados pelos modelos de linguagem.",
+    "descriptionEn": "💥 Fast State-of-the-Art Tokenizers optimized for Research and Production",
+    "url": "https://github.com/huggingface/tokenizers",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "PEFT",
+    "category": "Modelos, treinamento e MLOps",
+    "description": "Biblioteca para adaptar modelos com técnicas que treinam apenas parte de seus parâmetros.",
+    "descriptionEn": "🤗 PEFT: State-of-the-art Parameter-Efficient Fine-Tuning.",
+    "url": "https://github.com/huggingface/peft",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "Accelerate",
+    "category": "Modelos, treinamento e MLOps",
+    "description": "Biblioteca para simplificar a execução e o treinamento de modelos em diferentes dispositivos.",
+    "descriptionEn": "🚀 A simple way to launch, train, and use PyTorch models on almost any device and distributed configuration, automatic mixed precision (including fp8), and",
+    "url": "https://github.com/huggingface/accelerate",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "TRL",
+    "category": "Modelos, treinamento e MLOps",
+    "description": "Biblioteca para treinamento e ajuste de modelos de linguagem com técnicas de aprendizado por reforço.",
+    "descriptionEn": "Train transformer language models with reinforcement learning.",
+    "url": "https://github.com/huggingface/trl",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "Sentence Transformers",
+    "category": "Modelos, treinamento e MLOps",
+    "description": "Biblioteca para produzir embeddings e realizar recuperação e reordenação de resultados.",
+    "descriptionEn": "State-of-the-Art Embeddings, Retrieval, and Reranking",
+    "url": "https://github.com/ukplab/sentence-transformers",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "ONNX",
+    "category": "Modelos, treinamento e MLOps",
+    "description": "Formato aberto para representar modelos e facilitar a interoperabilidade entre ferramentas.",
+    "descriptionEn": "Open standard for machine learning interoperability",
+    "url": "https://github.com/onnx/onnx",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "ONNX Runtime",
+    "category": "Modelos, treinamento e MLOps",
+    "description": "Motor para executar e acelerar modelos representados em ONNX.",
+    "descriptionEn": "ONNX Runtime: cross-platform, high performance ML inferencing and training accelerator",
+    "url": "https://github.com/microsoft/onnxruntime",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "MLflow",
+    "category": "Modelos, treinamento e MLOps",
+    "description": "Plataforma para acompanhar, avaliar e gerenciar modelos, experimentos e aplicações de IA.",
+    "descriptionEn": "The open source AI engineering platform for agents, LLMs, and ML models. MLflow enables teams of all sizes to debug, evaluate, monitor, and optimize",
+    "url": "https://github.com/mlflow/mlflow",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "Kubeflow",
+    "category": "Modelos, treinamento e MLOps",
+    "description": "Conjunto de componentes para fluxos de aprendizado de máquina executados em Kubernetes.",
+    "descriptionEn": "The Cloud Native AI Platform",
+    "url": "https://github.com/kubeflow/kubeflow",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "ClearML",
+    "category": "Modelos, treinamento e MLOps",
+    "description": "Plataforma para acompanhar experimentos e organizar dados, treinamento e execução de modelos.",
+    "descriptionEn": "ClearML - Auto-Magical CI/CD to streamline your AI workload. Experiment Management, Data Management, Pipeline, Orchestration, Scheduling & Serving in one MLOps/LLMOps solution",
+    "url": "https://github.com/clearml/clearml",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "BentoML MLServer",
+    "category": "Modelos, treinamento e MLOps",
+    "description": "Servidor MLServer do ecossistema Seldon, usado para disponibilizar modelos por APIs.",
+    "descriptionEn": "An inference server for your machine learning models, including support for multiple frameworks, multi-model serving and more",
+    "url": "https://github.com/seldonio/mlserver",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "Seldon Core",
+    "category": "Modelos, treinamento e MLOps",
+    "description": "Framework para publicar, gerenciar e monitorar modelos em produção.",
+    "descriptionEn": "An MLOps framework to package, deploy, monitor and manage thousands of production machine learning models",
+    "url": "https://github.com/seldonio/seldon-core",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "KServe",
+    "category": "Modelos, treinamento e MLOps",
+    "description": "Plataforma de disponibilização de modelos e serviços de inferência em Kubernetes.",
+    "descriptionEn": "Standardized Distributed Generative and Predictive AI Inference Platform for Scalable, Multi-Framework Deployment on Kubernetes",
+    "url": "https://github.com/kserve/kserve",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "Triton Server",
+    "category": "Modelos, treinamento e MLOps",
+    "description": "Servidor de inferência da NVIDIA para executar modelos em diferentes ambientes.",
+    "descriptionEn": "The Triton Inference Server provides an optimized cloud and edge inferencing solution. ",
+    "url": "https://github.com/triton-inference-server/server",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "DeepSpeed",
+    "category": "Modelos, treinamento e MLOps",
+    "description": "Biblioteca para otimizar treinamento e inferência de modelos de aprendizado profundo.",
+    "descriptionEn": "DeepSpeed is a deep learning optimization library that makes distributed training and inference easy, efficient, and effective.",
+    "url": "https://github.com/deepspeedai/deepspeed",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "JAX",
+    "category": "Modelos, treinamento e MLOps",
+    "description": "Biblioteca de computação numérica com diferenciação automática e compilação para aceleradores.",
+    "descriptionEn": "Composable transformations of Python+NumPy programs: differentiate, vectorize, JIT to GPU/TPU, and more",
+    "url": "https://github.com/jax-ml/jax",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "Scikit-learn",
+    "category": "Modelos, treinamento e MLOps",
+    "description": "Biblioteca Python com algoritmos e ferramentas de aprendizado de máquina.",
+    "descriptionEn": "scikit-learn: machine learning in Python",
+    "url": "https://github.com/scikit-learn/scikit-learn",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "XGBoost",
+    "category": "Modelos, treinamento e MLOps",
+    "description": "Biblioteca de modelos baseados em árvores e gradient boosting.",
+    "descriptionEn": "Scalable, Portable and Distributed Gradient Boosting (GBDT, GBRT or GBM) Library, for Python, R, Java, Scala, C and more. Runs on single machine, Hadoop,",
+    "url": "https://github.com/dmlc/xgboost",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "H2O",
+    "category": "Modelos, treinamento e MLOps",
+    "description": "Plataforma distribuída para treinamento e execução de modelos de aprendizado de máquina.",
+    "descriptionEn": "H2O is an Open Source, Distributed, Fast & Scalable Machine Learning Platform: Deep Learning, Gradient Boosting (GBM) & XGBoost, Random Forest, Generalized Linear Modeling",
+    "url": "https://github.com/h2oai/h2o-3",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "Jupyter",
+    "category": "Modelos, treinamento e MLOps",
+    "description": "Serviços de servidor para ambientes interativos de notebooks e aplicações de dados.",
+    "descriptionEn": "The backend—i.e. core services, APIs, and REST endpoints—to Jupyter web applications.",
+    "url": "https://github.com/jupyter-server/jupyter_server",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "DVC",
+    "category": "Modelos, treinamento e MLOps",
+    "description": "Ferramenta para versionar dados e acompanhar experimentos de aprendizado de máquina.",
+    "descriptionEn": "🦉 Data Versioning and ML Experiments",
+    "url": "https://github.com/iterative/dvc",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "Dask",
+    "category": "Modelos, treinamento e MLOps",
+    "description": "Ferramentas e agendador para executar computação e tarefas de dados de forma distribuída.",
+    "descriptionEn": "A distributed task scheduler for Dask",
+    "url": "https://github.com/dask/distributed",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "Horovod",
+    "category": "Modelos, treinamento e MLOps",
+    "description": "Framework para treinamento distribuído de modelos em diferentes bibliotecas de aprendizado profundo.",
+    "descriptionEn": "Distributed training framework for TensorFlow, Keras, PyTorch, and Apache MXNet.",
+    "url": "https://github.com/horovod/horovod",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "LiteLLM",
+    "category": "Gateways, SDKs e observabilidade",
+    "description": "Gateway e biblioteca para conectar aplicações a diferentes APIs de modelos de linguagem.",
+    "descriptionEn": "The fastest, litest AI Gateway. Rust core with Python SDK. Call 100+ LLM APIs in OpenAI (or native) format with cost tracking, guardrails, load",
+    "url": "https://github.com/berriai/litellm",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "Portkey",
+    "category": "Gateways, SDKs e observabilidade",
+    "description": "Gateway de IA para organizar o acesso e o roteamento entre provedores de modelos.",
+    "descriptionEn": "A blazing fast AI Gateway with integrated guardrails. Route to 1,600+ LLMs, 50+ AI Guardrails with 1 fast & friendly API.",
+    "url": "https://github.com/portkey-ai/gateway",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "OpenAI SDK",
+    "category": "Gateways, SDKs e observabilidade",
+    "description": "Biblioteca cliente para integrar aplicações Python à API da OpenAI.",
+    "descriptionEn": "The official Python library for the OpenAI API",
+    "url": "https://github.com/openai/openai-python",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "Anthropic SDK",
+    "category": "Gateways, SDKs e observabilidade",
+    "description": "Biblioteca cliente para integrar aplicações Python à API da Anthropic.",
+    "descriptionEn": "",
+    "url": "https://github.com/anthropics/anthropic-sdk-python",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "Google Gen AI SDK",
+    "category": "Gateways, SDKs e observabilidade",
+    "description": "Biblioteca cliente para integrar aplicações Python aos modelos generativos do Google.",
+    "descriptionEn": "Google Gen AI Python SDK provides an interface for developers to integrate Google's generative models into their Python applications.",
+    "url": "https://github.com/googleapis/python-genai",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "Vercel AI SDK",
+    "category": "Gateways, SDKs e observabilidade",
+    "description": "Biblioteca TypeScript para desenvolver aplicações que usam modelos e agentes de IA.",
+    "descriptionEn": "The AI Toolkit for TypeScript. From the creators of Next.js, the AI SDK is a free open-source library for building AI-powered applications and agents",
+    "url": "https://github.com/vercel/ai",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "Langfuse",
+    "category": "Gateways, SDKs e observabilidade",
+    "description": "Plataforma para rastrear, avaliar e observar aplicações com modelos de linguagem.",
+    "descriptionEn": "🪢 Open source agent evals & observability: Trace, evaluate, and improve LLM applications with one open platform.",
+    "url": "https://github.com/langfuse/langfuse",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "LangSmith",
+    "category": "Gateways, SDKs e observabilidade",
+    "description": "Ferramentas e SDKs para rastreamento e avaliação de aplicações com modelos e agentes.",
+    "descriptionEn": "This repo was archived on Oct 16, 2026. Python SDK moved to langchain-ai/langsmith-python and JS SDK to langchain-ai/langsmith-javascript.",
+    "url": "https://github.com/langchain-ai/langsmith-sdk",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "Phoenix",
+    "category": "Gateways, SDKs e observabilidade",
+    "description": "Plataforma de observabilidade e avaliação de aplicações de IA, mantida pela Arize.",
+    "descriptionEn": "AI Observability & Evaluation",
+    "url": "https://github.com/arize-ai/phoenix",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "Opik",
+    "category": "Gateways, SDKs e observabilidade",
+    "description": "Plataforma para rastrear, depurar e avaliar aplicações com modelos e agentes de IA.",
+    "descriptionEn": "Debug, evaluate, and monitor your LLM applications, RAG systems, and agentic workflows with comprehensive tracing, automated evaluations, and production-ready dashboards.",
+    "url": "https://github.com/comet-ml/opik",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "W&B",
+    "category": "Gateways, SDKs e observabilidade",
+    "description": "Plataforma para acompanhar experimentos, treinamento e o ciclo de vida de modelos.",
+    "descriptionEn": "The AI developer platform. Use Weights & Biases to train and fine-tune models, and manage models from experimentation to production.",
+    "url": "https://github.com/wandb/wandb",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "NeMo Guardrails",
+    "category": "Gateways, SDKs e observabilidade",
+    "description": "Toolkit para adicionar regras e controles ao comportamento de aplicações conversacionais.",
+    "descriptionEn": "NeMo Guardrails is an open-source toolkit for easily adding programmable guardrails to LLM-based conversational systems.",
+    "url": "https://github.com/nvidia/nemo-guardrails",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "Guardrails AI",
+    "category": "Gateways, SDKs e observabilidade",
+    "description": "Biblioteca para validar e controlar entradas e saídas de aplicações com modelos de linguagem.",
+    "descriptionEn": "Adding guardrails to large language models.",
+    "url": "https://github.com/guardrails-ai/guardrails",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "Cursor",
+    "category": "Assistentes e ferramentas de código",
+    "description": "Editor de código com assistência de IA integrada ao desenvolvimento.",
+    "descriptionEn": "",
+    "url": "https://cursor.com",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "Windsurf",
+    "category": "Assistentes e ferramentas de código",
+    "description": "Ambiente de desenvolvimento com recursos de assistência e agentes de IA.",
+    "descriptionEn": "",
+    "url": "https://windsurf.com",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "GitHub Copilot",
+    "category": "Assistentes e ferramentas de código",
+    "description": "Assistente de programação integrado a ferramentas de desenvolvimento e ao GitHub.",
+    "descriptionEn": "",
+    "url": "https://github.com/features/copilot",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "Claude Code",
+    "category": "Assistentes e ferramentas de código",
+    "description": "Agente de programação que trabalha com repositórios e ferramentas no terminal.",
+    "descriptionEn": "Claude Code is an agentic coding tool that lives in your terminal, understands your codebase, and helps you code faster by executing routine tasks,",
+    "url": "https://github.com/anthropics/claude-code",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "Codex CLI",
+    "category": "Assistentes e ferramentas de código",
+    "description": "Agente de programação usado no terminal para trabalhar com código e ferramentas.",
+    "descriptionEn": "Lightweight coding agent that runs in your terminal",
+    "url": "https://github.com/openai/codex",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "Gemini CLI",
+    "category": "Assistentes e ferramentas de código",
+    "description": "Agente de IA acessado no terminal para tarefas de desenvolvimento e automação.",
+    "descriptionEn": "An open-source AI agent that brings the power of Gemini directly into your terminal.",
+    "url": "https://github.com/google-gemini/gemini-cli",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "Cline",
+    "category": "Assistentes e ferramentas de código",
+    "description": "Agente de programação disponível como extensão, assistente e componentes de desenvolvimento.",
+    "descriptionEn": "Autonomous coding agent as an SDK, IDE extension, or CLI assistant.",
+    "url": "https://github.com/cline/cline",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "Roo Code",
+    "category": "Assistentes e ferramentas de código",
+    "description": "Extensão de editor para trabalhar com agentes de programação.",
+    "descriptionEn": "Roo Code gives you a whole dev team of AI agents in your code editor.",
+    "url": "https://github.com/roocodeinc/roo-code",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "Continue",
+    "category": "Assistentes e ferramentas de código",
+    "description": "Agente e ferramentas de assistência à programação com IA.",
+    "descriptionEn": "open-source coding agent",
+    "url": "https://github.com/continuedev/continue",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "Aider",
+    "category": "Assistentes e ferramentas de código",
+    "description": "Assistente de programação que trabalha com código a partir do terminal.",
+    "descriptionEn": "aider is AI pair programming in your terminal",
+    "url": "https://github.com/aider-ai/aider",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "OpenCode",
+    "category": "Assistentes e ferramentas de código",
+    "description": "Agente de programação de código aberto.",
+    "descriptionEn": "The open source coding agent.",
+    "url": "https://github.com/sst/opencode",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "Tabby",
+    "category": "Assistentes e ferramentas de código",
+    "description": "Assistente de programação que pode ser hospedado em infraestrutura própria.",
+    "descriptionEn": "Self-hosted AI coding assistant",
+    "url": "https://github.com/tabbyml/tabby",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "Open Interpreter",
+    "category": "Assistentes e ferramentas de código",
+    "description": "Agente que usa código e ferramentas locais para executar tarefas.",
+    "descriptionEn": "A coding agent for open models like Kimi K3 and GLM 5.3",
+    "url": "https://github.com/openinterpreter/open-interpreter",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "ChatGPT",
+    "category": "Serviços e assistentes de IA",
+    "description": "Assistente conversacional da OpenAI para trabalhar com informações e tarefas por linguagem natural.",
+    "descriptionEn": "",
+    "url": "https://chatgpt.com",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "Claude",
+    "category": "Serviços e assistentes de IA",
+    "description": "Assistente e família de modelos da Anthropic para aplicações e interação em linguagem natural.",
+    "descriptionEn": "",
+    "url": "https://claude.ai",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "Google Gemini",
+    "category": "Serviços e assistentes de IA",
+    "description": "Família de modelos e assistente de IA do Google.",
+    "descriptionEn": "",
+    "url": "https://gemini.google.com",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "Microsoft Copilot",
+    "category": "Serviços e assistentes de IA",
+    "description": "Conjunto de assistentes de IA integrados a produtos e serviços da Microsoft.",
+    "descriptionEn": "",
+    "url": "https://copilot.microsoft.com",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "Perplexity",
+    "category": "Serviços e assistentes de IA",
+    "description": "Serviço de busca e respostas assistidas por IA.",
+    "descriptionEn": "",
+    "url": "https://www.perplexity.ai",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "DeepSeek",
+    "category": "Serviços e assistentes de IA",
+    "description": "Provedor e família de modelos de linguagem usados em assistentes e aplicações.",
+    "descriptionEn": "",
+    "url": "https://www.deepseek.com",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "Grok",
+    "category": "Serviços e assistentes de IA",
+    "description": "Assistente e família de modelos de linguagem da xAI.",
+    "descriptionEn": "",
+    "url": "https://grok.com",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "Mistral AI",
+    "category": "Serviços e assistentes de IA",
+    "description": "Provedor de modelos de IA e serviços para aplicações com linguagem natural.",
+    "descriptionEn": "",
+    "url": "https://mistral.ai",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "LM Studio",
+    "category": "Serviços e assistentes de IA",
+    "description": "Aplicação para executar e utilizar modelos de linguagem no computador.",
+    "descriptionEn": "",
+    "url": "https://lmstudio.ai",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "Amazon Bedrock",
+    "category": "Serviços e assistentes de IA",
+    "description": "Serviço gerenciado da AWS para acessar modelos e desenvolver aplicações de IA generativa.",
+    "descriptionEn": "",
+    "url": "https://aws.amazon.com/bedrock/",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "Amazon SageMaker",
+    "category": "Serviços e assistentes de IA",
+    "description": "Plataforma da AWS para preparar dados, treinar e disponibilizar modelos de aprendizado de máquina.",
+    "descriptionEn": "",
+    "url": "https://aws.amazon.com/sagemaker/",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "Azure AI",
+    "category": "Serviços e assistentes de IA",
+    "description": "Conjunto de serviços da Microsoft Azure para desenvolver e operar aplicações de IA.",
+    "descriptionEn": "",
+    "url": "https://azure.microsoft.com/products/ai-services",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "Google Vertex AI",
+    "category": "Serviços e assistentes de IA",
+    "description": "Plataforma do Google Cloud para desenvolver e disponibilizar modelos e aplicações de IA.",
+    "descriptionEn": "",
+    "url": "https://cloud.google.com/vertex-ai",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "IBM watsonx",
+    "category": "Serviços e assistentes de IA",
+    "description": "Plataforma da IBM para desenvolver e operar soluções de IA e dados.",
+    "descriptionEn": "",
+    "url": "https://www.ibm.com/watsonx",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "Databricks AI",
+    "category": "Serviços e assistentes de IA",
+    "description": "Recursos da plataforma Databricks para desenvolver e operar modelos e aplicações de IA.",
+    "descriptionEn": "",
+    "url": "https://www.databricks.com",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "Snowflake Cortex",
+    "category": "Serviços e assistentes de IA",
+    "description": "Recursos de IA da Snowflake para trabalhar com modelos e dados na plataforma.",
+    "descriptionEn": "",
+    "url": "https://www.snowflake.com/en/data-cloud/cortex/",
+    "reviewedAt": "2026-10-16"
+  },
+  {
+    "name": "JetBrains AI Assistant",
+    "category": "Serviços e assistentes de IA",
+    "description": "Assistente de IA integrado aos ambientes de desenvolvimento da JetBrains.",
+    "descriptionEn": "",
+    "url": "https://www.jetbrains.com/ai/",
+    "reviewedAt": "2026-10-16"
+  }
+]
