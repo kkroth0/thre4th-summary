@@ -22,7 +22,7 @@ export interface OtProductBase { rows: OtProductRecord[]; truncated: boolean; su
 export interface OtPatchData {
   month: string; rows: OtPatchRow[];
   catalog: { vendor: string; aliases: string[]; models: string[]; review: string[]; description?: string; descriptionEn?: string; url?: string; observedModels?: string[]; observedFamilies?: string[]; evidenceProducts?: number; category?: string; families?: string[]; equipmentTypes?: string[] }[];
-  productBase?: OtProductBase;
+  productSummary?: OtProductBase['summary'];
   equipmentTypes?: OtEquipmentType[];
   equipmentReference?: string;
   categories?: string[];

@@ -463,3 +463,11 @@ test('weekly reports enforce account access, Sunday boundaries and profile owner
     const allowed=await fetch(`${BASE}/api/reports/weekly`,{method:'PUT',headers:{...AUTH_HEADERS,'Content-Type':'application/json'},body:JSON.stringify({enabled:false,profileId:'owned'})});
     assert.equal(allowed.status,200);assert.equal((await allowed.json()).plan.profileId,'owned');
 });
+
+test('OT monthly payload keeps the accumulated product inventory behind an on-demand endpoint', async () => {
+    const response = await fetch(BASE + '/api/ot-patch-day?month=2026-10');
+    assert.equal(response.status, 200);
+    const monthly = await response.json(); assert.ok(Array.isArray(monthly.rows)); assert.equal(monthly.productBase, undefined); assert.equal(monthly.productSummary.products, 0);
+    const products = await fetch(BASE + '/api/ot-patch-day/products'); assert.equal(products.status, 200);
+    const base = await products.json(); assert.deepEqual(base.rows, []); assert.equal(base.summary.products, 0);
+});

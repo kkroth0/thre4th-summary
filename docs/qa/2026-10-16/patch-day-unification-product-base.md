@@ -15,4 +15,8 @@
 - New tests cover SAP monthly isolation/single-flight/restart/stale behavior and GHSA links, product evidence deduplication, hardware/firmware relationships, version wording, exact model versus wildcard codes, source-host restrictions and complete seeded-tool glossary definitions.
 
 ## Production verification
-Pending deployment and authenticated browser checks.
+First release `14f0d0fecc25f21cc4a16f73c827a9c91f4d6b7a` passed CI 38983123529 and deployed through VPS 38983329002 / Pages 38983328892 (release SHA verified).
+- SAP browser: October has 22 notes, September has 20, with correct official monthly URLs. Actual downloaded `SAP-Security-Patch-Day-2026-09.xlsx` round-trips in ExcelJS: executive sheet plus 20 note rows.
+- AI browser: seeded Ollama definition and official repository visible in the sibling glossary. NVD/KEV/EPSS healthy; GitHub continues to serve a stale snapshot during an upstream failure (388 monthly advisories preserved). No new external calls are introduced by glossary definitions.
+- Production testing caught a large accumulated inventory payload. Follow-up separates it from monthly responses, loads it only on the product tab, and excludes ambiguous cached version-only leaves from equipment identities while retaining original advisory evidence.
+- Screenshots remain local in the temporary `patch-day-unification` directory; profile images are not committed.

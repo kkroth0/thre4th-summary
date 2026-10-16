@@ -47,3 +47,9 @@ test('every seeded AI tool has its own sourced purpose definition', () => {
         assert.ok(entry, tool.name); assert.ok(entry.description.length > 30, tool.name); assert.match(entry.url, /^https:\/\//);
     }
 });
+
+test('asset base excludes ambiguous cached version leaves while retaining structured product context', () => {
+    const base = buildOtProductBase([{ ...row, products: [{ name: '12.6(1)ES1' }, { name: '.0' }, { name: '12.6(1)ES1', platform: 'Cisco Unified Communications' }, { name: '6ES7222-1BF32-0XB0' }] }]);
+    assert.equal(base.rows.length, 2); assert.ok(base.rows.some(p => p.name === 'Cisco Unified Communications 12.6(1)ES1'));
+    assert.ok(base.rows.some(p => p.name === '6ES7222-1BF32-0XB0'));
+});

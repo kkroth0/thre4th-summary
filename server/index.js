@@ -3200,12 +3200,17 @@ const otPatchDay = createOtPatchDay({
     filePath: process.env.NODE_ENV === 'test' ? undefined : path.join(__dirname, '.feed-cache', 'ot-patch-day.json'),
     getCve: id => vulnerabilityCatalog.detail(id),
 });
+app.get('/api/ot-patch-day/products', (req, res) => {
+    res.set('Cache-Control', 'no-store');
+    res.json(otPatchDay.query().productBase);
+});
 app.get('/api/ot-patch-day', (req, res) => {
     const month = req.query.month;
     if (month !== undefined && (typeof month !== 'string' || !/^20\d{2}-(0[1-9]|1[0-2])$/.test(month))) return res.status(400).json({ error: 'Mês inválido. Use AAAA-MM.' });
     const data = otPatchDay.query({ month, vendor: typeof req.query.vendor === 'string' ? req.query.vendor : '', scope: typeof req.query.scope === 'string' ? req.query.scope : 'all' });
     res.set('Cache-Control', 'no-store');
-    res.json(data);
+    const { productBase, ...monthly } = data;
+    res.json({ ...monthly, productSummary: productBase.summary });
     if (process.env.NODE_ENV !== 'test') void otPatchDay.sync();
 });
 const vulnerabilityOptimization = process.env.NODE_ENV === 'test' ? Promise.resolve() : optimizeVulnerabilityCatalog(path.join(__dirname, '.vulnerability-catalog.sqlite')).catch(error => { console.warn('Catalog optimization failed:', error.code || error.name); });

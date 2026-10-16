@@ -27,7 +27,13 @@ export function buildOtProductBase(advisories, { limit = 10000, canonicalVendor 
     const products = new Map(); let truncated = false;
     for (const row of [...advisories].sort((a, b) => (b.updated || '').localeCompare(a.updated || ''))) {
         for (const input of row.products || []) {
-            const p = describeOtProduct(input), vendor = canonicalVendor(p.vendor || (row.vendors?.length === 1 ? row.vendors[0] : 'Fabricante não identificado'));
+            const p = describeOtProduct(input);
+            // Older vendor caches sometimes contain only a version leaf, not
+            // an identifiable product. Keep it in the advisory evidence, but
+            // do not present it as an equipment model in the asset catalog.
+            if (!p.platform && !p.family && (!/[a-z]{2}/i.test(p.name) || /^[<>=~()\sVv]*\d*\.\d/.test(p.name))) continue;
+            if ((p.platform || p.family) && /^[<>=~()\sVv]*\d*\.\d/.test(p.name)) p.name = [p.platform || p.family, p.name].join(' ');
+            const vendor = canonicalVendor(p.vendor || (row.vendors?.length === 1 ? row.vendors[0] : 'Fabricante não identificado'));
             const modelNumbers = unique(p.modelNumbers || []), identity = [vendor, p.family, p.platform, p.name, p.version, ...modelNumbers.slice().sort()].map(key).join('\u0000');
             let record = products.get(identity);
             if (!record) {
