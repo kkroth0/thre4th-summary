@@ -15,6 +15,7 @@ const expectedRoutes = [
   "/atores",
   "/threat-map",
   "/patch-tuesday",
+  "/ot-patch-day",
   "/sap-patch",
   "/vendors",
   "/attack-surface",

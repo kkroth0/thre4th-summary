@@ -56,6 +56,7 @@ import { createWatchlistStore, runDueExposureSnapshots, runExposureSnapshot } fr
 import { detectQueryType, sanitizeQuery } from './iocValidation.js';
 import { isEarlyDoc, normalizeCvrf } from './patchTuesday.js';
 import { parseSapNotes, latestPatchMonth, monthUrl, summarize as summarizeSap, sortNotes as sortSapNotes } from './sapPatch.js';
+import { createOtPatchDay } from './otPatchDay.js';
 import {
     asArray,
     buildThreatMapResponse,
@@ -3200,6 +3201,18 @@ const vulnerabilityCatalog = createVulnerabilityCatalog({
     },
 });
 const vulnerabilityQueries = process.env.NODE_ENV === 'test' ? null : createVulnerabilityQueries({ filePath: path.join(__dirname, '.vulnerability-catalog.sqlite') });
+const otPatchDay = createOtPatchDay({
+    filePath: process.env.NODE_ENV === 'test' ? undefined : path.join(__dirname, '.feed-cache', 'ot-patch-day.json'),
+    getCve: id => vulnerabilityCatalog.detail(id),
+});
+app.get('/api/ot-patch-day', (req, res) => {
+    const month = req.query.month;
+    if (month !== undefined && (typeof month !== 'string' || !/^20\d{2}-(0[1-9]|1[0-2])$/.test(month))) return res.status(400).json({ error: 'Mês inválido. Use AAAA-MM.' });
+    const data = otPatchDay.query({ month, vendor: typeof req.query.vendor === 'string' ? req.query.vendor : '', scope: typeof req.query.scope === 'string' ? req.query.scope : 'all' });
+    res.set('Cache-Control', 'no-store');
+    res.json(data);
+    if (process.env.NODE_ENV !== 'test') void otPatchDay.sync();
+});
 const vulnerabilityOptimization = process.env.NODE_ENV === 'test' ? Promise.resolve() : optimizeVulnerabilityCatalog(path.join(__dirname, '.vulnerability-catalog.sqlite')).catch(error => { console.warn('Catalog optimization failed:', error.code || error.name); });
 async function queryVulnerabilities(method, params) {
     await vulnerabilityOptimization;
@@ -4134,6 +4147,9 @@ app.listen(PORT, () => {
     };
     setTimeout(refreshVulnerabilities, 1000).unref();
     setInterval(() => { vulnerabilityRetries = 0; void refreshVulnerabilities(); }, 6 * 60 * 60 * 1000).unref();
+    const refreshOtPatches = () => { otPatchDay.query(); void otPatchDay.sync(); };
+    setTimeout(refreshOtPatches, 120000).unref();
+    setInterval(refreshOtPatches, 60000).unref();
     // Prime the newsletter RSS feed cache and schedule background updates
     void iocIntelligence.ingestNews(newsArchiveStore.all()).catch(() => console.warn('IOC archive backfill failed'));
     setTimeout(() => { void runIntelligenceCollection(); }, 5000).unref();

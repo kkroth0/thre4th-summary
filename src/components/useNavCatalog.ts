@@ -91,6 +91,7 @@ export function useNavCatalog() {
           description: pt ? "Notas de segurança mensais da SAP." : "Monthly SAP security notes.",
           icon: ShieldCheck,
         },
+        { path: '/ot-patch-day', label: 'OT/ICS Patch Day', description: pt ? 'Correções industriais por mês e fabricante.' : 'Industrial fixes by month and manufacturer.', icon: CalendarCheck },
       ],
     },
     {

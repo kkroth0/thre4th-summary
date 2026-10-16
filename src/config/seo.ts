@@ -135,6 +135,15 @@ export const PUBLIC_SEO_ROUTES: SeoRoute[] = [
     },
   },
   {
+    path: "/ot-patch-day",
+    priority: "0.7",
+    changefreq: "daily",
+    metadata: {
+      pt: { title: "OT/ICS Patch Day e Correções | ThreatSumm4ry", description: "Avisos e correções industriais por mês, fabricante e produto, com referências oficiais e cobertura das fontes." },
+      en: { title: "OT/ICS Patch Day | ThreatSumm4ry", description: "Monthly industrial advisories and fixes by manufacturer and product, with official references and source coverage." },
+    },
+  },
+  {
     path: "/sap-patch",
     priority: "0.7",
     changefreq: "monthly",

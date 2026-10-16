@@ -60,8 +60,13 @@ const common: Column[] = [['title', 'Publicação', 65], ['source', 'Fonte', 26]
 export function buildNewsExcelWorkbook(payload: NewsExcelPayload, ExcelLib: ExcelFactory) {
   if (!Array.isArray(payload.rows)) throw Error('Resposta de exportação inválida.');
   const wb = new ExcelLib.Workbook();
-  workbookMetadata(wb, 'Notícias e IOCs', payload.generatedAt || new Date().toISOString(), 'IOC, fontes, evidências');
+  workbookMetadata(wb, payload.dataset === 'ot-patches' ? 'OT/ICS Patch Day' : 'Notícias e IOCs', payload.generatedAt || new Date().toISOString(), 'IOC, fontes, evidências');
   const table = tables(wb), isIocs = payload.dataset === 'iocs';
+  if (payload.dataset === 'ot-patches') {
+    table('OT ICS Patch Day', [['id', 'Aviso', 25], ['title', 'Título', 65], ['vendors', 'Fabricantes', 30], ['products', 'Produtos e versões da fonte', 80], ['patchLabel', 'Situação da correção', 28], ['cvss', 'CVSS', 12], ['kev', 'KEV', 12], ['cves', 'CVEs', 35], ['cveSignals', 'Sinais do catálogo de CVEs', 60], ['published', 'Publicação inicial', 28], ['updated', 'Última revisão', 28], ['source', 'Fonte', 20], ['url', 'Aviso oficial', 65], ['remediations', 'Correções e mitigações', 100], ['matches', 'Correspondências do catálogo (não confirma exposição)', 60], ['references', 'Referências', 80], ['stale', 'Cache anterior', 15], ['sourceCoverage', 'Estado e cobertura das fontes na exportação', 80]], payload.rows);
+    table('Resumo', [['label', 'Campo', 40], ['value', 'Valor', 100]], [{ label: 'Período', value: `${payload.range.from} a ${payload.range.to}` }, { label: 'Avisos exportados', value: payload.rows.length }, { label: 'Aplicabilidade', value: 'Correspondência de modelo/fabricante não confirma a versão instalada nem vulnerabilidade. Validar o aviso original e planejar a atualização OT.' }]);
+    return wb;
+  }
   table(isIocs ? 'IOCs' : 'Publicações', isIocs
     ? [['type', 'Tipo', 14], ['indicator', 'Indicador', 70], ...common]
     : [...common, ['ips', 'IPs', 42], ['domains', 'Domínios', 50], ['hashes', 'Hashes', 70], ['urls', 'URLs', 70]], payload.rows);

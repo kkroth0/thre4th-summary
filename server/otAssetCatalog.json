@@ -1,0 +1,324 @@
+{
+  "version": 1,
+  "description": "Catálogo genérico de produtos OT/ICS; sem inventário, cliente ou firmware instalado. Correspondências não confirmam vulnerabilidade.",
+  "vendors": [
+    {
+      "vendor": "ABB",
+      "aliases": [
+        "ABB"
+      ],
+      "models": [],
+      "review": [
+        "Descrição sem modelo validado",
+        "XV-460-57TQB-1-10 (fabricante a confirmar)"
+      ]
+    },
+    {
+      "vendor": "Bihl+Wiedemann",
+      "aliases": [
+        "Bihl Wiedeman",
+        "Bihl+Wiedemann"
+      ],
+      "models": [
+        "BWU1833"
+      ],
+      "review": []
+    },
+    {
+      "vendor": "CCK",
+      "aliases": [
+        "CCK"
+      ],
+      "models": [
+        "CCK 7010 S",
+        "CCK 7200 S"
+      ],
+      "review": []
+    },
+    {
+      "vendor": "Cisco",
+      "aliases": [
+        "Cisco"
+      ],
+      "models": [
+        "Catalyst 2960-Plus Series",
+        "Catalyst 2960-X Series",
+        "Catalyst 9200 24"
+      ],
+      "review": ["Gateway (modelo a confirmar)"]
+    },
+    {
+      "vendor": "DALOG",
+      "aliases": [
+        "DaLog"
+      ],
+      "models": [],
+      "review": [
+        "Descrição sem modelo validado"
+      ]
+    },
+    {
+      "vendor": "Dell",
+      "aliases": [
+        "Dell"
+      ],
+      "models": [
+        "Dell S4128-T"
+      ],
+      "review": []
+    },
+    {
+      "vendor": "HPE",
+      "aliases": [
+        "HP",
+        "HPE"
+      ],
+      "models": [
+        "A5500-24G"
+      ],
+      "review": []
+    },
+    {
+      "vendor": "Intelbras",
+      "aliases": [
+        "IntelBras"
+      ],
+      "models": [
+        "WOM5A"
+      ],
+      "review": [
+        "Descrição sem modelo validado"
+      ]
+    },
+    {
+      "vendor": "Lenze",
+      "aliases": [
+        "Lenze"
+      ],
+      "models": [],
+      "review": [
+        "Descrição sem modelo validado"
+      ]
+    },
+    {
+      "vendor": "Lubi Electronics",
+      "aliases": [
+        "Lubi Electronics"
+      ],
+      "models": [
+        "L-IPC-1500"
+      ],
+      "review": []
+    },
+    {
+      "vendor": "Raytek",
+      "aliases": [
+        "Raytek"
+      ],
+      "models": [],
+      "review": [
+        "Raytek scanner (modelo pendente)"
+      ]
+    },
+    {
+      "vendor": "Rockwell Automation",
+      "aliases": [
+        "Rockwell",
+        "Rockwell Automation",
+        "ALLEN BRADLEY",
+        "Allen Brandley",
+        "Allen-Bradley"
+      ],
+      "models": [
+        "1734-AENT",
+        "1747-5/03",
+        "1747-5/04",
+        "1747-5/05",
+        "1747-L531E",
+        "1747-L55",
+        "1747-L551",
+        "1747-L552",
+        "1747-L553",
+        "1756",
+        "1756-DHRIO",
+        "1756-EN2T",
+        "1756-EN2TR",
+        "1756-ENBT",
+        "1756-ENET",
+        "1756-L55",
+        "1756-L5550",
+        "1756-L5555",
+        "1756-L5572",
+        "1756-L5573",
+        "1756-L61",
+        "1756-L61B",
+        "1756-L62",
+        "1756-L63",
+        "1756-L64",
+        "1756-L71",
+        "1756-L72",
+        "1756-L73",
+        "1756-L73S",
+        "1756-L74",
+        "1756-L7SP",
+        "1756-L81EP",
+        "1756-L83EP",
+        "1756-L85E",
+        "1756-L85EP",
+        "1768-ENBT",
+        "1768-L43",
+        "1769-AENTR",
+        "1769-L19ER",
+        "1769-L27ERM",
+        "1769-L30ER",
+        "1769-L32E",
+        "1769-L35E",
+        "1783-BMS10CGN",
+        "1783-BMS20CGP",
+        "1783-CMSB",
+        "1783-ETAP1F",
+        "1783-HMS8T4CGN",
+        "1783-MS10T",
+        "1785-5/20",
+        "1785-5/20B",
+        "1785-5/30",
+        "1785-5/30C",
+        "1785-5/40",
+        "1785-5/40B",
+        "1785-5/40E",
+        "1785-5/60",
+        "1785-5/60B",
+        "1785-5/80",
+        "1785-5/80C",
+        "1785-5/80E",
+        "1785-ENET",
+        "1785-L40E",
+        "1785-L40E F",
+        "1785-L80E",
+        "1794-AENT",
+        "1794-AENTR",
+        "2080-LC50",
+        "2080-LC50-24QBB",
+        "2080-LC50-24QWB",
+        "2080-LC50-48QWB",
+        "2711R-T4",
+        "2711R-T4T",
+        "2711R-T7T",
+        "5069-L306ER",
+        "5094-AEN2TR",
+        "EtherNet",
+        "Micro 850 LC50 24QBB",
+        "PAINEL VIEW PLUS 700",
+        "PLC 5/30",
+        "PLC 5/60",
+        "PLC 5/80",
+        "PLC5/40E",
+        "PLC5/80E",
+        "PVC 600-T6T",
+        "PVP 600",
+        "Panel view 1250 Plus",
+        "PanelView 800",
+        "PanelView-Plus 1000",
+        "PanelView-Plus 600",
+        "Powerflex 6000T",
+        "SLC 5/05E",
+        "STRATIX 5400",
+        "STRATIX 5410",
+        "Stratix 10 portas",
+        "Stratix 8000 10 Port managed switch",
+        "Stratix 8000 14 Port managed switch",
+        "Stratix 8000 18 Port managed switch",
+        "Stratix 8000 6 Port managed switch",
+        "Switch Stratix 8000",
+        "Switch allen bradley 5700"
+      ],
+      "review": [
+        "Descrição sem modelo validado"
+      ]
+    },
+    {
+      "vendor": "SKF",
+      "aliases": [
+        "SKF"
+      ],
+      "models": [],
+      "review": [
+        "ANYBUS IMX8 (identificação a confirmar)"
+      ]
+    },
+    {
+      "vendor": "Schneider Electric",
+      "aliases": [
+        "Schneider",
+        "Schneider Electric"
+      ],
+      "models": [
+        "ATV1200",
+        "BME-NOC-0311.4",
+        "BMXNOE 0100.2",
+        "BMXNOE 0110.2",
+        "BMXNOE0110",
+        "BMXP342020",
+        "M580-BME P58",
+        "SWITCH TCSESM103F2LG0",
+        "TCSESM043F2CU0",
+        "TCSESM083F23F0",
+        "TCSESM083F2CU0",
+        "TCSESM103F2LG0",
+        "TCSESM163F2CU0",
+        "TCSESM243F2CU0",
+        "TCSESM243F2CU02",
+        "TSX ETY 4103",
+        "TSX P57 4634M",
+        "TSX P57 6654M",
+        "TSXETC101",
+        "TSXETY4103",
+        "TSXP574634M",
+        "TSXP576634M"
+      ],
+      "review": []
+    },
+    {
+      "vendor": "Schweitzer Engineering Laboratories",
+      "aliases": [
+        "SEL",
+        "Schweitzer Engineering Laboratories"
+      ],
+      "models": [],
+      "review": [
+        "Descrição sem modelo validado"
+      ]
+    },
+    {
+      "vendor": "Spectrum",
+      "aliases": [
+        "Spectrum"
+      ],
+      "models": [],
+      "review": [
+        "Descrição sem modelo validado"
+      ]
+    },
+    {
+      "vendor": "Ubiquiti",
+      "aliases": [
+        "Ubiquiti"
+      ],
+      "models": [],
+      "review": [
+        "AirGripM5hp (identificação a confirmar)",
+        "Descrição sem modelo validado"
+      ]
+    },
+    {
+      "vendor": "WEG",
+      "aliases": [
+        "WEG"
+      ],
+      "models": [],
+      "review": [
+        "ANYBUS MVW (identificação a confirmar)"
+      ]
+    }
+  ]
+}

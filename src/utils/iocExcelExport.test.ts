@@ -69,3 +69,13 @@ test('large provider JSON survives Excel roundtrip as ordered chunks without tru
 test('invalid news export payload is rejected instead of producing a misleading empty workbook', () => {
   assert.throws(() => buildNewsExcelWorkbook({ ...payload(), rows: null as unknown as [] }, Excel), /inválida/);
 });
+test('OT Patch Day Excel retains versions, fixes, matches, source status and period as literal values', async () => {
+  const row = { id: 'SEVD-2025-224-05', title: '=untrusted title', products: [{ name: 'Module before 6.80', modelNumbers: ['BMXNOE0110'], status: 'affected' }], remediations: [{ category: 'vendor_fix', details: 'Upgrade to 6.80' }], matches: [{ vendor: 'Schneider Electric', level: 'model', models: ['BMXNOE0110'] }], cveSignals: [{ id: 'CVE-2025-6625', kev: null, epss: null }], sourceCoverage: [{ id: 'schneider', status: 'ok' }] };
+  const wb = buildNewsExcelWorkbook({ dataset: 'ot-patches', range: { from: '2026-08-01', to: '2026-08-31' }, rows: [row] }, Excel);
+  const restored = new Excel.Workbook(); await restored.xlsx.load(await wb.xlsx.writeBuffer());
+  const sheet = restored.getWorksheet('OT ICS Patch Day')!;
+  assert.equal(sheet.rowCount, 2); assert.equal(sheet.getCell('B2').type, Excel.ValueType.String);
+  const text = JSON.stringify(sheet.getSheetValues());
+  for (const value of ['BMXNOE0110', 'Upgrade to 6.80', 'model', 'schneider', 'CVE-2025-6625']) assert.ok(text.includes(value));
+  assert.ok(JSON.stringify(restored.getWorksheet('Resumo')!.getSheetValues()).includes('2026-08-31'));
+});

@@ -58,7 +58,8 @@ já cadastrada com parser dos arquivos do repositório implementado.
 - Release `3a1a8d1`: CI `38904432345`, VPS `38904669142` e Cloudflare
   `38904669215` concluídos com sucesso. SHA confirmado no deploy.
 - Excel da base unificada baixado novamente na versão publicada, sem erro
-  exibido. A mensagem original do usuário continua sem reprodução.
+  exibido. O arquivo foi reaberto: 29.814 evidências, 12 colunas, abas IOCs e
+  Resumo, zero fórmulas. A mensagem original do usuário continua sem reprodução.
 - Auditoria `38905057571` identificou vários encerramentos anteriores por
   `JavaScript heap out of memory`, inclusive em 16/10 às 05:43, 09:37 e 09:51
   de Fortaleza. Isso também fazia a extração começar fria após cada reinício.
@@ -79,7 +80,35 @@ já cadastrada com parser dos arquivos do repositório implementado.
   É uma medição local do caminho de persistência, não prova de eliminação de
   todos os encerramentos em produção. Telemetria por fase foi acrescentada
   ao diagnóstico do ciclo para acompanhar os próximos picos.
+- Auditoria `38906390603` (primeira release): arquivo persistido restaurou
+  3.396 extrações, 4.411.675 bytes, zero erros de leitura, sem reiniciar o
+  serviço para o ensaio. É o mesmo construtor de restauração do boot, chamado
+  somente para leitura. C2Agent manteve 32 hashes no histórico e no evento.
+  O ciclo às 10:12:35 de Fortaleza tentou 40 textos em 40 sites; 27 tiveram
+  sucesso e 13 falharam, contra 15 sucessos e 25 falhas no ciclo anterior.
+  Não é uma comparação controlada de disponibilidade dos editores.
+  Serviço sem reinícios automáticos desde a primeira implantação às 10:03.
 
-Validação da segunda implantação e integridade após a publicação: pendente.
+## Segunda implantação
+
+- Release `768533e`: CI `38906249980` aprovado (787 testes de backend,
+  249 unitários de frontend e 7 de marca; typecheck/build aprovados).
+  VPS `38906567956` e Cloudflare `38906568468` aprovados, SHA confirmado.
+  A varredura separada de dependências segue com os 49 achados preexistentes;
+  manifests de dependências não foram alterados. Gitleaks passou na primeira
+  release; verificação local de valores de credenciais no diff também passou.
+- Integridade `38906947067`, geração 131: 7.982 publicações / 5.426 eventos;
+  cópias JSON iguais ao SQLite, zero fontes órfãs, aliases conflitantes ou
+  fontes duplicadas. Inventário: 7.982 publicações processadas, 368 com IOCs,
+  3.635 menções normalizadas válidas, 3.443 valores distintos derivados das
+  notícias, 8.139 vínculos de entidades esperados; zero ausências ou vínculos
+  obsoletos. Os 10 indicadores rejeitados pela normalização permanecem no
+  histórico bruto. Esses números não abrangem todos os IOCs das APIs externas.
+
+- Auditoria `38907798141`: ciclo completo às 10:25:10 de Fortaleza, 390.136 ms,
+  sem reinícios desde a implantação. Pico do serviço: 572.329.984 bytes.
+  Cache persistido restaurou 3.407 entradas / 4.448.076 bytes, zero erros.
+  Os 32 hashes do C2Agent permanecem no histórico e no evento. Esse primeiro
+  ciclo é frio após a mudança de código; não representa a latência com cache.
 Não se conclui precisão semântica de todas as atribuições ou cobertura
 integral de textos bloqueados a partir de uma auditoria de persistência.
