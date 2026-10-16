@@ -5,11 +5,11 @@ import { AI_TOOL_CATALOG, AI_CATEGORIES, classifyAiTool } from './aiToolCatalog.
 import { defaultOtMonth, validOtMonth } from './otPatchDay.js';
 
 const DAY = 86400000, SOURCE = 'https://api.github.com/advisories';
-const advisoryPage = (from, to) => SOURCE + '?' + new URLSearchParams({ modified: `${from.slice(0, 10)}..${to.slice(0, 10)}`, sort: 'updated', direction: 'desc', per_page: '100' });
+const advisoryPage = (from, to, known = false) => SOURCE + '?' + new URLSearchParams({ type: 'reviewed', ...(from ? { modified: `${from.slice(0, 10)}..${to.slice(0, 10)}` } : {}), ...(known ? { affects: [...new Set(AI_TOOL_CATALOG.filter(t => t.repo).flatMap(t => t.packages))].join(',') } : {}), sort: 'updated', direction: 'desc', per_page: '100' });
 const refs = values => [...new Set(values.filter(url => typeof url === 'string' && /^https:\/\//.test(url)))];
 const score = values => { const scores = values.filter(v => typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= 10); return scores.length ? Math.max(...scores) : null; };
 export function normalizeAiAdvisory(advisory) {
-    if (advisory.withdrawn_at || !/^GHSA-[a-z0-9-]+$/i.test(advisory.ghsa_id || '')) return null;
+    if (advisory.withdrawn_at || advisory.type && advisory.type !== 'reviewed' || !/^GHSA-[a-z0-9-]+$/i.test(advisory.ghsa_id || '')) return null;
     const vulnerabilities = advisory.vulnerabilities || [];
     const tools = classifyAiTool({ packages: vulnerabilities.map(v => v.package).filter(Boolean), repository: advisory.source_code_location || '', summary: advisory.summary || '', text: advisory.description || '', references: advisory.references || [] });
     if (!tools.length) return null;
@@ -49,10 +49,10 @@ export function mergeAiPatches(github, nvd) {
 }
 const allowedPage = address => { try { const u = new URL(address); return u.origin === 'https://api.github.com' && u.pathname === '/advisories'; } catch { return false; } };
 export function createAiPatchDay({ filePath, http = axios, queryCatalog, now = () => Date.now(), token = '', pageBudget = 5 } = {}) {
-    let state = { version: 2, rows: [], since: '', until: '', next: '', lastSuccess: '', checkedAt: '', error: '', persistenceError: false, truncated: false, pages: 0, recent: { next: '', until: '', lastSuccess: '' } };
+    let state = { version: 3, rows: [], since: '', until: '', next: '', lastSuccess: '', checkedAt: '', error: '', persistenceError: false, truncated: false, pages: 0, recent: { next: '', until: '', lastSuccess: '' }, known: { next: '', until: '', lastSuccess: '' } };
     let flight = null, write = Promise.resolve();
     const monthly = new Map(), monthsInFlight = new Map();
-    const loaded = filePath ? fs.readFile(filePath, 'utf8').then(raw => { const saved = JSON.parse(raw); if (saved.version === 2 && Array.isArray(saved.rows)) state = { ...state, ...saved }; }).catch(() => {}) : Promise.resolve();
+    const loaded = filePath ? fs.readFile(filePath, 'utf8').then(raw => { const saved = JSON.parse(raw); if (saved.version === 3 && Array.isArray(saved.rows)) state = { ...state, ...saved }; }).catch(() => {}) : Promise.resolve();
     const persist = () => {
         if (!filePath) return Promise.resolve();
         const raw = JSON.stringify(state);
@@ -78,9 +78,16 @@ export function createAiPatchDay({ filePath, http = axios, queryCatalog, now = (
                 state.recent.until = new Date(now()).toISOString();
                 state.recent.next = advisoryPage(since, state.recent.until);
             }
+            if (!state.known.next && (!state.known.lastSuccess || now() - Date.parse(state.known.lastSuccess) >= DAY)) {
+                state.known.until = new Date(now()).toISOString();
+                // One batched package query, rather than 150 per-tool calls.
+                // The first pass can recover older patched-version evidence for
+                // CVEs whose NVD entry was revised in the selected month.
+                state.known.next = advisoryPage(state.known.lastSuccess ? new Date(Date.parse(state.known.lastSuccess) - DAY).toISOString() : '', state.known.until, true);
+            }
             try {
-                for (let page = 0; (state.next || state.recent.next) && page < Math.min(20, Math.max(1, pageBudget)); page++) {
-                    const current = state.recent.next ? state.recent : state;
+                for (let page = 0; (state.next || state.recent.next || state.known.next) && page < Math.min(20, Math.max(1, pageBudget)); page++) {
+                    const current = state.recent.next ? state.recent : state.known.next ? state.known : state;
                     if (!allowedPage(current.next)) throw Error('Invalid advisory pagination');
                     const response = await http.get(current.next, { timeout: 25000, maxContentLength: 12 * 1024 * 1024, maxRedirects: 0, headers: { Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', 'User-Agent': 'ThreatSumm4ry-AI-Patch-Day', ...(token ? { Authorization: `Bearer ${token}` } : {}) } });
                     if (!Array.isArray(response.data)) throw Error('Invalid advisory response');
@@ -101,6 +108,7 @@ export function createAiPatchDay({ filePath, http = axios, queryCatalog, now = (
                     if (next && !allowedPage(next)) throw Error('Invalid advisory pagination');
                     current.next = next;
                     if (current === state.recent && !next) state.recent.lastSuccess = state.recent.until;
+                    if (current === state.known && !next) state.known.lastSuccess = state.known.until;
                     state.pages++; await persist();
                     if (Number(response.headers?.['x-ratelimit-remaining']) === 0 && next) break;
                 }
@@ -126,15 +134,15 @@ export function createAiPatchDay({ filePath, http = axios, queryCatalog, now = (
             const github = state.rows.filter(r => r.published.startsWith(month) || r.updated.startsWith(month) || r.cves.some(c => nvdIds.has(c)));
             const rows = mergeAiPatches(github, nvd), sourceStatus = local.status?.sources || {};
             const sources = [
-                { id: 'github', name: 'GitHub Security Advisories', url: 'https://github.com/advisories', coverage: `Avisos de pacotes, repositórios e descoberta de componentes MCP/IA. Histórico inicial de 12 meses; ${state.pages} páginas processadas.${state.next ? ' Importação histórica em andamento; a coleta diária continua em paralelo.' : ''}${state.truncated ? ' O cache atingiu o limite; registros mais antigos podem não estar disponíveis.' : ''}`, status: state.error ? state.rows.length ? 'stale' : 'error' : state.truncated ? 'stale' : !state.lastSuccess || state.next || state.recent.next ? 'pending' : 'ok', lastSuccess: state.recent.lastSuccess || state.lastSuccess, checkedAt: state.checkedAt, error: state.error },
+                { id: 'github', name: 'GitHub Security Advisories', url: 'https://github.com/advisories', coverage: `Avisos revisados, versões afetadas e corrigidas. Consulta em lote aos pacotes do catálogo e descoberta global de novos componentes MCP/IA nos últimos 12 meses; ${state.pages} páginas processadas.${state.next || state.known.next ? ' Importação histórica em andamento; a coleta diária continua em paralelo.' : ''}${state.truncated ? ' O cache atingiu o limite; registros mais antigos podem não estar disponíveis.' : ''}`, status: state.error ? state.rows.length ? 'stale' : 'error' : state.truncated ? 'stale' : !state.lastSuccess || state.next || state.recent.next || state.known.next ? 'pending' : 'ok', lastSuccess: state.recent.lastSuccess || state.lastSuccess, checkedAt: state.checkedAt, error: state.error },
                 ...['nvd', 'kev', 'epss'].map(id => ({ id, name: { nvd: 'NVD', kev: 'CISA KEV', epss: 'FIRST EPSS' }[id], url: { nvd: 'https://nvd.nist.gov/', kev: 'https://www.cisa.gov/known-exploited-vulnerabilities-catalog', epss: 'https://www.first.org/epss/' }[id], coverage: id === 'nvd' ? 'Catálogo unificado local: CVEs publicadas ou revisadas no mês, filtradas pelo componente de IA.' : 'Sinais do catálogo unificado, vinculados pelo identificador CVE.', status: !catalogError && sourceStatus[id]?.status === 'ready' ? 'ok' : catalogError || sourceStatus[id]?.status === 'error' ? 'error' : 'stale', lastSuccess: sourceStatus[id]?.at, error: catalogError ? 'Catálogo temporariamente indisponível.' : sourceStatus[id]?.error || '' })),
             ];
             const discovered = rows.flatMap(r => r.tools).filter(t => t.evidence === 'discovery');
             const catalog = [...AI_TOOL_CATALOG.map(t => ({ vendor: t.name, aliases: t.packages, models: t.packages, review: [], category: t.category, repo: t.repo })), ...discovered.filter((t, i, all) => all.findIndex(x => x.name === t.name) === i).map(t => ({ vendor: t.name, aliases: [], models: [t.name], review: ['Componente identificado no texto do aviso; conferir o pacote e a aplicabilidade.'], category: t.category, repo: '' }))];
             const data = { month, rows, catalog, categories: [...new Set([...AI_CATEGORIES, ...rows.flatMap(r => r.categories)])], sources,
-                status: { running: Boolean(flight), pending: state.next || state.recent.next || !state.recent.lastSuccess ? 1 : 0, failed: state.error || catalogError ? 1 : 0, initialized: Boolean(state.recent.lastSuccess) && !local.truncated, cadenceHours: 24, persistenceError: state.persistenceError },
+                status: { running: Boolean(flight), pending: state.next || state.known.next || state.recent.next || !state.recent.lastSuccess ? 1 : 0, failed: state.error || catalogError ? 1 : 0, initialized: Boolean(state.recent.lastSuccess) && !local.truncated, cadenceHours: 24, persistenceError: state.persistenceError },
                 summary: { advisories: rows.length, patches: rows.filter(r => r.patch === 'available').length, mitigations: 0, kev: rows.filter(r => r.kev).length, matched: rows.filter(r => r.matches.some(m => m.level === 'model')).length },
-                coverage: { initialFrom: state.since, categories: AI_CATEGORIES.length, catalogTools: AI_TOOL_CATALOG.length, githubAdvisories: state.rows.length, truncated: Boolean(local.truncated || state.truncated), historicalImportPending: Boolean(state.next), policy: 'Catálogo ampliável e descoberta por evidência. Produtos proprietários entram quando há aviso público nas fontes; presença no catálogo não garante cobertura integral.' },
+                coverage: { initialFrom: state.since, categories: AI_CATEGORIES.length, catalogTools: AI_TOOL_CATALOG.length, githubAdvisories: state.rows.length, truncated: Boolean(local.truncated || state.truncated), historicalImportPending: Boolean(state.next || state.known.next), policy: 'Catálogo ampliável e descoberta por evidência. Produtos proprietários entram quando há aviso público nas fontes; presença no catálogo não garante cobertura integral.' },
             };
             monthly.set(month, { at: now(), data }); if (monthly.size > 24) monthly.delete(monthly.keys().next().value);
             return data;

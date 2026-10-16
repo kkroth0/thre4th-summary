@@ -10,7 +10,7 @@ const groups = {
     'Interfaces e plataformas': [
         ['Open WebUI','open-webui/open-webui','open-webui'], ['LibreChat','danny-avila/LibreChat','librechat'], ['AnythingLLM','Mintplex-Labs/anything-llm','anythingllm'],
         ['Dify','langgenius/dify','dify'], ['Flowise','FlowiseAI/Flowise','flowise'], ['Langflow','langflow-ai/langflow','langflow'],
-        ['LobeChat','lobehub/lobe-chat','@lobehub/chat'], ['Jan','menloresearch/jan','jan'], ['KoboldCpp','LostRuins/koboldcpp','koboldcpp'],
+        ['LobeChat','lobehub/lobe-chat','@lobehub/chat'], ['Jan','menloresearch/jan'], ['KoboldCpp','LostRuins/koboldcpp','koboldcpp'],
         ['text-generation-webui','oobabooga/text-generation-webui','text-generation-webui'], ['ComfyUI','comfyanonymous/ComfyUI','comfyui'],
         ['AUTOMATIC1111','AUTOMATIC1111/stable-diffusion-webui','stable-diffusion-webui'], ['InvokeAI','invoke-ai/InvokeAI','invokeai'],
         ['Fooocus','lllyasviel/Fooocus','fooocus'], ['Gradio','gradio-app/gradio','gradio'], ['Streamlit','streamlit/streamlit','streamlit'],

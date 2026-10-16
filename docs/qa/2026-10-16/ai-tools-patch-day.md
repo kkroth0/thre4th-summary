@@ -24,3 +24,5 @@
 - Full checks and production release validation are recorded after deployment below.
 
 - A live incremental request exposed GitHub's rejection of millisecond timestamp ranges (HTTP 422). Queries now use inclusive YYYY-MM-DD ranges with a one-day overlap; the corrected live request returned relevant AI/MCP advisories without an error. A regression test checks the wire format. Combined rows keep the latest revision date and both source revision origins.
+
+- Production exposed GitHub's inclusion of unreviewed records when filters were present. The connector now explicitly requests reviewed advisories and prioritizes one batched query for the 155 known package identities before the discovery backfill. A live two-request validation returned 58 October advisories, 57 with published fixes; package ranges and patched versions were preserved. The 150-tool catalog remains the scope reference, not a claim of complete coverage of every product.

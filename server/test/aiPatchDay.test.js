@@ -29,6 +29,7 @@ test('GHSA preserves exact affected and fixed versions; CVE presence alone never
     const unconfirmed = normalizeAiAdvisory(advisory({ vulnerabilities: [{ package: { name: 'langchain' }, vulnerable_version_range: '*' }] }));
     assert.equal(unconfirmed.patch, 'unconfirmed'); assert.equal(unconfirmed.remediations.length, 0);
     assert.equal(normalizeAiAdvisory(advisory({ withdrawn_at: '2026-10-03' })), null);
+    assert.equal(normalizeAiAdvisory(advisory({ type: 'unreviewed' })), null);
     assert.equal(normalizeAiAdvisory(advisory({ summary: 'Server bug', description: 'Ordinary web server', vulnerabilities: [{ package: { name: 'ordinary-http-server' } }] })), null);
 });
 
@@ -44,7 +45,7 @@ test('CVE join deduplicates NVD evidence while preserving distinct GHSA/package 
 test('global source uses bounded single-flight pages, durable cursor, no per-view calls, and retains cache on failure', async () => {
     const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'ai-patch-test-')), filePath = path.join(directory, 'cache.json');
     let clock = Date.parse('2026-10-16T12:00:00Z'), calls = 0, fail = false;
-    const http = { get: async url => { calls++; const range = new URL(url).searchParams.get('modified'); if (range) assert.match(range, /^\d{4}-\d\d-\d\d\.\.\d{4}-\d\d-\d\d$/); if (fail) throw { response: { status: 429 } }; return { data: [advisory()], headers: { link: '<https://api.github.com/advisories?after=cursor>; rel="next"' } }; } };
+    const http = { get: async url => { calls++; const parsed = new URL(url), range = parsed.searchParams.get('modified'); if (range) { assert.match(range, /^\d{4}-\d\d-\d\d\.\.\d{4}-\d\d-\d\d$/); assert.equal(parsed.searchParams.get('type'), 'reviewed'); } if (fail) throw { response: { status: 429 } }; return { data: [advisory()], headers: { link: '<https://api.github.com/advisories?after=cursor>; rel="next"' } }; } };
     try {
         const day = createAiPatchDay({ filePath, http, queryCatalog: async () => local(), now: () => clock, pageBudget: 1 });
         await Promise.all([day.sync(), day.sync()]); assert.equal(calls, 1);
@@ -67,12 +68,16 @@ test('pagination rejects redirects to arbitrary hosts and reports incomplete sou
 
 test('daily collection continues during backfill and an older historical row cannot undo a new fix', async () => {
     let clock = Date.parse('2026-10-16T12:00:00Z'), calls = 0;
-    const day = createAiPatchDay({ now: () => clock, queryCatalog: async () => local(), pageBudget: 2, http: { get: async () => {
+    const addresses = [];
+    const day = createAiPatchDay({ now: () => clock, queryCatalog: async () => local(), pageBudget: 2, http: { get: async url => {
+        addresses.push(url);
         calls++;
         const fresh = calls === 3 ? advisory({ updated_at: '2026-10-17T10:00:00Z', vulnerabilities: [{ package: { name: 'mcp' }, first_patched_version: '2.0.2' }] }) : advisory();
         return { data: [fresh], headers: calls % 2 === 0 ? { link: '<https://api.github.com/advisories?after=history>; rel="next"' } : {} };
     } } });
     await day.sync(); assert.equal(calls, 2);
+    assert.ok(new URL(addresses[1]).searchParams.get('affects').includes('@modelcontextprotocol/sdk'));
+    assert.equal(new URL(addresses[1]).searchParams.get('type'), 'reviewed');
     clock += 86400001; await day.sync(); assert.equal(calls, 4);
     const result = await day.query({ month: '2026-10' });
     assert.equal(result.rows[0].updated, '2026-10-17T10:00:00Z');
