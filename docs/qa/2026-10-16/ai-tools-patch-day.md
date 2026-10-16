@@ -22,3 +22,5 @@
 - Frontend/report tests cover year-boundary navigation, Fortaleza month, priority/unknown distinctions, full evidence, native-chart ZIP relationships/caches, report formulas and separate AI wording.
 - Artifact Tool imported the real exported OT workbook, rendered all seven principal sheets, and found zero spreadsheet formula-error cells. Visual review caught and repaired narrow title clipping in technical tabs. Native rendering on Windows emitted an exit crash after writing the completed previews and successful inspection; ExcelJS ZIP round-trip tests also validated the workbook independently.
 - Full checks and production release validation are recorded after deployment below.
+
+- A live incremental request exposed GitHub's rejection of millisecond timestamp ranges (HTTP 422). Queries now use inclusive YYYY-MM-DD ranges with a one-day overlap; the corrected live request returned relevant AI/MCP advisories without an error. A regression test checks the wire format. Combined rows keep the latest revision date and both source revision origins.

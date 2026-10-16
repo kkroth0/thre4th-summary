@@ -5,6 +5,7 @@ import { AI_TOOL_CATALOG, AI_CATEGORIES, classifyAiTool } from './aiToolCatalog.
 import { defaultOtMonth, validOtMonth } from './otPatchDay.js';
 
 const DAY = 86400000, SOURCE = 'https://api.github.com/advisories';
+const advisoryPage = (from, to) => SOURCE + '?' + new URLSearchParams({ modified: `${from.slice(0, 10)}..${to.slice(0, 10)}`, sort: 'updated', direction: 'desc', per_page: '100' });
 const refs = values => [...new Set(values.filter(url => typeof url === 'string' && /^https:\/\//.test(url)))];
 const score = values => { const scores = values.filter(v => typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= 10); return scores.length ? Math.max(...scores) : null; };
 export function normalizeAiAdvisory(advisory) {
@@ -38,7 +39,8 @@ export function mergeAiPatches(github, nvd) {
     const rows = github.map(row => {
         const matches = row.cves.map(id => byCve.get(id)).filter(Boolean);
         matches.forEach(r => used.add(r.id));
-        return { ...row, cvss: score([row.cvss, ...matches.map(r => r.cvss)]), kev: row.kev || matches.some(r => r.kev),
+        const updated = [row.updated, ...matches.map(r => r.updated)].filter(Boolean).sort().at(-1) || row.updated;
+        return { ...row, updated, revision: updated, revisionOrigins: { github: row.updated, nvd: matches.map(r => ({ cve: r.id, updated: r.updated })) }, cvss: score([row.cvss, ...matches.map(r => r.cvss)]), kev: row.kev || matches.some(r => r.kev),
             references: refs([...row.references, ...matches.flatMap(r => [r.url, ...r.references])]), alsoReportedBy: matches.length ? ['NVD'] : [],
             cveSignals: row.cveSignals.map(signal => matches.find(r => r.id === signal.id)?.cveSignals[0] || signal),
         };
@@ -47,10 +49,10 @@ export function mergeAiPatches(github, nvd) {
 }
 const allowedPage = address => { try { const u = new URL(address); return u.origin === 'https://api.github.com' && u.pathname === '/advisories'; } catch { return false; } };
 export function createAiPatchDay({ filePath, http = axios, queryCatalog, now = () => Date.now(), token = '', pageBudget = 5 } = {}) {
-    let state = { version: 1, rows: [], since: '', until: '', next: '', lastSuccess: '', checkedAt: '', error: '', persistenceError: false, truncated: false, pages: 0, recent: { next: '', until: '', lastSuccess: '' } };
+    let state = { version: 2, rows: [], since: '', until: '', next: '', lastSuccess: '', checkedAt: '', error: '', persistenceError: false, truncated: false, pages: 0, recent: { next: '', until: '', lastSuccess: '' } };
     let flight = null, write = Promise.resolve();
     const monthly = new Map(), monthsInFlight = new Map();
-    const loaded = filePath ? fs.readFile(filePath, 'utf8').then(raw => { const saved = JSON.parse(raw); if (saved.version === 1 && Array.isArray(saved.rows)) state = { ...state, ...saved }; }).catch(() => {}) : Promise.resolve();
+    const loaded = filePath ? fs.readFile(filePath, 'utf8').then(raw => { const saved = JSON.parse(raw); if (saved.version === 2 && Array.isArray(saved.rows)) state = { ...state, ...saved }; }).catch(() => {}) : Promise.resolve();
     const persist = () => {
         if (!filePath) return Promise.resolve();
         const raw = JSON.stringify(state);
@@ -67,14 +69,14 @@ export function createAiPatchDay({ filePath, http = axios, queryCatalog, now = (
             if (!state.next) {
                 state.since = state.lastSuccess ? new Date(Date.parse(state.lastSuccess) - DAY).toISOString() : new Date(now() - 366 * DAY).toISOString();
                 state.until = new Date(now()).toISOString();
-                state.next = SOURCE + '?' + new URLSearchParams({ modified: `${state.since}..${state.until}`, sort: 'updated', direction: 'desc', per_page: '100' });
+                state.next = advisoryPage(state.since, state.until);
             }
             // A long historical import must never prevent new advisories from
             // arriving. Its cursor and the daily incremental cursor are separate.
             if (!state.recent.next && (!state.recent.lastSuccess || now() - Date.parse(state.recent.lastSuccess) >= DAY)) {
                 const since = new Date(state.recent.lastSuccess ? Date.parse(state.recent.lastSuccess) - DAY : now() - 2 * DAY).toISOString();
                 state.recent.until = new Date(now()).toISOString();
-                state.recent.next = SOURCE + '?' + new URLSearchParams({ modified: `${since}..${state.recent.until}`, sort: 'updated', direction: 'desc', per_page: '100' });
+                state.recent.next = advisoryPage(since, state.recent.until);
             }
             try {
                 for (let page = 0; (state.next || state.recent.next) && page < Math.min(20, Math.max(1, pageBudget)); page++) {

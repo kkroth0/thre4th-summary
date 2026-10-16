@@ -44,7 +44,7 @@ test('CVE join deduplicates NVD evidence while preserving distinct GHSA/package 
 test('global source uses bounded single-flight pages, durable cursor, no per-view calls, and retains cache on failure', async () => {
     const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'ai-patch-test-')), filePath = path.join(directory, 'cache.json');
     let clock = Date.parse('2026-10-16T12:00:00Z'), calls = 0, fail = false;
-    const http = { get: async () => { calls++; if (fail) throw { response: { status: 429 } }; return { data: [advisory()], headers: { link: '<https://api.github.com/advisories?after=cursor>; rel="next"' } }; } };
+    const http = { get: async url => { calls++; const range = new URL(url).searchParams.get('modified'); if (range) assert.match(range, /^\d{4}-\d\d-\d\d\.\.\d{4}-\d\d-\d\d$/); if (fail) throw { response: { status: 429 } }; return { data: [advisory()], headers: { link: '<https://api.github.com/advisories?after=cursor>; rel="next"' } }; } };
     try {
         const day = createAiPatchDay({ filePath, http, queryCatalog: async () => local(), now: () => clock, pageBudget: 1 });
         await Promise.all([day.sync(), day.sync()]); assert.equal(calls, 1);
