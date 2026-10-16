@@ -52,3 +52,12 @@ test('AI report is titled correctly and package matching is explicit without cla
   assert.equal(wb.getWorksheet('Plano de ação')!.getCell('I6').value, 'Pacote citado');
   assert.match(String(wb.getWorksheet('Plano de ação')!.getCell('G6').value), /Pacote citado/);
 });
+
+test('multiline source text is fully readable in continuation rows rather than clipped at Excel height limits', () => {
+  const summary = Array.from({ length: 70 }, (_, i) => `Linha ${i + 1}: evidência da fonte.\n`).join('');
+  const wb = buildNewsExcelWorkbook({ dataset: 'ai-patches', report: { domain: 'ai', sources: [{ id: 'github', name: 'GitHub', url: 'https://github.com/advisories', coverage: 'Histórico em atualização', status: 'pending' }] }, range: { from: '2026-10-01', to: '2026-10-31' }, rows: [row({ summary })] }, Excel);
+  const sheet = wb.getWorksheet('Correções e evidências')!; const parts: string[] = [];
+  sheet.eachRow((r, index) => { if (index >= 6) { parts.push(String(r.getCell(4).value)); assert.ok((r.height || 0) < 409); } });
+  assert.ok(parts.length >= 4); assert.equal(parts.join(''), summary);
+  assert.ok(JSON.stringify(wb.getWorksheet('Fontes e critérios')!.getSheetValues()).includes('Em atualização'));
+});

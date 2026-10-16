@@ -16,6 +16,7 @@ export async function addOtPatchExcelCharts(buffer: Uint8Array, payload: NewsExc
     if (name === 'contentTypes') continue;
     let value = source;
     if (/\/charts\/chart[12]\.xml$/.test(name)) {
+      if (payload.dataset === 'ai-patches') value = value.replace('Fabricantes com mais avisos', 'Ferramentas com mais avisos');
       const data = chartData[name.endsWith('chart1.xml') ? 0 : 1];
       value = value.replace(/<c:strCache>[\s\S]*?<\/c:strCache>/, `<c:strCache><c:ptCount val="${data.length}"/>${data.map((d, i) => `<c:pt idx="${i}"><c:v>${xml(d.label)}</c:v></c:pt>`).join('')}</c:strCache>`)
         .replace(/<c:numCache>[\s\S]*?<\/c:numCache>/, `<c:numCache><c:formatCode>0</c:formatCode><c:ptCount val="${data.length}"/>${data.map((d, i) => `<c:pt idx="${i}"><c:v>${d.count}</c:v></c:pt>`).join('')}</c:numCache>`)

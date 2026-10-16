@@ -80,7 +80,7 @@ const groups = {
         ['Databricks AI','','databricks-ai'], ['Snowflake Cortex','','snowflake-cortex'], ['JetBrains AI Assistant','','jetbrains-ai-assistant'],
     ],
 };
-export const AI_TOOL_CATALOG = Object.entries(groups).flatMap(([category, entries]) => entries.map(([name, repo, ...packages]) => ({ name, category, repo: repo.toLowerCase(), packages })));
+export const AI_TOOL_CATALOG = Object.entries(groups).flatMap(([category, entries]) => entries.map(([name, repo, ...packages]) => ({ name, category, repo: repo.toLowerCase(), packages: repo ? packages : [] })));
 export const AI_CATEGORIES = Object.keys(groups);
 const normalize = v => String(v || '').toLowerCase().replace(/[_\s]+/g, '-');
 const patterns = new Map();
@@ -93,7 +93,7 @@ const bounded = (text, term) => {
 // intersection paged the production corpus heavily; date-index streaming keeps
 // the read bounded and avoids loading a second full-text posting list.
 const candidateTerms = [...new Set([...AI_TOOL_CATALOG.flatMap(t => [t.name, ...t.packages, t.repo]).filter(t => t.length >= 3 && !['Continue','Jan','datasets','notebook','distributed','accelerate'].includes(t)), 'MCP', 'LLM', 'large language', 'generative AI', 'AI agent', 'model inference', 'retrieval augmented'])];
-const candidatePattern = new RegExp(candidateTerms.sort((a, b) => b.length - a.length).map(t => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/[-_ ]/g, '[-_ ]')).join('|'), 'i');
+const candidatePattern = new RegExp('(?:^|[^a-z0-9])(?:' + candidateTerms.sort((a, b) => b.length - a.length).map(t => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/[-_ ]/g, '[-_ ]')).join('|') + ')(?:$|[^a-z0-9])', 'i');
 export const possibleAiTool = row => candidatePattern.test(`${row.product || ''} ${row.description || ''} ${row.references_json || ''}`);
 function affectedSubject(value) {
     const intro = value.trim().slice(0, 700)

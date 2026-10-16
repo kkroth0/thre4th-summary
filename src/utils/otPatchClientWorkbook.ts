@@ -12,6 +12,22 @@ const split = (value: string, max = 1500) => {
   while (remaining.length > max) { let end = remaining.lastIndexOf(' ', max); if (end < max / 2) end = max; if (/[\uD800-\uDBFF]/.test(remaining[end - 1])) end--; result.push(remaining.slice(0, end)); remaining = remaining.slice(end); }
   result.push(remaining); return result;
 };
+function tableTextParts(value: string, width: number) {
+  const result: string[] = [], lineWidth = Math.max(8, Math.floor(width - 3)); let remaining = text(value);
+  while (remaining.length) {
+    let end = 0, lines = 1, column = 0, boundary = 0;
+    while (end < remaining.length && end < 1500) {
+      const char = remaining[end];
+      if (char === '\n') { lines++; column = 0; } else if (++column > lineWidth) { lines++; column = 1; }
+      if (lines > 20) break;
+      end++; if (/\s/.test(char)) boundary = end;
+    }
+    if (end < remaining.length && boundary > end / 2) end = boundary;
+    if (end < remaining.length && /[\uD800-\uDBFF]/.test(remaining[end - 1])) end--;
+    end = Math.max(1, end); result.push(remaining.slice(0, end)); remaining = remaining.slice(end);
+  }
+  return result.length ? result : [''];
+}
 function sheet(wb: ExcelJS.Workbook, name: string, widths: number[], presentation = false) {
   const ws = wb.addWorksheet(name, { properties: { tabColor: { argb: presentation ? C.ink : C.blue }, defaultRowHeight: 19 }, views: [{ showGridLines: false, zoomScale: 90, ...(presentation ? {} : { state: 'frozen' as const, ySplit: 5, xSplit: 2 }) }], pageSetup: { paperSize: 9, orientation: presentation ? 'portrait' : 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0, margins: { left: .3, right: .3, top: .4, bottom: .4, header: .15, footer: .15 } } });
   widths.forEach((width, i) => { ws.getColumn(i + 1).width = width; });
@@ -53,7 +69,7 @@ function readableTable(wb: ExcelJS.Workbook, name: string, subtitle: string, col
   ws.getCell('A3').value = subtitle; cellStyle(ws.getCell('A3'), false, C.muted); ws.getCell('A3').alignment = { wrapText: false }; ws.getRow(3).height = 22;
   columns.forEach((c, i) => { const cell = ws.getCell(5, i + 1); cell.value = c.label; cellStyle(cell, true, C.white); cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: C.ink } }; cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true }; }); ws.getRow(5).height = 30;
   for (const record of records) {
-    const chunks = columns.map(c => typeof record[c.key] === 'string' && paginate ? split(String(record[c.key])) : [record[c.key]]);
+    const chunks = columns.map(c => typeof record[c.key] === 'string' && paginate && c.key !== 'url' ? tableTextParts(String(record[c.key]), c.width) : [record[c.key]]);
     for (let part = 0; part < Math.max(1, ...chunks.map(a => a.length)); part++) {
       const row = ws.addRow(columns.map((c, i) => { const value = chunks[i][part] ?? (chunks[i].length === 1 ? record[c.key] ?? null : null); return value === '' ? null : value; }) as ExcelJS.CellValue[]);
       let lines = 1;
@@ -62,8 +78,8 @@ function readableTable(wb: ExcelJS.Workbook, name: string, subtitle: string, col
         if (c.format) cell.numFmt = c.format;
         if (typeof cell.value === 'number') cell.alignment = { vertical: 'top', horizontal: 'right' };
         if (cell.value instanceof Date) cell.numFmt = 'dd/mm/yyyy';
-        const value = String(cell.value ?? '');
-        lines = Math.max(lines, ...value.split('\n').map(line => Math.ceil(line.length / Math.max(8, c.width - 3))));
+        const value = c.key === 'url' ? 'Abrir referência oficial' : String(cell.value ?? '');
+        lines = Math.max(lines, value.split('\n').reduce((sum, line) => sum + Math.max(1, Math.ceil(line.length / Math.max(8, c.width - 3))), 0));
         if (c.key === 'url' && safeLink(cell.value)) { cell.value = { text: 'Abrir referência oficial', hyperlink: safeLink(cell.value) }; cell.font = { ...cell.font, color: { argb: C.blue }, underline: true }; }
         cell.border = { bottom: { style: 'hair', color: { argb: C.line } } };
       });
@@ -142,15 +158,15 @@ export function addOtPatchClientSheets(wb: ExcelJS.Workbook, payload: NewsExcelP
 
   const planRows = a.assessments.map((item, i) => ({ rank: i + 1, priority: item.priority, id: item.row.id, vendor: item.row.vendors.join('\n'), reason: item.reason, action: item.action, applicability: item.applicability, patch: item.patchLabel, match: item.modelMatches.length ? matchedLabel : item.row.matches.length ? 'Somente fabricante' : 'Não identificado', kev: item.kev ? 'Com sinal' : 'Sem sinal positivo', cvss: item.cvss, epss: item.epss, url: item.row.url }));
   const planSheet = readableTable(wb, 'Plano de ação', 'Ordem de triagem e decisões recomendadas para os avisos desta seleção.', [
-    { key: 'rank', label: '#', width: 6 }, { key: 'priority', label: 'Prioridade', width: 12 }, { key: 'id', label: 'Aviso', width: 23 }, { key: 'vendor', label: 'Fabricante', width: 27 }, { key: 'reason', label: 'Justificativa', width: 56 }, { key: 'action', label: 'Ação recomendada', width: 58 }, { key: 'applicability', label: 'Validação de aplicabilidade', width: 54 }, { key: 'patch', label: 'Situação da correção', width: 27 }, { key: 'match', label: 'Catálogo', width: 22 }, { key: 'kev', label: 'Exploração conhecida', width: 22 }, { key: 'cvss', label: 'Maior CVSS', width: 13, format: '0.0' }, { key: 'epss', label: 'Maior EPSS', width: 14, format: '0.00%' }, { key: 'url', label: 'Fonte', width: 30 },
+    { key: 'rank', label: '#', width: 6 }, { key: 'priority', label: 'Prioridade', width: 12 }, { key: 'id', label: 'Aviso', width: 23 }, { key: 'vendor', label: ai ? 'Ferramenta' : 'Fabricante', width: 27 }, { key: 'reason', label: 'Justificativa', width: 56 }, { key: 'action', label: 'Ação recomendada', width: 58 }, { key: 'applicability', label: 'Validação de aplicabilidade', width: 54 }, { key: 'patch', label: 'Situação da correção', width: 27 }, { key: 'match', label: 'Catálogo', width: 22 }, { key: 'kev', label: 'Exploração conhecida', width: 22 }, { key: 'cvss', label: 'Maior CVSS', width: 13, format: '0.0' }, { key: 'epss', label: 'Maior EPSS', width: 14, format: '0.00%' }, { key: 'url', label: 'Fonte', width: 30 },
   ], planRows, false);
   for (let row = 6; row <= planSheet.rowCount; row++) { const cell = planSheet.getCell(row, 2); cell.font = { ...cell.font, bold: true, color: { argb: cell.value === 'P1' ? C.red : cell.value === 'P2' ? C.amber : C.ink } }; }
 
   readableTable(wb, 'Produtos e versões', 'Produtos mencionados nas fontes; versões instaladas no ambiente não foram avaliadas.', [
-    { key: 'id', label: 'Aviso', width: 25 }, { key: 'vendor', label: 'Fabricante', width: 28 }, { key: 'product', label: 'Produto e versão informados', width: 83 }, { key: 'model', label: 'Códigos de modelo', width: 40 }, { key: 'status', label: 'Estado na fonte', width: 24 }, { key: 'url', label: 'Referência', width: 30 },
+    { key: 'id', label: 'Aviso', width: 25 }, { key: 'vendor', label: ai ? 'Ferramenta' : 'Fabricante', width: 28 }, { key: 'product', label: 'Produto e versão informados', width: 83 }, { key: 'model', label: ai ? 'Pacotes' : 'Códigos de modelo', width: 40 }, { key: 'status', label: 'Estado na fonte', width: 24 }, { key: 'url', label: 'Referência', width: 30 },
   ], a.assessments.flatMap(item => item.row.products.length ? item.row.products.map(p => ({ id: item.row.id, vendor: p.vendor || item.row.vendors.join(', '), product: p.name, model: (p.modelNumbers || []).join('\n'), status: p.status === 'affected' ? 'Afetado na fonte' : p.status === 'fixed' ? 'Versão corrigida' : 'Mencionado na fonte', url: item.row.url })) : [{ id: item.row.id, vendor: item.row.vendors.join(', '), product: 'Produto/versão não estruturados; consultar o aviso oficial.', model: '', status: 'Não informado', url: item.row.url }]));
   const remediationNames: Record<string, string> = { vendor_fix: 'Correção do fabricante', mitigation: 'Mitigação', workaround: 'Contorno', reference: 'Referência', no_fix_planned: 'Sem correção planejada', none_available: 'Solução não disponível' };
-  readableTable(wb, 'Correções e evidências', 'Orientações e sínteses das fontes, preservadas no idioma original.', [
+  readableTable(wb, 'Correções e evidências', 'Textos das fontes no idioma original. Trechos longos continuam nas linhas seguintes.', [
     { key: 'id', label: 'Aviso', width: 25 }, { key: 'cve', label: 'CVE', width: 24 }, { key: 'category', label: 'Tipo de informação', width: 28 }, { key: 'details', label: 'Texto da fonte', width: 100 }, { key: 'products', label: 'Produtos associados', width: 72 }, { key: 'url', label: 'Referência', width: 30 },
   ], a.assessments.flatMap(item => [
     ...(item.row.summary ? [{ id: item.row.id, cve: item.row.cves.join('\n'), category: 'Síntese do fabricante', details: item.row.summary, products: '', url: item.row.url }] : []),
@@ -169,7 +185,7 @@ export function addOtPatchClientSheets(wb: ExcelJS.Workbook, payload: NewsExcelP
   r = paragraph(sources, r, 'Interpretação.', 'O limiar EPSS de 50% é uma regra editorial deste relatório. EPSS estima exploração de uma CVE nos próximos 30 dias; não mede probabilidade de incidente no cliente. CVSS descreve severidade técnica. A priorização não substitui validação de exposição e criticidade operacional.');
   section(sources, ++r, 'Fontes e referências'); r++;
   for (const source of a.sources) {
-    r = paragraph(sources, r, source.name + '.', `${source.status === 'ok' ? 'Disponível' : source.status === 'stale' ? 'Cache anterior' : 'Indisponível ou não consultada'}. Último sucesso: ${source.lastSuccess || 'não informado'}. ${source.coverage || ''}${source.error ? ' Falha: ' + source.error : ''}`);
+    r = paragraph(sources, r, source.name + '.', `${source.status === 'ok' ? 'Disponível' : source.status === 'pending' ? 'Em atualização' : source.status === 'stale' ? 'Cache anterior' : 'Indisponível ou não consultada'}. Último sucesso: ${source.lastSuccess || 'não informado'}. ${source.coverage || ''}${source.error ? ' Falha: ' + source.error : ''}`);
     const cell = merged(sources, r++, 2, 13, ''); const url = safeLink(source.url); if (url) { cell.value = { text: source.url, hyperlink: url }; cell.font = { name: 'Calibri', size: 11, color: { argb: C.blue }, underline: true }; cell.alignment = { wrapText: true }; sources.getRow(r - 1).height = 36; }
   }
   for (const [label, url] of [['EPSS · FIRST', 'https://www.first.org/epss/'], ['CVSS · FIRST', 'https://www.first.org/cvss/'], ['CISA · KEV', 'https://www.cisa.gov/known-exploited-vulnerabilities-catalog']]) {

@@ -4,7 +4,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import Database from 'better-sqlite3';
-import { AI_TOOL_CATALOG, AI_CATEGORIES, classifyAiTool } from '../aiToolCatalog.js';
+import { AI_TOOL_CATALOG, AI_CATEGORIES, classifyAiTool, possibleAiTool } from '../aiToolCatalog.js';
 import { createAiPatchDay, mergeAiPatches, normalizeAiAdvisory, normalizeAiNvd } from '../aiPatchDay.js';
 import { createVulnerabilityCatalog } from '../vulnerabilityCatalog.js';
 
@@ -24,6 +24,8 @@ test('AI coverage spans inference, agents, MCP, data, ML frameworks and coding a
     assert.equal(plugin[0].name, 'S2B AI Assistant – ChatBot, ChatGPT, OpenAI plugin for WordPress');
     assert.equal(plugin[0].evidence, 'discovery'); assert.notEqual(plugin[0].name, 'ChatGPT');
     assert.deepEqual(classifyAiTool({ text: 'Ordinary HTTP Server is vulnerable to file disclosure. Reported by ChatGPT.' }), []);
+    assert.deepEqual(classifyAiTool({ packages: [{ name: 'cursor', ecosystem: 'npm' }], text: 'Terminal cursor movement library.' }), []);
+    assert.equal(possibleAiTool({ description: 'Ordinary array indexing issue in a web server.' }), false);
 });
 
 test('GHSA preserves exact affected and fixed versions; CVE presence alone never confirms a patch', () => {
