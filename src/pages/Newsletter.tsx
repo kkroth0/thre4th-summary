@@ -5,9 +5,10 @@ import { StoryTable } from '@/components/workbench/StoryTable';
 import { NewsIocTable } from '@/components/workbench/NewsIocTable';
 import { IocInventory } from '@/components/workbench/IocInventory';
 import { NewsExportDialog } from '@/components/workbench/NewsExportDialog';
+import { NewsFeedFilters } from '@/components/workbench/NewsFeedFilters';
 
 import { SourceIdentity } from '@/components/SourceIdentity';
-import { ArrowLeft, Globe, BookOpen, AlertTriangle, Search, Mail, Eye, Filter, ChevronDown, RefreshCw, Share2, Loader2, Bookmark, X, PencilLine, ExternalLink, CheckCircle2, Settings2 } from "lucide-react";
+import { ArrowLeft, Globe, BookOpen, AlertTriangle, Search, Mail, Eye, ChevronDown, RefreshCw, Share2, Loader2, Bookmark, X, PencilLine, ExternalLink, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -16,16 +17,9 @@ import { PageLayout } from "@/components/PageLayout";
 import { EmptyState } from "@/components/EmptyState";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { toast } from "sonner";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
-import { NEWS_CATEGORY_ORDER, countByCategory, filterNewsletterAdvisories, filterStoryCards, groupAdvisoriesIntoStories, normalizeStoryEntities, severityEvidence, activeFilterChips, TIME_RANGES } from "./newsletterView";
+import { NEWS_CATEGORY_ORDER, countByCategory, filterNewsletterAdvisories, filterStoryCards, groupAdvisoriesIntoStories, normalizeStoryEntities, severityEvidence, activeFilterChips } from "./newsletterView";
 import type { TimeRange } from "./newsletterView";
 import type { StoryCard } from "./newsletterView";
 import { generateBoletim, saveKnowledge, fetchStoryDetail, type StoryDetail, type CorrelationEvidenceType } from "@/services/threatApi";
@@ -577,11 +571,10 @@ const Newsletter = () => {
   );
 
   const [categoryFilter, setCategoryFilter] = useState("");
-  // A lista de categorias cresce (9 hoje); só as com maior volume ficam à vista,
-  // o resto entra por "Ver todas" — senão a barra vira duas linhas de pílula
-  // toda vez que uma categoria rara aparece.
-  const [showAllCategories, setShowAllCategories] = useState(false);
-  const VISIBLE_CATEGORY_CAP = 5;
+  // Keep the leading categories visible; the rest open in a compact menu.
+  // A selected category stays visible even when its current result count is zero.
+  const [categoryMenuOpen, setCategoryMenuOpen] = useState(false);
+  const VISIBLE_CATEGORY_CAP = 4;
 
   const storyCards = useMemo(
     () => filterStoryCards(
@@ -600,8 +593,9 @@ const Newsletter = () => {
       .slice().sort((a, b) => a === 'Artificial Intelligence' ? -1 : b === 'Artificial Intelligence' ? 1 : (categoryCounts[b] || 0) - (categoryCounts[a] || 0)),
     [categoryCounts],
   );
-  const visibleCategories = showAllCategories ? categoriesByVolume : categoriesByVolume.slice(0, VISIBLE_CATEGORY_CAP);
-  const hiddenCategoryCount = categoriesByVolume.length - visibleCategories.length;
+  const leadingCategories: string[] = categoriesByVolume.slice(0, VISIBLE_CATEGORY_CAP);
+  const visibleCategories = categoryFilter && !leadingCategories.includes(categoryFilter) ? [...leadingCategories, categoryFilter] : leadingCategories;
+  const hiddenCategories = categoriesByVolume.filter(name => !visibleCategories.includes(name));
 
   // How many filters are narrowing the feed — drives the badge on the Filters button.
   const activeFilterCount = [
@@ -691,16 +685,17 @@ const Newsletter = () => {
               filtros") competindo por espaço — agora é um Popover com tudo
               dentro, e os chips abaixo (DEN-02) continuam mostrando o que
               está ativo sem precisar abrir nada. */}
-          <div className="intel-panel flex flex-col gap-3 p-4">
-            <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
+          <div className="rounded-xl border bg-card p-3">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
               <div className="relative min-w-0 flex-1">
                 <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
                 <Input
                   ref={searchInputRef}
+                  aria-label={language === "pt" ? "Buscar notícias" : "Search news"}
                   placeholder={language === "pt" ? "Buscar por CVE, vetor, alvo..." : "Search by CVE, vector, target..."}
                   value={searchNews}
                   onChange={(e) => setSearchNews(e.target.value)}
-                  className="pl-9 pr-9 bg-card border-border/50"
+                  className="pl-9 pr-9 h-9 bg-background border-border/50"
                 />
                 {!searchNews && (
                   <kbd className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
@@ -709,180 +704,30 @@ const Newsletter = () => {
                 )}
               </div>
 
-              <div className="flex flex-wrap items-center gap-2 lg:shrink-0">
+              <div className="flex shrink-0 items-center gap-2">
+                <NewsFeedFilters
+                  pt={language === 'pt'} activeCount={activeFilterCount}
+                  severity={selectedSeverity} onSeverityChange={setSelectedSeverity}
+                  period={timeRange} onPeriodChange={setTimeRange}
+                  relevance={sortByRelevance} onRelevanceChange={setSortByRelevance}
+                  source={selectedSource} sources={availableSources} onSourceChange={setSelectedSource}
+                  kevOnly={kevOnly} onKevChange={setKevOnly}
+                  profiles={orgProfiles} profileId={orgProfileId} onProfileChange={id => { setOrgProfileId(id); if (!id) setOrgOnly(false); }}
+                  hasContext={Boolean(orgModel)} orgOnly={orgOnly} onOrgOnlyChange={setOrgOnly} onClear={clearFilters}
+                />
                 <NewsExportDialog pt={language === 'pt'} view={newsView} />
-                <Button asChild variant="outline" size="sm" className="h-9 gap-1.5 px-3 text-xs">
-                  <Link
-                    to="/settings?section=monitoring&from=/newsletter#news-vendors"
-                    aria-label={language === "pt" ? "Configurar fornecedores monitorados" : "Configure monitored vendors"}
-                    title={language === "pt" ? "Configurar fornecedores monitorados" : "Configure monitored vendors"}
-                  >
-                    <Settings2 className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
-                    <span className="text-muted-foreground">{language === "pt" ? "Fornecedores:" : "Vendors:"}</span>
-                    <span className="font-semibold tabular-nums" aria-live="polite">{monitoring.error
-                      ? (language === "pt" ? "Indisponível" : "Unavailable")
-                      : !monitoring.data ? "…"
-                      : monitoring.data.preferences.mode === "selected"
-                      ? monitoring.data.preferences.vendorIds.length
-                      : (language === "pt" ? "Todos" : "All")}</span>
-                  </Link>
+                <Button
+                  disabled={loadingNews || isRefreshingNews}
+                  onClick={() => loadNews()}
+                  variant="outline"
+                  size="icon"
+                  className="h-9 w-9 shrink-0"
+                  aria-label={language === "pt" ? "Atualizar agora" : "Refresh now"}
+                  title={language === "pt" ? "Atualizar agora" : "Refresh now"}
+                >
+                  <RefreshCw className={cn("h-3.5 w-3.5", (loadingNews || isRefreshingNews) && "animate-spin")} />
+
                 </Button>
-
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant={activeFilterCount > 0 ? "default" : "outline"}
-                    size="sm"
-                    className="h-9 shrink-0 gap-1.5 px-3 text-xs font-semibold"
-                  >
-                    <Filter className="h-3.5 w-3.5" />
-                    {language === "pt" ? "Filtros" : "Filters"}
-                    {activeFilterCount > 0 && (
-                      <Badge variant="secondary" className="ml-0.5 h-4 min-w-[16px] px-1 text-[10px] tabular-nums">
-                        {activeFilterCount}
-                      </Badge>
-                    )}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent align="start" className="w-80 space-y-3">
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-medium text-muted-foreground">
-                      {language === "pt" ? "Severidade" : "Severity"}
-                    </label>
-                    <div className="flex items-center gap-1 rounded-md border border-border/60 bg-background p-0.5">
-                      {([
-                        ["all", language === "pt" ? "Todas" : "All"],
-                        ["Critical", language === "pt" ? "Críticas" : "Critical"],
-                        ["High", language === "pt" ? "Alta" : "High"],
-                        ["Medium", language === "pt" ? "Média" : "Medium"],
-                        ["Low", language === "pt" ? "Baixa" : "Low"],
-                      ] as const).map(([value, label]) => (
-                        <button
-                          key={value}
-                          type="button"
-                          onClick={() => setSelectedSeverity(value)}
-                          aria-pressed={selectedSeverity === value}
-                          className={cn(
-                            "flex-1 rounded px-2 py-1.5 text-xs font-semibold transition-colors",
-                            selectedSeverity === value ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground",
-                          )}
-                        >
-                          {label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-2 border-t pt-3">
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-medium text-muted-foreground">
-                        {language === "pt" ? "Período" : "Period"}
-                      </label>
-                      <Select value={timeRange} onValueChange={(v) => setTimeRange(v as TimeRange)}>
-                        <SelectTrigger className="h-9 w-full text-xs font-semibold">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {TIME_RANGES.map((range) => (
-                            <SelectItem key={range} value={range}>
-                              {range === "all" && (language === "pt" ? "Todo o período" : "All time")}
-                              {range === "24h" && (language === "pt" ? "Últimas 24h" : "Last 24h")}
-                              {range === "7d" && (language === "pt" ? "Últimos 7 dias" : "Last 7 days")}
-                              {range === "30d" && (language === "pt" ? "Últimos 30 dias" : "Last 30 days")}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-medium text-muted-foreground">
-                        {language === "pt" ? "Ordenar por" : "Sort by"}
-                      </label>
-                      <Select value={sortByRelevance ? "relevance" : "recent"} onValueChange={(v) => setSortByRelevance(v === "relevance")}>
-                        <SelectTrigger className="h-9 w-full text-xs font-semibold">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="recent">{language === "pt" ? "Mais recentes" : "Most recent"}</SelectItem>
-                          <SelectItem value="relevance">{language === "pt" ? "Mais relevantes" : "Most relevant"}</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-
-                  <Button
-                    variant={kevOnly ? "default" : "outline"}
-                    size="sm"
-                    className={cn(
-                      "h-8 w-full justify-start gap-1.5 border-t text-xs font-semibold",
-                      !kevOnly && "text-red-500 border-red-500/30 hover:bg-red-500/5",
-                      kevOnly && "bg-red-600 hover:bg-red-600/90 text-white",
-                    )}
-                    onClick={() => setKevOnly((v) => !v)}
-                  >
-                    <AlertTriangle className="h-3.5 w-3.5" />
-                    {language === "pt" ? "Só explorada ativamente (KEV)" : "Actively exploited only (KEV)"}
-                  </Button>
-
-                  {availableSources.length > 0 && (
-                    <div className="space-y-1.5 border-t pt-3">
-                      <label className="text-xs font-medium text-muted-foreground">
-                        {language === "pt" ? "Fonte" : "Source"}
-                      </label>
-                      <select
-                        value={selectedSource}
-                        onChange={(event) => setSelectedSource(event.target.value)}
-                        className="w-full rounded-md border bg-background px-2 py-1.5 text-xs"
-                      >
-                        <option value="all">{language === "pt" ? "Todas as fontes" : "All sources"}</option>
-                        {availableSources.map((source) => (
-                          <option key={source} value={source}>{source}</option>
-                        ))}
-                      </select>
-                    </div>
-                  )}
-
-                  {orgProfiles.length > 0 && (
-                    <div className="space-y-2 border-t pt-3">
-                      <label className="text-xs font-medium text-muted-foreground">
-                        {language === "pt" ? "Contexto da organização" : "Organization context"}
-                      </label>
-                      <select
-                        value={orgProfileId}
-                        onChange={(event) => setOrgProfileId(event.target.value)}
-                        className="w-full rounded-md border bg-background px-2 py-1.5 text-xs"
-                      >
-                        <option value="">{language === "pt" ? "Sem contexto" : "No context"}</option>
-                        {orgProfiles.map((profile) => (
-                          <option key={profile.id} value={profile.id}>{profile.name}</option>
-                        ))}
-                      </select>
-                      <label className="flex items-center gap-2 text-xs">
-                        <input type="checkbox" checked={orgOnly} disabled={!orgModel} onChange={(event) => setOrgOnly(event.target.checked)} />
-                        {language === "pt" ? "Só o meu contexto" : "My context only"}
-                      </label>
-                    </div>
-                  )}
-
-                  {activeFilterCount > 0 && (
-                    <Button variant="ghost" size="sm" className="h-8 w-full border-t text-xs text-muted-foreground" onClick={clearFilters}>
-                      {language === "pt" ? "Limpar filtros" : "Clear filters"}
-                    </Button>
-                  )}
-                </PopoverContent>
-              </Popover>
-
-              <Button
-                disabled={loadingNews || isRefreshingNews}
-                onClick={() => loadNews()}
-                className="h-9 shrink-0 gap-1.5 px-3 text-xs font-semibold"
-                aria-label={language === "pt" ? "Atualizar agora" : "Refresh now"}
-                title={language === "pt" ? "Atualizar agora" : "Refresh now"}
-              >
-                <RefreshCw className={cn("h-3.5 w-3.5", (loadingNews || isRefreshingNews) && "animate-spin")} />
-                <span className="hidden sm:inline">{language === "pt" ? "Atualizar agora" : "Refresh now"}</span>
-              </Button>
               </div>
             </div>
           </div>
@@ -892,15 +737,25 @@ const Newsletter = () => {
             {/* News Feed */}
             <div className="space-y-4">
               {/* Loading/Error/News List */}
-              <div className="flex flex-wrap items-center gap-2 pb-3">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+              <div className="overflow-x-auto border-b pb-3">
+                <div className="flex w-max min-w-full gap-1 sm:min-w-0" aria-label={language === 'pt' ? 'Visualização do feed' : 'Feed view'}>
+                  <Button type="button" size="sm" variant={newsView === 'posts' && feedView === 'table' ? 'secondary' : 'ghost'} className="h-7 gap-1.5 px-2 text-xs" aria-pressed={newsView === 'posts' && feedView === 'table'} onClick={() => setNewsSection('posts')}><List className="h-3.5 w-3.5" />{language === 'pt' ? 'Publicações' : 'Posts'}</Button>
+                  <Button type="button" size="sm" variant={feedView === 'cards' ? 'secondary' : 'ghost'} className="h-7 gap-1.5 px-2 text-xs" aria-pressed={feedView === 'cards'} onClick={() => { setNewsSection('posts'); setFeedView('cards'); }}><LayoutGrid className="h-3.5 w-3.5" />Cards</Button>
+                  <Button type="button" size="sm" variant={newsView === 'ips' ? 'secondary' : 'ghost'} className="h-7 px-2 text-xs" aria-pressed={newsView === 'ips'} onClick={() => setNewsSection('ips')}>IPs</Button>
+                  <Button type="button" size="sm" variant={newsView === 'domains' ? 'secondary' : 'ghost'} className="h-7 px-2 text-xs" aria-pressed={newsView === 'domains'} onClick={() => setNewsSection('domains')}>{language === 'pt' ? 'Domínios' : 'Domains'}</Button>
+                  <Button type="button" size="sm" variant={newsView === 'iocs' ? 'secondary' : 'ghost'} className="h-7 px-2 text-xs" aria-pressed={newsView === 'iocs'} onClick={() => setNewsSection('iocs')}>{language === 'pt' ? 'Base de IOCs' : 'IOC inventory'}</Button>
+                </div>
+              </div>
+              <div className="flex min-w-0 items-center gap-2" aria-label={language === "pt" ? "Categorias de notícias" : "News categories"}>
+                <div className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto pb-1">
+                <span className="shrink-0 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
                   {language === "pt" ? "Categorias" : "Categories"}
                 </span>
                 <button
                   type="button"
                   onClick={() => setCategoryFilter("")}
                   aria-pressed={categoryFilter === ""}
-                  className={`rounded-full border px-3 py-1 text-xs transition ${categoryFilter === "" ? "border-primary bg-primary/10 text-primary" : "text-muted-foreground hover:border-primary/40"}`}
+                  className={`shrink-0 whitespace-nowrap rounded-full border px-3 py-1 text-xs transition ${categoryFilter === "" ? "border-primary bg-primary/10 text-primary" : "text-muted-foreground hover:border-primary/40"}`}
                 >
                   {language === "pt" ? "Todas" : "All"}
                 </button>
@@ -910,29 +765,18 @@ const Newsletter = () => {
                     type="button"
                     onClick={() => setCategoryFilter(categoryFilter === name ? "" : name)}
                     aria-pressed={categoryFilter === name}
-                    className={`rounded-full border px-3 py-1 text-xs transition ${categoryFilter === name ? "border-primary bg-primary/10 text-primary" : "text-muted-foreground hover:border-primary/40"}`}
+                    className={`shrink-0 whitespace-nowrap rounded-full border px-3 py-1 text-xs transition ${categoryFilter === name ? "border-primary bg-primary/10 text-primary" : "text-muted-foreground hover:border-primary/40"}`}
                   >
                     {name === 'Artificial Intelligence' && language === 'pt' ? 'Inteligência artificial' : name} <span className="tabular-nums opacity-60">{categoryCounts[name] || 0}</span>
                   </button>
                 ))}
-                {categoriesByVolume.length > VISIBLE_CATEGORY_CAP && (
-                  <button
-                    type="button"
-                    onClick={() => setShowAllCategories((v) => !v)}
-                    className="text-xs font-medium text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
-                  >
-                    {showAllCategories
-                      ? (language === "pt" ? "Ver menos" : "Show less")
-                      : (language === "pt" ? `Ver todas (+${hiddenCategoryCount})` : `Show all (+${hiddenCategoryCount})`)}
-                  </button>
-                )}
-                <div className="ml-auto flex gap-1 rounded-lg border p-1" aria-label={language === 'pt' ? 'Visualização do feed' : 'Feed view'}>
-                  <Button type="button" size="sm" variant={newsView === 'posts' && feedView === 'table' ? 'secondary' : 'ghost'} className="h-7 gap-1.5 px-2 text-xs" aria-pressed={newsView === 'posts' && feedView === 'table'} onClick={() => setNewsSection('posts')}><List className="h-3.5 w-3.5" />{language === 'pt' ? 'Publicações' : 'Posts'}</Button>
-                  <Button type="button" size="sm" variant={feedView === 'cards' ? 'secondary' : 'ghost'} className="h-7 gap-1.5 px-2 text-xs" aria-pressed={feedView === 'cards'} onClick={() => { setNewsSection('posts'); setFeedView('cards'); }}><LayoutGrid className="h-3.5 w-3.5" />Cards</Button>
-                  <Button type="button" size="sm" variant={newsView === 'ips' ? 'secondary' : 'ghost'} className="h-7 px-2 text-xs" aria-pressed={newsView === 'ips'} onClick={() => setNewsSection('ips')}>IPs</Button>
-                  <Button type="button" size="sm" variant={newsView === 'domains' ? 'secondary' : 'ghost'} className="h-7 px-2 text-xs" aria-pressed={newsView === 'domains'} onClick={() => setNewsSection('domains')}>{language === 'pt' ? 'Domínios' : 'Domains'}</Button>
-                  <Button type="button" size="sm" variant={newsView === 'iocs' ? 'secondary' : 'ghost'} className="h-7 px-2 text-xs" aria-pressed={newsView === 'iocs'} onClick={() => setNewsSection('iocs')}>{language === 'pt' ? 'Base de IOCs' : 'IOC inventory'}</Button>
                 </div>
+                {hiddenCategories.length > 0 && <Popover open={categoryMenuOpen} onOpenChange={setCategoryMenuOpen}>
+                  <PopoverTrigger asChild><Button variant="ghost" size="sm" className="h-8 shrink-0 gap-1 px-2 text-xs text-muted-foreground">{language === 'pt' ? 'Mais categorias' : 'More categories'}<ChevronDown className="h-3 w-3" /></Button></PopoverTrigger>
+                  <PopoverContent align="end" className="w-64 rounded-xl bg-card p-2" aria-label={language === 'pt' ? 'Outras categorias' : 'Other categories'}>
+                    {hiddenCategories.map(name => <button key={name} type="button" className="flex w-full items-center justify-between gap-3 rounded-md px-3 py-2 text-left text-sm hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" onClick={() => { setCategoryFilter(name); setCategoryMenuOpen(false); }}><span>{name === 'Artificial Intelligence' && language === 'pt' ? 'Inteligência artificial' : name}</span><span className="text-xs tabular-nums text-muted-foreground">{categoryCounts[name] || 0}</span></button>)}
+                  </PopoverContent>
+                </Popover>}
               </div>
 
               {/* DEN-02: os chips de categoria são o filtro primário, porque
@@ -997,7 +841,7 @@ const Newsletter = () => {
                     ? "Ajuste a busca, os filtros ou os fornecedores monitorados nas configurações."
                     : "Adjust your search, filters or monitored vendors in settings."}
                   action={monitoring.data?.preferences.mode === "selected" && !advisories.length ? (
-                    <Button asChild size="sm"><Link to="/settings?section=monitoring&from=/newsletter#news-vendors">{language === "pt" ? "Selecionar fornecedores" : "Select vendors"}</Link></Button>
+                    <Button asChild size="sm"><Link to="/settings?section=monitoring&from=/newsletter#news-vendors">{language === "pt" ? "Ajustar monitoramento" : "Adjust monitoring"}</Link></Button>
                   ) : (
                     <Button onClick={() => loadNews()} size="sm" className="gap-2">
                       <RefreshCw className="h-3.5 w-3.5" />

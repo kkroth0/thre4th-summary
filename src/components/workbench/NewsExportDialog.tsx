@@ -51,7 +51,7 @@ export function NewsExportDialog({ pt, view }: { pt: boolean; view: string }) {
   };
 
   return <Dialog open={open} onOpenChange={value => { if (busy) return; setOpen(value); if (value) setDataset(view === 'posts' ? 'news' : 'iocs'); }}>
-    <DialogTrigger asChild><Button variant="outline" size="sm" className="h-9 gap-1.5 px-3 text-xs"><Download className="h-3.5 w-3.5" />{l('Exportar por período', 'Export by date')}</Button></DialogTrigger>
+    <DialogTrigger asChild><Button variant="outline" size="icon" className="h-9 w-9 shrink-0" aria-label={l('Exportar por período', 'Export by date')} title={l('Exportar por período', 'Export by date')}><Download className="h-4 w-4" aria-hidden="true" /></Button></DialogTrigger>
     <DialogContent className="max-w-lg">
       <DialogHeader><DialogTitle>{l('Exportar notícias e IOCs', 'Export news and IOCs')}</DialogTitle><DialogDescription>{view === 'iocs' ? l('Exporte as evidências da base unificada no período, incluindo notícias e fontes externas disponíveis na sua conta.', 'Export unified inventory evidence for this period, including news and external sources available to your account.') : l('Baixe o histórico coletado no período, conforme os fornecedores monitorados. Inclui todas as páginas de resultados.', 'Download the collected archive for this period, respecting monitored vendors. Includes every result page.')}</DialogDescription></DialogHeader>
       <div className="grid grid-cols-2 gap-4">
