@@ -15,4 +15,10 @@
 - Narrow-layout browser observation: no horizontal page overflow; filter controls remained within the viewport. Temporary viewport override reset after QA.
 
 ## Production
-Pending CI and deployment verification. Screenshots will remain local; account/profile details are not committed.
+- Functional release `6645ef5eee0bfdbaf0f572be45f7154732cf23e8` verified exactly in VPS deployment logs. CI 39269863390 succeeded (825 backend tests, 257 frontend unit tests, 7 brand tests). VPS 39270240997 and Cloudflare Pages 39270241110 succeeded.
+- Authenticated production feed loaded 6,221 stories. Export trigger measured 167px before and 36px after deployment. The monitored-vendor shortcut is absent.
+- Main filter fields each measured 187px at the tested desktop viewport. Selecting Critical + KEV produced the two expected active chips and all visible rows contained KEV evidence; clearing restored the default feed.
+- The compact export trigger opens the original Export news and IOCs dialog. View navigation and category row are distinct. No horizontal page overflow was observed.
+- Screenshots saved locally under the temporary `news-layout-2026-10-19` directory, not committed. Both agent-created browser tabs closed and the temporary fixture server stopped.
+- Repository lint passed with the unrelated untracked `transforma-mobile/` project excluded from the local invocation. That project and all other unrelated files were preserved.
+- The separate dependency security scan retains the existing dependency findings; this UI change does not modify dependencies.
