@@ -38,14 +38,14 @@ export const PUBLIC_SEO_ROUTES: SeoRoute[] = [
     changefreq: "weekly",
     metadata: {
       pt: {
-        title: "ThreatSumm4ry | Plataforma CTI open source",
+        title: "ThreatSumm4ry | CTI para analistas",
         description:
-          "Colete feeds de segurança, salve publicações para sua pesquisa e produza relatórios. ThreatSumm4ry é uma plataforma CTI open source para pesquisa de ameaças.",
+          "Inteligência de ameaças para analistas. Correlacione notícias, IOCs, CVEs, atores e malware, investigue evidências e produza relatórios com contexto.",
       },
       en: {
-        title: "ThreatSumm4ry | Open Source CTI Platform",
+        title: "ThreatSumm4ry | CTI for Analysts",
         description:
-          "Collect security feeds, save publications for your research and produce reports. ThreatSumm4ry is an open source CTI platform for threat research.",
+          "Threat intelligence for analysts. Correlate news, IOCs, CVEs, actors and malware, investigate evidence and produce reports with context.",
       },
     },
   },

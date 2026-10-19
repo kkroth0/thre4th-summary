@@ -1,7 +1,8 @@
 # Direção do produto
 
-ThreatSumm4ry é uma plataforma CTI open source para coletar feeds de segurança,
-organizar pesquisa e produzir inteligência rastreável até as publicações originais.
+ThreatSumm4ry é uma plataforma de inteligência de ameaças feita para o analista:
+conecta notícias, indicadores, vulnerabilidades, atores e malware para apoiar
+investigações e produzir relatórios com evidências rastreáveis às fontes originais.
 A licença do projeto é AGPL-3.0-only; serviços e fontes de terceiros têm suas
 próprias condições de uso.
 

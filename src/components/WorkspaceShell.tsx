@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { ChevronDown, Github, PanelLeftClose, PanelLeftOpen, Settings } from 'lucide-react';
+import { ChevronDown, PanelLeftClose, PanelLeftOpen, Settings } from 'lucide-react';
 import { BrandMark } from './BrandMark';
 import { useNavCatalog } from './useNavCatalog';
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from './ui/sheet';
@@ -77,7 +77,7 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
         const Icon = item!.icon; const active = isRouteActive(item!.path, pathname);
         return <Link key={item!.path} to={item!.path} onClick={() => setMobileOpen(false)} aria-current={active ? 'page' : undefined} aria-label={item!.label} title={rail ? item!.label : undefined} className={cn('flex min-h-8 items-center gap-2 rounded px-2 py-1.5 text-xs hover:bg-sidebar-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring', rail && 'justify-center px-0', active ? 'bg-primary/10 font-semibold text-primary' : 'text-muted-foreground')}><Icon className="h-4 w-4 shrink-0" />{!rail && <span>{item!.label}</span>}</Link>;
       })}
-      {!rail && <a href="https://github.com/kkroth0/thre4th-summary" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 px-2 py-2 text-[10px] text-muted-foreground hover:text-foreground"><Github className="h-3.5 w-3.5" />Open source · AGPL-3.0</a>}
+      {!rail && <p className="px-2 py-2 text-[10px] text-muted-foreground">{pt ? 'CTI para analistas' : 'CTI for analysts'}</p>}
     </div>
   </>;
   return <WorkspaceNavigationContext.Provider value={{ openMenu: () => {
