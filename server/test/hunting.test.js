@@ -117,10 +117,10 @@ test('feedback persists per user across restart and invalid feedback is rejected
 
 test('AI generation is single-flight, cached, source-bound and never replaces repository KQL', async () => {
   let calls = 0, release; const gate = new Promise(resolve => { release = resolve; });
-  const service = createHuntingService({ library, getNews: () => [news()], now: () => now, generate: async ({ candidates }) => { calls++; await gate; return { hypotheses: [{ id: 'invented', title: 'bad' }, { id: candidates[0].id, title: 'Investigar PowerShell', hypothesis: 'Pode haver execução codificada.', reason: 'Comportamento descrito na fonte.' }] }; } });
+  const service = createHuntingService({ library, getNews: () => [news({ cves: ['CVE-2026-12345'] })], now: () => now, generate: async ({ candidates }) => { calls++; await gate; return { hypotheses: [{ id: 'invented', title: 'bad' }, { id: candidates[0].id, title: 'Investigar PowerShell', hypothesis: 'Pode haver execução codificada.', reason: 'Comportamento descrito na fonte.' }] }; } });
   assert.equal((await service.overview('alice', 'day')).aiStatus, 'processing'); await service.overview('alice', 'day'); assert.equal(calls, 1);
   release(); await service.idle(); const result = await service.overview('alice', 'day');
-  assert.equal(result.aiStatus, 'ready'); assert.equal(result.hypotheses[0].aiUsed, true); assert.equal(result.hypotheses[0].query.query, q.query); assert.equal(calls, 1);
+  assert.equal(result.aiStatus, 'ready'); assert.equal(result.hypotheses.length, 1); assert.equal(result.hypotheses[0].aiUsed, true); assert.equal(result.hypotheses[0].query.query, q.query); assert.equal(calls, 1);
   service.close();
 });
 

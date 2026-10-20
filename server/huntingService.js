@@ -136,14 +136,14 @@ export function createHuntingService({ library, getNews, getCves = async () => [
       seen.add(choice.id); output.push({ ...original, title: clean(choice.title, 180), hypothesis: clean(choice.hypothesis, 600), reason: clean(choice.reason, 700), aiUsed: true });
     }
     if (!output.length) throw Error('Invalid hunting response');
-    return [...output, ...base.filter(row => !seen.has(row.id))].slice(0, 12);
+    return output.slice(0, 8);
   }
   async function overview(owner, period) {
     const window = huntingWindow(period, now()), news = getNews(owner), revision = library.revision();
     if (indexedRevision !== revision) { index = createHuntingIndex(library.all()); indexedRevision = revision; }
     // Inventory queries are cached by the worker; news is read from local stores.
     const cves = await getCves(); const votes = votesFor(owner);
-    const signature = fingerprint(JSON.stringify([3, owner, period, window.from.slice(0, 13), revision, news.map(r => [r.link, r.contentHash, r.pubDate, r.score]), cves.map(r => [r.id, r.dateAdded, r.modified]), votes]));
+    const signature = fingerprint(JSON.stringify([4, owner, period, window.from.slice(0, 13), revision, news.map(r => [r.link, r.contentHash, r.pubDate, r.score]), cves.map(r => [r.id, r.dateAdded, r.modified]), votes]));
     let base = computed.get(signature);
     if (!base || now() - base.at > 5 * 60000) { base = { ...buildHuntingCandidates({ news, cves, library: library.all(), index, period, now: now(), votes }), at: now() }; computed.set(signature, base); if (computed.size > 32) computed.delete(computed.keys().next().value); }
     const candidates = base.candidates, key = signature + ':' + Math.floor(now() / (6 * 3600000));
