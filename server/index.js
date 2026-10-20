@@ -3774,8 +3774,11 @@ app.get('/api/actors/:id/evidence', requirePremium, (req, res) => {
 app.get('/api/actors/:id', (req, res) => {
     const session=verifySession(getCookie(req,'ts_session'));
     const owner=session&&sessionHasPremium(session)?session.sub:'';
-    const found=iocIntelligence.entities('actor',owner).find(row=>row.id===req.params.id);
-    const actor = loadActors().actors.find(a => a.id === req.params.id) || (found ? {...found,aliases:[],country:'',motivation:'',sectors:[],targets:[],techniques:[],software:[],description:`Adversário informado pela fonte ${found.source}.`,refs:iocIntelligence.publications({owner,kind:'actor',id:found.id}).slice(0,10).map(row=>row.link),verification:'source-reported'}:null);
+    let actor = loadActors().actors.find(a => a.id === req.params.id);
+    if (!actor) {
+        const found=iocIntelligence.entities('actor',owner).find(row=>row.id===req.params.id);
+        actor=found ? {...found,aliases:[],country:'',motivation:'',sectors:[],targets:[],techniques:[],software:[],description:`Adversário informado pela fonte ${found.source}.`,refs:iocIntelligence.publications({owner,kind:'actor',id:found.id}).slice(0,10).map(row=>row.link),verification:'source-reported'}:null;
+    }
     if (!actor) return res.status(404).json({ error: 'actor not found' });
     res.set('Cache-Control', owner?'private, no-store':'public, max-age=60');
     res.json(actor);

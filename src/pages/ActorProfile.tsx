@@ -28,7 +28,7 @@ function ActorTags({ title, items, pt }: { title: string; items: string[]; pt: b
 }
 
 export function ActorProfile({ id, summary, pt, onBack, initialTab = 'ips' }: { id: string; summary?: ActorListItem; pt: boolean; onBack: () => void; initialTab?: string }) {
-  const [tab, setTab] = useState(['ips', 'domains', 'hashes', 'posts'].includes(initialTab) ? initialTab : 'ips'); const [allAliases, setAllAliases] = useState(false);
+  const [tab, setTab] = useState(['ips', 'domains', 'hashes', 'posts', 'infrastructure', 'techniques', 'software', 'details', 'references'].includes(initialTab) ? initialTab : 'ips'); const [allAliases, setAllAliases] = useState(false);
   const [days, setDays] = useState(180); const { auth } = useAuth();
   const evidence = useQuery({ queryKey: ['actor-evidence', auth.login || '', id, days], queryFn: ({ signal }) => fetchActorEvidence(id, days, signal), staleTime: 300_000, retry: false });
   const detail = useQuery({ queryKey: ['actor-detail', id], queryFn: async ({ signal }) => {
