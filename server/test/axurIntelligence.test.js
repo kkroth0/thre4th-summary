@@ -45,6 +45,14 @@ test('uses a matched catalog alias without creating a second actor identity',()=
   assert.equal(rows[1].actors[0].id,'G0007');
 });
 
+test('links an explicit unambiguous source family but never a substring of an AV detection label',()=>{
+  const matchMalware=(text,options)=>options.structured?[{id:'mirai',name:'Mirai',matched:'Mirai'}]:[];
+  const rows=axurObservations([{...ioc,threatName:'Mirai'}],[],{scope,matchMalware});
+  assert.equal(rows[0].malwares[0].id,'mirai');assert.equal(rows[0].relation,'mentioned-by-source');
+  const generic=axurObservations([{...ioc,threatName:'Generic.Mirai.Trojan'}],[],{scope,matchMalware});
+  assert.equal(generic[0].malwares,undefined);
+});
+
 test('reads both GET endpoints, batches repeated insights, resumes and finishes without requesting an extra page', async t => {
   const f = fixture(t,(url,{params})=>url.endsWith('/iocs')?page(params.page,[{...ioc,id:String(params.page)}]):[insight]);
   await f.importer.run({maxPages:1});assert.equal(f.importer.status().page,2);

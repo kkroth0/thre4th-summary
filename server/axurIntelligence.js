@@ -10,7 +10,7 @@ function entities(values, kind, match) {
   return names(values).map(name => {
     // Resolve only an exact catalog name/alias. The report's narrative must not
     // turn a different actor into an attribution for this indicator.
-    const known = (match?.(kind === 'actor' ? `Threat actor group: ${name}` : name) || []).find(entity => [entity.name, entity.matched, ...(entity.aliases || [])].some(alias => String(alias || '').toLowerCase() === name.toLowerCase()));
+    const known = (match?.(kind === 'actor' ? `Threat actor group: ${name}` : name, { structured: kind === 'malware' }) || []).find(entity => [entity.name, entity.matched, ...(entity.aliases || [])].some(alias => String(alias || '').toLowerCase() === name.toLowerCase()));
     return known || { id: `axur:${kind}:${id(name)}`, name };
   });
 }
@@ -27,7 +27,8 @@ export function axurObservations(iocs, insights, { scope, matchActors, matchMalw
       threatLevel: ioc.threatLevel, trustFactor: ioc.trustFactor, relatedTTPs: ioc.relatedTTPs || [], relatedInsights: ioc.relatedInsights || [], enrichedAt: iso(ioc.enrichedAt) };
     // AV detection labels (e.g. Generic.Trojan) are retained as evidence rather
     // than automatically creating a malware family or threat actor.
-    const rows = [{ ...base, externalId: `ioc:${ioc.id}`, title: ioc.description || ioc.threatName || `IOC ${ioc.source || 'Axur'}`, payload }];
+    const family = ioc.threatName ? (matchMalware?.(ioc.threatName, { structured:true }) || []).filter(entity => [entity.name,entity.matched].some(name => String(name || '').toLowerCase() === ioc.threatName.toLowerCase())) : [];
+    const rows = [{ ...base, externalId: `ioc:${ioc.id}`, title: ioc.description || ioc.threatName || `IOC ${ioc.source || 'Axur'}`, payload, ...(family.length === 1 ? { malwares:family, relation:'mentioned-by-source' } : {}) }];
     for (const reportId of new Set(ioc.relatedInsights || [])) {
       const report = reports.get(reportId);
       if (!report) continue;

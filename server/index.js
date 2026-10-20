@@ -2370,7 +2370,7 @@ function accountAxurImport(owner) {
     if (!axurImports.has(owner)) axurImports.set(owner, createAxurImport({ store: iocIntelligence, scope: owner,
         getKey: () => getUserApiKey(owner, 'axur'), http: axios,
         canWrite: () => { const disk = fs.statfsSync(path.dirname(process.env.IOC_INTELLIGENCE_PATH || path.join(__dirname, '.ioc-intelligence.sqlite'))); return disk.bavail * disk.bsize > 2 * 1024 ** 3; },
-        matchActors: text => matchActors(text, actorIndex), matchMalware: text => matchMalware(text, malwareIndex) }));
+        matchActors: text => matchActors(text, actorIndex), matchMalware: (text, options) => matchMalware(text, malwareIndex, options) }));
     return axurImports.get(owner);
 }
 let axurCollectionFlight;
