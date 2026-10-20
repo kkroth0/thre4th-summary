@@ -94,6 +94,14 @@ foram preservadas; o ator foi resolvido uma vez, em vez de uma vez por IOC.
 O perfil Akira também apresentou seus aliases, referências, endereço onion e
 contadores de evidências na interface autenticada.
 
+A auditoria final de persistência
+[39491767889](https://github.com/kkroth0/thre4th-summary/actions/runs/39491767889)
+passou: 283.921 observações Axur persistidas, 276.554 indicadores únicos,
+5.087 vínculos com 177 atores e 5.811 vínculos com 1.024 CVEs; nenhuma observação
+Axur no escopo público. São leituras durante a importação, sem snapshot
+transacional entre contagens. Depois dessa leitura, a interface já mostrava
+278.000 registros percorridos e 285.074 evidências processadas, em andamento.
+
 ## Próximas otimizações, por prioridade
 
 | Prioridade | Fluxo e evidência no código | Mudança proposta | Como validar |
