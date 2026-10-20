@@ -108,9 +108,12 @@ export function createIocIntelligence({filePath=':memory:',now=()=>Date.now()}={
     else clauses.push('o.id IN (SELECT DISTINCT observation FROM entity_links)');
     // Catalog correlation needs reference metadata, not full provider payloads.
     // Iterate all matching evidence so older relationships survive growth beyond 10k.
+    // Production EXPLAIN chose observations_scope even with the IN filter:
+    // 20 actor matches took 10.9s. Require primary-key probes for the linked IDs
+    // rather than scanning every observation in the owner's scope.
     const records=db.prepare(`SELECT o.provider,o.external_id,o.published,json_extract(o.details,'$.link') link,json_extract(o.details,'$.title') title,i.type,i.value,
       (SELECT json_group_array(json_object('kind',e.kind,'id',e.entity,'name',e.name)) FROM entity_links e WHERE e.observation=o.id) entities
-      FROM observations o JOIN indicators i ON i.id=o.indicator WHERE ${clauses.join(' AND ')} AND o.provider<>'news' ORDER BY o.published DESC`).iterate(...args);
+      FROM observations o INDEXED BY sqlite_autoindex_observations_1 JOIN indicators i ON i.id=o.indicator WHERE ${clauses.join(' AND ')} AND o.provider<>'news' ORDER BY o.published DESC`).iterate(...args);
     const grouped=new Map();
     for(const record of records){const key=record.provider+':'+record.external_id;let row=grouped.get(key);
       if(!row){row={link:record.link,title:record.title,source:record.provider,pubDate:record.published,actors:[],malware:[],cves:[],iocs:{ips:[],domains:[],hashes:[],urls:[]}};grouped.set(key,row);}

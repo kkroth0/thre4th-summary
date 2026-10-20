@@ -20,8 +20,9 @@ const schema=db.prepare("SELECT name,sql FROM sqlite_master WHERE type='index' A
 const predicate="o.scope IN (?,?) AND o.provider<>'news'",args=['global',owner,'actor','G1024'];
 const oldSql=`SELECT COUNT(*) count FROM observations o WHERE ${predicate} AND EXISTS(SELECT 1 FROM entity_links e WHERE e.observation=o.id AND e.kind=? AND e.entity=?)`;
 const newSql=`SELECT COUNT(*) count FROM observations o WHERE ${predicate} AND o.id IN (SELECT observation FROM entity_links WHERE kind=? AND entity=?)`;
-const plans={before:db.prepare('EXPLAIN QUERY PLAN '+oldSql).all(...args).map(row=>row.detail),after:db.prepare('EXPLAIN QUERY PLAN '+newSql).all(...args).map(row=>row.detail)};
-const actorMatches=measure('indexed-actor-observation-count',()=>db.prepare(newSql).get(...args).count);
+const forcedSql=newSql.replace('observations o WHERE','observations o INDEXED BY sqlite_autoindex_observations_1 WHERE');
+const plans={before:db.prepare('EXPLAIN QUERY PLAN '+oldSql).all(...args).map(row=>row.detail),filtered:db.prepare('EXPLAIN QUERY PLAN '+newSql).all(...args).map(row=>row.detail),after:db.prepare('EXPLAIN QUERY PLAN '+forcedSql).all(...args).map(row=>row.detail)};
+const actorMatches=measure('primary-key-actor-observation-count',()=>db.prepare(forcedSql).get(...args).count);
 const stat=file=>{try{return fs.statSync(file).size;}catch{return 0;}};
 const disk=fs.statfsSync(path.dirname(file));
 const axur=state(`axur-import-v1:${owner}`);
