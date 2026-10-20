@@ -223,6 +223,13 @@ export const PUBLIC_SEO_ROUTES: SeoRoute[] = [
 ];
 
 export const DEFAULT_SEO_ROUTE = PUBLIC_SEO_ROUTES[0];
+const HUNTING_SEO_ROUTE: SeoRoute = {
+  path: '/hunting', priority: '0.8', changefreq: 'daily',
+  metadata: {
+    pt: { title: 'O que caçar hoje | ThreatSumm4ry', description: 'Descubra o que caçar hoje, na semana e no mês. Hipóteses ligadas a notícias, CVEs e MITRE ATT&CK, com consultas KQL e feedback do analista.' },
+    en: { title: 'Threat Hunting | ThreatSumm4ry', description: 'Discover what to hunt today, this week and this month. Source-backed hypotheses linked to news, CVEs and MITRE ATT&CK, with KQL and analyst feedback.' },
+  },
+};
 
 export const getCanonicalUrl = (path: string) => {
   const normalizedPath = normalizePath(path);
@@ -231,7 +238,7 @@ export const getCanonicalUrl = (path: string) => {
 
 export const getSeoRoute = (path: string) => {
   const normalizedPath = normalizePath(path);
-  return PUBLIC_SEO_ROUTES.find((route) => route.path === normalizedPath) ?? DEFAULT_SEO_ROUTE;
+  return normalizedPath === HUNTING_SEO_ROUTE.path ? HUNTING_SEO_ROUTE : PUBLIC_SEO_ROUTES.find((route) => route.path === normalizedPath) ?? DEFAULT_SEO_ROUTE;
 };
 
 export const getSeoLanguage = (language: string): SeoLanguage => (language === "pt" ? "pt" : "en");

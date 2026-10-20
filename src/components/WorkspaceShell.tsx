@@ -35,7 +35,7 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
   const catalog = [homeItem, ...navGroups.flatMap(group => group.items)];
   const sections = [
     { label: pt ? 'Plataforma' : 'Platform', paths: ['/dashboard', '/analyzer', '/bulk', '/knowledge', '/relatorios'] },
-    { label: pt ? 'Inteligência de ameaças' : 'Threat hunting', paths: ['/newsletter', '/atores', '/malware', '/cves', '/phishing-analyzer', '/domain-monitoring', '/attack-surface', '/threat-map'] },
+    { label: pt ? 'Inteligência de ameaças' : 'Threat hunting', paths: ['/newsletter', '/hunting', '/atores', '/malware', '/cves', '/phishing-analyzer', '/domain-monitoring', '/attack-surface', '/threat-map'] },
     { label: pt ? 'Correções' : 'Patches', paths: ['/patch-tuesday', '/sap-patch', '/ot-patch-day', '/ai-patch-day'] },
   ];
   const toggle = () => setCollapsed(value => {

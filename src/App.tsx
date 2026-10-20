@@ -21,6 +21,7 @@ const AttackSurface = lazy(() => import("./pages/AttackSurface"));
 const ExposureWatchlist = lazy(() => import("./pages/ExposureWatchlist"));
 const Newsletter = lazy(() => import("./pages/Newsletter"));
 const IntelligenceOverview = lazy(() => import("./pages/IntelligenceOverview"));
+const HuntingDashboard = lazy(() => import("./pages/HuntingDashboard"));
 const MalwareCatalog = lazy(() => import("./pages/MalwareCatalog"));
 const CveDashboard = lazy(() => import("./pages/CveDashboard"));
 const Actors = lazy(() => import("./pages/Actors"));
@@ -57,6 +58,7 @@ const App = () => (
                 <Route path="/analyzer" element={<Index />} />
                 <Route path="/bulk" element={<BulkEnrichment />} />
                 <Route path="/dashboard" element={<PremiumRoute feature="advisory-feed"><IntelligenceOverview /></PremiumRoute>} />
+                <Route path="/hunting" element={<PremiumRoute feature="hunting"><HuntingDashboard /></PremiumRoute>} />
                 <Route path="/malware" element={<MalwareCatalog />} />
                 <Route path="/cves" element={<CveDashboard />} />
                 <Route path="/atores" element={<Actors />} />

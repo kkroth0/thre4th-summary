@@ -1,5 +1,5 @@
 import type React from "react";
-import { Activity, Layers, Bug, Rss, Bookmark, FileSearch, Users, MapPinned, BookOpen, Shield, CalendarCheck, ShieldCheck, Search, Mail, Radar, Globe } from "lucide-react";
+import { Activity, Layers, Bug, Rss, Bookmark, FileSearch, Users, MapPinned, BookOpen, Shield, CalendarCheck, ShieldCheck, Search, Mail, Radar, Globe, Crosshair } from "lucide-react";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { actorPageCopy } from "@/pages/actorsView";
 
@@ -34,6 +34,7 @@ export function useNavCatalog() {
       label: pt ? "Pesquisa e contexto" : "Research and context",
       items: [
         { path: '/dashboard', label: pt ? 'Visão geral' : 'Overview', icon: Activity },
+        { path: '/hunting', label: 'Threat Hunting', description: pt ? 'O que caçar hoje, na semana e no mês.' : 'What to hunt today, this week and this month.', icon: Crosshair, premium: true },
         { path: '/bulk', label: pt ? 'Enriquecimento em lote' : 'Bulk enrichment', icon: Layers },
         { path: '/malware', label: 'Malware', icon: Bug },
         {

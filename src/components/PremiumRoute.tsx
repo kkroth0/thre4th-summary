@@ -8,9 +8,10 @@ import { Footer } from "@/components/Footer";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useAuth } from "@/contexts/AuthContext";
 
-type Feature = "threat-brief" | "advisory-feed" | "exposure-watchlist" | "knowledge";
+type Feature = "threat-brief" | "advisory-feed" | "exposure-watchlist" | "knowledge" | "hunting";
 
 const COPY: Record<Feature, { pt: [string, string]; en: [string, string] }> = {
+  hunting: { pt: ['Threat Hunting', 'Hipóteses e consultas KQL orientadas pela inteligência da sua base.'], en: ['Threat Hunting', 'Hunting hypotheses and KQL grounded in your intelligence.'] },
   "threat-brief": {
     pt: ["Relatórios", "Produza resumos a partir das suas fontes."],
     en: ["Reports", "Produce summaries from your sources."],

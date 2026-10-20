@@ -56,6 +56,21 @@ test('domain investigation and actor archive endpoints enforce premium access an
     assert.equal(activity.status, 200); assert.equal(activity.headers.get('Cache-Control'), 'private, no-store');
 });
 
+test('hunting requires authorization, validates inputs and isolates persistent feedback', async () => {
+    assert.equal((await fetch(BASE + '/api/hunting/overview')).status, 401);
+    assert.equal((await fetch(BASE + '/api/hunting/overview?period=bad', { headers: AUTH_HEADERS })).status, 400);
+    const response = await fetch(BASE + '/api/hunting/overview?period=month', { headers: AUTH_HEADERS });
+    assert.equal(response.status, 200); assert.equal(response.headers.get('cache-control'), 'private, no-store');
+    const body = await response.json(); assert.ok(body.library.queries > 1000); assert.equal(body.aiStatus, 'disabled');
+    const input = { queryId: 'exposure-CVE-2026-12345', vote: 'yes' };
+    const post = (headers, value) => fetch(BASE + '/api/hunting/feedback', { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify(value) });
+    assert.equal((await post({}, input)).status, 401);
+    assert.equal((await post(AUTH_HEADERS, { ...input, vote: 'bad' })).status, 400);
+    assert.equal((await post({ ...AUTH_HEADERS, Origin: 'https://untrusted.example' }, input)).status, 403);
+    assert.equal((await post(AUTH_HEADERS, input)).status, 200);
+    assert.equal((await fetch(BASE + '/api/hunting/overview?period=month', { headers: AUTH_HEADERS })).status, 200);
+});
+
 before(async () => {
     writeFileSync(NEWS_STORIES_PATH, '[]');
     writeFileSync(PHISH_WATCH_PATH, JSON.stringify({ hits: [{ id: 'owned:example.net', profileId: 'owned', ownerId: 'smoke-user', apexDomain: 'example.net', domain: 'example.net', status: 'new', score: 20, reasons: ['brand-glued'], firstSeen: '2026-10-08T12:00:00Z', lastSeen: new Date().toISOString() }], runs: {} }));

@@ -63,6 +63,7 @@ server/.vulnerability-downloads/
 server/.ioc-intelligence.sqlite*
 
 server/.weekly-reports.sqlite*
+server/.hunting.sqlite*
 
 .codex-weekly-template/
 

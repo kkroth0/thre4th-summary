@@ -113,6 +113,9 @@ import {
 import { createRdap, takedownTargets } from './rdap.js';
 import { createQuotaReader } from './vendorQuotas.js';
 import { createKnowledgeAssistant, createAssistantGenerator } from './assistantKnowledge.js';
+import { createHuntingLibrary } from './huntingLibrary.js';
+import { createHuntingService } from './huntingService.js';
+import { createHuntingGenerator } from './huntingAi.js';
 import { createTelegramIntegration } from './telegramIntegration.js';
 import { ORG_REGIONS, ORG_SECTORS, createProfileStore } from './orgProfiles.js';
 import { buildThreatModel } from './orgThreatModel.js';
@@ -3286,6 +3289,34 @@ app.post('/api/assistant/query', requirePremium, telegramSettingsGuard, assistan
     try { res.json(await telegramIntegration.preview(req.user.sub, req.body.question, req.body.aiEnabled === true)); }
     catch { res.status(503).json({ error: 'Consulta indisponível. Tente novamente.' }); }
 });
+
+const huntingLibrary = createHuntingLibrary({ cachePath: process.env.NODE_ENV === 'test' ? undefined : path.join(__dirname, '.feed-cache/hunting-library.json'), http: axios, token: process.env.GITHUB_API_TOKEN || process.env.GITHUB_TOKEN || '' });
+let huntingCveCache;
+function huntingCves() {
+    if (!huntingCveCache || huntingCveCache.until < Date.now()) {
+        huntingCveCache = { until: Date.now() + 5 * 60000, task: Promise.allSettled([queryVulnerabilities('list', { size: 100 }), queryVulnerabilities('list', { view: 'weaponized', size: 100 })]).then(results => [...new Map(results.flatMap(result => result.status === 'fulfilled' ? result.value.rows : []).map(row => [row.id, row])).values()]) };
+    }
+    return huntingCveCache.task;
+}
+const huntingService = createHuntingService({
+    library: huntingLibrary, filePath: process.env.HUNTING_DB_PATH || (process.env.NODE_ENV === 'test' ? ':memory:' : path.join(__dirname, '.hunting.sqlite')),
+    getNews: owner => filterMonitoredNews(newsArchiveStore.all(), newsMonitoringStore.get(owner)), getCves: huntingCves,
+    generate: process.env.NODE_ENV !== 'test' && process.env.OPENROUTER_API_KEY ? createHuntingGenerator({ http: axios, getKey: () => process.env.OPENROUTER_API_KEY, model: process.env.OPENROUTER_HUNTING_MODEL || 'deepseek/deepseek-v4.1-flash' }) : undefined,
+});
+const huntingLimiter = rateLimit({ windowMs: 60000, max: 45, keyGenerator: req => req.user.sub, standardHeaders: true, legacyHeaders: false, message: { error: 'Aguarde um minuto para atualizar as caças.' } });
+app.get('/api/hunting/overview', requirePremium, huntingLimiter, async (req, res) => {
+    res.set('Cache-Control', 'private, no-store');
+    try { res.json(await huntingService.overview(req.user.sub, req.query.period || 'day')); }
+    catch (error) { res.status(error.status || 503).json({ error: error.status === 400 ? error.message : 'Não foi possível preparar as caças. Tente novamente.' }); }
+});
+app.post('/api/hunting/feedback', requirePremium, telegramSettingsGuard, huntingLimiter, (req, res) => {
+    try { res.json(huntingService.feedback(req.user.sub, req.body?.queryId, req.body?.vote)); }
+    catch (error) { res.status(error.status || 503).json({ error: error.status ? error.message : 'Não foi possível salvar o retorno.' }); }
+});
+if (process.env.NODE_ENV !== 'test') {
+    setTimeout(() => { void huntingLibrary.sync().catch(() => {}); }, 120000).unref();
+    setInterval(() => { void huntingLibrary.sync().catch(() => {}); }, 24 * 3600000).unref();
+}
 
 const weeklySourceCache=new Map();
 async function weeklyInputs(range){
