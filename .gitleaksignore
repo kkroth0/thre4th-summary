@@ -1,0 +1,6 @@
+# Public BlackCat/ALPHV actor name in imported KQL descriptions, never a credential.
+# Markdown flattening placed it after "Token Description Actor:" and triggered
+# generic-api-key twice on the same historical JSON line. The parser now formats
+# this prose without an assignment. This exception matches only that commit,
+# rule, file and line; future catalog additions remain scanned.
+9113571ee97d1a387d7c58f78f4ba8ac42c09635:server/data/hunting-library.json:generic-api-key:1

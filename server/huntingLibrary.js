@@ -30,7 +30,7 @@ export function parseHuntingFile(source, file, text, revision) {
     const platformText = [heading, file].join(' ');
     const platform = /sentinel|log analytics|syslog|cef|azure activity|securityevents?/i.test(platformText) ? 'sentinel' : /defender|endpoint|xdr|m365/i.test(platformText) ? 'defender' : /\bTimeGenerated\b/.test(query) ? 'sentinel' : /\bTimestamp\b|\bDevice\w+Events\b/.test(query) ? 'defender' : 'unknown';
     const tables = [...new Set([...query.matchAll(/(?:^|\n)\s*([A-Z][A-Za-z0-9_]+)\s*(?=\r?\n\s*\||\s*\|)/g)].map(match => match[1]))].slice(0, 15);
-    const description = clean(text.replace(/```[\s\S]*?```/g, '').replace(/https?:\/\/\S+/g, '').replace(/[#*|]/g, ' ').replace(/\s+/g, ' '), 800);
+    const description = clean(text.replace(/```[\s\S]*?```/g, '').replace(/https?:\/\/\S+/g, '').replace(/[#*|]/g, ' ').replace(/\bActor:\s*/g, 'Actor — ').replace(/\s+/g, ' '), 800);
     const id = fingerprint(platform + '\n' + query);
     return [{ id, title, description, query, platform, tables, techniques: ids(text), cves: [...new Set(text.match(/\bCVE-\d{4}-\d{4,}\b/gi) || [])].map(x => x.toUpperCase()), provenance: [{ repo: source.repo, license: source.license, revision, path: file, url: `https://github.com/${source.repo}/blob/${revision}/${encodedPath(file)}` }] }];
   });
