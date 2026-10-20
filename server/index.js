@@ -3302,6 +3302,7 @@ const huntingService = createHuntingService({
     library: huntingLibrary, filePath: process.env.HUNTING_DB_PATH || (process.env.NODE_ENV === 'test' ? ':memory:' : path.join(__dirname, '.hunting.sqlite')),
     getNews: owner => filterMonitoredNews(newsArchiveStore.all(), newsMonitoringStore.get(owner)), getCves: huntingCves,
     generate: process.env.NODE_ENV !== 'test' && process.env.OPENROUTER_API_KEY ? createHuntingGenerator({ http: axios, getKey: () => process.env.OPENROUTER_API_KEY, model: process.env.OPENROUTER_HUNTING_MODEL || 'deepseek/deepseek-v4.1-flash' }) : undefined,
+    onError: error => console.warn('Hunting AI unavailable:', error.response?.status || error.code || error.name),
 });
 const huntingLimiter = rateLimit({ windowMs: 60000, max: 45, keyGenerator: req => req.user.sub, standardHeaders: true, legacyHeaders: false, message: { error: 'Aguarde um minuto para atualizar as caças.' } });
 app.get('/api/hunting/overview', requirePremium, huntingLimiter, async (req, res) => {

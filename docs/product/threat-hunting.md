@@ -10,7 +10,7 @@ O script `server/scripts/sync-hunting-library.mjs` regenera o snapshot. Em produ
 
 ## Hipóteses e IA
 
-A recuperação usa técnicas explícitas em comum, CVEs e termos específicos. Favorece termos no título da consulta e reduz correspondências com atores específicos ausentes da notícia. Agrupa insumos que recomendam a mesma consulta, mantendo suas URLs e IDs de eventos independentes. Um resumo multivulnerabilidade não transfere o KEV ou EPSS de uma CVE para as demais.
+A recuperação usa técnicas explícitas em comum, CVEs e termos específicos. Pondera a raridade dos termos no catálogo e exige âncoras do título da consulta; palavras genéricas de acesso/arquivos não sustentam uma correspondência sozinhas. Rejeita variantes com atores explicitamente nomeados ausentes da notícia. Agrupa insumos que recomendam a mesma consulta, mantendo suas URLs e IDs de eventos independentes. Um resumo multivulnerabilidade não transfere o KEV ou EPSS de uma CVE para as demais.
 
 O ranking inicial considera correspondência, atualidade, score da notícia, KEV, EPSS, CVSS e feedback pessoal. Até quatro consultas genéricas de exposição a CVEs entram no conjunto, para não excluir todas as caças comportamentais. Essas consultas usam somente IDs de CVE validados e não inferem técnicas MITRE.
 
@@ -27,3 +27,5 @@ O cache considera usuário, período, catálogo, publicações e feedback; gera�
 A interface apresenta insumos, conexões com atores/malware/CVEs, referência MITRE, plataforma e proveniência. Copiar mantém a KQL original. Tabelas e plataforma extraídas do texto são heurísticas; conectores, funções, campos, janela temporal e falsos positivos precisam ser verificados no ambiente. Nenhuma consulta é executada no Sentinel/Defender e nenhuma regra de detecção é publicada por este módulo.
 
 O serviço antigo removido continua desativado. Este módulo usa `/api/hunting/overview` e `/api/hunting/feedback`, ambos com autenticação e autorização equivalentes ao feed. Não reintroduz URLs de scraping fornecidas pelo usuário.
+
+O workflow manual `Threat hunting audit` lê as notícias públicas e o catálogo no VPS, mede a seleção e faz uma chamada limitada ao modelo configurado. Registra somente títulos públicos e metadados de resposta, sem credenciais, feedback ou texto gerado. Não altera o banco de produção.

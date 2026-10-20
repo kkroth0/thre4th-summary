@@ -5,9 +5,10 @@ import { fingerprint } from './huntingLibrary.js';
 const DAY = 86400000;
 const clean = (value, length = 600) => String(value || '').replace(/[\u0000-\u001f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, length);
 const fold = value => clean(value, 20000).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
-const tokens = value => [...new Set((fold(value).match(/[a-z0-9][a-z0-9_.-]{3,}/g) || []).filter(word => !STOP.has(word)))];
+const tokens = value => [...new Set((fold(String(value || '') + ' ' + String(value || '').replace(/([a-z])([A-Z])/g, '$1 $2')).match(/[a-z0-9][a-z0-9_.-]{3,}/g) || []).filter(word => !STOP.has(word)))];
 const STOP = new Set('with from this that these those query queries detection hunting threat threats security malicious malware windows endpoint attack attacks activity suspicious events event microsoft sentinel defender using used uses user users report research system data process processes command commands information details article news about into have been more than possible techniques technique'.split(' '));
 const STRONG = new Set('powershell rundll32 regsvr32 mimikatz lsass winrar anydesk cobaltstrike mshta schtasks wmic psexec certutil clickfix msbuild netsh'.split(' '));
+const GENERIC_ANCHORS = new Set('initial access files file active known successful multiple new recent actor actors campaign campaigns potentially potential common source sources public suspicious performed changes changing change insecure level'.split(' '));
 const CVE = /^CVE-\d{4}-\d{4,}$/;
 const calendarStamp = value => /^\d{4}-\d{2}-\d{2}$/.test(value || '') ? value + 'T03:00:00.000Z' : value;
 const safeUrl = value => { try { const url = new URL(value); return ['http:', 'https:'].includes(url.protocol) && !url.username && !url.password ? url.href : ''; } catch { return ''; } };
@@ -37,17 +38,21 @@ export function createHuntingIndex(library) {
     const terms = tokens([row.title, row.description, ...(row.actors || []).map(x => x.name), ...(row.malware || []).map(x => x.name)].join(' '));
     const ttps = [...new Set([...(row.ttpIds || []), ...(row.ttps || []).flatMap(value => String(value).match(/\bT\d{4}(?:\.\d{3})?\b/g) || [])])];
     const scores = new Map();
-    const add = (term, weight, kind) => { for (const id of postings.get(term) || []) { const hit = scores.get(id) || { score: 0, words: [], techniques: [], cves: [] }; hit.score += weight + (kind === 'words' && titleTerms.get(id).has(term) ? 8 : 0); hit[kind].push(term); scores.set(id, hit); } };
+    const specificity = term => Math.log(1 + queries.size / Math.max(1, postings.get(term)?.size || 0));
+    const add = (term, weight, kind) => { for (const id of postings.get(term) || []) { const hit = scores.get(id) || { score: 0, words: [], techniques: [], cves: [] }; hit.score += (kind === 'words' ? weight * specificity(term) : weight) + (kind === 'words' && titleTerms.get(id).has(term) ? 8 : 0); hit[kind].push(term); scores.set(id, hit); } };
     ttps.forEach(term => add(term, 16, 'techniques')); (row.cves || []).forEach(term => add(term, 35, 'cves')); terms.forEach(term => add(term, STRONG.has(term) ? 10 : 2, 'words'));
     const text = fold([row.title, row.description, ...(row.actors || []).map(x => x.name), ...(row.malware || []).map(x => x.name)].join(' '));
     for (const [id, hit] of scores) {
       const query = queries.get(id), namedActors = query.title.match(/\b(?:APT\s?\d+|FIN\d+|UNC\d+|TA\d{3,}|Lazarus)\b/gi) || [];
-      if (namedActors.some(name => !text.includes(name.toLowerCase()))) hit.score -= 35;
+      if (namedActors.some(name => !text.includes(name.toLowerCase()))) hit.score = -10000;
       const sharedTitle = hit.words.filter(word => titleTerms.get(id).has(word)).length;
       hit.score += sharedTitle * 8 / Math.sqrt(Math.max(1, titleTerms.get(id).size));
       hit.score += 20 * sharedTitle / Math.max(1, titleTerms.get(id).size);
     }
-    return [...scores].filter(([, hit]) => hit.techniques.length || hit.cves.length || hit.words.some(word => STRONG.has(word)) || hit.words.length >= 3)
+    return [...scores].filter(([id, hit]) => {
+      const anchors = hit.words.filter(word => titleTerms.get(id).has(word) && !GENERIC_ANCHORS.has(word) && (STRONG.has(word) || specificity(word) >= 2.5));
+      return hit.cves.length || anchors.length >= 2 || anchors.some(word => STRONG.has(word)) || (hit.techniques.length && anchors.length >= 1);
+    })
       .filter(([, hit]) => hit.score > 0).sort((a, b) => b[1].score - a[1].score || a[0].localeCompare(b[0])).slice(0, 1).map(([id, match]) => ({ query: queries.get(id), match }));
   }
   return { match };
@@ -101,7 +106,7 @@ export function buildHuntingCandidates({ news, cves = [], library, period = 'day
   return { window, publications: publications.length, candidates };
 }
 
-export function createHuntingService({ library, getNews, getCves = async () => [], filePath = ':memory:', generate, now = () => Date.now() }) {
+export function createHuntingService({ library, getNews, getCves = async () => [], filePath = ':memory:', generate, onError = () => {}, now = () => Date.now() }) {
   const db = new Database(filePath); db.pragma('journal_mode = WAL');
   db.exec('CREATE TABLE IF NOT EXISTS hunting_feedback(owner TEXT,key TEXT,vote TEXT,at TEXT,PRIMARY KEY(owner,key)); CREATE TABLE IF NOT EXISTS hunting_ai(key TEXT PRIMARY KEY,body TEXT,at INTEGER); CREATE TABLE IF NOT EXISTS hunting_budget(owner TEXT,day TEXT,used INTEGER,PRIMARY KEY(owner,day));');
   const feedbackRows = db.prepare('SELECT key,vote FROM hunting_feedback WHERE owner=?'), cacheRead = db.prepare('SELECT body,at FROM hunting_ai WHERE key=?');
@@ -131,7 +136,7 @@ export function createHuntingService({ library, getNews, getCves = async () => [
     if (indexedRevision !== revision) { index = createHuntingIndex(library.all()); indexedRevision = revision; }
     // Inventory queries are cached by the worker; news is read from local stores.
     const cves = await getCves(); const votes = votesFor(owner);
-    const signature = fingerprint(JSON.stringify([owner, period, window.from.slice(0, 13), revision, news.map(r => [r.link, r.contentHash, r.pubDate, r.score]), cves.map(r => [r.id, r.dateAdded, r.modified]), votes]));
+    const signature = fingerprint(JSON.stringify([2, owner, period, window.from.slice(0, 13), revision, news.map(r => [r.link, r.contentHash, r.pubDate, r.score]), cves.map(r => [r.id, r.dateAdded, r.modified]), votes]));
     let base = computed.get(signature);
     if (!base || now() - base.at > 5 * 60000) { base = { ...buildHuntingCandidates({ news, cves, library: library.all(), index, period, now: now(), votes }), at: now() }; computed.set(signature, base); if (computed.size > 32) computed.delete(computed.keys().next().value); }
     const candidates = base.candidates, key = signature + ':' + Math.floor(now() / (6 * 3600000));
@@ -139,7 +144,7 @@ export function createHuntingService({ library, getNews, getCves = async () => [
     const retryable = !cached || (ai?.status === 'unavailable' && now() - cached.at > 15 * 60000);
     if (generate && candidates.length && retryable && !flights.has(key) && activeAi < 2 && claim(owner)) {
       activeAi++;
-      const task = (async () => { try { const result = await generate({ period, candidates: candidates.slice(0, 12), feedback: votes }); const rows = annotate(candidates, result); saveAi(key, { status: 'ready', choices: rows.filter(r => r.aiUsed).map(r => ({ id: r.id, title: r.title, hypothesis: r.hypothesis, reason: r.reason })) }); } catch { saveAi(key, { status: 'unavailable' }); } finally { flights.delete(key); activeAi--; } })();
+      const task = (async () => { try { const result = await generate({ period, candidates: candidates.slice(0, 12), feedback: votes }); const rows = annotate(candidates, result); saveAi(key, { status: 'ready', choices: rows.filter(r => r.aiUsed).map(r => ({ id: r.id, title: r.title, hypothesis: r.hypothesis, reason: r.reason })) }); } catch (error) { onError(error); saveAi(key, { status: 'unavailable' }); } finally { flights.delete(key); activeAi--; } })();
       flights.set(key, task);
     }
     let rows = candidates.slice(0, 12);

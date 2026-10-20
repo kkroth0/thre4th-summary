@@ -67,8 +67,17 @@ test('behaviour-specific queries outrank unrelated actor-themed variants of the 
 test('encoded PowerShell reports select encoded behaviour from the real catalog, not an unrelated policy change', () => {
   const snapshot = JSON.parse(readFileSync(new URL('../data/hunting-library.json', import.meta.url), 'utf8'));
   const hit = createHuntingIndex(snapshot.queries).match(news())[0];
-  assert.match(hit.query.title, /encoded/i);
+  assert.match(hit.query.title, /encoded|encoding/i);
   assert.doesNotMatch(hit.query.title, /execution policy|FIN7/i);
+});
+
+test('generic initial-access and file words cannot attach AsyncRAT or guest-sharing hunts to unrelated reports', () => {
+  const snapshot = JSON.parse(readFileSync(new URL('../data/hunting-library.json', import.meta.url), 'utf8'));
+  const unrelated = snapshot.queries.filter(row => /AsyncRAT Initial Access|MultipleFilesSharedtoGuests/.test(row.title));
+  const index = createHuntingIndex(unrelated);
+  for (const title of ['Atlassian Arbitrary File Access Vulnerability', 'Microsoft Says AI Agents Could Become Insider Threats']) {
+    assert.deepEqual(index.match({ title, description: 'Initial access can allow a user to open files in an environment. Multiple files and access are discussed in this report.', ttpIds: ['T1190'] }), []);
+  }
 });
 
 test('CVE exposure uses exact escaped IDs and never infers ATT&CK from a vulnerability alone', () => {
