@@ -10,11 +10,22 @@ OpenAPI fornecido; paginação e formato foram verificados em 20/10/2026.
 Uma mudança no contrato interrompe a página, sem avançar o marcador.
 Não cria buscas, exportações, tickets ou alterações no ambiente Axur.
 
-A leitura usa páginas de 5.000 IOCs, até cinco por rodada, sem concorrência
-entre importações, e agrupa os relatórios em lotes de até 25 IDs únicos por
-página. O agendador tenta a cada minuto; consultas e ingestões cedem o processo
+A leitura começa com páginas de 5.000 IOCs, até cinco por rodada, sem concorrência
+entre importações. Falhas de comunicação, tempo limite ou tamanho de resposta
+reduzem o lote para 1.000, 500 ou 100 registros, preservando exatamente o
+deslocamento da retomada. Falhas antigas sem diagnóstico também retomam com lote
+menor. Respostas de autenticação ou limite de chamadas preservam sua espera.
+Os relatórios são agrupados em lotes de até 25 IDs únicos. Um cache privado de
+24 horas, vinculado à credencial, evita consultar novamente os mesmos relatórios
+entre páginas e reinícios. Guarda apenas os campos necessários à correlação.
+O agendador tenta a cada minuto; consultas e ingestões cedem o processo
 entre lotes. Requisições têm limite de 55 segundos. Falhas usam espera crescente
 e respeitam Retry-After até 24 horas. A carga pausa se houver menos de 2 GiB livres.
+
+O marcador registra a categoria e a etapa da falha, a próxima tentativa e os
+tempos de consulta de IOCs, consulta de relatórios, conversão e gravação por
+página. Mensagens não contêm credenciais nem respostas completas da fonte.
+Relatórios ausentes ainda impedem o avanço da página para preservar os vínculos.
 
 O marcador `axur-import-v1:<owner>` está em `intelligence_state` no SQLite
 existente, preservado pelo deploy. Só avança depois de persistir todos os IOCs

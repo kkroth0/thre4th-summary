@@ -106,3 +106,37 @@ test('detects repeated pages instead of marking an endless pagination loop succe
   const f=fixture(t,(url,{params})=>url.endsWith('/iocs')?page(params.page,[ioc],3):[insight]);
   await f.importer.run();assert.equal(f.importer.status().page,2);assert.equal(f.importer.status().status,'retrying');assert.equal(f.importer.status().processed,1);
 });
+
+test('timeout shrinks the request at the identical offset and persists a safe diagnostic',async t=>{
+  let fail=true;
+  const f=fixture(t,(_url,{params})=>{if(fail){fail=false;throw {code:'ECONNABORTED',config:{headers:{Authorization:'secret'}}};}return {metadata:{page:params.page,perPage:params.perPage,offset:(params.page-1)*params.perPage,total:125001},iocs:[{...ioc,relatedInsights:[]}]};},{pageSize:5000});
+  f.store.setState('axur-import-v1:owner',{page:26,pageSize:5000,processed:125000,observations:125000,status:'running'});
+  await f.importer.run();const pending=f.importer.status();
+  assert.equal(pending.pageSize,1000);assert.equal(pending.page,126);assert.equal(pending.processed,125000);assert.equal(pending.failureCode,'timeout');assert.equal(pending.failureStage,'iocs');assert.ok(!JSON.stringify(pending).includes('secret'));
+  f.advance();await f.importer.run();assert.equal(f.importer.status().processed,125001);assert.equal(f.importer.status().status,'complete');assert.equal(f.calls[1].options.params.page,126);
+});
+
+test('legacy generic failures resume with smaller pages without skipping or replaying previous offsets',async t=>{
+  const f=fixture(t,(_url,{params})=>({metadata:{page:params.page,perPage:params.perPage,offset:(params.page-1)*params.perPage,total:275001},iocs:[{...ioc,relatedInsights:[]}]}));
+  f.store.setState('axur-import-v1:owner',{page:56,pageSize:5000,processed:275000,observations:282061,status:'retrying',failures:3,error:'Importação interrompida; a página será tentada novamente.'});
+  await f.importer.run();assert.equal(f.calls[0].options.params.page,276);assert.equal(f.calls[0].options.params.perPage,1000);assert.equal(f.importer.status().processed,275001);
+});
+
+test('persisted insight cache avoids repeated requests across pages and restart while retaining links',async t=>{
+  const f=fixture(t,(url,{params})=>url.endsWith('/iocs')?page(params.page,[{...ioc,id:String(params.page)}]):[{...insight,iocs:[{value:'not copied'}]}]);
+  await f.importer.run({maxPages:1});await createAxurImport(f.options).run();
+  assert.equal(f.calls.filter(call=>!call.url.endsWith('/iocs')).length,1);assert.equal(f.importer.status().reportCacheHits,1);
+  assert.equal(f.store.status(scope).evidence,3);assert.ok(!JSON.stringify(f.store.state('axur-report-v1:owner:report')).includes('not copied'));
+});
+
+test('expired or changed credentials never reuse a cached report',async t=>{
+  let key='keyCase';
+  const f=fixture(t,(url,{params})=>url.endsWith('/iocs')?page(params.page,[{...ioc,id:String(params.page)}],3):[insight],{getKey:()=>key});
+  await f.importer.run({maxPages:1});key='keycase';await f.importer.run({maxPages:1});assert.equal(f.calls.filter(call=>!call.url.endsWith('/iocs')).length,2);
+  f.advance();await f.importer.run({maxPages:1});assert.equal(f.calls.filter(call=>!call.url.endsWith('/iocs')).length,3);
+});
+
+test('missing insights and changed formats report the stage without advancing the page',async t=>{
+  const f=fixture(t,url=>url.endsWith('/iocs')?page(1,[ioc],1):[]);
+  await f.importer.run();assert.equal(f.importer.status().failureCode,'missing_insights');assert.equal(f.importer.status().failureStage,'insights');assert.equal(f.importer.status().page,1);
+});
