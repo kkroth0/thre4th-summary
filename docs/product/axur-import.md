@@ -18,6 +18,8 @@ menor. Respostas de autenticação ou limite de chamadas preservam sua espera.
 Os relatórios são agrupados em lotes de até 25 IDs únicos. Um cache privado de
 24 horas, vinculado à credencial, evita consultar novamente os mesmos relatórios
 entre páginas e reinícios. Guarda apenas os campos necessários à correlação.
+Atores, famílias e CVEs de um relatório compartilhado são resolvidos uma vez
+por página; a evidência de cada IOC continua sendo persistida individualmente.
 O agendador tenta a cada minuto; consultas e ingestões cedem o processo
 entre lotes. Requisições têm limite de 55 segundos. Falhas usam espera crescente
 e respeitam Retry-After até 24 horas. A carga pausa se houver menos de 2 GiB livres.

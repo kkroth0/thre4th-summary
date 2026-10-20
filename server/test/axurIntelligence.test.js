@@ -8,6 +8,19 @@ const ioc = { id:'one', value:'8.8.8.8', type:'ip', source:'MalwareBazaar', crea
   threatName:'Generic.Trojan', relatedInsights:['report'], relatedTTPs:[{code:'T1059',name:'Command execution'}] };
 const insight = { id:'report', title:'Threat report', publicationDate:1792513501216, threatActors:['APT28','Unknown'], malwares:['Mirai'], vulnerabilities:[{vulnerability:'CVE-2026-12345'}], attacks:[{code:'T1059'}] };
 const page = (number, iocs, total = 2) => ({ metadata:{page:number,perPage:1,offset:number-1,total}, iocs });
+
+test('a shared report and detection label are resolved once per page without losing IOC relationships',()=>{
+  let actorCalls=0,malwareCalls=0;
+  const records=Array.from({length:100},(_,index)=>({...ioc,id:String(index),value:`8.8.4.${index+1}`,threatName:'Mirai'}));
+  const rows=axurObservations(records,[{...insight,threatActors:['APT28']}],{scope,
+    matchActors:()=>{actorCalls++;return [{id:'G0007',name:'APT28'}];},
+    matchMalware:()=>{malwareCalls++;return [{id:'mirai',name:'Mirai'}];},
+  });
+  assert.equal(rows.length,200);assert.equal(actorCalls,1);assert.equal(malwareCalls,2);
+  assert.equal(rows.filter(row=>row.actors?.[0]?.id==='G0007').length,100);
+  assert.equal(rows.filter(row=>row.malwares?.[0]?.id==='mirai').length,200);
+  assert.ok(rows.filter(row=>row.actors).every(row=>row.cves[0].id==='CVE-2026-12345'));
+});
 function fixture(t, handler, overrides = {}) {
   const store = createIocIntelligence(); t.after(() => store.close());
   const calls = [];

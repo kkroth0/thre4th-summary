@@ -36,6 +36,7 @@ function entities(values, kind, match) {
 export function axurObservations(iocs, insights, { scope, matchActors, matchMalware } = {}) {
   if (!scope || scope === 'global') throw new Error('Axur requires an account scope');
   const reports = new Map(insights.map(report => [report.id, report]));
+  const reportEntities=new Map(),families=new Map();
   return iocs.flatMap(ioc => {
     const indicator = normalizeIndicator(ioc.value, ioc.type);
     if (!indicator || !ioc.id) return [];
@@ -45,16 +46,21 @@ export function axurObservations(iocs, insights, { scope, matchActors, matchMalw
       threatLevel: ioc.threatLevel, trustFactor: ioc.trustFactor, relatedTTPs: ioc.relatedTTPs || [], relatedInsights: ioc.relatedInsights || [], enrichedAt: iso(ioc.enrichedAt) };
     // AV detection labels (e.g. Generic.Trojan) are retained as evidence rather
     // than automatically creating a malware family or threat actor.
-    const family = ioc.threatName ? (matchMalware?.(ioc.threatName, { structured:true }) || []).filter(entity => [entity.name,entity.matched].some(name => String(name || '').toLowerCase() === ioc.threatName.toLowerCase())) : [];
+    const familyName=typeof ioc.threatName==='string'?ioc.threatName:'';
+    if(familyName&&!families.has(familyName))families.set(familyName,(matchMalware?.(familyName,{structured:true}) || []).filter(entity=>[entity.name,entity.matched].some(name=>String(name || '').toLowerCase()===familyName.toLowerCase())));
+    const family=families.get(familyName)||[];
     const rows = [{ ...base, externalId: `ioc:${ioc.id}`, title: ioc.description || ioc.threatName || `IOC ${ioc.source || 'Axur'}`, payload, ...(family.length === 1 ? { malwares:family, relation:'mentioned-by-source' } : {}) }];
     for (const reportId of new Set(ioc.relatedInsights || [])) {
       const report = reports.get(reportId);
       if (!report) continue;
+      if(!reportEntities.has(reportId))reportEntities.set(reportId,{
+        actors:entities(report.threatActors,'actor',matchActors),malwares:entities(report.malwares,'malware',matchMalware),
+        cves:[...new Set((report.vulnerabilities || []).map(value=>typeof value==='string'?value:value?.vulnerability).filter(value=>/^CVE-\d{4}-\d{4,}$/i.test(value)))].map(value=>({id:value.toUpperCase(),name:value.toUpperCase()})),
+      });
       rows.push({ ...base, externalId: `insight:${reportId}`, title: report.title, link: `https://cti.axur.com/insight/${encodeURIComponent(reportId)}`,
         published: iso(report.publicationDate) || base.published,
         tags: [...new Set([...(ioc.tags || []), ...(report.tags || [])])],
-        actors: entities(report.threatActors, 'actor', matchActors), malwares: entities(report.malwares, 'malware', matchMalware),
-        cves: [...new Set((report.vulnerabilities || []).map(value => typeof value === 'string' ? value : value?.vulnerability).filter(value => /^CVE-\d{4}-\d{4,}$/i.test(value)))].map(value => ({ id: value.toUpperCase(), name: value.toUpperCase() })),
+        ...reportEntities.get(reportId),
         payload: { insightId: reportId, association: 'reported-in-same-insight', threatLevel: report.threatLevel, attacks: report.attacks || [], lastUpdate: iso(report.lastUpdate) } });
     }
     return rows;
