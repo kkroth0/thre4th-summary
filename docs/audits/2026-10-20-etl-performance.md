@@ -65,6 +65,35 @@ O erro genérico antigo não permite afirmar a causa exata dessas cinco falhas.
 Uma consulta direta de 5.000 registros havia excedido 55 segundos; isso motivou
 o lote adaptativo, mas não prova que todas as interrupções tiveram essa causa.
 
+### Conferência após publicação
+
+O deploy de servidor
+[39490896789](https://github.com/kkroth0/thre4th-summary/actions/runs/39490896789)
+e o de interface
+[39490896782](https://github.com/kkroth0/thre4th-summary/actions/runs/39490896782)
+concluíram com sucesso, com o código `56d3b86`.
+Na auditoria
+[39491432247](https://github.com/kkroth0/thre4th-summary/actions/runs/39491432247),
+a consulta das mesmas 20 evidências levou 134,81 ms; o GET local do perfil,
+198 ms. O status de provedores ainda levou 9,90 s nessa amostra, reforçando que
+o problema geral de contenção não foi eliminado.
+
+Na sessão autenticada, o marcador da Axur confirmou o avanço para **276.000
+registros percorridos**, lote de **1.000**, **283.065 evidências processadas**,
+estado `running`, nenhuma falha consecutiva e sucesso em
+`2026-10-20T20:23:16.473Z`. O lote completo levou 56.528 ms: consulta de IOCs
+50.418 ms, relatórios 596 ms, conversão 109 ms e gravação 5.392 ms. A carga
+destravou, mas a consulta da origem continua próxima do limite de 55 segundos.
+O contador não é o total de IOCs únicos nem indica conclusão dos cerca de
+4,3 milhões de registros da fonte.
+
+Validação: **875 testes de servidor aprovados**, verificações de tipos,
+lint, testes de interface e build aprovados no CI. No teste de um relatório
+compartilhado por 100 IOCs, as 100 relações de ator e as 200 relações de malware
+foram preservadas; o ator foi resolvido uma vez, em vez de uma vez por IOC.
+O perfil Akira também apresentou seus aliases, referências, endereço onion e
+contadores de evidências na interface autenticada.
+
 ## Próximas otimizações, por prioridade
 
 | Prioridade | Fluxo e evidência no código | Mudança proposta | Como validar |
