@@ -5,10 +5,10 @@ import { fingerprint } from './huntingLibrary.js';
 const DAY = 86400000;
 const clean = (value, length = 600) => String(value || '').replace(/[\u0000-\u001f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, length);
 const fold = value => clean(value, 20000).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
-const tokens = value => [...new Set((fold(String(value || '') + ' ' + String(value || '').replace(/([a-z])([A-Z])/g, '$1 $2')).match(/[a-z0-9][a-z0-9_.-]{3,}/g) || []).filter(word => !STOP.has(word)))];
+const tokens = value => [...new Set((fold(String(value || '') + ' ' + String(value || '').replace(/([a-z])([A-Z])/g, '$1 $2')).match(/[a-z0-9][a-z0-9_.-]{3,}/g) || []).map(word => /^(?:base64|encoding|encoded)$/.test(word) ? 'encoded' : word).filter(word => !STOP.has(word)))];
 const STOP = new Set('with from this that these those query queries detection hunting threat threats security malicious malware windows endpoint attack attacks activity suspicious events event microsoft sentinel defender using used uses user users report research system data process processes command commands information details article news about into have been more than possible techniques technique'.split(' '));
-const STRONG = new Set('powershell rundll32 regsvr32 mimikatz lsass winrar anydesk cobaltstrike mshta schtasks wmic psexec certutil clickfix msbuild netsh'.split(' '));
-const GENERIC_ANCHORS = new Set('initial access files file active known successful multiple new recent actor actors campaign campaigns potentially potential common source sources public suspicious performed changes changing change insecure level'.split(' '));
+const STRONG = new Set('powershell rundll32 regsvr32 mimikatz lsass winrar anydesk cobaltstrike mshta schtasks wmic psexec certutil clickfix msbuild netsh phishing ransomware registry onenote oauth'.split(' '));
+const GENERIC_ANCHORS = new Set('initial access files file active known successful multiple new recent actor actors campaign campaigns potentially potential common source sources public suspicious performed changes changing change insecure level vulnerability vulnerabilities vulnerable critical high medium severity devices device indicators indicator compromise compromised customers servers could allow your after before first last hours days time that there their these when been does then will should would also most some many such they them were only other over under through into detected detect executed execution executions remote code commands command windows microsoft software system systems iocs malicious post use using management local summary rules unique actions triage asr power shell permissions privileges groups chart exposure extract'.split(' '));
 const CVE = /^CVE-\d{4}-\d{4,}$/;
 const calendarStamp = value => /^\d{4}-\d{2}-\d{2}$/.test(value || '') ? value + 'T03:00:00.000Z' : value;
 const safeUrl = value => { try { const url = new URL(value); return ['http:', 'https:'].includes(url.protocol) && !url.username && !url.password ? url.href : ''; } catch { return ''; } };
@@ -42,16 +42,23 @@ export function createHuntingIndex(library) {
     const add = (term, weight, kind) => { for (const id of postings.get(term) || []) { const hit = scores.get(id) || { score: 0, words: [], techniques: [], cves: [] }; hit.score += (kind === 'words' ? weight * specificity(term) : weight) + (kind === 'words' && titleTerms.get(id).has(term) ? 8 : 0); hit[kind].push(term); scores.set(id, hit); } };
     ttps.forEach(term => add(term, 16, 'techniques')); (row.cves || []).forEach(term => add(term, 35, 'cves')); terms.forEach(term => add(term, STRONG.has(term) ? 10 : 2, 'words'));
     const text = fold([row.title, row.description, ...(row.actors || []).map(x => x.name), ...(row.malware || []).map(x => x.name)].join(' '));
+    const entities = new Set(tokens([...(row.actors || []), ...(row.malware || [])].map(entity => entity.name).join(' ')));
     for (const [id, hit] of scores) {
       const query = queries.get(id), namedActors = query.title.match(/\b(?:APT\s?\d+|FIN\d+|UNC\d+|TA\d{3,}|Lazarus)\b/gi) || [];
       if (namedActors.some(name => !text.includes(name.toLowerCase()))) hit.score = -10000;
+      if (query.cves.length && !query.cves.some(id => (row.cves || []).includes(id))) hit.score = -10000;
       const sharedTitle = hit.words.filter(word => titleTerms.get(id).has(word)).length;
       hit.score += sharedTitle * 8 / Math.sqrt(Math.max(1, titleTerms.get(id).size));
       hit.score += 20 * sharedTitle / Math.max(1, titleTerms.get(id).size);
     }
     return [...scores].filter(([id, hit]) => {
       const anchors = hit.words.filter(word => titleTerms.get(id).has(word) && !GENERIC_ANCHORS.has(word) && (STRONG.has(word) || specificity(word) >= 2.5));
-      return hit.cves.length || anchors.length >= 2 || anchors.some(word => STRONG.has(word)) || (hit.techniques.length && anchors.length >= 1);
+      const meaningful = [...titleTerms.get(id)].filter(word => !GENERIC_ANCHORS.has(word));
+      const shared = meaningful.filter(word => hit.words.includes(word));
+      const requiredTools = meaningful.filter(word => STRONG.has(word));
+      const coverage = shared.length / Math.max(1, meaningful.length);
+      if (requiredTools.some(word => !hit.words.includes(word))) return false;
+      return hit.cves.length || (coverage >= 0.6 && (anchors.some(word => STRONG.has(word) || entities.has(word)) || (hit.techniques.length && anchors.length >= 1)));
     })
       .filter(([, hit]) => hit.score > 0).sort((a, b) => b[1].score - a[1].score || a[0].localeCompare(b[0])).slice(0, 1).map(([id, match]) => ({ query: queries.get(id), match }));
   }
@@ -136,7 +143,7 @@ export function createHuntingService({ library, getNews, getCves = async () => [
     if (indexedRevision !== revision) { index = createHuntingIndex(library.all()); indexedRevision = revision; }
     // Inventory queries are cached by the worker; news is read from local stores.
     const cves = await getCves(); const votes = votesFor(owner);
-    const signature = fingerprint(JSON.stringify([2, owner, period, window.from.slice(0, 13), revision, news.map(r => [r.link, r.contentHash, r.pubDate, r.score]), cves.map(r => [r.id, r.dateAdded, r.modified]), votes]));
+    const signature = fingerprint(JSON.stringify([3, owner, period, window.from.slice(0, 13), revision, news.map(r => [r.link, r.contentHash, r.pubDate, r.score]), cves.map(r => [r.id, r.dateAdded, r.modified]), votes]));
     let base = computed.get(signature);
     if (!base || now() - base.at > 5 * 60000) { base = { ...buildHuntingCandidates({ news, cves, library: library.all(), index, period, now: now(), votes }), at: now() }; computed.set(signature, base); if (computed.size > 32) computed.delete(computed.keys().next().value); }
     const candidates = base.candidates, key = signature + ':' + Math.floor(now() / (6 * 3600000));

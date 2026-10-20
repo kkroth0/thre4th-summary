@@ -87,6 +87,15 @@ test('CVE exposure uses exact escaped IDs and never infers ATT&CK from a vulnera
   assert.equal(result.candidates[0].signals.kev, true);
 });
 
+test('current RCE advisories cannot recommend old OpenSSL CVEs or unrelated WMIC and PowerShell hunts', () => {
+  const snapshot = JSON.parse(readFileSync(new URL('../data/hunting-library.json', import.meta.url), 'utf8'));
+  const wrong = snapshot.queries.filter(row => /OpenSSL critical|WMIC Remote|PowerShell spawning|Blocklist.de|Qakbot post|ExtractPhoneNumber/.test(row.title));
+  const index = createHuntingIndex(wrong);
+  for (const description of ['Critical vulnerability allows remote code execution on devices', 'Customers and servers affected by multiple post compromise commands', 'Your first hours after a database breach may expose a phone number']) {
+    assert.deepEqual(index.match({ title: 'Atlassian vulnerability', description, cves: ['CVE-2026-21589'] }), []);
+  }
+});
+
 test('roundup KEV and EPSS signals are never copied to every mentioned CVE', () => {
   const result = buildHuntingCandidates({ news: [news({ title: 'Two vulnerabilities', description: '', ttpIds: [], cves: ['CVE-2026-11111', 'CVE-2026-22222'], kev: true, kevDetails: { cve: 'CVE-2026-11111' }, epss: 0.95 })], library: [], now });
   const first = result.candidates.find(row => row.cves.includes('CVE-2026-11111'));
