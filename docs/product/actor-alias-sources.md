@@ -36,6 +36,12 @@ relação e escopo de acesso, e não faz novas chamadas às APIs. O processament
 cede o servidor a cada lote de 200 vínculos e só roda novamente se os aliases
 do catálogo mudarem.
 
+Abrir um perfil não dispara o panorama completo de atividade. Perfis catalogados
+são resolvidos primeiro no catálogo local; o banco de IOCs só é consultado nessa
+rota para identidades vindas das fontes. A busca de publicações parte do índice
+de vínculos das entidades, evitando uma consulta correlacionada por linha do
+inventário inteiro durante as importações volumosas.
+
 Para atualizar o snapshot, execute `node server/scripts/update-actor-sources.mjs`,
 revise a mudança e publique. A atualização não executa JavaScript de terceiros,
 fixa o README do GitHub em um commit, valida a cobertura mínima de cada fonte e

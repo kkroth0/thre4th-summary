@@ -102,12 +102,15 @@ export function createIocIntelligence({filePath=':memory:',now=()=>Date.now()}={
     const scope=scopeSql(owner),args=[...scope.args],clauses=[scope.sql];
     const matchingIds=ids===undefined?(id?[String(id)]:[]):[...new Set((Array.isArray(ids)?ids:[]).filter(value=>typeof value==='string'&&value.length>0&&value.length<=180))].slice(0,50);
     if(ids!==undefined&&(!kind||!matchingIds.length))return [];
-    if(kind&&matchingIds.length){clauses.push('EXISTS(SELECT 1 FROM entity_links e WHERE e.observation=o.id AND e.kind=? AND e.entity IN ('+matchingIds.map(()=>'?').join(',')+'))');args.push(kind,...matchingIds);}
+    // Start with the small set of linked observations instead of probing
+    // entity_links once for every IOC imported from large provider catalogs.
+    if(kind&&matchingIds.length){clauses.push('o.id IN (SELECT observation FROM entity_links WHERE kind=? AND entity IN ('+matchingIds.map(()=>'?').join(',')+'))');args.push(kind,...matchingIds);}
+    else clauses.push('o.id IN (SELECT DISTINCT observation FROM entity_links)');
     // Catalog correlation needs reference metadata, not full provider payloads.
     // Iterate all matching evidence so older relationships survive growth beyond 10k.
     const records=db.prepare(`SELECT o.provider,o.external_id,o.published,json_extract(o.details,'$.link') link,json_extract(o.details,'$.title') title,i.type,i.value,
       (SELECT json_group_array(json_object('kind',e.kind,'id',e.entity,'name',e.name)) FROM entity_links e WHERE e.observation=o.id) entities
-      FROM observations o JOIN indicators i ON i.id=o.indicator WHERE ${clauses.join(' AND ')} AND o.provider<>'news' AND EXISTS(SELECT 1 FROM entity_links e WHERE e.observation=o.id) ORDER BY o.published DESC`).iterate(...args);
+      FROM observations o JOIN indicators i ON i.id=o.indicator WHERE ${clauses.join(' AND ')} AND o.provider<>'news' ORDER BY o.published DESC`).iterate(...args);
     const grouped=new Map();
     for(const record of records){const key=record.provider+':'+record.external_id;let row=grouped.get(key);
       if(!row){row={link:record.link,title:record.title,source:record.provider,pubDate:record.published,actors:[],malware:[],cves:[],iocs:{ips:[],domains:[],hashes:[],urls:[]}};grouped.set(key,row);}

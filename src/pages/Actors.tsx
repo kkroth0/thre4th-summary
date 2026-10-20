@@ -57,7 +57,7 @@ export default function Actors() {
   const { auth } = useAuth();
   const view = ['overview', 'catalog', 'global', 'model'].includes(params.get('view') || '') ? params.get('view')! : 'overview';
   const setView = (value: string) => setParams(previous => { const next = new URLSearchParams(previous); next.set('view', value); next.delete('actor'); return next; });
-  const activity = useQuery({ queryKey: ['actor-activity', auth.login || ''], queryFn: ({ signal }) => fetchActorActivity(signal), enabled: auth.authenticated, staleTime: 300_000, retry: false });
+  const activity = useQuery({ queryKey: ['actor-activity', auth.login || ''], queryFn: ({ signal }) => fetchActorActivity(signal), enabled: auth.authenticated && !actorId, staleTime: 300_000, retry: false });
   const [query, setQuery] = useState(''); const [country, setCountry] = useState(ALL);
   const [sector, setSector] = useState(ALL); const [target, setTarget] = useState(ALL);
   const [motivation, setMotivation] = useState(ALL);
