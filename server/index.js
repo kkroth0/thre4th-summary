@@ -118,6 +118,7 @@ import { createHuntingService } from './huntingService.js';
 import { createHuntingGenerator } from './huntingAi.js';
 import { createTelegramIntegration } from './telegramIntegration.js';
 import { createAxurImport } from './axurIntelligence.js';
+import { enrichActorCatalog } from './actorSources.js';
 import { ORG_REGIONS, ORG_SECTORS, createProfileStore } from './orgProfiles.js';
 import { buildThreatModel } from './orgThreatModel.js';
 import { SCRAPE_SOURCES, collectScraped } from './scrapeFeeds.js';
@@ -350,8 +351,10 @@ try { scrapeSeen = JSON.parse(fs.readFileSync(SCRAPE_SEEN_PATH, 'utf8')) || {}; 
 const actorIndex = (() => {
     try {
         const raw = JSON.parse(fs.readFileSync(path.join(__dirname, 'data', 'actors.json'), 'utf8'));
-        registerCatalogEntities(Array.isArray(raw) ? raw : raw.actors, 'actor');
-        return buildActorIndex(Array.isArray(raw) ? raw : raw.actors);
+        const actors = enrichActorCatalog(Array.isArray(raw) ? raw : raw.actors, loadActorSources());
+        registerCatalogEntities(actors, 'actor');
+        void iocIntelligence.reconcileActorAliases(actors).catch(() => console.warn('Actor alias reconciliation deferred'));
+        return buildActorIndex(actors);
     } catch (error) {
         console.error('actor index unavailable:', error.message);
         return buildActorIndex([]);
@@ -3563,12 +3566,16 @@ app.get('/api/patch-tuesday/:id', async (req, res) => {
 // Loaded once — the JSON is static, so the actors list and its country facet are
 // computed a single time and cached for the process lifetime.
 let ACTORS_CACHE = null;
+function loadActorSources() {
+    try { return JSON.parse(fs.readFileSync(path.join(__dirname, 'data', 'actor-sources.json'), 'utf8')); }
+    catch { return {}; }
+}
 const loadBaseActors = () => {
     if (ACTORS_CACHE) return ACTORS_CACHE;
     let actors = [];
     try {
         const raw = JSON.parse(fs.readFileSync(path.join(__dirname, 'data', 'actors.json'), 'utf8'));
-        actors = Array.isArray(raw.actors) ? raw.actors : [];
+        actors = enrichActorCatalog(Array.isArray(raw.actors) ? raw.actors : [], loadActorSources());
     } catch (err) {
         console.error('Failed to load actors.json (run build-actors.mjs):', err.message);
     }

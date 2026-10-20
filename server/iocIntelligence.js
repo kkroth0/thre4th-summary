@@ -8,6 +8,7 @@ import { createPhishingEvolution } from './phishingEvolution.js';
 import { createNewsPersistence } from './newsPersistence.js';
 import { createWatchSuggestions } from './watchSuggestions.js';
 import { canonicalJsonEvidence } from './jsonEvidence.js';
+import { actorNameKey } from './actorSources.js';
 
 const idFor = value => crypto.createHash('sha256').update(value).digest('hex');
 const refang = value => String(value || '').trim().replace(/^hxxp/i,'http').replace(/\[\.\]|\(\.\)|\{\.\}/g,'.').replace(/\[:\]/g,':');
@@ -190,6 +191,44 @@ export function createIocIntelligence({filePath=':memory:',now=()=>Date.now()}={
     const scope=scopeSql(owner);
     return db.prepare(`SELECT e.entity id,e.name,MAX(o.published) updated,GROUP_CONCAT(DISTINCT COALESCE(json_extract(o.details,'$.source'),o.provider)) source FROM entity_links e JOIN observations o ON o.id=e.observation WHERE e.kind=? AND ${scope.sql} GROUP BY e.entity,e.name LIMIT 10000`).all(kind,...scope.args).map(row=>({...row,references:[]}));
   }
+  async function reconcileActorAliases(catalog) {
+    const revision='actor-aliases-v1:'+idFor(JSON.stringify(catalog.map(actor=>[actor.id,actor.name,actor.aliases || []])));
+    if(db.prepare('SELECT 1 FROM intelligence_state WHERE id=?').get(revision))return {changed:0};
+    const owners=new Map(),known=new Set(catalog.map(actor=>actor.id));
+    for(const actor of catalog)for(const name of [actor.name,...(actor.aliases || [])]){
+      const key=actorNameKey(name),bucket=owners.get(key)||new Map();bucket.set(actor.id,actor);owners.set(key,bucket);
+    }
+    const work=flight.then(async()=>{
+      let changed=0;
+      const candidates=db.prepare("SELECT DISTINCT entity,name FROM entity_links WHERE kind='actor'").all();
+      const read=db.prepare("SELECT e.*,o.scope,o.provider FROM entity_links e JOIN observations o ON o.id=e.observation WHERE e.kind='actor' AND e.entity=? AND e.name=? LIMIT 200");
+      const retire=db.prepare("DELETE FROM entity_links WHERE observation=? AND kind='actor' AND entity=?");
+      const revise=db.prepare('INSERT INTO observation_revisions(observation,at,payload) VALUES(?,?,?)');
+      const registered=new Set();
+      const update=db.transaction((rows,actor)=>{
+        for(const row of rows){
+          revise.run(row.observation,new Date(now()).toISOString(),JSON.stringify({reason:'actor-alias-reconciliation',previousLink:{kind:row.kind,entity:row.entity,name:row.name,relation:row.relation},canonicalActor:actor.id}));
+          db.prepare('INSERT OR IGNORE INTO entity_links VALUES(?,?,?,?,?)').run(row.observation,'actor',actor.id,actor.name,row.relation);
+          retire.run(row.observation,row.entity);
+          const registryKey=JSON.stringify([row.scope,row.provider,actor.id]);
+          if(!registered.has(registryKey)){news.registerEntities([{...actor,kind:'actor'}],row.scope,row.provider);registered.add(registryKey);}
+          changed++;
+        }
+      });
+      for(const candidate of candidates){
+        // Catalog actors retain their identities, including subgroups. Only
+        // source-created identities with one exact alias owner are canonicalized.
+        if(known.has(candidate.entity))continue;
+        const matches=owners.get(actorNameKey(candidate.name));if(matches?.size!==1)continue;
+        const actor=[...matches.values()][0];
+        for(let rows=read.all(candidate.entity,candidate.name);rows.length;rows=read.all(candidate.entity,candidate.name)){
+          update(rows,actor);await yieldLoop();
+        }
+      }
+      putState.run(revision,JSON.stringify({at:new Date(now()).toISOString(),changed}));return {changed};
+    });
+    flight=work.catch(()=>{});return work;
+  }
   return {ingest,list,detail,publications,replayProviderPayloads,news,watchSuggestions:createWatchSuggestions(db),phishing:createPhishingEvolution(db,{now}),
     exportRows:({owner='',from,to})=>{
       const scope=scopeSql(owner);
@@ -199,7 +238,7 @@ export function createIocIntelligence({filePath=':memory:',now=()=>Date.now()}={
           actors:entities.filter(entity=>entity.kind==='actor').map(entity=>entity.name),malware:entities.filter(entity=>entity.kind==='malware').map(entity=>entity.name),cves:entities.filter(entity=>entity.kind==='cve').map(entity=>entity.id)};
       });
     },
-    ingestNews,reviewSoftwareLinks,
+    ingestNews,reviewSoftwareLinks,reconcileActorAliases,
     families:owner=>entities('malware',owner),entities,
     state:key=>{const row=db.prepare('SELECT value FROM intelligence_state WHERE id=?').get(key);return row?JSON.parse(row.value):null;},
     setState:(key,value)=>putState.run(key,JSON.stringify(value)),
