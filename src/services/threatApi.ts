@@ -1505,6 +1505,16 @@ export const deleteScan = async (id: string): Promise<SavedScan[]> => {
 
 // BYOK genérico: quais providers têm chave configurada (booleans, nunca os valores).
 export type ApiKeysState = Record<string, boolean>;
+export interface AxurImportStatus {
+    configured: boolean; status: 'pending' | 'running' | 'retrying' | 'complete';
+    page: number; processed: number; observations: number; total?: number; skipped?: number;
+    lastSuccessfulAt?: string; error?: string | null;
+}
+export const fetchAxurImportStatus = async (): Promise<AxurImportStatus> => {
+    const response = await fetch('/api/intelligence/axur/status');
+    if (!response.ok) throw new Error('Não foi possível consultar a importação Axur.');
+    return response.json();
+};
 
 export const fetchApiKeys = async (): Promise<ApiKeysState> => {
     try {

@@ -301,7 +301,7 @@ test('urlscan BYOK é cifrado, isolado por conta e ativa a busca sem chave da pl
     assert.equal(saved.status, 200);
     assert.deepEqual(await saved.json(), { provider: 'urlscan', hasKey: true });
     const own = await fetch(`${BASE}/api/user/keys`, { headers: AUTH_HEADERS }).then(r => r.json());
-    assert.deepEqual(own.keys, { shodan: false, urlscan: true, abuse_ch: false, otx:false, abuseipdb:false });
+    assert.deepEqual(own.keys, { shodan: false, urlscan: true, abuse_ch: false, otx:false, abuseipdb:false, axur:false });
     assert.ok(!JSON.stringify(own).includes(key));
     const other = await fetch(`${BASE}/api/user/keys`, { headers: OUTSIDER_HEADERS }).then(r => r.json());
     assert.equal(other.keys.urlscan, false);
@@ -324,6 +324,24 @@ test('urlscan BYOK é cifrado, isolado por conta e ativa a busca sem chave da pl
     assert.equal((await fetch(route, { method: 'DELETE', headers: AUTH_HEADERS })).status, 200);
     assert.equal((await watchStatus()).configured, false);
     assert.equal(JSON.parse(readFileSync(USERS_STORE_PATH, 'utf8'))['smoke-user'].apiKeysEnc.urlscan, undefined);
+});
+
+test('Axur BYOK and progress are encrypted, account-scoped and never expose credentials', async () => {
+    const key = 'axur-smoke-personal-key';
+    const route = `${BASE}/api/user/keys/axur`;
+    assert.equal((await fetch(`${BASE}/api/intelligence/axur/status`)).status, 401);
+    assert.equal((await fetch(route, { method:'PUT', headers:{...AUTH_HEADERS,'Content-Type':'application/json'},body:JSON.stringify({key,ownerId:'outsider'}) })).status,200);
+    const own = await fetch(`${BASE}/api/intelligence/axur/status?owner=outsider`, {headers:AUTH_HEADERS});
+    assert.equal(own.headers.get('cache-control'),'private, no-store');
+    const progress=await own.json();assert.equal(progress.configured,true);assert.equal(progress.processed,0);
+    assert.ok(!JSON.stringify(progress).includes(key));
+    const other=await fetch(`${BASE}/api/intelligence/axur/status?owner=smoke-user`,{headers:OUTSIDER_HEADERS});
+    assert.equal(other.status,403);
+    const otherKeys=await fetch(`${BASE}/api/user/keys`,{headers:OUTSIDER_HEADERS}).then(response=>response.json());
+    assert.equal(otherKeys.keys.axur,false);
+    const disk=readFileSync(USERS_STORE_PATH,'utf8');assert.ok(!disk.includes(key));
+    assert.ok(JSON.parse(disk)['smoke-user'].apiKeysEnc.axur);
+    await fetch(route,{method:'DELETE',headers:AUTH_HEADERS});
 });
 
 test('Abuse.ch BYOK is encrypted and isolated from other accounts', async () => {

@@ -117,6 +117,7 @@ import { createHuntingLibrary } from './huntingLibrary.js';
 import { createHuntingService } from './huntingService.js';
 import { createHuntingGenerator } from './huntingAi.js';
 import { createTelegramIntegration } from './telegramIntegration.js';
+import { createAxurImport } from './axurIntelligence.js';
 import { ORG_REGIONS, ORG_SECTORS, createProfileStore } from './orgProfiles.js';
 import { buildThreatModel } from './orgThreatModel.js';
 import { SCRAPE_SOURCES, collectScraped } from './scrapeFeeds.js';
@@ -2363,7 +2364,23 @@ app.post('/api/auth/logout', (req, res) => {
 // dnsdumpster) ficavam guardados cifrados, apareciam como "configurado" na tela
 // e nenhuma rota os lia — todas leem só process.env. Prometer o que não
 // acontece é pior do que não oferecer.
-const BYOK_PROVIDERS = new Set(['shodan', 'urlscan', 'abuse_ch', 'otx', 'abuseipdb']);
+const BYOK_PROVIDERS = new Set(['shodan', 'urlscan', 'abuse_ch', 'otx', 'abuseipdb', 'axur']);
+const axurImports = new Map();
+function accountAxurImport(owner) {
+    if (!axurImports.has(owner)) axurImports.set(owner, createAxurImport({ store: iocIntelligence, scope: owner,
+        getKey: () => getUserApiKey(owner, 'axur'), http: axios,
+        canWrite: () => { const disk = fs.statfsSync(path.dirname(process.env.IOC_INTELLIGENCE_PATH || path.join(__dirname, '.ioc-intelligence.sqlite'))); return disk.bavail * disk.bsize > 2 * 1024 ** 3; },
+        matchActors: text => matchActors(text, actorIndex), matchMalware: text => matchMalware(text, malwareIndex) }));
+    return axurImports.get(owner);
+}
+let axurCollectionFlight;
+function runAxurCollection() {
+    return axurCollectionFlight || (axurCollectionFlight = (async () => {
+        for (const [owner, user] of Object.entries(usersStore)) {
+            if (user.apiKeysEnc?.axur && (hasPremiumAccessSync(user.login) || premiumOpen)) await accountAxurImport(owner).run();
+        }
+    })().catch(() => console.warn('Axur import deferred')).finally(() => { axurCollectionFlight = null; }));
+}
 function userKeysStatus(u) {
     const out = {};
     const m = (u && u.apiKeysEnc) || {};
@@ -2384,6 +2401,7 @@ app.put('/api/user/keys/:provider', requireAuth, (req, res) => {
     u.updatedAt = new Date().toISOString();
     saveUsers();
     if (process.env.NODE_ENV !== 'test' && ['abuse_ch','abuseipdb','otx'].includes(provider) && sessionHasPremium(req.user)) { accountIntelligenceCollector(req.user.sub); void runIntelligenceCollection(); }
+    if (process.env.NODE_ENV !== 'test' && provider === 'axur' && sessionHasPremium(req.user)) void runAxurCollection();
     res.json({ provider, hasKey: true });
 });
 app.delete('/api/user/keys/:provider', requireAuth, (req, res) => {
@@ -3714,6 +3732,9 @@ app.get('/api/intelligence/status', requirePremium, (req,res) => {
     const statuses=own?.status()||[];
     res.set('Cache-Control','private, no-store').json({ ...iocIntelligence.status(req.user.sub), collectors:[...intelligenceCollector.status().map(source=>statuses.find(row=>row.id===source.id&&row.configured)||source), ctiFyi.status()] });
 });
+app.get('/api/intelligence/axur/status', requirePremium, (req,res) => {
+    res.set('Cache-Control', 'private, no-store').json(accountAxurImport(req.user.sub).status());
+});
 app.get('/api/intel/cti-fyi/status', (_req,res) => res.set('Cache-Control','no-store').json(ctiFyi.status()));
 app.get('/api/intelligence/export', requirePremium, (req,res) => {
     try {
@@ -4154,6 +4175,8 @@ app.listen(PORT, () => {
     void iocIntelligence.ingestNews(newsArchiveStore.all()).catch(() => console.warn('IOC archive backfill failed'));
     setTimeout(() => { void runIntelligenceCollection(); }, 5000).unref();
     setInterval(() => { void runIntelligenceCollection(); }, 60000).unref();
+    setTimeout(() => { void runAxurCollection(); }, 15000).unref();
+    setInterval(() => { void runAxurCollection(); }, 60000).unref();
     setTimeout(() => { void refreshCtiFyi().catch(() => console.warn('CTI.fyi refresh failed')); }, 45000).unref();
     setInterval(() => { void refreshCtiFyi().catch(() => console.warn('CTI.fyi refresh failed')); }, 60000).unref();
     setInterval(()=>{void weeklyReports.tick();},60000).unref();

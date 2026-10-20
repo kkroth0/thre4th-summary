@@ -20,7 +20,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { deleteApiKey, fetchApiKeys, saveApiKey, type ApiKeysState } from "@/services/threatApi";
+import { deleteApiKey, fetchApiKeys, saveApiKey, fetchAxurImportStatus, type AxurImportStatus, type ApiKeysState } from "@/services/threatApi";
 
 interface Provider {
   id: string;
@@ -43,6 +43,7 @@ const CATALOG: Group[] = [
   {
     title: { pt: 'Coleta contínua de inteligência', en: 'Continuous intelligence collection' },
     items: [
+      { id:'axur',label:'Axur',url:'https://docs.axur.com/en/axur/api/',placeholder:'Axur API Key',description:{pt:'Importa os IOCs e seus relatórios para a sua base privada, com retomada automática. Na Axur, realiza apenas consultas de leitura.',en:'Imports IOCs and linked insights into your private inventory, with automatic resume. Axur requests are read-only.'} },
       { id:'otx',label:'AlienVault OTX',url:'https://otx.alienvault.com/api',placeholder:'OTX API Key',description:{pt:'Usada nas consultas e na coleta contínua dos seus pulsos. Evidências privadas ficam vinculadas à sua conta.',en:'Used for lookups and continuous pulse collection. Private evidence remains scoped to your account.'} },
       { id:'abuseipdb',label:'AbuseIPDB',url:'https://www.abuseipdb.com/account/api',placeholder:'API Key',description:{pt:'Acrescenta reputação de IPs às consultas e à base de IOCs. A coleta respeita as cotas da sua chave.',en:'Adds IP reputation to lookups and the IOC inventory. Collection respects your key quota.'} },
     ],
@@ -71,6 +72,29 @@ const CATALOG: Group[] = [
     ],
   },
 ];
+
+function AxurProgress() {
+  const { language } = useLanguage();
+  const pt = language === 'pt';
+  const [progress, setProgress] = useState<AxurImportStatus | null>(null);
+  useEffect(() => {
+    let active = true;
+    const refresh = () => { void fetchAxurImportStatus().then(value => { if (active) setProgress(value); }).catch(() => {}); };
+    refresh();
+    const interval = window.setInterval(refresh, 15000);
+    return () => { active = false; window.clearInterval(interval); };
+  }, []);
+  if (!progress) return null;
+  const labels = pt ? { pending:'Aguardando importação', running:'Importando', retrying:'Aguardando nova tentativa', complete:'Varredura concluída' }
+    : { pending:'Waiting to import', running:'Importing', retrying:'Waiting to retry', complete:'Scan complete' };
+  const format = (value: number) => value.toLocaleString(pt ? 'pt-BR' : 'en-US');
+  return <div role="status" className="rounded-md border border-border bg-secondary/30 px-3 py-2 text-xs leading-relaxed text-muted-foreground">
+    <p className="font-medium text-foreground">{labels[progress.status]}</p>
+    <p>{format(progress.processed)}{progress.total !== undefined ? ` / ${format(progress.total)}` : ''} {pt ? 'registros percorridos' : 'records scanned'} · {format(progress.observations || 0)} {pt ? 'evidências processadas' : 'evidence records processed'}</p>
+    {progress.error && <p>{progress.error}</p>}
+    <p>{pt ? 'Os IOCs são deduplicados na base. A contagem acima acompanha a leitura das páginas da fonte.' : 'IOCs are deduplicated in the inventory. Counts above track source pages.'}</p>
+  </div>;
+}
 
 function KeyRow({ provider, configured, onChanged }: { provider: Provider; configured: boolean; onChanged: () => void }) {
   const { language } = useLanguage();
@@ -128,6 +152,7 @@ function KeyRow({ provider, configured, onChanged }: { provider: Provider; confi
       </div>
 
       {provider.description ? <p className="text-xs leading-relaxed text-muted-foreground">{pt ? provider.description.pt : provider.description.en}</p> : null}
+      {provider.id === 'axur' && configured && <AxurProgress />}
 
       {configured && !editing ? (
         <div className="flex flex-1 items-center gap-2">
@@ -210,8 +235,8 @@ export function ApiKeysSettings() {
               ser dita com todas as letras. */}
           <p className="mt-1 text-sm text-muted-foreground">
             {pt
-              ? "Use suas próprias chaves do Abuse.ch, Shodan e urlscan.io."
-              : "Use your own Abuse.ch, Shodan and urlscan.io keys."}
+              ? "Conecte suas fontes para consultar e ampliar sua base de inteligência."
+              : "Connect your sources to query and expand your intelligence inventory."}
           </p>
         </div>
         <Badge variant="outline" className="mt-1 shrink-0 text-xs">{loading ? "…" : `${configured}/${total}`} {pt ? "conectada" : "connected"}</Badge>
