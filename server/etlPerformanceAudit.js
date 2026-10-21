@@ -33,7 +33,12 @@ if(process.argv[4]==='checkpoint'){
       if(group)for(const name of ['memory.current','memory.max','memory.high','memory.swap.current','memory.swap.max','memory.events','io.stat']){
         try{limits[name]=fs.readFileSync(path.join('/sys/fs/cgroup',group,name),'utf8').trim();}catch{/* optional kernel controller */}
       }
-      processes.push({pid:Number(pid),memory,limits,threads});
+      const ancestors=[];
+      if(group){let dir=path.dirname(path.join('/sys/fs/cgroup',group));while(dir.startsWith('/sys/fs/cgroup')){
+        const constraints={};for(const name of ['memory.current','memory.max','memory.high','memory.swap.current'])try{constraints[name]=fs.readFileSync(path.join(dir,name),'utf8').trim();}catch{/* optional controller */}
+        ancestors.push(constraints);if(dir==='/sys/fs/cgroup')break;dir=path.dirname(dir);
+      }}
+      processes.push({pid:Number(pid),memory,limits,ancestors,threads});
     }catch{/* process may exit during inspection */}
   }
   console.log(JSON.stringify({at:new Date().toISOString(),readOnly:true,indexReady:Boolean(db.prepare("SELECT 1 FROM sqlite_master WHERE name='observations_inventory'").get()),processes,axur:state(`axur-import-v1:${owner}`)},null,2));
