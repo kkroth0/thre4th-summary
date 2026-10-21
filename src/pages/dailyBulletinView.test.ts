@@ -1,6 +1,17 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { canOpenJob, canOpenReport, DEFAULT_SUGGESTION_PREFS, explainFailure, filterSuggestions, filterReportLibrary, reportTitle } from "./dailyBulletinView.ts";
+import { canOpenJob, canOpenReport, DEFAULT_SUGGESTION_PREFS, explainFailure, filterSuggestions, filterReportLibrary, reportTitle, parseReportSources } from "./dailyBulletinView.ts";
+
+test("fontes múltiplas preservam ordem, removem duplicadas e validam todos os links", () => {
+  assert.deepEqual(parseReportSources(" https://news.example/a\nhttps://vendor.example/b https://news.example/a "), {
+    urls: ["https://news.example/a", "https://vendor.example/b"],
+  });
+  assert.equal(parseReportSources("https://news.example/a\ninválido").error, "invalid");
+  assert.equal(parseReportSources("ftp://news.example/a").error, "invalid");
+  assert.equal(parseReportSources("").error, "empty");
+  assert.equal(parseReportSources(Array.from({ length: 6 }, (_, i) => `https://news.example/${i}`).join("\n")).error, "limit");
+  assert.equal(parseReportSources(Array.from({ length: 5 }, (_, i) => `https://news.example/${i}`).join("\n")).error, undefined);
+});
 
 test("busca na biblioteca combina título, fonte e CVE sem perder sugestões após a 14ª", () => {
   const items = Array.from({ length: 40 }, (_, index) => ({ title: `Análise ${index + 1}`, url: `https://vendor.example/report-${index}`, cves: [`CVE-2026-${10000 + index}`] }));

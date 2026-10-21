@@ -8,6 +8,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Switch } from "@/components/ui/switch";
@@ -35,7 +36,7 @@ import {
 } from "@/services/threatApi";
 import { exportBoletimJSON } from "@/utils/boletimExport";
 import {
-  canOpenReport, filterSuggestions, filterReportLibrary, DEFAULT_SUGGESTION_PREFS, type SuggestionPrefs, canOpenJob, explainFailure, reportTitle } from "./dailyBulletinView";
+  canOpenReport, filterSuggestions, filterReportLibrary, DEFAULT_SUGGESTION_PREFS, type SuggestionPrefs, canOpenJob, explainFailure, reportTitle, parseReportSources, MAX_REPORT_SOURCES } from "./dailyBulletinView";
 
 const PREFS_KEY = "daily-suggestion-prefs";
 const loadPrefs = (): SuggestionPrefs => {
@@ -184,6 +185,7 @@ const JobListItem: React.FC<{
             <span className={st.text}>{pt ? st.pt : st.en}</span>
             {j.status === "done" ? ` · ${timeAgo(j.updatedAt || j.createdAt, pt)}` : ""}
             {" · "}{hostOf(j.url) || j.url}
+            {(j.urls?.length ?? 0) > 1 && ` · ${j.urls!.length} ${pt ? "fontes" : "sources"}`}
           </div>
         </div>
         {j.status === "pending" && (
@@ -258,7 +260,8 @@ const DailyBulletin: React.FC = () => {
   const [libraryMode, setLibraryMode] = useState("reports");
   const [librarySearch, setLibrarySearch] = useState("");
   const [jobStatus, setJobStatus] = useState("all");
-  const urlInputRef = useRef<HTMLInputElement | null>(null);
+  const urlInputRef = useRef<HTMLTextAreaElement | null>(null);
+  const sourceInput = parseReportSources(pasteUrl);
   const [deckTemplate, setDeckTemplate] = useState<DeckTemplate>(loadDeckTemplate);
   const [deckSubtype, setDeckSubtype] = useState<DeckSubtype>(loadDeckSubtype);
   const [jobs, setJobs] = useState<BoletimJob[]>([]);
@@ -304,6 +307,15 @@ const DailyBulletin: React.FC = () => {
   const visibleJobs = useMemo(() => filterReportLibrary(jobs, librarySearch)
     .filter((job) => jobStatus === "all" || job.status === jobStatus), [jobs, librarySearch, jobStatus]);
   const openComposer = () => { setComposerOpen(true); requestAnimationFrame(() => urlInputRef.current?.focus()); };
+  const addSource = (url: string) => {
+    const urls = [...new Set([...sourceInput.urls, url])];
+    if (urls.length > MAX_REPORT_SOURCES) {
+      toast.error(pt ? "Limite de 5 fontes por relatório." : "Limit of 5 sources per report.");
+      return;
+    }
+    setPasteUrl(urls.join("\n"));
+    openComposer();
+  };
 
   // A lista vem do servidor — antes vivia só no localStorage, então o histórico
   // era por navegador e sumia. Chega sem o JSON do boletim; o corpo é buscado
@@ -363,16 +375,23 @@ const DailyBulletin: React.FC = () => {
   }, [jobs]);
 
   const generate = async (
-    url: string, type: DeckType, title: string, template: DeckTemplate = deckTemplate,
+    source: string | string[], type: DeckType, title: string, template: DeckTemplate = deckTemplate,
     subtype: DeckSubtype = deckSubtype,
   ) => {
     if (!auth?.authenticated) { toast.error(pt ? "Entre com o GitHub para gerar" : "Sign in with GitHub to generate"); return false; }
-    if (!/^https?:\/\//i.test(url)) { toast.error(pt ? "URL inválida" : "Invalid URL"); return false; }
+    const { urls, error } = parseReportSources(Array.isArray(source) ? source.join("\n") : source);
+    if (error) {
+      toast.error(error === "limit"
+        ? (pt ? `Use até ${MAX_REPORT_SOURCES} fontes por relatório.` : `Use up to ${MAX_REPORT_SOURCES} sources per report.`)
+        : (pt ? "Informe links HTTP ou HTTPS válidos, um por linha." : "Enter valid HTTP or HTTPS links, one per line."));
+      return false;
+    }
+    const url = urls[0];
     try {
-      const { id } = await generateBoletim(url, type, title, template, subtype);
+      const { id } = await generateBoletim(urls, type, title, template, subtype);
       const now = new Date().toISOString();
       setJobs((prev) => [
-        { id, url, type, template, subtype, title, status: "pending", json: null, error: null, createdAt: now, updatedAt: now },
+        { id, url, urls, type, template, subtype, title, status: "pending", json: null, error: null, createdAt: now, updatedAt: now },
         ...prev,
       ]);
       setLibraryMode("reports");
@@ -452,7 +471,7 @@ const DailyBulletin: React.FC = () => {
   };
 
   const retryJob = (j: BoletimJob) => {
-    generate(j.url, j.type, j.title, j.template ?? deckTemplate, j.subtype ?? deckSubtype);
+    generate(j.urls?.length ? j.urls : j.url, j.type, j.title, j.template ?? deckTemplate, j.subtype ?? deckSubtype);
   };
 
   // EST-02: a geração leva minutos e não tinha como desistir. Apagar o job é o
@@ -487,22 +506,32 @@ const DailyBulletin: React.FC = () => {
       {(composerOpen || !auth.authenticated) && <section id="report-composer" className="mb-5 rounded-md border bg-card p-4">
         {auth.authenticated ? (
           <div className="space-y-3">
-            <div className="flex items-center justify-between"><h2 className="text-sm font-semibold">{pt ? "Criar a partir de uma fonte" : "Create from a source"}</h2><Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setComposerOpen(false)} aria-label={pt ? "Fechar criação" : "Close composer"}><X className="h-4 w-4" /></Button></div>
+            <div className="flex items-center justify-between"><h2 className="text-sm font-semibold">{pt ? "Reunir fontes para o relatório" : "Gather report sources"}</h2><Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setComposerOpen(false)} aria-label={pt ? "Fechar criação" : "Close composer"}><X className="h-4 w-4" /></Button></div>
             <div
               data-testid="report-generator-command-bar"
               className="grid items-end gap-3 sm:grid-cols-[1fr_1fr_auto]"
             >
-              <Input
+              <Textarea
                 ref={urlInputRef}
-                aria-label={pt ? "URL da fonte" : "Source URL"}
+                aria-label={pt ? "Links das fontes, um por linha" : "Source links, one per line"}
+                aria-describedby="report-sources-help"
+                aria-invalid={Boolean(pasteUrl.trim() && sourceInput.error)}
                 placeholder={pt
-                  ? "https://... — notícia, advisory ou pesquisa"
-                  : "https://... — news, advisory or research"}
+                  ? "Cole até 5 links de notícias, advisories ou pesquisas, um por linha"
+                  : "Paste up to 5 news, advisory or research links, one per line"}
                 value={pasteUrl}
                 onChange={(e) => setPasteUrl(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter" && pasteUrl.trim()) void submitSource(); }}
-                className="h-10 min-w-0 bg-background text-sm sm:col-span-3"
+                onKeyDown={(e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey) && pasteUrl.trim()) { e.preventDefault(); void submitSource(); } }}
+                rows={4}
+                className="min-w-0 bg-background text-sm sm:col-span-3"
               />
+              <p id="report-sources-help" className="text-xs text-muted-foreground sm:col-span-3" role="status">
+                {sourceInput.error && pasteUrl.trim()
+                  ? (sourceInput.error === "limit"
+                    ? (pt ? "Limite de 5 fontes por relatório." : "Limit of 5 sources per report.")
+                    : (pt ? "Revise os links: use HTTP ou HTTPS, um por linha." : "Check the links: use HTTP or HTTPS, one per line."))
+                  : (pt ? `${sourceInput.urls.length}/5 fontes. A IA combina os insumos em um único relatório.` : `${sourceInput.urls.length}/5 sources. AI combines the inputs into one report.`)}
+              </p>
               {/* Tipo (vulnerabilidade/campanha) não tem seletor PRÓPRIO: o motor
                   classifica sozinho por padrão (mesma heurística do CLI), e um
                   subtipo concreto do seletor abaixo já implica o tipo (phishing é
@@ -570,7 +599,7 @@ const DailyBulletin: React.FC = () => {
                 </SelectContent>
               </Select>
               </div>
-              <Button onClick={() => void submitSource()} disabled={submitting || !pasteUrl.trim()} className="h-9 gap-2 px-4">
+              <Button onClick={() => void submitSource()} disabled={submitting || Boolean(sourceInput.error)} className="h-9 gap-2 px-4">
                 {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />} {pt ? "Gerar relatório" : "Generate report"}
               </Button>
             </div>
@@ -774,7 +803,10 @@ const DailyBulletin: React.FC = () => {
                     {/* subtype "auto" explícito: suggestedType já vem resolvido pelo
                         próprio servidor, e herdar o subtipo manual da barra (se houver
                         um concreto) forçaria um tipo que pode contradizer suggestedType. */}
-                    <Button size="sm" variant="outline" disabled={!auth.authenticated} onClick={() => generate(s.url, s.suggestedType, s.title, deckTemplate, "auto")} className="ml-4 h-7 gap-1.5 px-2 text-xs">
+                    <Button size="sm" variant="ghost" disabled={!auth.authenticated} onClick={() => addSource(s.url)} className="ml-4 h-7 gap-1.5 px-2 text-xs">
+                      <Plus className="h-3 w-3" /> {pt ? "Adicionar ao relatório" : "Add to report"}
+                    </Button>
+                    <Button size="sm" variant="outline" disabled={!auth.authenticated} onClick={() => generate(s.url, s.suggestedType, s.title, deckTemplate, "auto")} className="h-7 gap-1.5 px-2 text-xs">
                       <FileText className="h-3 w-3" /> {pt ? "Gerar relatório" : "Generate report"}
                     </Button>
                   </div>

@@ -402,6 +402,16 @@ test('premium route rejects anonymous users', async () => {
     assert.ok([401, 403].includes(r.status), `expected 401/403, got ${r.status}`);
 });
 
+test('report generation rejects too many sources instead of silently dropping inputs', async () => {
+    const r = await fetch(`${BASE}/api/feed/generate`, {
+        method: 'POST',
+        headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ urls: Array.from({ length: 6 }, (_, i) => `https://example.com/${i}`) }),
+    });
+    assert.equal(r.status, 400);
+    assert.match((await r.json()).error, /5 fontes/);
+});
+
 test('legacy groq-key endpoint is gone', async () => {
     const r = await fetch(`${BASE}/api/user/groq-key`, { method: 'PUT' });
     assert.equal(r.status, 404);

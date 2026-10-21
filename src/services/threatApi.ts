@@ -904,11 +904,11 @@ export interface BoletimReport {
     };
 }
 
-// 1 URL = 1 boletim: o front pede a geração de uma URL; o worker na VPS gera o
-// JSON e devolve. O front faz poll do job até ficar pronto e baixa o JSON.
+// Um boletim combina as fontes indicadas; `url` mantém a primeira para clientes antigos.
 export interface BoletimJob {
     id: string;
     url: string;
+    urls?: string[];
     type: DeckType;
     template?: DeckTemplate;   // ausente em boletim anterior à escolha de template
     subtype?: DeckSubtype;     // só com template premium; ausente/'auto' = motor escolheu

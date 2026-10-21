@@ -1,6 +1,18 @@
 export const canOpenReport = (job: { status: string; json?: unknown; hasReport?: boolean }) =>
   job.status === "done" && Boolean(job.json || job.hasReport);
 
+export const MAX_REPORT_SOURCES = 5;
+
+export function parseReportSources(input: string): { urls: string[]; error?: "empty" | "invalid" | "limit" } {
+  const urls = [...new Set(input.trim().split(/\s+/).filter(Boolean))];
+  if (!urls.length) return { urls, error: "empty" };
+  if (urls.length > MAX_REPORT_SOURCES) return { urls, error: "limit" };
+  if (urls.some((value) => {
+    try { return !["http:", "https:"].includes(new URL(value).protocol); } catch { return true; }
+  })) return { urls, error: "invalid" };
+  return { urls };
+}
+
 // O item que falhou também abre. Antes, clicar num erro caía no estado vazio
 // "Nenhum relatório aberto" — 5 dos 48 relatórios estão nesse caso, e a mensagem
 // só existia truncada na lista.

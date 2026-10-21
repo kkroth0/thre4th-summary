@@ -317,16 +317,17 @@ export const BoletimView: React.FC<{ report: BoletimReport }> = ({ report }) => 
 
       {ttps.length > 0 && (
         <Section title="MITRE ATT&CK" count={ttps.length}>
-          <div className="flex flex-wrap gap-1.5">
-            {ttps.map((t, i) => (
-              <a key={i} href={t.url || `https://attack.mitre.org/techniques/${(t.id || "").replace(".", "/")}/`}
-                 target="_blank" rel="noopener noreferrer"
-                 className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs hover:bg-muted/50"
-                 title={t.descricao || ""}>
-                <span className="font-mono text-primary">{t.id}</span>
-                <span className="text-muted-foreground truncate max-w-[200px]">{t.nome}</span>
-              </a>
-            ))}
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[580px] text-left text-xs">
+              <thead><tr className="border-b"><th className="p-2 font-medium">Técnica</th><th className="p-2 font-medium">Descrição</th><th className="p-2 font-medium">Contexto</th></tr></thead>
+              <tbody>{ttps.map((t, i) => (
+                <tr key={i} className="border-b align-top last:border-0">
+                  <td className="w-1/4 p-2"><a href={t.url || `https://attack.mitre.org/techniques/${(t.id || "").replace(".", "/")}/`} target="_blank" rel="noopener noreferrer" className="hover:underline"><span className="font-mono text-primary">{t.id}</span><span className="mt-1 block">{t.nome}</span></a></td>
+                  <td className="w-1/3 p-2 text-muted-foreground">{t.descricao || "—"}</td>
+                  <td className="p-2 leading-relaxed">{t.contexto || "Contexto não informado neste relatório."}</td>
+                </tr>
+              ))}</tbody>
+            </table>
           </div>
         </Section>
       )}

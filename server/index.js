@@ -2600,10 +2600,12 @@ app.post('/api/feed/generate', requirePremium, scanLimiter, async (req, res) => 
     try {
         // Mesma forma do /api/newsletter/enrich: `urls` é a story consolidada,
         // `url` segue aceito para uma fonte só.
-        const urls = (Array.isArray(req.body?.urls) ? req.body.urls : [req.body?.url])
-            .map((value) => (value || '').toString())
-            .filter(Boolean)
-            .slice(0, MAX_STORY_SOURCES);
+        const urls = [...new Set((Array.isArray(req.body?.urls) ? req.body.urls : [req.body?.url])
+            .map((value) => (value || '').toString().trim())
+            .filter(Boolean))];
+        if (urls.length > MAX_STORY_SOURCES) {
+            return res.status(400).json({ error: `Use até ${MAX_STORY_SOURCES} fontes por relatório.` });
+        }
         const url = urls[0] || '';
         const type = normalizeDeckRequestType(req.body?.type);
         const title = (req.body?.title || '').toString().slice(0, 300);
