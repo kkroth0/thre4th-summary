@@ -6,6 +6,11 @@ on:
         description: GitHub login for account-scoped counts
         required: true
         type: string
+      checkpoint_only:
+        description: Read only the saved Axur checkpoint, without table scans or HTTP probes
+        required: false
+        type: boolean
+        default: false
 permissions:
   contents: read
 jobs:
@@ -21,6 +26,7 @@ jobs:
       SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
       SSH_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
       ACCOUNT_LOGIN: ${{ inputs.login }}
+      AUDIT_MODE: ${{ inputs.checkpoint_only && 'checkpoint' || 'full' }}
     steps:
       - uses: actions/checkout@v7
       - name: Read storage, collector state, query plans and endpoint timings
@@ -33,4 +39,4 @@ jobs:
           printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
           install -m 600 /dev/null ~/.ssh/known_hosts
           printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
-          ssh -o ConnectTimeout=15 -p "$VPS_PORT" "$VPS_USER@$VPS_HOST" "timeout 120 node --input-type=module - '$VPS_APP_DIR' '$ACCOUNT_LOGIN'" < server/etlPerformanceAudit.js
+          ssh -o ConnectTimeout=15 -p "$VPS_PORT" "$VPS_USER@$VPS_HOST" "timeout 120 node --input-type=module - '$VPS_APP_DIR' '$ACCOUNT_LOGIN' '$AUDIT_MODE'" < server/etlPerformanceAudit.js

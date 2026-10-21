@@ -15,6 +15,11 @@ db.pragma('query_only = ON');db.pragma('busy_timeout = 1000');
 const measurements=[];
 const measure=(name,fn)=>{const start=performance.now();const value=fn();measurements.push({name,ms:Math.round((performance.now()-start)*100)/100});return value;};
 const state=key=>{const row=db.prepare('SELECT value FROM intelligence_state WHERE id=?').get(key);return row?JSON.parse(row.value):null;};
+// Frequent import checks must not scan hundreds of thousands of observations.
+if(process.argv[4]==='checkpoint'){
+  console.log(JSON.stringify({at:new Date().toISOString(),readOnly:true,axur:state(`axur-import-v1:${owner}`)},null,2));
+  db.close();process.exit(0);
+}
 const providers=measure('provider-counts',()=>db.prepare('SELECT provider,COUNT(*) observations FROM observations WHERE scope IN (?,?) GROUP BY provider').all('global',owner));
 const schema=db.prepare("SELECT name,sql FROM sqlite_master WHERE type='index' AND tbl_name IN ('observations','entity_links','indicators') AND sql IS NOT NULL").all();
 const predicate="o.scope IN (?,?) AND o.provider<>'news'",args=['global',owner,'actor','G1024'];
