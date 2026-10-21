@@ -102,6 +102,53 @@ Axur no escopo público. São leituras durante a importação, sem snapshot
 transacional entre contagens. Depois dessa leitura, a interface já mostrava
 278.000 registros percorridos e 285.074 evidências processadas, em andamento.
 
+### Revisão após os timeouts das 22h — 20/10
+
+O acompanhamento posterior encontrou o lote reduzido a apenas 100 registros,
+com 51.096 ms por página: 47.911 ms aguardando a consulta de IOCs e 2.267 ms
+na gravação. O marcador avançava, mas a política de redução definitiva havia
+degradado a vazão. A auditoria
+[39528581964](https://github.com/kkroth0/thre4th-summary/actions/runs/39528581964)
+confirmou 310.500 registros percorridos nesse estado. O usuário também relatou
+novo timeout em 310.700, mesmo com lote de 100.
+
+O código `0a27a47`, publicado com sucesso no
+[servidor](https://github.com/kkroth0/thre4th-summary/actions/runs/39529670895)
+e na [interface](https://github.com/kkroth0/thre4th-summary/actions/runs/39529670911),
+substitui a política anterior: a consulta em segundo plano aceita até 240
+segundos, e timeouts de rede não diminuem o lote. Esse prazo também aparece no
+script de referência fornecido pelo usuário; não constitui SLA do fornecedor.
+Três páginas saudáveis permitem aumentar o lote até 5.000, com releitura
+controlada quando o marcador não se alinha ao novo tamanho. Apenas os registros
+depois da posição já comprometida são gravados e contados. A proteção de 32 MiB
+continua reduzindo lotes quando há excesso real de tamanho da resposta.
+
+A validação passou em **883 testes de servidor**, tipos, lint e build. Os novos
+testes cobrem recuperação de lotes, fronteiras desalinhadas, reinício após
+gravação parcial, excesso de tamanho, resposta interrompida, respeito a espera
+por limite de chamadas e término de página sobreposta. A fonte continua sendo
+consultada sequencialmente e apenas por GET.
+
+Em produção, a
+[segunda leitura leve](https://github.com/kkroth0/thre4th-summary/actions/runs/39530173732)
+confirmou 313.000 registros e lote de 1.000 concluído em 57.978 ms.
+A [leitura seguinte](https://github.com/kkroth0/thre4th-summary/actions/runs/39530403913)
+confirmou 315.000, sem falhas consecutivas, já com lote de 5.000: a consulta
+levou **70.448 ms**, acima do limite antigo, e concluiu corretamente. Essa
+primeira página maior continha 4.000 registros anteriores; somente os 1.000
+restantes avançaram o contador. Isso verifica a recuperação do tamanho e a
+preservação do marcador. As leituras de acompanhamento agora podem usar uma
+consulta direta ao estado salvo, sem recontar o inventário ou sondar rotas HTTP.
+
+A [conferência final às 23h](https://github.com/kkroth0/thre4th-summary/actions/runs/39530569392)
+confirmou **320.000 registros percorridos e 328.210 evidências processadas**, em
+andamento, sem falhas consecutivas. Um lote completo de **5.000 registros novos**
+levou **99.901 ms**: 70.224 ms na consulta de IOCs, 579 ms nos relatórios, 278 ms
+na conversão e 28.673 ms na gravação. A ampliação deixou de ser apenas configurada:
+o lote maior foi efetivamente consultado e persistido. É uma amostra de vazão,
+sem promessa de prazo para toda a carga; a latência da origem, as pausas por
+limites e a contenção local ainda podem variar.
+
 ## Próximas otimizações, por prioridade
 
 | Prioridade | Fluxo e evidência no código | Mudança proposta | Como validar |
