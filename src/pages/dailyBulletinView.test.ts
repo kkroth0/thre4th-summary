@@ -8,6 +8,7 @@ test("fontes múltiplas preservam ordem, removem duplicadas e validam todos os l
   });
   assert.equal(parseReportSources("https://news.example/a\ninválido").error, "invalid");
   assert.equal(parseReportSources("ftp://news.example/a").error, "invalid");
+  assert.equal(parseReportSources("https:news.example/a").error, "invalid");
   assert.equal(parseReportSources("").error, "empty");
   assert.equal(parseReportSources(Array.from({ length: 6 }, (_, i) => `https://news.example/${i}`).join("\n")).error, "limit");
   assert.equal(parseReportSources(Array.from({ length: 5 }, (_, i) => `https://news.example/${i}`).join("\n")).error, undefined);

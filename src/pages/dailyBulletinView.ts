@@ -8,7 +8,7 @@ export function parseReportSources(input: string): { urls: string[]; error?: "em
   if (!urls.length) return { urls, error: "empty" };
   if (urls.length > MAX_REPORT_SOURCES) return { urls, error: "limit" };
   if (urls.some((value) => {
-    try { return !["http:", "https:"].includes(new URL(value).protocol); } catch { return true; }
+    try { return !/^https?:\/\//i.test(value) || !["http:", "https:"].includes(new URL(value).protocol); } catch { return true; }
   })) return { urls, error: "invalid" };
   return { urls };
 }
