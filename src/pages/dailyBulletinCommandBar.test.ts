@@ -13,7 +13,7 @@ test("report composer preserves source, subtype and template controls", async ()
   assert.ok(statusStart > start, "status row should sit outside the command bar");
   const commandBar = source.slice(start, statusStart);
 
-  assert.match(commandBar, /aria-label=\{pt \? "URL da fonte" : "Source URL"\}/);
+  assert.match(commandBar, /aria-label=\{pt \? "Links das fontes, um por linha" : "Source links, one per line"\}/);
   assert.match(commandBar, /data-testid="report-generator-template-trigger"/);
   // Subtipo (malware/phishing/ransomware/cve_unica/cve_varias, ou automático)
   // substitui o antigo seletor de tipo -- um subtipo concreto já implica o
