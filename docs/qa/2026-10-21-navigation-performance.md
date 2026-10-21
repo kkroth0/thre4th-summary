@@ -54,3 +54,26 @@ Cold inventory aggregation and the first full-news transfer still depend on
 data volume and VPS resources. The index, short-lived caches and worker isolation
 reduce that cost and prevent it from monopolizing the HTTP event loop; this does
 not replace a future paginated news endpoint or materialized inventory summary.
+
+
+## Follow-up after the first production verification
+
+The index completed successfully. The base actor catalog returned HTTP 200 in
+1,453 ms and a profile in 498 ms, but account aggregation, news and inventory
+still exceeded the 20-second probe deadline. Authentication itself took 16,209 ms
+during one aggregation. These results do not establish that navigation is fixed.
+
+Read-only process inspection confirmed disk waits and substantial paging:
+approximately 384 MB RSS and 384 MB swapped for the application at 21:59 UTC.
+The inherited service memory limits were unlimited; the host itself has ~1 GB.
+The news archive contained 10,141 publications. The import checkpoint retained
+3,000,000 Axur records read; it was not reset or advanced before batch completion.
+
+The follow-up isolates provider batch writes too, sharing the exact observation
+and entity-registration SQL with news revisions. Main-thread news revisions and
+provider writes remain serialized by the existing ingestion queue. Actor activity
+receives only fields needed for its counts instead of full publication/story
+payloads. Idle IOC/CVE readers terminate after ten seconds; the write worker
+terminates after five idle seconds, releasing its SQLite and JavaScript memory.
+Low-memory hosts default to two concurrent feed requests and one article IOC
+extraction; configured concurrency overrides remain respected.

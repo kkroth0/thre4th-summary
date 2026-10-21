@@ -24,6 +24,26 @@ async function fixture(t, options = {}) {
   return { store, reader, filePath };
 }
 
+test('isolated provider writes preserve all evidence, aliases and scopes across news revisions and independent connections', async t => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'intelligence-write-'));
+  const filePath = path.join(dir, 'inventory.sqlite');
+  const store = createIocIntelligence({ filePath, isolatedWrites: true });
+  t.after(async () => { await store.close(); fs.rmSync(filePath, { force: true }); });
+  const rows = Array.from({ length: 350 }, (_, i) => ({ value: `8.8.${Math.floor(i/250)}.${i%250+1}`, provider: 'OTX', scope: 'one',
+    externalId: String(i), link: 'https://source.example/report', actors: [{ id: 'actor', name: 'Actor', aliases: ['Alias One'] }] }));
+  let served = false; setImmediate(() => { served = true; });
+  await store.ingest(rows);
+  assert.equal(served, true);
+  assert.equal(store.status('one').evidence, 350);
+  assert.equal(store.status('two').evidence, 0);
+  await store.ingestNews([{ link: 'https://news.example/post', title: 'News', pubDate: new Date().toISOString(), source: 'News', iocs: { ips: ['8.8.8.8'] }, actors: [{ id: 'actor', name: 'Actor' }] }]);
+  assert.equal(store.status('one').evidence, 351);
+  const independent = new Database(filePath, { readonly: true });
+  assert.equal(independent.prepare('SELECT COUNT(*) n FROM observations').get().n, 351);
+  assert.ok(independent.prepare("SELECT 1 FROM intelligence_entity_names WHERE scope='one' AND alias='alias one'").get());
+  independent.close();
+});
+
 test('isolated reads retain the exact scoped evidence and keep the main event loop available', async t => {
   const { store, reader } = await fixture(t, { ttl: 0 });
   let served = false;

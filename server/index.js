@@ -8,6 +8,8 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import dns from 'dns';
 import net from 'net';
+import os from 'node:os';
+const lowMemoryHost = os.totalmem() < 2 * 1024 ** 3;
 import fs from 'fs';
 import crypto from 'crypto';
 import compression from 'compression';
@@ -191,7 +193,7 @@ const dailyEditionStore = createEditionStore({ filePath: DAILY_SUMMARIES_PATH, w
 
 const NEWS_STORIES_PATH = process.env.NEWS_STORIES_PATH || path.join(__dirname, '.news-stories.json');
 const NEWS_ARCHIVE_PATH = process.env.NEWS_ARCHIVE_PATH || path.join(__dirname, '.news-archive.json');
-const iocIntelligence = createIocIntelligence({ filePath: process.env.IOC_INTELLIGENCE_PATH || (process.env.NODE_ENV === 'test' ? ':memory:' : path.join(__dirname, '.ioc-intelligence.sqlite')) });
+const iocIntelligence = createIocIntelligence({ isolatedWrites: process.env.NODE_ENV !== 'test', filePath: process.env.IOC_INTELLIGENCE_PATH || (process.env.NODE_ENV === 'test' ? ':memory:' : path.join(__dirname, '.ioc-intelligence.sqlite')) });
 const intelligenceReads = process.env.NODE_ENV === 'test' ? null : createIntelligenceReads({ filePath: process.env.IOC_INTELLIGENCE_PATH || path.join(__dirname, '.ioc-intelligence.sqlite') });
 const intelligenceCounts = process.env.NODE_ENV === 'test' ? null : createIntelligenceReads({ filePath: process.env.IOC_INTELLIGENCE_PATH || path.join(__dirname, '.ioc-intelligence.sqlite'), timeout: 120000, ttl: 60000 });
 let inventoryOptimization = Promise.resolve();
@@ -1480,7 +1482,7 @@ const feedCollector = createFeedCollector({
     cache: rssCollectionCache, parse: parseFeed,
     resolve: (feed, previous, options) => feed.kind === 'github' ? repositoryResolver(feed, previous, options) : publicationResolver(feed, previous, options),
     onHealth: (url, health) => feedHealth.set(url, health),
-    concurrency: Number(process.env.FEED_FETCH_CONCURRENCY) || 6,
+    concurrency: Number(process.env.FEED_FETCH_CONCURRENCY) || (lowMemoryHost ? 2 : 6),
     // One bounded attempt per cycle; the collector retains the last good
     // source snapshot on failure instead of tripling timeouts/API calls.
     request: (url, { headers }) => publicationRequest(url, {
@@ -1541,7 +1543,7 @@ const refreshNewsletterFeed = singleFlightRefresh(async () => {
         const bodies = await collectArticleTexts(rawItems, {
             cache: articleCollectionCache,
             maxFetches: process.env.NEWS_ARTICLE_MAX_FETCHES === undefined ? 40 : Number(process.env.NEWS_ARTICLE_MAX_FETCHES),
-            concurrency: Number(process.env.NEWS_IOC_CONCURRENCY) || 3,
+            concurrency: Number(process.env.NEWS_IOC_CONCURRENCY) || (lowMemoryHost ? 1 : 3),
             fetchText: (url) => fetchArticleText(url, 64000),
         });
         stage('extraction');
@@ -3812,9 +3814,10 @@ app.get('/api/intelligence/ioc', requirePremium, async (req,res) => {
     if(!detail)return res.status(404).json({error:'Indicador não encontrado na base.'});
     res.set('Cache-Control','private, no-store').json(detail);
 });
+const activityPublication = ({ link, pubDate, actors, iocs, storyId }) => ({ link, pubDate, actors, iocs, storyId });
 app.get('/api/actors/activity', requirePremium, async (req, res) => {
     res.set('Cache-Control', 'private, no-store');
-    res.json({ days: 180, activity: await queryIntelligence('actorActivity', { owner: req.user.sub, archive: [...newsArchiveStore.all(), ...ctiActorRows()], stories: newsStoryStore.all() }, { revision: `${iocIntelligence.news.generation()}:${ctiFyi.groupsVersion()}` }) });
+    res.json({ days: 180, activity: await queryIntelligence('actorActivity', { owner: req.user.sub, archive: [...newsArchiveStore.all(), ...ctiActorRows()].map(activityPublication), stories: newsStoryStore.all().map(story => ({ id: story.id, sources: (story.sources || []).map(activityPublication) })) }, { revision: `${iocIntelligence.news.generation()}:${ctiFyi.groupsVersion()}` }) });
 });
 app.get('/api/actors/:id/evidence', requirePremium, async (req, res) => {
     if (!knownActorIds().has(req.params.id) && !(await queryIntelligence('entities', { kind: 'actor', owner: req.user.sub })).some(actor=>actor.id===req.params.id)) return res.status(404).json({ error: 'Actor not found' });

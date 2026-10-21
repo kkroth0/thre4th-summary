@@ -13,17 +13,18 @@ export function optimizeIntelligenceReads(filePath) {
 // Express; identical account-scoped requests share a recent result/in-flight read.
 export function createIntelligenceReads({ filePath, ttl = 15000, timeout = 60000, maxPending = 16,
   maxEntries = 48, maxBytes = 16 * 1024 * 1024 } = {}) {
-  let worker, sequence = 0, bytes = 0, closed = false;
+  let worker, idle, sequence = 0, bytes = 0, closed = false;
   const pending = new Map(), flights = new Map(), cache = new Map();
   const unavailable = () => Object.assign(Error('A consulta está temporariamente indisponível.'), { status: 503 });
   function reset(current) {
     if (worker !== current) return;
-    worker = null;
+    worker = null; clearTimeout(idle);
     for (const item of pending.values()) { clearTimeout(item.timer); item.reject(unavailable()); }
     pending.clear(); flights.clear();
     return current.terminate();
   }
   function start() {
+    clearTimeout(idle);
     if (worker) return worker;
     const current = new Worker(new URL('./intelligenceReadWorker.js', import.meta.url), {
       workerData: { filePath }, execArgv: [], resourceLimits: { maxOldGenerationSizeMb: 128 },
@@ -36,7 +37,7 @@ export function createIntelligenceReads({ filePath, ttl = 15000, timeout = 60000
       if (!item) return;
       pending.delete(id); clearTimeout(item.timer);
       if (error) item.reject(unavailable()); else item.resolve(data);
-      if (!pending.size) current.unref();
+      if (!pending.size) { current.unref(); idle = setTimeout(() => { void reset(current); }, 10000); idle.unref(); }
     });
     return current;
   }

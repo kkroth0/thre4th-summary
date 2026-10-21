@@ -1,4 +1,6 @@
 import Database from 'better-sqlite3';
+import { createObservationWriter } from './observationWriter.js';
+import { createIntelligenceWriter } from './intelligenceWriter.js';
 import { createIocIntelligenceReads } from './iocIntelligenceReads.js';
 import crypto from 'node:crypto';
 import { normalizeIndicator } from './indicatorIdentity.js';
@@ -15,7 +17,7 @@ import { actorNameKey } from './actorSources.js';
 const idFor = value => crypto.createHash('sha256').update(value).digest('hex');
 const iocValues = row => ['ips','domains','hashes','urls'].flatMap(type => (row.iocs?.[type] || []).map(value=>({value})));
 
-export function createIocIntelligence({filePath=':memory:',now=()=>Date.now()}={}) {
+export function createIocIntelligence({filePath=':memory:',now=()=>Date.now(),isolatedWrites=false}={}) {
   const db=new Database(filePath); db.pragma('journal_mode = WAL');db.pragma('busy_timeout = 5000');db.pragma('cache_size = -8000');
   db.exec(`CREATE TABLE IF NOT EXISTS indicators(id TEXT PRIMARY KEY,type TEXT NOT NULL,value TEXT NOT NULL UNIQUE);
     CREATE TABLE IF NOT EXISTS observations(id TEXT PRIMARY KEY,indicator TEXT NOT NULL,scope TEXT NOT NULL,provider TEXT NOT NULL,external_id TEXT NOT NULL,published TEXT NOT NULL,collected TEXT NOT NULL,details TEXT NOT NULL);
@@ -33,30 +35,14 @@ export function createIocIntelligence({filePath=':memory:',now=()=>Date.now()}={
     for (const entity of names) news.registerEntities([entity], entity.scope, entity.source);
     db.prepare('INSERT INTO intelligence_state VALUES(?,?)').run('entity-name-backfill-v1', JSON.stringify({ at: new Date(now()).toISOString(), names: names.length }));
   })();
-  const putIoc=db.prepare('INSERT OR IGNORE INTO indicators VALUES(?,?,?)');
-  const putObservation=db.prepare('INSERT INTO observations VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET published=excluded.published,collected=excluded.collected,details=excluded.details');
+  const chunk = createObservationWriter(db, news, now);
   const clearLinks=db.prepare('DELETE FROM entity_links WHERE observation=?');
-  const putLink=db.prepare('INSERT OR REPLACE INTO entity_links VALUES(?,?,?,?,?)');
   const putState=db.prepare('INSERT OR REPLACE INTO intelligence_state VALUES(?,?)');
-  const chunk=db.transaction(rows=>{
-    const names = new Map();
-    for(const row of rows) {
-      const indicator=normalizeIndicator(row.value,row.type);if(!indicator)continue;
-      const scope=String(row.scope||'global'),provider=String(row.provider||'news');
-      const key=idFor(`${indicator.type}:${indicator.value}`);
-      const observation=idFor(JSON.stringify([scope,provider,row.externalId||row.link||indicator.value,key]));
-      const published=Number.isFinite(Date.parse(row.published))?new Date(row.published).toISOString():new Date(now()).toISOString();
-      putIoc.run(key,indicator.type,indicator.value);
-      const details={title:String(row.title||provider).slice(0,300),source:String(row.source||provider).slice(0,200),link:row.link||'',confidence:row.confidence??null,reputation:row.reputation||null,port:row.port||null,storyId:row.storyId||null,tags:(row.tags||[]).slice(0,50),...(row.payload?{payload:row.payload}:{})};
-      putObservation.run(observation,key,scope,provider,String(row.externalId||row.link||indicator.value),published,new Date(now()).toISOString(),JSON.stringify(details));
-      clearLinks.run(observation);
-      for(const kind of ['actor','malware','cve'])for(const entity of row[kind+'s']||[])if(entity?.id&&entity?.name){putLink.run(observation,kind,String(entity.id).slice(0,180),String(entity.name).slice(0,200),row.relation||'mentioned-with');names.set(JSON.stringify([scope,provider,kind,entity.id,entity.name,entity.aliases||[]]),{entity:{...entity,kind},scope,provider});}
-    }
-    for (const { entity, scope, provider } of names.values()) news.registerEntities([entity], scope, provider);
-  });
+  const writer = isolatedWrites && filePath !== ':memory:' ? createIntelligenceWriter(filePath) : null;
   let flight=Promise.resolve(), writeBarrier=Promise.resolve();
   const ingest = rows => {
     const work=flight.then(async()=>{
+      if (writer) return writer.ingest(rows);
       let size = 25;
       for(let i=0;i<rows.length;){
         const batch=rows.slice(i,i+size),start=performance.now();
@@ -194,5 +180,5 @@ export function createIocIntelligence({filePath=':memory:',now=()=>Date.now()}={
     state:key=>{const row=db.prepare('SELECT value FROM intelligence_state WHERE id=?').get(key);return row?JSON.parse(row.value):null;},
     setState:(key,value)=>putState.run(key,JSON.stringify(value)),
     status,
-    close:()=>db.close()};
+    close:async()=>{ if (writer) await writer.close(); db.close(); }};
 }
