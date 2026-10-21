@@ -26,7 +26,7 @@ if(process.argv[4]==='ui'){
   const checkpoint=state(`axur-import-v1:${owner}`);
   db.close();
   const {parse}=await import(pathToFileURL(path.join(root,'server/node_modules/dotenv/lib/main.js')));
-  const env=parse(fs.readFileSync(path.join(root,'server/.env')));
+  const env=parse(fs.readFileSync(path.join(root,'.env')));
   if(!env.SESSION_SECRET)throw Error('Session configuration unavailable');
   // Short-lived signature for this existing account, retained only in memory.
   // No credentials, response content or signed token are emitted by the audit.
@@ -50,7 +50,7 @@ if(process.argv[4]==='ui'){
   const etag=await probe('/api/newsletter');
   if(etag)await probe('/api/newsletter',{'If-None-Match':etag});
   // The health probe should remain responsive while a heavier aggregation runs.
-  await Promise.all([probe('/api/actors/activity'),probe('/api/health')]);
+  await Promise.all([probe('/api/actors/activity'),probe('/api/auth/me')]);
   await probe('/api/intelligence/iocs?size=20');
   await probe('/api/intelligence/iocs?size=20');
   console.log(JSON.stringify({at:new Date().toISOString(),readOnly:true,indexReady,host:{cpus:os.cpus().length,loadAverage:os.loadavg(),memoryBytes:os.totalmem(),freeMemoryBytes:os.freemem()},axur:checkpoint,http},null,2));
