@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import crypto from 'node:crypto';
+import { execFileSync } from 'node:child_process';
 import { performance } from 'node:perf_hooks';
 import { pathToFileURL } from 'node:url';
 const root=path.resolve(process.argv[2] || process.cwd()),login=String(process.argv[3] || '').toLowerCase();
@@ -18,6 +19,8 @@ const measure=(name,fn)=>{const start=performance.now();const value=fn();measure
 const state=key=>{const row=db.prepare('SELECT value FROM intelligence_state WHERE id=?').get(key);return row?JSON.parse(row.value):null;};
 // Frequent import checks must not scan hundreds of thousands of observations.
 if(process.argv[4]==='checkpoint'){
+  let serviceEvents=[];
+  try { serviceEvents=execFileSync('journalctl',['-u','bdppt-site','--since','-15 min','-n','300','--no-pager','-o','short-iso'],{encoding:'utf8',timeout:5000}).split('\n').filter(line=>/Server running|Inventory read index|Stopped |Started |Main process exited|Failed with result|Out of memory|heap out of memory/.test(line)).slice(-20); } catch {/* optional service journal */}
   const processes=[];
   if(process.platform==='linux')for(const pid of fs.readdirSync('/proc').filter(name=>/^\d+$/.test(name))){
     try{
@@ -41,7 +44,7 @@ if(process.argv[4]==='checkpoint'){
       processes.push({pid:Number(pid),memory,limits,ancestors,threads});
     }catch{/* process may exit during inspection */}
   }
-  console.log(JSON.stringify({at:new Date().toISOString(),readOnly:true,indexReady:Boolean(db.prepare("SELECT 1 FROM sqlite_master WHERE name='observations_inventory'").get()),processes,replayComplete:Boolean(state('provider-matches-v12')),newsCycle:state('news-current-cycle'),newsSync:state('news-sync'),axur:state(`axur-import-v1:${owner}`)},null,2));
+  console.log(JSON.stringify({at:new Date().toISOString(),readOnly:true,serviceEvents,indexReady:Boolean(db.prepare("SELECT 1 FROM sqlite_master WHERE name='observations_inventory'").get()),processes,replayComplete:Boolean(state('provider-matches-v12')),newsCycle:state('news-current-cycle'),newsSync:state('news-sync'),axur:state(`axur-import-v1:${owner}`)},null,2));
   db.close();process.exit(0);
 }
 if(process.argv[4]==='ui'){
