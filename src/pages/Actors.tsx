@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import { ChevronDown, ChevronRight, Crosshair, Globe2, Search, Target, UsersRound, X } from 'lucide-react';
@@ -12,8 +12,8 @@ import { SourceIdentity } from '@/components/SourceIdentity';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { actorPageCopy, sortActors } from './actorsView';
 import { actorSourceLabel, type ActorListItem } from './actorsTypes';
-import { ActorProfile } from './ActorProfile';
-import { ThreatModelTab } from './ActorThreatModel';
+const ActorProfile = lazy(() => import('./ActorProfile').then(module => ({ default: module.ActorProfile })));
+const ThreatModelTab = lazy(() => import('./ActorThreatModel').then(module => ({ default: module.ThreatModelTab })));
 import { ActorsOverview, ActorsGlobal } from './ActorsOverview';
 import { ActorAvatar } from '@/components/ActorAvatar';
 import { useAuth } from '@/contexts/AuthContext';
@@ -57,17 +57,25 @@ export default function Actors() {
   const { auth } = useAuth();
   const view = ['overview', 'catalog', 'global', 'model'].includes(params.get('view') || '') ? params.get('view')! : 'overview';
   const setView = (value: string) => setParams(previous => { const next = new URLSearchParams(previous); next.set('view', value); next.delete('actor'); return next; });
-  const activity = useQuery({ queryKey: ['actor-activity', auth.login || ''], queryFn: ({ signal }) => fetchActorActivity(signal), enabled: auth.authenticated && !actorId, staleTime: 300_000, retry: false });
+  const activity = useQuery({ queryKey: ['actor-activity', auth.login || ''], queryFn: ({ signal }) => fetchActorActivity(signal), enabled: auth.authenticated && !actorId && ['overview', 'catalog'].includes(view), staleTime: 60_000, retry: false });
   const [query, setQuery] = useState(''); const [country, setCountry] = useState(ALL);
   const [sector, setSector] = useState(ALL); const [target, setTarget] = useState(ALL);
   const [motivation, setMotivation] = useState(ALL);
   const [sort, setSort] = useState<Sort>('name');
   const [page, setPage] = useState(1); const [pageSize, setPageSize] = useState(25);
-  const catalog = useQuery({ queryKey: ['actor-catalog'], queryFn: async ({ signal }) => {
+  const baseCatalog = useQuery({ queryKey: ['actor-base-catalog'], queryFn: async ({ signal }) => {
+    const response = await fetch('/api/actors?catalogOnly=1', { signal });
+    if (!response.ok) throw new Error(String(response.status));
+    return await response.json() as Catalog;
+  }, enabled: !actorId, staleTime: 30 * 60_000, retry: 1 });
+  const fullCatalog = useQuery({ queryKey: ['actor-catalog', auth.login || ''], queryFn: async ({ signal }) => {
     const response = await fetch('/api/actors', { signal, cache: 'no-cache' });
     if (!response.ok) throw new Error(String(response.status));
     return await response.json() as Catalog;
-  }, staleTime: 30 * 60_000, retry: 1 });
+  }, enabled: !actorId && Boolean(baseCatalog.data), staleTime: 60_000, retry: 1 });
+  const catalog = { data: fullCatalog.data || baseCatalog.data, isLoading: baseCatalog.isLoading && !fullCatalog.data,
+    isError: !fullCatalog.data && !baseCatalog.data && (baseCatalog.isError || fullCatalog.isError),
+    refetch: () => { void baseCatalog.refetch(); void fullCatalog.refetch(); } };
   const { actors, countries, sectors, targets } = catalog.data || emptyCatalog;
   const openActor = (id: string, section?: string) => { listScroll.current = window.scrollY; setParams(previous => { const next = new URLSearchParams(previous); next.set('actor', id); if (section) next.set('section', section); else next.delete('section'); return next; }); };
   const closeActor = () => setParams(previous => { const next = new URLSearchParams(previous); next.delete('actor'); next.delete('section'); return next; }, { replace: true });
@@ -94,7 +102,8 @@ export default function Actors() {
   return <PageLayout width="max-w-[1600px]" className="actor-workspace" breadcrumbItems={actorId
     ? [{ label: actors.find(actor => actor.id === actorId)?.name || (pt ? 'Perfil do ator' : 'Actor profile') }]
     : [{ label: view === 'catalog' ? (pt ? 'Lista' : 'Listing') : view === 'global' ? 'Global' : view === 'model' ? (pt ? 'Modelagem de ameaças' : 'Threat modelling') : (pt ? 'Visão geral' : 'Overview') }]}>
-    {actorId ? <ActorProfile key={actorId} id={actorId} initialTab={params.get('section') || undefined} summary={actors.find(actor => actor.id === actorId)} pt={pt} onBack={closeActor} /> : <>
+    {actorId ? <Suspense fallback={<LoadingRows rows={6} />}><ActorProfile key={actorId} id={actorId} initialTab={params.get('section') || undefined} summary={actors.find(actor => actor.id === actorId)} pt={pt} onBack={closeActor} /></Suspense> : <>
+      {baseCatalog.data && !fullCatalog.data && <p role="status" className="mb-3 text-xs text-muted-foreground">{fullCatalog.isError ? <>{pt ? 'Não foi possível carregar os perfis das suas fontes.' : 'Could not load profiles from your sources.'} <button className="underline" onClick={() => void fullCatalog.refetch()}>{pt ? 'Tentar novamente' : 'Retry'}</button></> : (pt ? 'Carregando os perfis das suas fontes…' : 'Loading profiles from your sources…')}</p>}
       <Tabs value={view} onValueChange={setView}>
         <TabsList variant="underline" className="mb-6 gap-4" aria-label={pt ? 'Visões de atores' : 'Actor views'}>
           <TabsTrigger value="overview">{pt ? 'Visão geral' : 'Overview'}</TabsTrigger>
@@ -129,7 +138,7 @@ export default function Actors() {
             </>}
           </section>
         </TabsContent>
-        <TabsContent value="model"><header className="mb-5"><h1 className="text-xl font-semibold">{pt ? 'Modelagem de ameaças' : 'Threat modelling'}</h1><p className="mt-1 text-sm text-muted-foreground">{pt ? 'Relacione o catálogo aos setores e regiões da organização.' : 'Match the catalog to organization sectors and regions.'}</p></header>{catalog.isLoading ? <LoadingRows rows={5} /> : catalog.isError ? <p role="alert">{pt ? 'Catálogo indisponível.' : 'Catalog unavailable.'}</p> : <ThreatModelTab actors={actors} sectors={sectors} targets={targets} pt={pt} onOpen={openActor} />}</TabsContent>
+        <TabsContent value="model"><header className="mb-5"><h1 className="text-xl font-semibold">{pt ? 'Modelagem de ameaças' : 'Threat modelling'}</h1><p className="mt-1 text-sm text-muted-foreground">{pt ? 'Relacione o catálogo aos setores e regiões da organização.' : 'Match the catalog to organization sectors and regions.'}</p></header>{catalog.isLoading ? <LoadingRows rows={5} /> : catalog.isError ? <p role="alert">{pt ? 'Catálogo indisponível.' : 'Catalog unavailable.'}</p> : <Suspense fallback={<LoadingRows rows={5} />}><ThreatModelTab actors={actors} sectors={sectors} targets={targets} pt={pt} onOpen={openActor} /></Suspense>}</TabsContent>
       </Tabs>
     </>}
   </PageLayout>;

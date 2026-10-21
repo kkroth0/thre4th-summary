@@ -189,6 +189,22 @@ test('unified IOC inventory and export require premium and validate dates',async
     assert.equal(exported.status,200);assert.equal((await exported.json()).total,0);
 });
 
+test('navigation catalog is independently available and unchanged news uses scoped conditional responses', async () => {
+    const catalog = await fetch(BASE + '/api/actors?catalogOnly=1').then(res => res.json());
+    assert.ok(Array.isArray(catalog.actors));
+    const news = await fetch(BASE + '/api/newsletter', { headers: AUTH_HEADERS });
+    assert.equal(news.status, 200);
+    const etag = news.headers.get('etag');
+    assert.ok(etag);
+    const snapshot = await news.json();
+    assert.ok(Array.isArray(snapshot));
+    const unchanged = await fetch(BASE + '/api/newsletter', { headers: { ...AUTH_HEADERS, 'If-None-Match': etag } });
+    assert.equal(unchanged.status, 304);
+    assert.equal((await unchanged.text()).length, 0);
+    assert.equal((await fetch(BASE + '/api/newsletter', { headers: { 'If-None-Match': etag } })).status, 401);
+    assert.equal((await fetch(BASE + '/api/newsletter', { headers: { ...OUTSIDER_HEADERS, 'If-None-Match': etag } })).status, 403);
+});
+
 test('archive export enforces authentication, applies monitoring and includes final-day IOC evidence', async () => {
     const route = '/api/news/export?from=2026-10-08&to=2026-10-08&dataset=iocs&format=json';
     assert.equal((await fetch(BASE + route)).status, 401);

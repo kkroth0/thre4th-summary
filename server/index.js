@@ -33,6 +33,7 @@ import { createVulnerabilityCatalog } from './vulnerabilityCatalog.js';
 import { createVulnerabilityQueries, optimizeVulnerabilityCatalog, startAiPatchIndex } from './vulnerabilityQueries.js';
 import { createNewsEpssLookup } from './newsEpss.js';
 import { createNewsFeedResponse } from './newsFeedResponse.js';
+import { createIntelligenceReads, optimizeIntelligenceReads } from './intelligenceReads.js';
 import { createLookupCache } from './lookupCache.js';
 import { PUBLICATION_SOURCES, OT_PUBLICATION_SOURCES, createPublicationResolver } from './publicationSources.js';
 import { REPOSITORY_SOURCES, createRepositoryResolver } from './repositorySources.js';
@@ -191,6 +192,20 @@ const dailyEditionStore = createEditionStore({ filePath: DAILY_SUMMARIES_PATH, w
 const NEWS_STORIES_PATH = process.env.NEWS_STORIES_PATH || path.join(__dirname, '.news-stories.json');
 const NEWS_ARCHIVE_PATH = process.env.NEWS_ARCHIVE_PATH || path.join(__dirname, '.news-archive.json');
 const iocIntelligence = createIocIntelligence({ filePath: process.env.IOC_INTELLIGENCE_PATH || (process.env.NODE_ENV === 'test' ? ':memory:' : path.join(__dirname, '.ioc-intelligence.sqlite')) });
+const intelligenceReads = process.env.NODE_ENV === 'test' ? null : createIntelligenceReads({ filePath: process.env.IOC_INTELLIGENCE_PATH || path.join(__dirname, '.ioc-intelligence.sqlite') });
+const intelligenceCounts = process.env.NODE_ENV === 'test' ? null : createIntelligenceReads({ filePath: process.env.IOC_INTELLIGENCE_PATH || path.join(__dirname, '.ioc-intelligence.sqlite'), timeout: 120000, ttl: 60000 });
+let inventoryOptimization = Promise.resolve();
+async function queryIntelligence(method, params = {}, options) {
+    if (intelligenceCounts && ['status', 'list'].includes(method)) return intelligenceCounts.query(method, params, options);
+    if (intelligenceReads) return intelligenceReads.query(method, params, options);
+    if (method === 'entities') return iocIntelligence.entities(params.kind, params.owner);
+    if (method === 'status') return iocIntelligence.status(params.owner);
+    if (method === 'list') return iocIntelligence.list(params);
+    if (method === 'detail') return iocIntelligence.detail(params.value, params.owner, params);
+    if (method === 'publications') return iocIntelligence.publications(params);
+    if (method === 'actorActivity') return buildActorActivity(actorPublications([...params.archive, ...iocIntelligence.publications({ owner: params.owner })], params.stories));
+    throw Error('Unsupported read');
+}
 const { archive: newsArchiveStore, stories: newsStoryStore } = createSqliteNewsStores({
     persistence: iocIntelligence.news,
     archive: createNewsArchiveStore({ filePath: NEWS_ARCHIVE_PATH, readFileSync: fs.readFileSync, writeJsonAtomic, initialRows: iocIntelligence.news.generation() ? [] : undefined }),
@@ -238,6 +253,7 @@ let intelligenceCollectionFlight = null;
 function runIntelligenceCollection() {
     if (intelligenceCollectionFlight) return intelligenceCollectionFlight;
     intelligenceCollectionFlight=(async()=>{
+        await inventoryOptimization;
         await intelligenceCollector.run();
         for (const [owner,user] of Object.entries(usersStore)) if (hasPremiumAccessSync(user.login) || premiumOpen) accountIntelligenceCollector(owner);
         for (const collector of accountIntelligenceCollectors.values()) await collector.run();
@@ -892,6 +908,7 @@ const ctiFyi = createCtiFyi({ http: axios,
 let ransomwareVictimsFlight = null;
 let ctiActorIndexVersion = '';
 async function refreshCtiFyi() {
+    await inventoryOptimization;
     await ctiFyi.refresh();
     const version = ctiFyi.groupsVersion();
     if (version && version !== ctiActorIndexVersion) { Object.assign(actorIndex, buildActorIndex(loadActors().actors)); ctiActorIndexVersion = version; softwareIndexCache = null; actorNameIndexCache = null; }
@@ -1472,6 +1489,7 @@ const feedCollector = createFeedCollector({
 });
 
 const refreshNewsletterFeed = singleFlightRefresh(async () => {
+    await inventoryOptimization;
     await newsQualityReady;
     const startedAt = Date.now();
     const stages = {}, memory = {};
@@ -1602,6 +1620,7 @@ app.get('/api/newsletter', requirePremium, async (req, res) => {
         }
         if (!memoryCache.newsletter.data && !newsArchiveStore.size()) return res.status(503).set('Retry-After', '60').json({ error: 'News feed is not available yet' });
         const response = newsFeedResponse({ current: memoryCache.newsletter.data || emptyNewsFeed, archive: newsArchiveStore.all(), stories: newsStoryStore.all(), owner: req.user.sub, preferences: newsMonitoringStore.get(req.user.sub), query: req.query });
+        if (req.headers['if-none-match'] === response.etag) return res.status(304).set('Cache-Control', 'private, no-store').set('ETag', response.etag).end();
         res.set('Cache-Control', 'private, no-store').set('ETag', response.etag).type('json').send(response.body);
     } catch (error) {
         const { status, message } = sanitizeError(error);
@@ -2380,6 +2399,7 @@ function accountAxurImport(owner) {
 let axurCollectionFlight;
 function runAxurCollection() {
     return axurCollectionFlight || (axurCollectionFlight = (async () => {
+        await inventoryOptimization;
         for (const [owner, user] of Object.entries(usersStore)) {
             if (user.apiKeysEnc?.axur && (hasPremiumAccessSync(user.login) || premiumOpen)) await accountAxurImport(owner).run();
         }
@@ -2445,8 +2465,8 @@ function buildExposureScanDeps(ownerId) {
 const malwareCatalog = createMalwareCatalog({
     http: axios,
     getKey: ownerId => getUserApiKey(ownerId, 'abuse_ch') || abuseChKey(),
-    getPublications: (owner, { newsOnly = false } = {}) => [...newsArchiveStore.list().map(row => ({ ...row, evidenceKind: 'news' })),...(newsOnly ? [] : iocIntelligence.publications({owner}).map(row => ({ ...row, evidenceKind: 'api' })))],
-    getIntelligenceFamilies: owner => iocIntelligence.families(owner),
+    getPublications: async (owner, { newsOnly = false } = {}) => [...newsArchiveStore.list().map(row => ({ ...row, evidenceKind: 'news' })),...(newsOnly ? [] : (await queryIntelligence('publications', { owner })).map(row => ({ ...row, evidenceKind: 'api' })))],
+    getIntelligenceFamilies: owner => queryIntelligence('entities', { kind: 'malware', owner }),
     onSamples:(owner,data)=>iocIntelligence.ingest(sourceObservations('MalwareBazaar',data,{scope:owner,matchActors:text=>matchActors(text,actorIndex),matchMalware:(text,options)=>matchMalware(text,malwareIndex,options)})),
     cacheFile: process.env.MALPEDIA_CACHE_PATH || path.join(__dirname, '.malpedia-cache.json'),
 });
@@ -3724,11 +3744,12 @@ app.get('/api/org/asset-suggestions', requirePremium, (req, res) => {
 });
 
 // List (slim) + facets. The client fetches once and searches/filters in-memory.
-app.get('/api/actors', (req, res) => {
+app.get('/api/actors', async (req, res) => {
     const catalog = loadActors();
     const session=verifySession(getCookie(req,'ts_session'));
     const owner=session&&sessionHasPremium(session)?session.sub:'';
-    const extras=iocIntelligence.entities('actor',owner).filter(row=>!catalog.actors.some(actor=>actor.id===row.id||actor.name.toLowerCase()===row.name.toLowerCase()))
+    const ids = new Set(catalog.actors.map(actor => actor.id)), names = new Set(catalog.actors.map(actor => actor.name.toLowerCase()));
+    const extras=(req.query.catalogOnly === '1' ? [] : await queryIntelligence('entities', { kind: 'actor', owner })).filter(row=>!ids.has(row.id)&&!names.has(row.name.toLowerCase()))
         .map(row=>({...row,aliases:[],country:'',motivation:'',techniques:[],sectors:[],targets:[],verification:'source-reported'}));
     const { countries, sectors, targets }=catalog;
     const actors=[...catalog.actors,...extras];
@@ -3765,10 +3786,10 @@ app.get('/api/actors/software-index', (req, res) => {
 });
 
 // Full detail for one actor.
-app.get('/api/intelligence/status', requirePremium, (req,res) => {
+app.get('/api/intelligence/status', requirePremium, async (req,res) => {
     const own=accountIntelligenceCollector(req.user.sub);
     const statuses=own?.status()||[];
-    res.set('Cache-Control','private, no-store').json({ ...iocIntelligence.status(req.user.sub), collectors:[...intelligenceCollector.status().map(source=>statuses.find(row=>row.id===source.id&&row.configured)||source), ctiFyi.status()] });
+    res.set('Cache-Control','private, no-store').json({ ...await queryIntelligence('status', { owner: req.user.sub }), collectors:[...intelligenceCollector.status().map(source=>statuses.find(row=>row.id===source.id&&row.configured)||source), ctiFyi.status()] });
 });
 app.get('/api/intelligence/axur/status', requirePremium, (req,res) => {
     res.set('Cache-Control', 'private, no-store').json(accountAxurImport(req.user.sub).status());
@@ -3783,32 +3804,32 @@ app.get('/api/intelligence/export', requirePremium, (req,res) => {
         res.json({dataset:'iocs',range:{from:options.from,to:options.to},total:rows.length,rows});
     }catch(error){res.status(error.status||500).json({error:error.status===400?error.message:'Não foi possível exportar a base.'});}
 });
-app.get('/api/intelligence/iocs', requirePremium, (req,res) => {
-    res.set('Cache-Control','private, no-store').json(iocIntelligence.list({ owner:req.user.sub,type:String(req.query.type||''),query:String(req.query.query||''),page:req.query.page,size:req.query.size,actor:String(req.query.actor||''),malware:String(req.query.malware||'') }));
+app.get('/api/intelligence/iocs', requirePremium, async (req,res) => {
+    res.set('Cache-Control','private, no-store').json(await queryIntelligence('list', { owner:req.user.sub,type:String(req.query.type||''),query:String(req.query.query||''),page:req.query.page,size:req.query.size,actor:String(req.query.actor||''),malware:String(req.query.malware||'') }));
 });
-app.get('/api/intelligence/ioc', requirePremium, (req,res) => {
-    const detail=iocIntelligence.detail(String(req.query.value||''),req.user.sub,{offset:req.query.offset,size:req.query.size});
+app.get('/api/intelligence/ioc', requirePremium, async (req,res) => {
+    const detail=await queryIntelligence('detail', { value: String(req.query.value||''), owner: req.user.sub, offset:req.query.offset,size:req.query.size });
     if(!detail)return res.status(404).json({error:'Indicador não encontrado na base.'});
     res.set('Cache-Control','private, no-store').json(detail);
 });
-app.get('/api/actors/activity', requirePremium, (req, res) => {
+app.get('/api/actors/activity', requirePremium, async (req, res) => {
     res.set('Cache-Control', 'private, no-store');
-    res.json({ days: 180, activity: buildActorActivity(actorPublications([...newsArchiveStore.all(),...ctiActorRows(),...iocIntelligence.publications({owner:req.user.sub})], newsStoryStore.all())) });
+    res.json({ days: 180, activity: await queryIntelligence('actorActivity', { owner: req.user.sub, archive: [...newsArchiveStore.all(), ...ctiActorRows()], stories: newsStoryStore.all() }, { revision: `${iocIntelligence.news.generation()}:${ctiFyi.groupsVersion()}` }) });
 });
-app.get('/api/actors/:id/evidence', requirePremium, (req, res) => {
-    if (!knownActorIds().has(req.params.id) && !iocIntelligence.entities('actor',req.user.sub).some(actor=>actor.id===req.params.id)) return res.status(404).json({ error: 'Actor not found' });
+app.get('/api/actors/:id/evidence', requirePremium, async (req, res) => {
+    if (!knownActorIds().has(req.params.id) && !(await queryIntelligence('entities', { kind: 'actor', owner: req.user.sub })).some(actor=>actor.id===req.params.id)) return res.status(404).json({ error: 'Actor not found' });
     const days = req.query.days == null ? 180 : Number(req.query.days);
     if (![0, 30, 90, 180, 365].includes(days)) return res.status(400).json({ error: 'Invalid time range' });
     res.set('Cache-Control', 'private, no-store');
-    res.json(buildActorEvidence(actorPublications([...newsArchiveStore.all(),...ctiActorRows(),...iocIntelligence.publications({owner:req.user.sub,kind:'actor',id:req.params.id})], newsStoryStore.all()), req.params.id, { days }));
+    res.json(buildActorEvidence(actorPublications([...newsArchiveStore.all(),...ctiActorRows(),...await queryIntelligence('publications', {owner:req.user.sub,kind:'actor',id:req.params.id})], newsStoryStore.all()), req.params.id, { days }));
 });
-app.get('/api/actors/:id', (req, res) => {
+app.get('/api/actors/:id', async (req, res) => {
     const session=verifySession(getCookie(req,'ts_session'));
     const owner=session&&sessionHasPremium(session)?session.sub:'';
     let actor = loadActors().actors.find(a => a.id === req.params.id);
     if (!actor) {
-        const found=iocIntelligence.entities('actor',owner).find(row=>row.id===req.params.id);
-        actor=found ? {...found,aliases:[],country:'',motivation:'',sectors:[],targets:[],techniques:[],software:[],description:`Adversário informado pela fonte ${found.source}.`,refs:iocIntelligence.publications({owner,kind:'actor',id:found.id}).slice(0,10).map(row=>row.link),verification:'source-reported'}:null;
+        const found=(await queryIntelligence('entities', { kind: 'actor', owner })).find(row=>row.id===req.params.id);
+        actor=found ? {...found,aliases:[],country:'',motivation:'',sectors:[],targets:[],techniques:[],software:[],description:`Adversário informado pela fonte ${found.source}.`,refs:(await queryIntelligence('publications', {owner,kind:'actor',id:found.id})).slice(0,10).map(row=>row.link),verification:'source-reported'}:null;
     }
     if (!actor) return res.status(404).json({ error: 'actor not found' });
     res.set('Cache-Control', owner?'private, no-store':'public, max-age=60');
@@ -4190,10 +4211,14 @@ app.listen(PORT, () => {
     // Unit/API tests invoke collectors explicitly with controlled inputs.
     // Booting a test server must not launch real scheduled collections.
     if (process.env.NODE_ENV === 'test') return;
+    inventoryOptimization = optimizeIntelligenceReads(process.env.IOC_INTELLIGENCE_PATH || path.join(__dirname, '.ioc-intelligence.sqlite'))
+        .then(() => console.log('Inventory read index ready'))
+        .catch(() => console.warn('Inventory read index preparation deferred'));
+    iocIntelligence.deferWritesUntil(inventoryOptimization);
     setInterval(() => { void telegramIntegration.tick().catch(() => console.warn('Telegram worker unavailable')); }, 2000).unref();
     console.log(`Server running on port ${PORT}`);
-    setTimeout(()=>{void iocIntelligence.replayProviderPayloads((provider,payload,options)=>sourceObservations(provider,payload,{...options,
-        matchActors:text=>matchActors(text,actorIndex),matchMalware:(text,matchOptions)=>matchMalware(text,malwareIndex,matchOptions)})).catch(()=>console.warn('Saved provider match review failed'));},2000).unref();
+    setTimeout(()=>{void inventoryOptimization.then(()=>iocIntelligence.replayProviderPayloads((provider,payload,options)=>sourceObservations(provider,payload,{...options,
+        matchActors:text=>matchActors(text,actorIndex),matchMalware:(text,matchOptions)=>matchMalware(text,malwareIndex,matchOptions)}))).catch(()=>console.warn('Saved provider match review failed'));},2000).unref();
     let vulnerabilityRetries = 0;
     const refreshVulnerabilities = async () => {
         try {

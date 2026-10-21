@@ -3,6 +3,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
+import crypto from 'node:crypto';
 import { performance } from 'node:perf_hooks';
 import { pathToFileURL } from 'node:url';
 const root=path.resolve(process.argv[2] || process.cwd()),login=String(process.argv[3] || '').toLowerCase();
@@ -19,6 +20,41 @@ const state=key=>{const row=db.prepare('SELECT value FROM intelligence_state WHE
 if(process.argv[4]==='checkpoint'){
   console.log(JSON.stringify({at:new Date().toISOString(),readOnly:true,axur:state(`axur-import-v1:${owner}`)},null,2));
   db.close();process.exit(0);
+}
+if(process.argv[4]==='ui'){
+  const indexReady=Boolean(db.prepare("SELECT 1 FROM sqlite_master WHERE type='index' AND name='observations_inventory'").get());
+  const checkpoint=state(`axur-import-v1:${owner}`);
+  db.close();
+  const {parse}=await import(pathToFileURL(path.join(root,'server/node_modules/dotenv/lib/main.js')));
+  const env=parse(fs.readFileSync(path.join(root,'server/.env')));
+  if(!env.SESSION_SECRET)throw Error('Session configuration unavailable');
+  // Short-lived signature for this existing account, retained only in memory.
+  // No credentials, response content or signed token are emitted by the audit.
+  const body=Buffer.from(JSON.stringify({sub:owner,login,exp:Math.floor(Date.now()/1000)+240})).toString('base64url');
+  const signature=crypto.createHmac('sha256',env.SESSION_SECRET).update(body).digest('base64url');
+  const headers={Cookie:`ts_session=${body}.${signature}`};
+  const http=[];
+  async function probe(endpoint,extra={}){
+    const start=performance.now();
+    try{
+      const response=await fetch(`http://127.0.0.1:3001${endpoint}`,{headers:{...headers,...extra},signal:AbortSignal.timeout(20000)});
+      const payload=await response.arrayBuffer();
+      http.push({endpoint,conditional:Boolean(extra['If-None-Match']),status:response.status,ms:Math.round(performance.now()-start),bytes:payload.byteLength});
+      return response.headers.get('etag');
+    }catch{http.push({endpoint,status:'timeout-or-unavailable',ms:Math.round(performance.now()-start)});}
+  }
+  await probe('/api/actors?catalogOnly=1');
+  await probe('/api/actors');
+  await probe('/api/actors');
+  await probe('/api/actors/G1024');
+  const etag=await probe('/api/newsletter');
+  if(etag)await probe('/api/newsletter',{'If-None-Match':etag});
+  // The health probe should remain responsive while a heavier aggregation runs.
+  await Promise.all([probe('/api/actors/activity'),probe('/api/health')]);
+  await probe('/api/intelligence/iocs?size=20');
+  await probe('/api/intelligence/iocs?size=20');
+  console.log(JSON.stringify({at:new Date().toISOString(),readOnly:true,indexReady,host:{cpus:os.cpus().length,loadAverage:os.loadavg(),memoryBytes:os.totalmem(),freeMemoryBytes:os.freemem()},axur:checkpoint,http},null,2));
+  process.exit(0);
 }
 const providers=measure('provider-counts',()=>db.prepare('SELECT provider,COUNT(*) observations FROM observations WHERE scope IN (?,?) GROUP BY provider').all('global',owner));
 const schema=db.prepare("SELECT name,sql FROM sqlite_master WHERE type='index' AND tbl_name IN ('observations','entity_links','indicators') AND sql IS NOT NULL").all();

@@ -1,4 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import { useQueryClient } from '@tanstack/react-query';
+import { useNewsProjection } from '@/hooks/useNewsProjection';
+import { DataPager } from '@/components/workbench/DataPager';
 import { Link, useSearchParams } from "react-router-dom";
 import { LayoutGrid, List } from 'lucide-react';
 import { StoryTable } from '@/components/workbench/StoryTable';
@@ -19,7 +22,7 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { toast } from "sonner";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
-import { NEWS_CATEGORY_ORDER, countByCategory, filterNewsletterAdvisories, filterStoryCards, groupAdvisoriesIntoStories, normalizeStoryEntities, severityEvidence, activeFilterChips } from "./newsletterView";
+import { NEWS_CATEGORY_ORDER, normalizeStoryEntities, severityEvidence, activeFilterChips } from "./newsletterView";
 import type { TimeRange } from "./newsletterView";
 import type { StoryCard } from "./newsletterView";
 import { generateBoletim, saveKnowledge, fetchStoryDetail, type StoryDetail, type CorrelationEvidenceType } from "@/services/threatApi";
@@ -27,7 +30,7 @@ import { useOrgProfile } from "@/hooks/useOrgProfile";
 import { useNewsMonitoring } from "@/hooks/useNewsMonitoring";
 import { useAuth } from "@/contexts/AuthContext";
 import { newsMonitoringCacheKey } from "@/utils/newsVendorSelection";
-import { annotateOrg, type OrgMatch } from "@/utils/orgRelevance";
+import { type OrgMatch } from "@/utils/orgRelevance";
 
 import { NewsTimestamp } from "@/components/NewsTimestamp";
 import { formatPublicationDate } from "@/utils/publicationDate";
@@ -190,6 +193,8 @@ const buildShareText = (item: Advisory, e: EnrichData | undefined, lang: string)
 const Newsletter = () => {
   const { language } = useLanguage();
   const { auth } = useAuth();
+  const queryClient = useQueryClient();
+  const hasNewsSnapshot = useRef(false);
   const monitoring = useNewsMonitoring();
   const newsCacheKey = monitoring.data ? newsMonitoringCacheKey(auth.login ?? "", monitoring.data.preferences) : null;
   const newsRequest = useRef<AbortController | null>(null);
@@ -223,13 +228,15 @@ const Newsletter = () => {
   // Background Polling / Last Updated States
   const [lastUpdatedNews, setLastUpdatedNews] = useState<Date | null>(null);
   const [isRefreshingNews, setIsRefreshingNews] = useState(false);
-  const [secondsRemaining, setSecondsRemaining] = useState(300);
 
   // Cached news is scoped to account and selection. Changing either clears the
   // view before loading another snapshot, including an offline visit.
   useEffect(() => {
     setAdvisories([]);
+    hasNewsSnapshot.current = false;
     if (!newsCacheKey) return;
+    const memory = queryClient.getQueryData<{ snapshot: Advisory[]; etag: string | null }>(['news-snapshot', newsCacheKey]);
+    if (memory) { setAdvisories(memory.snapshot); hasNewsSnapshot.current = true; setLoadingNews(false); return; }
     let cached: string | null = null;
     try { cached = localStorage.getItem(newsCacheKey); } catch { /* storage may be disabled */ }
     if (cached) {
@@ -281,12 +288,13 @@ const Newsletter = () => {
             primaryCategory: typeof item.primaryCategory === "string" || item.primaryCategory === null ? (item.primaryCategory as string | null) : undefined,
           }));
           setAdvisories(validated.map(normalizeStoryEntities));
+          hasNewsSnapshot.current = true; setLoadingNews(false);
         }
       } catch (e) {
         console.error("Failed to parse cached advisories", e);
       }
     }
-  }, [newsCacheKey]);
+  }, [newsCacheKey, queryClient]);
 
   // Fetch CTI News / Advisories
   const loadNews = useCallback(async (isBackground = false) => {
@@ -294,15 +302,17 @@ const Newsletter = () => {
     newsRequest.current?.abort();
     const controller = new AbortController();
     newsRequest.current = controller;
-    setSecondsRemaining(300);
-    if (!isBackground) {
+    if (!isBackground && !hasNewsSnapshot.current) {
       setLoadingNews(true);
     } else {
       setIsRefreshingNews(true);
     }
     setNewsError(null);
     try {
-      const res = await fetch("/api/newsletter", { signal: controller.signal, cache: "no-store" });
+      const queryKey = ['news-snapshot', newsCacheKey];
+      const previous = queryClient.getQueryData<{ snapshot: Advisory[]; etag: string | null }>(queryKey);
+      const res = await fetch("/api/newsletter", { signal: controller.signal, cache: "no-store", headers: previous?.etag ? { 'If-None-Match': previous.etag } : {} });
+      if (res.status === 304 && previous) { setAdvisories(previous.snapshot); setLastUpdatedNews(new Date()); return; }
       if (!res.ok) throw new Error(`Failed to load threat advisories (HTTP ${res.status})`);
       const data = await res.json();
       if (controller.signal.aborted) return;
@@ -310,8 +320,10 @@ const Newsletter = () => {
       if (!Array.isArray(data)) throw new Error("Invalid feed response");
       // The backend snapshot owns story identity. Combining it with older
       // snapshots resurrects retired IDs after an event merge.
-      const snapshot = (data as Advisory[]).map(normalizeStoryEntities);
+      const snapshot = data as Advisory[];
       setAdvisories(snapshot);
+      hasNewsSnapshot.current = true;
+      queryClient.setQueryData(queryKey, { snapshot, etag: res.headers.get('ETag') });
       try {
         localStorage.removeItem("cached_cti_advisories_v2");
         localStorage.removeItem("cached_cti_advisories_v3");
@@ -321,7 +333,7 @@ const Newsletter = () => {
     } catch (err) {
       if (controller.signal.aborted) return;
       console.error(err);
-      if (!isBackground) {
+      if (!isBackground && !hasNewsSnapshot.current) {
         setNewsError(err instanceof Error ? err.message : "Failed to load threat advisories");
       } else {
         toast.error(language === "pt" ? "Erro ao atualizar notícias em segundo plano" : "Failed to background refresh news");
@@ -332,28 +344,23 @@ const Newsletter = () => {
         setIsRefreshingNews(false);
       }
     }
-  }, [newsCacheKey, language]);
+  }, [newsCacheKey, language, queryClient]);
 
   useEffect(() => {
-    if (!newsCacheKey) return;
+    if (!newsCacheKey || newsView === 'iocs') return;
     loadNews();
 
-    // 1-second interval to update countdown
+    // Updating a tooltip countdown used to rerender the entire feed every
+    // second. Refresh the snapshot only when needed and while it is visible.
     const countdownInterval = setInterval(() => {
-      setSecondsRemaining(prev => {
-        if (prev <= 1) {
-          loadNews(true);
-          return 300;
-        }
-        return prev - 1;
-      });
-    }, 1000);
+      if (document.visibilityState === 'visible') void loadNews(true);
+    }, 300000);
 
     return () => {
       clearInterval(countdownInterval);
       newsRequest.current?.abort();
     };
-  }, [loadNews, newsCacheKey]);
+  }, [loadNews, newsCacheKey, newsView]);
 
   // Atalho "/" foca a busca — só quando o foco não está já num campo de
   // digitação, senão "/" vira caractere normal em vez de atalho.
@@ -369,13 +376,6 @@ const Newsletter = () => {
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
-
-  // Time formatting helper
-  const formatTime = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, "0")}`;
-  };
 
   // Regex highlighting helper for CVEs inside description text
   const renderHighlightedDescription = (text: string) => {
@@ -554,15 +554,6 @@ const Newsletter = () => {
   };
 
   // Filter Advisories / News
-  const filteredAdvisories = useMemo(() => annotateOrg(filterNewsletterAdvisories(advisories, {
-    search: searchNews,
-    severity: selectedSeverity,
-    source: selectedSource,
-    kevOnly,
-    sortByRelevance,
-    timeRange,
-  }), orgModel), [advisories, searchNews, selectedSeverity, selectedSource, sortByRelevance, kevOnly, timeRange, orgModel]);
-
   // Fontes disponíveis no feed atual (não no filtrado — senão escolher uma
   // fonte faria as outras desaparecerem da própria lista de opções).
   const availableSources = useMemo(
@@ -576,14 +567,16 @@ const Newsletter = () => {
   const [categoryMenuOpen, setCategoryMenuOpen] = useState(false);
   const VISIBLE_CATEGORY_CAP = 4;
 
-  const storyCards = useMemo(
-    () => filterStoryCards(
-      groupAdvisoriesIntoStories(filteredAdvisories, { sortByRelevance, pt: language === "pt" }),
-      { category: categoryFilter, orgOnly: orgOnly && Boolean(orgModel) },
-    ),
-    [filteredAdvisories, sortByRelevance, orgModel, categoryFilter, orgOnly, language],
-  );
-  const categoryCounts = useMemo(() => countByCategory(groupAdvisoriesIntoStories(filteredAdvisories)), [filteredAdvisories]);
+  const projectionOptions = useMemo(() => ({
+    filters: { search: searchNews, severity: selectedSeverity, source: selectedSource, kevOnly, sortByRelevance, timeRange },
+    model: orgModel, category: categoryFilter, orgOnly, pt: language === "pt",
+  }), [searchNews, selectedSeverity, selectedSource, kevOnly, sortByRelevance, timeRange, orgModel, categoryFilter, orgOnly, language]);
+  const projection = useNewsProjection(advisories, projectionOptions, newsCacheKey);
+  const storyCards = projection.cards, categoryCounts = projection.counts;
+  const [cardsPage, setCardsPage] = useState(1), [cardsSize, setCardsSize] = useState(20);
+  const currentCardsPage = Math.min(cardsPage, Math.max(1, Math.ceil(storyCards.length / cardsSize)));
+  const cardPager = <DataPager pt={language === 'pt'} total={storyCards.length} page={currentCardsPage} pageSize={cardsSize} onPage={setCardsPage} onPageSize={size => { setCardsSize(size); setCardsPage(1); }} />;
+  useEffect(() => { setCardsPage(1); }, [projectionOptions]);
   // Ordenadas por volume no momento — é o que ajuda a escolher o que ler
   // primeiro; a ordem de precedência (NEWS_CATEGORY_ORDER) só decide qual
   // categoria "ganha" quando uma matéria cabe em mais de uma, não em que
@@ -660,7 +653,7 @@ const Newsletter = () => {
                 </div>
                 <div
                   className="flex items-center justify-end gap-1.5 font-mono text-sm font-bold tabular-nums text-foreground"
-                  title={!isRefreshingNews ? `${language === "pt" ? "Próxima em" : "Next in"} ${formatTime(secondsRemaining)}` : undefined}
+                  title={language === 'pt' ? 'Atualização automática a cada cinco minutos' : 'Refreshes automatically every five minutes'}
                 >
                   <span className={cn("h-1.5 w-1.5 rounded-full", isRefreshingNews ? "bg-primary animate-pulse" : "bg-green-500")} />
                   {isRefreshingNews
@@ -815,7 +808,7 @@ const Newsletter = () => {
                   <p>{language === "pt" ? "Não foi possível carregar seu monitoramento de notícias." : "Unable to load your news monitoring."}</p>
                   <Button size="sm" variant="outline" className="mt-3" onClick={() => monitoring.refetch()}>{language === "pt" ? "Tentar novamente" : "Retry"}</Button>
                 </div>
-              ) : loadingNews ? (
+              ) : loadingNews || (projection.pending && !storyCards.length) ? (
                 <div className="grid grid-cols-1 gap-2.5 lg:grid-cols-2">
                   {[1, 2, 3].map((n) => (
                     <div key={n} className="p-4 rounded-lg border bg-card animate-pulse space-y-3">
@@ -857,8 +850,8 @@ const Newsletter = () => {
                 // Sem items-start: a grade estica os dois cards da mesma linha pra
                 // bater a mesma altura — é o que reduz a variação de tamanho entre
                 // um card que expandiu e o vizinho que ficou fechado.
-                <div className="grid grid-cols-1 gap-2.5 lg:grid-cols-2">
-                  {storyCards.map((card, idx) => {
+                <>{cardPager}<div className="grid grid-cols-1 gap-2.5 lg:grid-cols-2" aria-busy={projection.pending}>
+                  {storyCards.slice((currentCardsPage - 1) * cardsSize, currentCardsPage * cardsSize).map((card, idx) => {
                     const item = card.sources[0];
                     const enrichKey = enrichKeyOf(card);
                     const enr = enrichment[enrichKey]?.data;
@@ -1181,7 +1174,7 @@ const Newsletter = () => {
                       </div>
                     );
                   })}
-                </div>
+                </div>{cardPager}</>
               )}
             </div>
 
