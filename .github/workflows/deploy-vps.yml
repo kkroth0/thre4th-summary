@@ -200,12 +200,18 @@ jobs:
           ok=0
           # Cold starts can outlast the old ~15s window on the production VPS.
           # Require the same healthy response, allowing bounded startup time.
-          for i in $(seq 1 30); do
+          # The retained news corpus and SQLite recovery can take over a minute
+          # on the 1 GiB production host. Keep the same HTTP readiness check;
+          # allow two minutes even when connections are initially refused.
+          for i in $(seq 1 60); do
             if curl -fsS --max-time 5 http://localhost:3001/api/vendors/status >/dev/null 2>&1; then ok=1; break; fi
             if sudo systemctl is-failed --quiet "$SVC"; then break; fi
             sleep 2
           done
-          [ "$ok" = 1 ] || rollback
+          if [ "$ok" != 1 ]; then
+            sudo systemctl show "$SVC" --property=ActiveState,SubState,Result,ExecMainCode,ExecMainStatus,NRestarts,ActiveEnterTimestamp --no-pager || true
+            rollback
+          fi
 
           rm -rf node_modules.bak "$APP/server.prev" "$APP/dist.prev"
           sudo systemctl --no-pager --lines=15 status "$SVC" || true
