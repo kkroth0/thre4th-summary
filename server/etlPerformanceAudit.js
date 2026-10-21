@@ -26,7 +26,14 @@ if(process.argv[4]==='checkpoint'){
         try{const raw=fs.readFileSync(`/proc/${pid}/task/${tid}/stat`,'utf8'),fields=raw.slice(raw.lastIndexOf(')')+2).split(' ');
           return {tid:Number(tid),name:fs.readFileSync(`/proc/${pid}/task/${tid}/comm`,'utf8').trim(),state:fields[0],cpuTicks:Number(fields[11])+Number(fields[12]),majorFaults:Number(fields[9]),wait:fs.readFileSync(`/proc/${pid}/task/${tid}/wchan`,'utf8').trim()};}catch{return null;}
       }).filter(Boolean);
-      processes.push({pid:Number(pid),threads});
+      const status=fs.readFileSync(`/proc/${pid}/status`,'utf8');
+      const memory=Object.fromEntries(status.split('\n').filter(line=>/^(VmRSS|VmSwap|VmSize):/.test(line)).map(line=>line.split(/:\s*/)));
+      const group=fs.readFileSync(`/proc/${pid}/cgroup`,'utf8').split('\n').find(line=>line.startsWith('0::'))?.slice(3);
+      const limits={};
+      if(group)for(const name of ['memory.current','memory.max','memory.high','memory.swap.current','memory.swap.max','memory.events','io.stat']){
+        try{limits[name]=fs.readFileSync(path.join('/sys/fs/cgroup',group,name),'utf8').trim();}catch{/* optional kernel controller */}
+      }
+      processes.push({pid:Number(pid),memory,limits,threads});
     }catch{/* process may exit during inspection */}
   }
   console.log(JSON.stringify({at:new Date().toISOString(),readOnly:true,indexReady:Boolean(db.prepare("SELECT 1 FROM sqlite_master WHERE name='observations_inventory'").get()),processes,axur:state(`axur-import-v1:${owner}`)},null,2));
