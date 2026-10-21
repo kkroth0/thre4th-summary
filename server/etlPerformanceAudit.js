@@ -41,7 +41,7 @@ if(process.argv[4]==='checkpoint'){
       processes.push({pid:Number(pid),memory,limits,ancestors,threads});
     }catch{/* process may exit during inspection */}
   }
-  console.log(JSON.stringify({at:new Date().toISOString(),readOnly:true,indexReady:Boolean(db.prepare("SELECT 1 FROM sqlite_master WHERE name='observations_inventory'").get()),processes,axur:state(`axur-import-v1:${owner}`)},null,2));
+  console.log(JSON.stringify({at:new Date().toISOString(),readOnly:true,indexReady:Boolean(db.prepare("SELECT 1 FROM sqlite_master WHERE name='observations_inventory'").get()),processes,replayComplete:Boolean(state('provider-matches-v12')),newsCycle:state('news-current-cycle'),newsSync:state('news-sync'),axur:state(`axur-import-v1:${owner}`)},null,2));
   db.close();process.exit(0);
 }
 if(process.argv[4]==='ui'){
