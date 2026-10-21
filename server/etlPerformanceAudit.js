@@ -18,7 +18,18 @@ const measure=(name,fn)=>{const start=performance.now();const value=fn();measure
 const state=key=>{const row=db.prepare('SELECT value FROM intelligence_state WHERE id=?').get(key);return row?JSON.parse(row.value):null;};
 // Frequent import checks must not scan hundreds of thousands of observations.
 if(process.argv[4]==='checkpoint'){
-  console.log(JSON.stringify({at:new Date().toISOString(),readOnly:true,axur:state(`axur-import-v1:${owner}`)},null,2));
+  const processes=[];
+  if(process.platform==='linux')for(const pid of fs.readdirSync('/proc').filter(name=>/^\d+$/.test(name))){
+    try{
+      if(!fs.readFileSync(`/proc/${pid}/cmdline`,'utf8').includes('index.js')||fs.realpathSync(`/proc/${pid}/cwd`)!==path.join(root,'server'))continue;
+      const threads=fs.readdirSync(`/proc/${pid}/task`).map(tid=>{
+        try{const raw=fs.readFileSync(`/proc/${pid}/task/${tid}/stat`,'utf8'),fields=raw.slice(raw.lastIndexOf(')')+2).split(' ');
+          return {tid:Number(tid),name:fs.readFileSync(`/proc/${pid}/task/${tid}/comm`,'utf8').trim(),state:fields[0],cpuTicks:Number(fields[11])+Number(fields[12]),majorFaults:Number(fields[9]),wait:fs.readFileSync(`/proc/${pid}/task/${tid}/wchan`,'utf8').trim()};}catch{return null;}
+      }).filter(Boolean);
+      processes.push({pid:Number(pid),threads});
+    }catch{/* process may exit during inspection */}
+  }
+  console.log(JSON.stringify({at:new Date().toISOString(),readOnly:true,indexReady:Boolean(db.prepare("SELECT 1 FROM sqlite_master WHERE name='observations_inventory'").get()),processes,axur:state(`axur-import-v1:${owner}`)},null,2));
   db.close();process.exit(0);
 }
 if(process.argv[4]==='ui'){
