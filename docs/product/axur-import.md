@@ -11,22 +11,36 @@ Uma mudança no contrato interrompe a página, sem avançar o marcador.
 Não cria buscas, exportações, tickets ou alterações no ambiente Axur.
 
 A leitura começa com páginas de 5.000 IOCs, até cinco por rodada, sem concorrência
-entre importações. Falhas de comunicação, tempo limite ou tamanho de resposta
-reduzem o lote para 1.000, 500 ou 100 registros, preservando exatamente o
-deslocamento da retomada. Falhas antigas sem diagnóstico também retomam com lote
-menor. Respostas de autenticação ou limite de chamadas preservam sua espera.
+entre importações. A política `latency-v2` permite até 240 segundos por consulta
+de IOCs em segundo plano; relatórios mantêm limite de 55 segundos. A referência
+`enriquecimento-de-iocs/axur.py` também usa 240 segundos e recomenda consultas
+sequenciais. Não é um SLA da Axur: a margem evita cancelar respostas da fonte
+que as medições mostraram próximas do limite antigo de 55 segundos.
+
+Timeouts e falhas de rede não reduzem mais o lote. Na migração, lotes antigos de
+100 ou 500 limitados por latência voltam a 1.000. Após três páginas bem-sucedidas,
+o tamanho pode crescer na sequência 100 → 500 → 1.000 → 5.000. Se a posição não
+estiver alinhada com o novo tamanho, relê-se uma faixa anterior, mas só a parte
+ainda não comprometida é gravada e contada. O marcador preserva essa posição
+mesmo se houver interrupção após uma gravação parcial.
+
+Apenas a violação real do limite de 32 MiB da resposta reduz o lote e define um
+teto para seu crescimento. Respostas de autenticação ou limite de chamadas
+preservam sua espera. A correção não introduz consultas paralelas à Axur.
 Os relatórios são agrupados em lotes de até 25 IDs únicos. Um cache privado de
 24 horas, vinculado à credencial, evita consultar novamente os mesmos relatórios
 entre páginas e reinícios. Guarda apenas os campos necessários à correlação.
 Atores, famílias e CVEs de um relatório compartilhado são resolvidos uma vez
 por página; a evidência de cada IOC continua sendo persistida individualmente.
 O agendador tenta a cada minuto; consultas e ingestões cedem o processo
-entre lotes. Requisições têm limite de 55 segundos. Falhas usam espera crescente
+entre lotes. Falhas usam espera crescente
 e respeitam Retry-After até 24 horas. A carga pausa se houver menos de 2 GiB livres.
 
 O marcador registra a categoria e a etapa da falha, a próxima tentativa e os
 tempos de consulta de IOCs, consulta de relatórios, conversão e gravação por
-página. Mensagens não contêm credenciais nem respostas completas da fonte.
+página. A etapa atual fica visível enquanto o lote está sendo processado;
+o contador só avança após a persistência. Mensagens não contêm credenciais nem
+respostas completas da fonte.
 Relatórios ausentes ainda impedem o avanço da página para preservar os vínculos.
 
 O marcador `axur-import-v1:<owner>` está em `intelligence_state` no SQLite

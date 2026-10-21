@@ -120,13 +120,14 @@ test('detects repeated pages instead of marking an endless pagination loop succe
   await f.importer.run();assert.equal(f.importer.status().page,2);assert.equal(f.importer.status().status,'retrying');assert.equal(f.importer.status().processed,1);
 });
 
-test('timeout shrinks the request at the identical offset and persists a safe diagnostic',async t=>{
+test('timeout preserves batch size and committed offset, allowing the slow source up to 240 seconds',async t=>{
   let fail=true;
   const f=fixture(t,(_url,{params})=>{if(fail){fail=false;throw {code:'ECONNABORTED',config:{headers:{Authorization:'secret'}}};}return {metadata:{page:params.page,perPage:params.perPage,offset:(params.page-1)*params.perPage,total:125001},iocs:[{...ioc,relatedInsights:[]}]};},{pageSize:5000});
   f.store.setState('axur-import-v1:owner',{page:26,pageSize:5000,processed:125000,observations:125000,status:'running'});
   await f.importer.run();const pending=f.importer.status();
-  assert.equal(pending.pageSize,1000);assert.equal(pending.page,126);assert.equal(pending.processed,125000);assert.equal(pending.failureCode,'timeout');assert.equal(pending.failureStage,'iocs');assert.ok(!JSON.stringify(pending).includes('secret'));
-  f.advance();await f.importer.run();assert.equal(f.importer.status().processed,125001);assert.equal(f.importer.status().status,'complete');assert.equal(f.calls[1].options.params.page,126);
+  assert.equal(pending.pageSize,5000);assert.equal(pending.page,26);assert.equal(pending.processed,125000);assert.equal(pending.failureCode,'timeout');assert.equal(pending.failureStage,'iocs');assert.ok(!JSON.stringify(pending).includes('secret'));
+  assert.equal(f.calls[0].options.timeout,240000);
+  f.advance();await f.importer.run();assert.equal(f.importer.status().processed,125001);assert.equal(f.importer.status().status,'complete');assert.equal(f.calls[1].options.params.page,26);
 });
 
 test('legacy generic failures resume with smaller pages without skipping or replaying previous offsets',async t=>{
@@ -152,4 +153,82 @@ test('expired or changed credentials never reuse a cached report',async t=>{
 test('missing insights and changed formats report the stage without advancing the page',async t=>{
   const f=fixture(t,url=>url.endsWith('/iocs')?page(1,[ioc],1):[]);
   await f.importer.run();assert.equal(f.importer.status().failureCode,'missing_insights');assert.equal(f.importer.status().failureStage,'insights');assert.equal(f.importer.status().page,1);
+});
+
+function sourcePage(params,total=1000000){
+  const offset=(params.page-1)*params.perPage;
+  return {metadata:{page:params.page,perPage:params.perPage,offset,total},
+    iocs:Array.from({length:Math.max(0,Math.min(params.perPage,total-offset))},(_,index)=>({...ioc,id:String(offset+index),relatedInsights:[]}))};
+}
+
+test('recovers a 100-record legacy checkpoint into a larger overlapping page without recounting committed records',async t=>{
+  const f=fixture(t,(_url,{params})=>sourcePage(params));
+  f.store.setState('axur-import-v1:owner',{page:3108,pageSize:100,processed:310700,observations:318717,status:'retrying',failureCode:'timeout'});
+  await f.importer.run({maxPages:1});
+  assert.equal(f.calls[0].options.params.perPage,1000);assert.equal(f.calls[0].options.params.page,311);
+  const state=f.importer.status();assert.equal(state.processed,311000);assert.equal(state.observations,319017);
+  assert.equal(state.replayedRecords,700);assert.equal(state.lastPageNewRecords,300);
+  assert.equal(state.page,312);assert.equal(state.pageSize,1000);assert.equal(state.resumeOffset,undefined);
+  assert.equal(f.store.status(scope).evidence,300);
+  assert.equal(f.store.detail('8.8.8.8',scope).evidence.some(row=>row.payload.id==='310699'),false);
+});
+
+test('three healthy pages grow to 5000 and retain the exact unaligned position across restart',async t=>{
+  const f=fixture(t,(_url,{params})=>sourcePage(params));
+  f.store.setState('axur-import-v1:owner',{page:3108,pageSize:100,processed:310700,observations:0,status:'running'});
+  await f.importer.run({maxPages:3});
+  assert.equal(f.importer.status().processed,313000);
+  await createAxurImport(f.options).run({maxPages:1});
+  assert.deepEqual(f.calls.map(call=>[call.options.params.page,call.options.params.perPage]),[[311,1000],[312,1000],[313,1000],[63,5000]]);
+  const state=f.importer.status();assert.equal(state.processed,315000);assert.equal(state.page,64);assert.equal(state.pageSize,5000);
+  assert.equal(state.observations,4300);assert.equal(f.store.status(scope).evidence,4300);
+});
+
+test('a partially committed overlapping page can restart without losing or duplicating its uncommitted suffix',async t=>{
+  const f=fixture(t,(_url,{params})=>sourcePage(params));
+  f.store.setState('axur-import-v1:owner',{page:3108,pageSize:100,processed:310700,observations:0,status:'retrying',failureCode:'timeout'});
+  const ingest=f.store.ingest;let fail=true;
+  f.store.ingest=async rows=>{await ingest(rows);if(fail){fail=false;throw new Error('interrupted');}};
+  await f.importer.run({maxPages:1});
+  assert.equal(f.importer.status().processed,310700);assert.equal(f.importer.status().resumeOffset,310700);
+  assert.equal(f.store.status(scope).evidence,300);
+  f.advance();await createAxurImport(f.options).run({maxPages:1});
+  assert.equal(f.importer.status().processed,311000);assert.equal(f.store.status(scope).evidence,300);
+});
+
+test('true oversize responses reduce page size and cap recovery, while ordinary timeouts do not',async t=>{
+  let oversize=true;
+  const f=fixture(t,(_url,{params})=>{if(oversize){oversize=false;throw {code:'ERR_BAD_RESPONSE',message:'maxContentLength size of 33554432 exceeded'};}return sourcePage(params);});
+  f.store.setState('axur-import-v1:owner',{page:63,pageSize:5000,processed:310700,resumeOffset:310700,observations:0,status:'running',requestPolicy:'latency-v2'});
+  await f.importer.run({maxPages:1});
+  assert.equal(f.importer.status().pageSize,1000);assert.equal(f.importer.status().pageSizeCeiling,1000);
+  assert.equal(f.importer.status().processed,310700);assert.equal(f.importer.status().resumeOffset,310700);
+  f.advance();await f.importer.run({maxPages:5});assert.ok(f.calls.slice(1).every(call=>call.options.params.perPage===1000));
+});
+
+test('migration and recovery respect an existing authentication or rate-limit cooldown',async t=>{
+  const f=fixture(t,()=>{throw new Error('must not request');});
+  const pending={page:3108,pageSize:100,processed:310700,observations:0,status:'retrying',failureCode:'network',error:'Axur HTTP 429',nextAttemptAt:1792513501216+180000};
+  f.store.setState('axur-import-v1:owner',pending);await f.importer.run();
+  assert.deepEqual(f.importer.status(),{id:'axur',configured:true,...pending});assert.equal(f.calls.length,0);
+});
+
+test('active stages are visible without advancing the checkpoint before the slow source responds',async t=>{
+  let release;const response=new Promise(resolve=>{release=resolve;});
+  const f=fixture(t,async()=>{await response;return page(1,[{...ioc,relatedInsights:[]}],1);});
+  const task=f.importer.run();assert.equal(f.importer.status().status,'running');assert.equal(f.importer.status().activeStage,'iocs');
+  assert.equal(f.importer.status().processed,0);assert.equal(f.importer.status().requestTimeoutMs,240000);
+  release();await task;assert.equal(f.importer.status().activeStage,null);assert.equal(f.importer.status().status,'complete');
+});
+
+test('an overlapping final page processes its remaining suffix once and completes without an extra request',async t=>{
+  const f=fixture(t,(_url,{params})=>sourcePage(params,310850));
+  f.store.setState('axur-import-v1:owner',{page:3108,pageSize:100,processed:310700,observations:0,status:'running'});
+  await f.importer.run();assert.equal(f.calls.length,1);assert.equal(f.importer.status().processed,310850);
+  assert.equal(f.importer.status().observations,150);assert.equal(f.importer.status().status,'complete');
+});
+
+test('a broken response stream is not mistaken for an oversized batch',async t=>{
+  const f=fixture(t,()=>{throw {code:'ERR_BAD_RESPONSE',message:'stream has been aborted'};},{pageSize:5000});
+  await f.importer.run();assert.equal(f.importer.status().failureCode,'network');assert.equal(f.importer.status().pageSize,5000);
 });

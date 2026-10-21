@@ -1510,6 +1510,7 @@ export interface AxurImportStatus {
     page: number; processed: number; observations: number; total?: number; skipped?: number;
     lastSuccessfulAt?: string; error?: string | null;
     pageSize?: number; nextAttemptAt?: number; failureCode?: string | null; failureStage?: string | null;
+    activeStage?: 'iocs' | 'insights' | 'conversion' | 'ingest' | null; lastAttemptAt?: string;
 }
 export const fetchAxurImportStatus = async (): Promise<AxurImportStatus> => {
     const response = await fetch('/api/intelligence/axur/status');

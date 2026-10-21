@@ -88,10 +88,13 @@ function AxurProgress() {
   const labels = pt ? { pending:'Aguardando importação', running:'Importando', retrying:'Aguardando nova tentativa', complete:'Varredura concluída' }
     : { pending:'Waiting to import', running:'Importing', retrying:'Waiting to retry', complete:'Scan complete' };
   const format = (value: number) => value.toLocaleString(pt ? 'pt-BR' : 'en-US');
+  const stages=pt?{iocs:'Consultando IOCs na Axur',insights:'Consultando relatórios relacionados',conversion:'Preparando correlações',ingest:'Salvando na base'}
+    :{iocs:'Reading IOCs from Axur',insights:'Reading related reports',conversion:'Preparing correlations',ingest:'Saving to the database'};
   return <div role="status" className="rounded-md border border-border bg-secondary/30 px-3 py-2 text-xs leading-relaxed text-muted-foreground">
     <p className="font-medium text-foreground">{labels[progress.status]}</p>
     <p>{format(progress.processed)}{progress.total !== undefined ? ` / ${format(progress.total)}` : ''} {pt ? 'registros percorridos' : 'records scanned'} · {format(progress.observations || 0)} {pt ? 'evidências processadas' : 'evidence records processed'}</p>
     {progress.error && <p>{progress.error}</p>}
+    {progress.status === 'running' && progress.activeStage && <p>{stages[progress.activeStage]}{progress.pageSize ? ` · ${format(progress.pageSize)} ${pt ? 'registros por lote' : 'records per batch'}` : ''}</p>}
     {progress.status === 'retrying' && progress.nextAttemptAt && <p>{pt ? 'Nova tentativa a partir de ' : 'Next retry from '}{new Date(progress.nextAttemptAt).toLocaleTimeString(pt ? 'pt-BR' : 'en-US', { hour:'2-digit', minute:'2-digit' })}{progress.pageSize ? ` · ${format(progress.pageSize)} ${pt ? 'registros por lote' : 'records per batch'}` : ''}</p>}
     <p>{pt ? 'Os IOCs são deduplicados na base. A contagem acima acompanha a leitura das páginas da fonte.' : 'IOCs are deduplicated in the inventory. Counts above track source pages.'}</p>
   </div>;
