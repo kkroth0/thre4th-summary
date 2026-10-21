@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { ChevronDown, ExternalLink, FileText, Loader2 } from "lucide-react";
+import { ChevronDown, ExternalLink, FileText, Loader2, RotateCcw } from "lucide-react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
@@ -11,7 +11,8 @@ import { BrandMark } from "@/components/BrandMark";
 import { BoletimView } from "@/components/BoletimView";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { downloadBoletimDeck, fetchJobRelated, type BoletimJob, type BoletimReport } from "@/services/threatApi";
+import { downloadBoletimDeck, fetchJobRelated, renderBoletimVersion, type BoletimJob, type BoletimReport } from "@/services/threatApi";
+import { ReportReviewDialog } from "@/components/ReportReviewDialog";
 import { exportBoletimJSON, exportBoletimIocsExcel, canExportBoletimIocs } from "@/utils/boletimExport";
 
 // Host da URL pra exibição compacta ("fortiguard.com" em vez do link inteiro).
@@ -133,9 +134,20 @@ function ExportMenu({ job, pt }: { job: BoletimJob; pt: boolean }) {
 
 // Painel de leitura da workstation: toolbar com meta/ações + BoletimView.
 // `job === null` (ou sem JSON) mostra o estado vazio.
-export function ReportPane({ job, onCreate }: { job: BoletimJob | null; onCreate?: () => void }) {
+export function ReportPane({ job, onCreate, onQueued }: { job: BoletimJob | null; onCreate?: () => void; onQueued?: (job: BoletimJob) => void }) {
   const { language } = useLanguage();
   const pt = language === "pt";
+  const [rendering, setRendering] = useState(false);
+  const rebuild = async () => {
+    if (!job || rendering) return;
+    setRendering(true);
+    try {
+      const next = await renderBoletimVersion(job.id);
+      onQueued?.(next);
+      toast.success(pt ? "Slides na fila. A análise será reaproveitada." : "Slides queued. The analysis will be reused.");
+    } catch (error) { toast.error((error as Error).message); }
+    finally { setRendering(false); }
+  };
 
   if (!job || !job.json) {
     return (
@@ -177,7 +189,12 @@ export function ReportPane({ job, onCreate }: { job: BoletimJob | null; onCreate
             }[job.subtype]}
           </Badge>
         )}
-        <div className="ml-auto"><ExportMenu job={job} pt={pt} /></div>
+        {job.revision && <Badge variant="outline">{pt ? "Versão" : "Version"} {job.revision}</Badge>}
+        <div className="ml-auto flex flex-wrap gap-2">
+          <ReportReviewDialog key={job.id} job={job} pt={pt} onQueued={onQueued} />
+          <Button variant="outline" size="sm" disabled={rendering} onClick={() => void rebuild()} className="gap-1.5">{rendering ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}{pt ? "Regerar slides" : "Rebuild slides"}</Button>
+          <ExportMenu job={job} pt={pt} />
+        </div>
       </div>
       <h2 className="mt-5 max-w-[65ch] text-xl font-semibold leading-snug xl:text-2xl">
         {r.titulo || job.title || job.url}
@@ -199,6 +216,16 @@ export function ReportPane({ job, onCreate }: { job: BoletimJob | null; onCreate
           </a>
         )}
       </div>
+      {job.operation === "render" && <p className="mt-3 text-xs text-muted-foreground">{pt ? "Análise reaproveitada. Esta versão não fez novas chamadas à IA." : "Analysis reused. This version made no new AI calls."}{job.parentId && <Link className="ml-2 text-primary hover:underline" to={`/relatorios?job=${encodeURIComponent(job.parentId)}`}>{pt ? "Versão anterior" : "Previous version"}</Link>}</p>}
+      <section className="mt-5 rounded-md border p-3 text-xs" aria-label={pt ? "Cobertura das fontes" : "Source coverage"}>
+        <h3 className="font-medium">{pt ? "Cobertura das fontes" : "Source coverage"}</h3>
+        {r.cobertura_fontes?.length ? <ul className="mt-2 space-y-2">{r.cobertura_fontes.map(source => <li key={source.url} className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+          <a href={source.url} target="_blank" rel="noopener noreferrer" className="max-w-full break-words text-primary hover:underline">{source.titulo || hostOf(source.url)}</a>
+          <span className={source.status === "falhou" ? "text-amber-700 dark:text-amber-400" : "text-muted-foreground"}>{source.status === "coletada" ? (pt ? "Lida e usada na análise" : "Read and used in analysis") : (pt ? "Não foi possível ler — não usada na análise" : "Could not read — excluded from analysis")}</span>
+          {source.motivo && <span className="text-muted-foreground">{source.motivo}</span>}
+        </li>)}</ul> : <p className="mt-2 text-muted-foreground">{pt ? "Este relatório antigo não registra o resultado da coleta de cada fonte." : "This older report does not record collection status for each source."}</p>}
+      </section>
+      {r.qualidade_slides && <details className="mt-3 rounded-md border p-3 text-xs"><summary className="cursor-pointer font-medium">{pt ? "Checagem dos slides" : "Slide checks"}{r.qualidade_slides.avisos.length ? ` · ${r.qualidade_slides.avisos.length} ${pt ? "pontos para revisar" : "items to review"}` : ` · ${pt ? "concluída" : "completed"}`}</summary><p className="mt-2 text-muted-foreground">{pt ? "Checagem estrutural de preenchimento e estimativa de legibilidade. Confira o PDF antes de compartilhar." : "Structural fill checks and readability estimates. Review the PDF before sharing."}</p><ul className="mt-2 space-y-1">{r.qualidade_slides.avisos.map((warning, index) => <li key={index}>Slide {warning.slide}: {warning.mensagem}</li>)}</ul></details>}
       <BoletimView report={r} />
       <ReportRelations job={job} pt={pt} />
       <details className="mt-8 border-t pt-4 text-xs text-muted-foreground"><summary className="cursor-pointer">{pt ? "Dados de geração" : "Generation details"}</summary><div className="mt-3 flex flex-wrap items-center gap-3">{r.generated_at && <span>{pt ? "Gerado em" : "Generated on"} {fmtDate(r.generated_at, pt)}</span>}{job.template && <span>Template: {job.template}</span>}{usage}</div></details>

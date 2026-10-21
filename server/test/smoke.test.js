@@ -74,7 +74,11 @@ test('hunting requires authorization, validates inputs and isolates persistent f
 before(async () => {
     writeFileSync(NEWS_STORIES_PATH, '[]');
     writeFileSync(PHISH_WATCH_PATH, JSON.stringify({ hits: [{ id: 'owned:example.net', profileId: 'owned', ownerId: 'smoke-user', apexDomain: 'example.net', domain: 'example.net', status: 'new', score: 20, reasons: ['brand-glued'], firstSeen: '2026-10-08T12:00:00Z', lastSeen: new Date().toISOString() }], runs: {} }));
-    writeFileSync(FEED_JOBS_PATH, JSON.stringify({ 'smoke-multi-source': { id: 'smoke-multi-source', url: 'https://example.com/a', urls: ['https://example.com/a', 'https://example.com/b'], status: 'pending', createdAt: new Date().toISOString() } }));
+    writeFileSync(FEED_JOBS_PATH, JSON.stringify({
+        'smoke-multi-source': { id: 'smoke-multi-source', url: 'https://example.com/a', urls: ['https://example.com/a', 'https://example.com/b'], status: 'pending', createdAt: new Date().toISOString() },
+        'smoke-review-ready': { id: 'smoke-review-ready', ownerSub: 'smoke-user', url: 'https://example.com/a', urls: ['https://example.com/a'], type: 'campaign', template: 'premium', status: 'done',
+            json: { deck_type: 'campaign', titulo: 'Original title', sumario_executivo: 'Original summary', mitre_ttps: [{ id: 'T1566', contexto: '[POTENCIAL] Avaliar a campanha.' }] }, createdAt: new Date().toISOString() },
+    }));
     writeFileSync(NEWS_ARCHIVE_PATH, JSON.stringify([
         { link: 'https://example.com/a', title: 'ClickFix phishing targets banks in Brazil with fake Adobe login pages', source: 'Research', pubDate: '2026-10-08T23:59:59.999Z', storyId: 'same', iocs: { ips: ['9.9.9.10'], domains: ['example.net'] } },
         { link: 'https://example.com/b', title: 'ClickFix phishing campaign', source: 'News', pubDate: '2026-10-09T00:00:00Z', storyId: 'same' },
@@ -90,7 +94,7 @@ before(async () => {
             PORT: String(PORT), NODE_ENV: 'test', SESSION_SECRET,
             GITHUB_ALLOWED_LOGINS: 'tester', PREMIUM_OPEN_PATH, NEWS_MONITORING_PATH,
             USERS_STORE_PATH, NEWS_ARCHIVE_PATH, NEWS_STORIES_PATH, ORG_PROFILES_PATH, PHISH_WATCH_PATH, SECRETS_ENCRYPTION_KEY, URLSCAN_API_KEY: '',
-            FEED_JOBS_PATH, FEED_AGENT_SECRET: 'smoke-worker-secret',
+            FEED_JOBS_PATH, FEED_AGENT_SECRET: 'smoke-worker-secret', FEED_DECKS_DIR: path.join(tmpdir(), `threatsumm4ry-smoke-decks-${PORT}`),
         },
         stdio: 'ignore',
     });
@@ -149,6 +153,31 @@ test('the worker receives all selected sources and requires its dedicated secret
     const result = await fetch(`${BASE}/api/feed/jobs/pending`, { headers: { 'X-Feed-Secret': 'smoke-worker-secret' } }).then(res => res.json());
     assert.deepEqual(result.pending[0].urls, ['https://example.com/a', 'https://example.com/b']);
     assert.ok(!JSON.stringify(result).includes('smoke-worker-secret'));
+});
+
+test('review versions are owner-isolated and render saved analysis without exposing worker input', async () => {
+    const route = `${BASE}/api/feed/job/smoke-review-ready/render`;
+    const request = (headers, patch = {}) => fetch(route, { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify({ patch }) });
+    assert.equal((await request({})).status, 401);
+    assert.equal((await request(OUTSIDER_HEADERS)).status, 403);
+    assert.equal((await request(AUTH_HEADERS, { iocs: [] })).status, 400);
+    const response = await request(AUTH_HEADERS, { sumario_executivo: 'Reviewed summary' });
+    assert.equal(response.status, 202);
+    const next = await response.json();
+    assert.equal(next.operation, 'render'); assert.equal(next.revision, 2);
+    assert.equal(next.renderReport, undefined); assert.equal(next.json, undefined);
+    const original = await fetch(`${BASE}/api/feed/job?id=smoke-review-ready`, { headers: AUTH_HEADERS }).then(r => r.json());
+    assert.equal(original.json.sumario_executivo, 'Original summary');
+    const pending = await fetch(`${BASE}/api/feed/jobs/pending`, { headers: { 'X-Feed-Secret': 'smoke-worker-secret' } }).then(r => r.json());
+    const render = pending.pending.find(item => item.id === next.id);
+    assert.equal(render.report.sumario_executivo, 'Reviewed summary');
+    assert.equal(render.documents, undefined);
+    const detail = await fetch(`${BASE}/api/feed/job?id=${next.id}`, { headers: AUTH_HEADERS }).then(r => r.json());
+    assert.equal(detail.renderReport, undefined);
+    await fetch(`${BASE}/api/feed/job/result`, { method: 'POST', headers: { 'X-Feed-Secret': 'smoke-worker-secret', 'Content-Type': 'application/json' }, body: JSON.stringify({ id: next.id, error: 'render failed' }) });
+    const retry = await fetch(`${BASE}/api/feed/job/${next.id}/render`, { method: 'POST', headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' }, body: '{}' }).then(r => r.json());
+    const retried = await fetch(`${BASE}/api/feed/jobs/pending`, { headers: { 'X-Feed-Secret': 'smoke-worker-secret' } }).then(r => r.json());
+    assert.equal(retried.pending.find(item => item.id === retry.id).report.sumario_executivo, 'Reviewed summary');
 });
 
 test('unified IOC inventory and export require premium and validate dates',async()=>{

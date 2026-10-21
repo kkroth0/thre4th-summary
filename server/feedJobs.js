@@ -69,6 +69,7 @@ export function normalizeDeckSubtype(raw) {
 export function jobSummary(job) {
     const { json, ...meta } = job || {};
     delete meta.documents;
+    delete meta.renderReport;
     return { ...meta, hasReport: Boolean(json) };
 }
 

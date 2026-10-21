@@ -30,7 +30,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import {
-  fetchDailySuggestions, generateBoletim, fetchJob, fetchJobList, deleteJob,
+  fetchDailySuggestions, generateBoletim, fetchJob, fetchJobList, deleteJob, renderBoletimVersion,
   type DailySuggestion, type BoletimJob, type DeckType, type DeckTemplate, type DeckSubtype,
   loadDeckTemplate, saveDeckTemplate, loadDeckSubtype, saveDeckSubtype,
 } from "@/services/threatApi";
@@ -200,6 +200,7 @@ const JobListItem: React.FC<{
           <div className="mt-2 pl-12 text-[10px] text-muted-foreground">
             {j.type}{j.template ? ` · ${j.template === "basico" ? (pt ? "básico" : "basic") : j.template === "premium" ? "premium" : (pt ? "avançado" : "advanced")}` : ""}
             {j.subtype && j.subtype !== "auto" ? ` · ${j.subtype}` : ""}
+            {j.revision ? ` · ${pt ? "versão" : "version"} ${j.revision}` : ""}
           </div>
         )}
       {j.status === "error" && (
@@ -227,7 +228,8 @@ const JobListItem: React.FC<{
             <span className="min-w-0 flex-1 truncate">
               {j.queuePosition && j.queuePosition > 0
                 ? (pt ? `Na fila, ${j.queuePosition} na sua frente` : `In queue, ${j.queuePosition} ahead of you`)
-                : (pt ? PHASES[phaseIndex(elapsed)].pt : PHASES[phaseIndex(elapsed)].en)}
+                : j.operation === "render" ? (pt ? "Montando slides da análise salva…" : "Building slides from saved analysis…")
+                  : (pt ? PHASES[phaseIndex(elapsed)].pt : PHASES[phaseIndex(elapsed)].en)}
             </span>
             <Button
               size="sm" variant="ghost"
@@ -470,7 +472,15 @@ const DailyBulletin: React.FC = () => {
     }
   };
 
+  const versionQueued = (job: BoletimJob) => {
+    setJobs(current => [job, ...current.filter(item => item.id !== job.id)]);
+    setLibraryMode("reports"); setJobStatus("all"); setLibrarySearch("");
+  };
   const retryJob = (j: BoletimJob) => {
+    if (j.operation === "render") {
+      void renderBoletimVersion(j.id).then(versionQueued).catch(error => toast.error((error as Error).message));
+      return;
+    }
     generate(j.urls?.length ? j.urls : j.url, j.type, j.title, j.template ?? deckTemplate, j.subtype ?? deckSubtype);
   };
 
@@ -840,7 +850,7 @@ const DailyBulletin: React.FC = () => {
           ) : selectedId && !selectedJob ? (
             <div role="status" className="flex min-h-[420px] items-center justify-center gap-2 rounded-md border bg-card text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" />{pt ? "Abrindo relatório…" : "Opening report…"}</div>
           ) : (
-            <ReportPane job={selectedJob} onCreate={openComposer} />
+            <ReportPane job={selectedJob} onCreate={openComposer} onQueued={versionQueued} />
           )}
         </div>
       </div>

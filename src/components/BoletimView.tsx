@@ -324,7 +324,15 @@ export const BoletimView: React.FC<{ report: BoletimReport }> = ({ report }) => 
                 <tr key={i} className="border-b align-top last:border-0">
                   <td className="w-1/4 p-2"><a href={t.url || `https://attack.mitre.org/techniques/${(t.id || "").replace(".", "/")}/`} target="_blank" rel="noopener noreferrer" className="hover:underline"><span className="font-mono text-primary">{t.id}</span><span className="mt-1 block">{t.nome}</span></a></td>
                   <td className="w-1/3 p-2 text-muted-foreground">{t.descricao || "—"}</td>
-                  <td className="p-2 leading-relaxed">{t.contexto || "Contexto não informado neste relatório."}</td>
+                  <td className="p-2 leading-relaxed">{t.contexto || "Contexto não informado neste relatório."}
+                    <details className="mt-2 text-muted-foreground"><summary className="cursor-pointer text-[11px]">Evidência e justificativa</summary>
+                      <div className="mt-2 space-y-2">
+                        <p className="!leading-5">{t.justificativa || "Este relatório não registra a justificativa do mapeamento. Confira as fontes antes de confirmar o uso."}</p>
+                        {t.evidencia ? <blockquote className="border-l-2 pl-2 italic">“{t.evidencia}”</blockquote> : <p className="!leading-5">Sem citação literal registrada.</p>}
+                        {Boolean(t.fontes?.length) && <div><span className="block text-[11px]">{t.evidencia ? "Fontes da evidência" : "Fontes do contexto"}</span>{t.fontes!.map((url, sourceIndex) => <a key={url} href={url} target="_blank" rel="noopener noreferrer" className="mr-3 inline-flex items-center gap-1 text-primary hover:underline">Fonte {sourceIndex + 1}<ExternalLink className="h-3 w-3" /></a>)}</div>}
+                      </div>
+                    </details>
+                  </td>
                 </tr>
               ))}</tbody>
             </table>

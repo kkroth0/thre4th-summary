@@ -37,6 +37,7 @@ import { createLookupCache } from './lookupCache.js';
 import { PUBLICATION_SOURCES, OT_PUBLICATION_SOURCES, createPublicationResolver } from './publicationSources.js';
 import { REPOSITORY_SOURCES, createRepositoryResolver } from './repositorySources.js';
 import { prepareFeedJobDocuments } from './feedJobDocuments.js';
+import { reviewReport } from './reportReview.js';
 import { completeReportEvidence } from './reportEvidence.js';
 import { completeNewsFeed, reviewNewsEvidence, removeVersionIndicators, recoverJoinedTableIps } from './newsQuality.js';
 import { rebuildStoryCorrelationsAsync } from './newsStories.js';
@@ -2521,7 +2522,7 @@ const JOBS_STORE_PATH = process.env.FEED_JOBS_PATH || path.join(__dirname, '.fee
 // Vão pro DISCO, não pro store: juntos passam de 4 MB e o store é reescrito
 // inteiro a cada saveJobs() — carregá-los ali transformaria cada gravação de job
 // numa cópia de vários MB.
-const DECKS_DIR = path.join(__dirname, '.feed-decks');
+const DECKS_DIR = process.env.FEED_DECKS_DIR || path.join(__dirname, '.feed-decks');
 const DECK_KINDS = { pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
                      pdf: 'application/pdf' };
 const deckPath = (id, kind) => path.join(DECKS_DIR, `${id}.${kind}`);
@@ -2664,7 +2665,32 @@ app.get('/api/feed/job', requirePremium, (req, res) => {
     }
     const clientJob = { ...job };
     delete clientJob.documents;
+    delete clientJob.renderReport;
     res.json({ ...clientJob, queuePosition });
+});
+
+// New version of a saved report: render only, without scraping or LLM calls.
+app.post('/api/feed/job/:id/render', requirePremium, scanLimiter, (req, res) => {
+    const original = jobsStore[req.params.id];
+    if (!original) return res.status(404).json({ error: 'job não encontrado' });
+    if (original.ownerSub !== req.user.sub) return res.status(403).json({ error: 'job pertence a outro usuário' });
+    const savedReport = original.status === 'done' ? original.json
+        : original.status === 'error' && original.operation === 'render' ? original.renderReport : null;
+    if (!savedReport) return res.status(409).json({ error: 'Aguarde o relatório ficar pronto.' });
+    expireStaleJobs();
+    if (pendingCount() >= FEED_MAX_QUEUE) return res.status(503).json({ error: 'Servidor ocupado. Tente novamente em alguns minutos.' });
+    let reviewed;
+    try { reviewed = reviewReport(savedReport, req.body?.patch ?? {}); }
+    catch (error) { return res.status(400).json({ error: error.message }); }
+    const id = crypto.randomUUID(), now = new Date().toISOString();
+    const job = { id, ownerSub: req.user.sub, url: original.url, urls: original.urls || [original.url],
+        type: original.type, template: original.template, subtype: original.subtype,
+        title: reviewed.titulo || original.title, operation: 'render', parentId: original.id,
+        revision: (original.revision || 1) + 1, renderReport: reviewed,
+        status: 'pending', json: null, error: null, createdAt: now, updatedAt: now };
+    jobsStore[id] = job;
+    pruneJobs(); saveJobs();
+    res.status(202).json(jobSummary(job));
 });
 
 // Boletins do usuário, sem o JSON — é a lista de consulta do /relatorios.
@@ -2757,7 +2783,9 @@ app.get('/api/feed/jobs/pending', (req, res) => {
             // Só importa com template premium; 'auto' (padrão) o motor escolhe.
             ...(j.subtype && j.subtype !== 'auto' ? { subtype: j.subtype } : {}),
             title: j.title,
-            documents: j.documents?.length ? j.documents : prepareFeedJobDocuments(j.urls || [j.url], { items: [...(memoryCache.newsletter.data || []),...newsArchiveStore.all()], articleCache: articleCollectionCache, rssCache: rssCollectionCache }),
+            ...(j.operation === 'render'
+                ? { operation: 'render', report: j.renderReport }
+                : { documents: j.documents?.length ? j.documents : prepareFeedJobDocuments(j.urls || [j.url], { items: [...(memoryCache.newsletter.data || []),...newsArchiveStore.all()], articleCache: articleCollectionCache, rssCache: rssCollectionCache }) }),
             ...(workerModel ? { model: workerModel } : {}),
         }));
     res.json({ pending });
@@ -2773,6 +2801,7 @@ app.post('/api/feed/job/result', (req, res) => {
         job.status = 'done';
         job.error = null;
         job.json = completeReportEvidence(req.body.json,job,{items:newsArchiveStore.all()});
+        delete job.renderReport;
         // O pedido pode ter sido 'auto' (motor decide depois de raspar a URL);
         // o JSON que volta sempre tem o tipo concreto que o motor escolheu
         // (deck_type), e é esse que o badge da lista deve mostrar -- não 'auto'.

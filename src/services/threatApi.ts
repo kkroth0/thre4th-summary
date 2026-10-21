@@ -893,7 +893,10 @@ export interface BoletimReport {
     recomendacoes?: { titulo?: string; itens?: string[] }[];
     iocs?: { categoria?: string; tipo?: string; valor?: string }[];
     iocs_fontes?: string[];   // apêndices externos (repo/gist) de onde os IOCs foram coletados
-    mitre_ttps?: { id?: string; nome?: string; tatica?: string; descricao?: string; contexto?: string; url?: string }[];
+    mitre_ttps?: { id?: string; nome?: string; tatica?: string; descricao?: string; contexto?: string; url?: string;
+        evidencia?: string; fontes?: string[]; justificativa?: string; classificacao?: string }[];
+    cobertura_fontes?: { url: string; titulo?: string; status: 'coletada' | 'falhou'; caracteres?: number; metodo?: string; motivo?: string }[];
+    qualidade_slides?: { checagem: string; avisos: { slide: number; tipo: string; quantidade?: number; mensagem: string }[] };
     referencias_coletadas?: { titulo?: string; url?: string }[];
     // Conteúdo extra do template avançado (risco, ações, destaques, cadeia...).
     srr_avancado?: Record<string, unknown>;
@@ -909,6 +912,9 @@ export interface BoletimJob {
     id: string;
     url: string;
     urls?: string[];
+    operation?: 'render';
+    parentId?: string;
+    revision?: number;
     type: DeckType;
     template?: DeckTemplate;   // ausente em boletim anterior à escolha de template
     subtype?: DeckSubtype;     // só com template premium; ausente/'auto' = motor escolheu
@@ -986,6 +992,15 @@ export const fetchJob = async (id: string): Promise<BoletimJob> => {
     const r = await fetch(`/api/feed/job?id=${encodeURIComponent(id)}`);
     if (!r.ok) throw new Error(`Job API error: ${r.status}`);
     return r.json();
+};
+
+export const renderBoletimVersion = async (id: string, patch: Partial<BoletimReport> = {}): Promise<BoletimJob> => {
+    const response = await fetch(`/api/feed/job/${encodeURIComponent(id)}/render`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ patch }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.error || `Render API error: ${response.status}`);
+    return data;
 };
 
 export interface RansomwareVictim {
