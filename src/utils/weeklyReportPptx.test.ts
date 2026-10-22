@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import JSZip from 'jszip';
 import { buildWeeklySlides } from './weeklyReportPptx';
+import { exportWeeklyPptx } from './weeklyReportPptx';
+import { weeklyProductLogo } from './weeklyPptxLogos';
 import type { WeeklyReportData, WeeklyNews } from '@/types/weekly-report';
 
 const news: WeeklyNews = {id:'selected',title:'Selected publication',summary:'Selected summary',published:'2026-10-13T15:25:00Z',score:80,severity:'High',sources:[{title:'Selected publication',source:'Research',link:'https://example.com/selected',published:'2026-10-13T15:25:00Z'}],categories:[],actors:[],malware:[],cves:[],ttps:[]};
@@ -12,6 +14,23 @@ test('weekly PowerPoint exports the editorial selection with publisher time and 
   const slides=buildWeeklySlides(report);const content=JSON.stringify(slides);
   assert.match(content,/Selected publication/);assert.match(content,/13\/10\/2026 · 12:25/);
   assert.match(content,/https:\/\/example.com\/selected/);assert.doesNotMatch(content,/Do not export this candidate/);
+});
+
+test('weekly export requires completed reading and editorial writing before fetching its template',async()=>{
+  await assert.rejects(exportWeeklyPptx(report),/Redija o boletim/);
+});
+test('product logos follow actual products and never substitute an unrelated vendor mark',()=>{
+ const base={id:'CVE-2026-10000',description:'',vendor:'',product:'',cvss:null,severity:'',published:'',dateAdded:'',kev:false,epss:null,action:'',references:[]};
+ for(const family of ['Java','PHP','Node.js'])assert.ok(weeklyProductLogo({...base,editorialFamily:family}));
+ assert.equal(weeklyProductLogo({...base,vendor:'Siemens',product:'Software Center'}),'siemens');assert.equal(weeklyProductLogo({...base,vendor:'Plex',product:'Media Server'}),'plex');assert.equal(weeklyProductLogo({...base,product:'SiteGuard Server Edition'}),'siteguard');assert.equal(weeklyProductLogo({...base,vendor:'Unknown vendor'}),null);
+});
+test('weekly slides use written stories and section analysis instead of feed snippets and generic cards',()=>{
+  const article={id:news.id,status:'ready' as const,title:'Manchete redigida com a leitura da notícia',lead:'Uma abertura escrita após a leitura das fontes.',context:'Uma análise específica das permissões do fornecedor.',body:['Primeiro parágrafo que desenvolve o acontecimento.','Segundo parágrafo que explica a consequência.'],attention:[{title:'Contas do fornecedor',text:'As credenciais concentravam permissões em diferentes ambientes.'},{title:'Sistemas administrados',text:'O alcance depende dos sistemas vinculados à conta.'},{title:'Histórico de acessos',text:'Os registros ajudam a delimitar a atividade observada.'}],sourceUrls:[news.sources[0].link],evidence:[{url:news.sources[0].link,status:'read',hash:'body-hash'}]};
+  const editorial={status:'ready' as const,available:true,articles:[article],sections:{executive:{priority:'Leitura editorial da semana.',overview:'Panorama escrito a partir das notícias lidas.'},ransomware:{overview:'Interpretação do panorama de publicações.',trend:'Leitura do histórico com períodos comparáveis.',groups:'Leitura específica dos grupos.'},ai:{interpretation:'Interpretação das publicações em ferramentas de IA.',leadership:'Consequência específica para a liderança.'},cves:[]}};
+  const slides=buildWeeklySlides({...report,editorial});const story=slides.find(s=>s.source===6)!;
+  assert.equal(story.values.S6_5130,article.title);assert.equal(story.values.S6_5131,article.lead);assert.equal(story.values.S6_5140,article.body[0]);assert.equal(story.values.S6_5147,article.attention[0].title);
+  assert.equal(slides.find(s=>s.source===3)?.values.S3_5049,editorial.sections.executive.overview);assert.equal(slides.find(s=>s.source===16)?.values.S16_167,editorial.sections.ransomware.overview);
+  assert.match(story.notes,/body-hash/);assert.doesNotMatch(JSON.stringify(story.values),/Selected summary|Identificar relações|Para a organização, o impacto depende/);
 });
 test('weekly PowerPoint caps legacy priorities at three native CVE cards on one page',()=>{
   const rows=Array.from({length:23},(_,i)=>({id:'CVE-2026-'+(10000+i),published:'2026-10-13',dateAdded:'',vendor:'Vendor',product:'Product',description:'Description',cvss:8,kev:false,severity:'HIGH',epss:0.1,action:'',references:[]}));

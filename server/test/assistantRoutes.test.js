@@ -44,6 +44,10 @@ test('assistant HTTP routes start safely, enforce account gates and origin, and 
   assert.equal(ready, true, 'isolated backend did not become ready within the bounded startup budget');
   const headers = { Cookie: cookie('assistant-tests', 'one'), 'Content-Type': 'application/json' };
   assert.equal((await fetch(base + '/api/integrations/telegram', { headers: { Cookie: cookie('outsider', 'two') } })).status, 403);
+  assert.equal((await fetch(base + '/api/reports/weekly/editorial', { method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({week:'2026-10-18'}) })).status,401);
+  assert.equal((await fetch(base + '/api/reports/weekly/editorial', { method:'POST',headers:{...headers,Cookie:cookie('outsider','two')},body:JSON.stringify({week:'2026-10-18'}) })).status,403);
+  assert.equal((await fetch(base + '/api/reports/weekly/editorial', { method:'POST',headers:{...headers,Origin:'https://other.example'},body:JSON.stringify({week:'2026-10-18'}) })).status,403);
+  assert.equal((await fetch(base + '/api/reports/weekly/editorial', { method:'POST',headers,body:JSON.stringify({week:'2026-10-18'}) })).status,400,'No saved selection means no reading or AI work');
   const status = await fetch(base + '/api/integrations/telegram', { headers }); assert.equal(status.status, 200);
   const metadata = await status.json(); assert.equal(metadata.configured, false); assert.equal(metadata.aiAvailable, false);
   assert.equal(status.headers.get('cache-control'), 'private, no-store'); assert.equal(metadata.token, undefined);

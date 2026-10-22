@@ -109,7 +109,9 @@ export function createWeeklyReports({filePath=':memory:',getInputs,getProfile=()
   db.exec(`CREATE TABLE IF NOT EXISTS weekly_plans(owner TEXT PRIMARY KEY,enabled INTEGER NOT NULL,profile TEXT NOT NULL,attempted TEXT,error TEXT);
     CREATE TABLE IF NOT EXISTS weekly_reports(owner TEXT NOT NULL,week TEXT NOT NULL,updated TEXT NOT NULL,fingerprint TEXT NOT NULL,revision INTEGER NOT NULL,payload TEXT NOT NULL,PRIMARY KEY(owner,week));
     CREATE TABLE IF NOT EXISTS ransomware_observations(id TEXT PRIMARY KEY,payload TEXT NOT NULL);
-    CREATE TABLE IF NOT EXISTS weekly_selections(owner TEXT NOT NULL,week TEXT NOT NULL,payload TEXT NOT NULL,PRIMARY KEY(owner,week));`);
+    CREATE TABLE IF NOT EXISTS weekly_selections(owner TEXT NOT NULL,week TEXT NOT NULL,payload TEXT NOT NULL,PRIMARY KEY(owner,week));
+    CREATE TABLE IF NOT EXISTS weekly_editorial(owner TEXT NOT NULL,week TEXT NOT NULL,payload TEXT NOT NULL,PRIMARY KEY(owner,week));
+    CREATE TABLE IF NOT EXISTS weekly_editorial_cache(owner TEXT NOT NULL,key TEXT NOT NULL,created INTEGER NOT NULL,payload TEXT NOT NULL,PRIMARY KEY(owner,key));`);
   const pending=new Map();
   const ensure=owner=>{db.prepare("INSERT OR IGNORE INTO weekly_plans VALUES(?,1,'',NULL,NULL)").run(owner);return db.prepare('SELECT * FROM weekly_plans WHERE owner=?').get(owner);};
   const read=(owner,week)=>{const row=db.prepare('SELECT * FROM weekly_reports WHERE owner=? AND week=?').get(owner,week);return row?{...JSON.parse(row.payload),updatedAt:row.updated,revision:row.revision}:null;};
@@ -144,6 +146,12 @@ export function createWeeklyReports({filePath=':memory:',getInputs,getProfile=()
     })().finally(()=>pending.delete(key));pending.set(key,work);return work;
   }
   return {refresh,
+    editorialStore:{
+      get:(owner,week)=>{const row=db.prepare('SELECT payload FROM weekly_editorial WHERE owner=? AND week=?').get(owner,week);return row?JSON.parse(row.payload):null;},
+      put:(owner,week,value)=>db.prepare('INSERT OR REPLACE INTO weekly_editorial VALUES(?,?,?)').run(owner,week,JSON.stringify(value)),
+      cacheGet:(owner,key)=>{const row=db.prepare('SELECT payload FROM weekly_editorial_cache WHERE owner=? AND key=?').get(owner,key);return row?JSON.parse(row.payload):null;},
+      cachePut:(owner,key,value)=>{db.prepare('INSERT OR REPLACE INTO weekly_editorial_cache VALUES(?,?,?,?)').run(owner,key,now(),JSON.stringify(value));db.prepare('DELETE FROM weekly_editorial_cache WHERE owner=? AND key NOT IN (SELECT key FROM weekly_editorial_cache WHERE owner=? ORDER BY created DESC,rowid DESC LIMIT 200)').run(owner,owner);},
+    },
     select:(owner,week,selection)=>{
       const report=read(owner,week);if(!report)throw Error('Report not found');
       if(Array.isArray(selection.newsIds)&&Array.isArray(selection.aiNewsIds)&&selection.newsIds.some(id=>selection.aiNewsIds.includes(id)))throw Error('Duplicate event');

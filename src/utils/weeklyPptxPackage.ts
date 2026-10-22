@@ -3,9 +3,11 @@ import manifest from '@/config/weeklyEyTemplate.json';
 import type {WeeklyReportData} from '@/types/weekly-report';
 import {buildWeeklySlides,countryNames} from './weeklyEySlides';
 import {fillWeeklyCharts} from './weeklyPptxCharts';
+import {fillWeeklyProductLogos} from './weeklyPptxLogos';
 import {A,P,R,REL,children,first,parse,serialize,escapeXml,relation,override,writeText,setFill} from './weeklyPptxXml';
 const validLink=(v:string)=>{try{const u=new URL(v);return /^https?:$/.test(u.protocol)&&!u.username&&!u.password?u.href:null;}catch{return null;}};
 export async function createWeeklyPptx(report:WeeklyReportData,bytes:ArrayBuffer):Promise<Blob>{
+ if(report.editorial?.status!=='ready'||[...report.news,...report.aiNews].some(item=>!report.editorial?.articles?.some(article=>article.id===item.id&&article.status==='ready')))throw Error('Redação com leitura das fontes necessária antes da exportação.');
  const zip=await JSZip.loadAsync(bytes),slides=buildWeeklySlides(report);
  const load=async(n:string)=>{const f=zip.file(n);if(!f)throw Error('Template part missing: '+n);return f.async('string');};
  const originals=new Map<number,{xml:string;rels:string}>();for(const s of slides)if(!originals.has(s.source))originals.set(s.source,{xml:await load(`ppt/slides/slide${s.source}.xml`),rels:await load(`ppt/slides/_rels/slide${s.source}.xml.rels`)});
@@ -33,6 +35,7 @@ export async function createWeeklyPptx(report:WeeklyReportData,bytes:ArrayBuffer
    const top=Object.entries(s.map).sort((a,b)=>b[1]-a[1]).slice(0,7);for(let i=0;i<7;i++){const label=shapes.get(5618+i);if(!label)continue;const row=top[i];if(!row){label.parentNode?.removeChild(label);continue;}writeText(label,`${countryNames[row[0]]||row[0]}  ${row[1]}`);const ext=first(label,A,'ext');ext?.setAttribute('cx','1100000');const pos=biggest.get(row[0]),off=first(label,A,'off');if(pos&&off){off.setAttribute('x',String(Math.round(Math.max(700000,Math.min(6100000,pos.x-350000)))));off.setAttribute('y',String(Math.round(pos.y)));}}
    const arrow=shapes.get(169);if(arrow)arrow.parentNode?.removeChild(arrow);
   }
+  if([13,14].includes(s.source)){const v=report.vulnerabilities;const rows=s.source===13?(v.editorial?.highlights??v.priority).slice(0,3):(v.editorial?.exploited??v.kev).filter(row=>row.kev).slice(0,3);await fillWeeklyProductLogos(zip,doc,sr,rows);if(rows.some(row=>row.editorialFamily==='PHP'))s.notes+='\nPHP: logo alternativo de Levi Morrison, https://www.php.net/download-logos.php; CC BY-SA 4.0 https://creativecommons.org/licenses/by-sa/4.0/. Arte preservada e redimensionada proporcionalmente.';}
   const note=`<?xml version="1.0" encoding="UTF-8"?><p:notes xmlns:p="${P}" xmlns:a="${A}"><p:cSld><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr/><p:sp><p:nvSpPr><p:cNvPr id="2" name="Sources"/><p:cNvSpPr/><p:nvPr><p:ph type="body" idx="1"/></p:nvPr></p:nvSpPr><p:spPr/><p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:t>${escapeXml(s.notes)}</a:t></a:r></a:p></p:txBody></p:sp></p:spTree></p:cSld></p:notes>`;
   relation(sr,'weeklyNotes','notesSlide',`../notesSlides/notesSlide${n}.xml`);zip.file(`ppt/notesSlides/notesSlide${n}.xml`,note);
   const nr=parse(`<Relationships xmlns="${REL}"/>`);relation(nr,'slide','slide',`../slides/slide${n}.xml`);if(zip.file('ppt/notesMasters/notesMaster1.xml'))relation(nr,'master','notesMaster','../notesMasters/notesMaster1.xml');zip.file(`ppt/notesSlides/_rels/notesSlide${n}.xml.rels`,serialize(nr));override(types,`/ppt/notesSlides/notesSlide${n}.xml`,'application/vnd.openxmlformats-officedocument.presentationml.notesSlide+xml');

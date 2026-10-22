@@ -49,6 +49,7 @@ import { publishNewsSnapshot } from './publishNewsSnapshot.js';
 import { createIocIntelligence } from './iocIntelligence.js';
 import { createIntelligenceCollector, sourceObservations } from './intelligenceSources.js';
 import { createWeeklyReports, weeklyWindow } from './weeklyReports.js';
+import { createWeeklyEditorial, createWeeklyEditorialGenerator } from './weeklyEditorial.js';
 import { createWeeklyRansomware } from './weeklyRansomware.js';
 import { createPublicationRequest, resolvePublicationHost } from './publicationHttp.js';
 import { actorPublications, buildActorActivity, buildActorEvidence } from './actorEvidence.js';
@@ -2937,11 +2938,12 @@ async function googleTranslate(text, targetLang) {
 // and the caller falls back to the RSS summary.
 const BROWSER_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 
-async function fetchArticleText(url, textCap = 8000) {
+async function fetchArticleText(url, textCap = 8000, signal) {
     try {
         const resp = await publicationRequest(url, {
             headers: { 'User-Agent': BROWSER_UA, Accept: 'text/html,application/xhtml+xml' },
             maxContentLength: 2000000,
+            signal,
         });
         return {
             text: extractReadableText(resp.data).slice(0, textCap),
@@ -3421,14 +3423,42 @@ const weeklyReports=createWeeklyReports({filePath:process.env.NODE_ENV==='test'?
     getProfile:(owner,id)=>orgProfileStore.get(owner,id),
     getInputs:async(owner,range)=>({...await weeklyInputs(range),reports:Object.values(jobsStore).filter(job=>job.ownerSub===owner)}),
 });
+const weeklyEditorial=createWeeklyEditorial({
+    storage:weeklyReports.editorialStore,
+    getReport:(owner,week)=>weeklyReports.get(owner,week).report,
+    available:()=>!!process.env.OPENROUTER_API_KEY,
+    getSourceRevision:report=>[...report.news,...report.aiNews].flatMap(item=>item.sources.slice(0,4).map(source=>{const body=articleCollectionCache.get(source.link);return [source.link,body?.contentHash||body?.collectedAt||''];})),
+    generate:createWeeklyEditorialGenerator({http:axios,getKey:()=>process.env.OPENROUTER_API_KEY,model:process.env.OPENROUTER_WEEKLY_MODEL||OPENROUTER_MODEL}),
+    readArticle:async(url,{signal})=>{
+        const cached=articleCollectionCache.get(url);
+        if(cached?.text?.length>=1500&&Date.now()-Date.parse(cached.collectedAt)<24*3600000)return {...cached,origin:'etl-cache'};
+        const prepared=prepareFeedJobDocuments([url],{items:newsArchiveStore.all(),articleCache:articleCollectionCache,rssCache:rssCollectionCache})[0];
+        if(prepared?.text&&!cached?.text)return {...prepared,origin:'etl-body'};
+        const fetched=await fetchArticleText(url,64000,signal);
+        if(fetched.text?.length>=900){const collectedAt=new Date().toISOString();articleCollectionCache.set(url,{...cached,...fetched,collectedAt,contentHash:crypto.createHash('sha256').update(fetched.text).digest('hex')});return {...fetched,collectedAt,origin:'article'};}
+        if(prepared?.text)return {...prepared,origin:'etl-snapshot'};
+        throw Error('BODY_UNAVAILABLE');
+    },
+});
 app.get('/api/reports/weekly',requirePremium,(req,res)=>{
     try {
         const week=req.query.week?weeklyWindow(new Date(),String(req.query.week)).id:undefined;
         if(week&&week>weeklyWindow().id)return res.status(400).json({error:'Semana futura inválida.'});
         const data=weeklyReports.get(req.user.sub,week);
         if(!week&&data.plan.enabled&&(!data.report||!data.plan.lastAttemptedAt||Date.parse(data.plan.lastAttemptedAt)<Date.now()-15*60000)){void weeklyReports.refresh(req.user.sub).catch(()=>{});data.updating=true;}
-        res.set('Cache-Control','private, no-store').json(data);
+        res.set('Cache-Control','private, no-store').json({...data,report:weeklyEditorial.attach(req.user.sub,data.report)});
     }catch{res.status(400).json({error:'Informe o domingo inicial da semana.'});}
+});
+app.post('/api/reports/weekly/editorial',requirePremium,scanLimiter,(req,res)=>{
+    if(req.get('Origin')&&req.get('Origin')!==new URL(APP_BASE_URL).origin)return res.status(403).json({error:'Origem não autorizada.'});
+    try{
+        const week=weeklyWindow(new Date(),String(req.body?.week||'')).id;
+        const editorial=weeklyEditorial.start(req.user.sub,week);
+        res.set('Cache-Control','private, no-store').status(editorial.status==='ready'?200:202).json({editorial});
+    }catch(error){
+        const reason=error.message;
+        res.status(reason==='AI_UNAVAILABLE'?503:reason==='EDITORIAL_BUSY'?429:400).json({error:reason==='AI_UNAVAILABLE'?'Configure a IA para redigir o boletim.':reason==='EDITORIAL_BUSY'?'Há um boletim em redação. Tente novamente quando ele terminar.':'Salve a seleção da semana antes de gerar o boletim.'});
+    }
 });
 app.put('/api/reports/weekly',requirePremium,(req,res)=>{
     try{if(typeof req.body?.enabled!=='boolean')return res.status(400).json({error:'Configuração inválida.'});weeklyReports.configure(req.user.sub,{enabled:req.body.enabled,profileId:String(req.body.profileId||'')});

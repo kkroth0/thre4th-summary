@@ -6,7 +6,7 @@ O padrão de redação e revisão está em [Padrão editorial do boletim semanal
 
 ## Seleção editorial
 
-Cada semana oferece até 25 eventos gerais e 25 de inteligência artificial, classificados por relevância e deduplicados pelo evento correlacionado. A sugestão inicial marca os 10 gerais e 5 de IA mais relevantes. O usuário pode trocar, remover e confirmar as escolhas com **Salvar seleção**; o PPTX fica disponível após essa confirmação.
+Cada semana oferece até 25 eventos gerais e 25 de inteligência artificial, classificados por relevância e deduplicados pelo evento correlacionado. A sugestão inicial marca os 10 gerais e 5 de IA mais relevantes. O usuário pode trocar, remover e confirmar as escolhas com **Salvar seleção**; após essa confirmação, **Gerar redação** lê os artigos selecionados e prepara as matérias e a síntese das seções. O PPTX fica disponível quando a redação termina sem matérias bloqueadas.
 
 As escolhas ficam vinculadas à conta e à semana, persistem após reinícios e não são substituídas por notícias novas ou mudanças no ranking. Uma escolha que saiu das 25 sugestões permanece disponível para revisão. O JSON inclui as sugestões e a seleção; o PPTX inclui somente as notícias selecionadas.
 
@@ -38,3 +38,17 @@ A chave Pro da Ransomware.live permite consultar meses completos, além do feed 
 Para perfis cujo nome identifica Grupo Ultrapar, o recorte solicitado usa os nomes conferidos no endpoint Pro `/listsectors`: `Financial Services` (financeiro), `Transportation` (logística e mobilidade), `Manufacturing` (indústria e manufatura) e `Energy & Utilities` (energia). Cada organização é contada uma vez. Outros perfis não herdam esse recorte. O perfil e os setores ficam registrados na versão semanal.
 
 As chaves ficam somente no servidor. `NVD_API_KEY` e `RANSOMWARE_LIVE_API_KEY` são sincronizadas pelo workflow manual de segredos para a VPS. O navegador recebe os dados consolidados, nunca as credenciais.
+
+## Redação com leitura das fontes
+
+A redação é iniciada explicitamente em `POST /api/reports/weekly/editorial`, com autenticação, acesso premium e verificação de origem. O GET e o ciclo de atualização de quinze minutos não fazem chamadas de IA. A tarefa continua no servidor ao sair da página; a interface mostra o progresso e permite revisar os textos e as fontes antes de exportar.
+
+O leitor reutiliza corpos do ETL, nunca o resumo curto como substituto de artigo, e consulta a URL quando necessário. As requisições usam a proteção existente contra SSRF, DNS privado e redirecionamentos inseguros. Cada matéria considera até quatro fontes; fontes indisponíveis ou adicionais ficam explicitamente identificadas. O corpo e a parcela fornecida à IA têm limites de tamanho registrados na evidência. Sem ao menos um corpo legível, a matéria fica bloqueada e não recebe texto genérico.
+
+A IA recebe a voz editorial de revista semanal em português brasileiro e produz manchete, abertura, contexto, dois parágrafos de desenvolvimento e três pontos de atenção específicos. Dois trechos literais devem corresponder aos textos lidos; URLs não lidas, CVEs ausentes do corpo e versões de correção ausentes das evidências são rejeitadas. Uma tentativa de reescrita pode corrigir formato e extensão. Essa validação não equivale à checagem independente de todas as afirmações; a revisão editorial continua necessária.
+
+Os advisories das seis CVEs selecionadas também são consultados quando disponíveis, além dos dados do catálogo. Sem texto do advisory, a seção usa apenas o catálogo e não pode inventar versões corrigidas. A síntese executiva e os textos de ransomware, histórico e IA usam as matérias redigidas e os dados estruturados da edição. Comparações numéricas com a semana anterior não aparecem como queda durante uma semana ainda em andamento.
+
+Rascunhos e cache ficam isolados por conta em tabelas do mesmo `.weekly-reports.sqlite`, preservado no deploy. O cache inclui versão editorial, modelo, conteúdo e perfil; mudanças invalidam a redação. Uma tarefa interrompida pode ser retomada sem cobrar novamente por matérias idênticas já verificadas. Uma edição é processada por vez, com até duas matérias simultâneas. `OPENROUTER_WEEKLY_MODEL` pode selecionar o modelo; na ausência, utiliza a configuração já existente de `OPENROUTER_MODEL`. Chaves ficam no servidor.
+
+O workflow manual `weekly-editorial-audit.yml` lê uma notícia pública e testa a IA em memória, sem criar ou alterar relatórios de clientes. As contagens desse teste são uma fixture, nunca uma edição publicável.
