@@ -19,13 +19,19 @@ if(!result.configured){console.log(JSON.stringify(result));process.exitCode=1;}e
  try{
   await store.refresh('isolated');store.select('isolated',range.id,{newsIds:['operator-public-article'],aiNewsIds:[]});
   const request=createPublicationRequest();
+  const provider=createWeeklyEditorialGenerator({http,getKey:()=>process.env.OPENROUTER_API_KEY,model:process.env.OPENROUTER_WEEKLY_MODEL||process.env.OPENROUTER_MODEL||'deepseek/deepseek-v4-flash'});
+  const diagnostics=[];
   const editorial=createWeeklyEditorial({storage:store.editorialStore,getReport:()=>store.get('isolated',range.id).report,now,
    readArticle:async url=>{const response=await request(url,{maxContentLength:2000000});return {text:extractReadableText(response.data),origin:'article'};},
-   generate:createWeeklyEditorialGenerator({http,getKey:()=>process.env.OPENROUTER_API_KEY,model:process.env.OPENROUTER_WEEKLY_MODEL||process.env.OPENROUTER_MODEL||'deepseek/deepseek-v4-flash'}),
+   generate:async(kind,input,repair)=>{
+    try{const value=await provider(kind,input,repair);const normalize=text=>String(text||'').replace(/\s+/g,' ').trim();
+     diagnostics.push({kind,repair,keys:Object.keys(value),lengths:Object.fromEntries(['title','lead','context'].map(key=>[key,String(value[key]||'').length])),body:value.body?.map(p=>String(p).length),attention:value.attention?.map(p=>({title:p.title?.length,text:p.text?.length})),quotes:value.supportingQuotes?.map(q=>({characters:normalize(q.text).length,found:input.documents?.some(d=>d.url===q.url&&normalize(d.text).includes(normalize(q.text)))}))});return value;
+    }catch(error){diagnostics.push({kind,providerStatus:error.response?.status||error.code||error.name});throw error;}
+   },
   });
   editorial.start('isolated',range.id);await editorial.wait('isolated',range.id);
   const state=editorial.status('isolated',store.get('isolated',range.id).report);
-  result.status=state.status;result.stories=state.articles?.map(row=>({status:row.status,title:row.title,attention:row.attention?.length,evidence:row.evidence.map(e=>({status:e.status,characters:e.characters,hash:e.hash})),reason:row.reason}));result.sections=!!state.sections;
+  result.status=state.status;result.stories=state.articles?.map(row=>({status:row.status,title:row.title,attention:row.attention?.length,evidence:row.evidence.map(e=>({status:e.status,characters:e.characters,hash:e.hash})),reason:row.reason}));result.sections=!!state.sections;result.diagnostics=diagnostics;
   if(state.status!=='ready')process.exitCode=1;
  }catch{result.status='unavailable';process.exitCode=1;}finally{store.close();}
  console.log(JSON.stringify(result,null,2));
