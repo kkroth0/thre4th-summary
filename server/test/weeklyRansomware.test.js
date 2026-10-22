@@ -29,3 +29,10 @@ test('truncated month exposes partial coverage, leaves chart weeks missing and c
  assert.ok(report.ransomware.history.every(w=>w.latam===null));
  broken=false;assert.equal((await api.get(range)).coverage.status,'ready');
 });
+test('new NVD records without CPE retain affected AI tool identity and aggregate its CVEs',()=>{
+ const rows=[{id:'CVE-2026-10001',description:'piflow 2.0.0 contains a remote code execution vulnerability in its DeepAgent AI agent.',cvss:9.3},{id:'CVE-2026-10002',description:'piflow 2.0.1 contains an AI agent permission issue.',cvss:8.2},{id:'CVE-2026-10003',description:'LangChain through 0.3.1 contains an AI agent vulnerability.',cvss:7}].map(row=>({...row,published:'2026-10-20T12:00:00Z',references:[]}));
+ const report=buildWeeklyReport({vulnerabilities:rows},{range,now});
+ const tool=report.vulnerabilities.ai.tools.find(t=>t.name==='piflow');
+ assert.equal(tool.count,2);assert.equal(tool.cvss,9.3);assert.equal(tool.id,'CVE-2026-10001');
+ assert.ok(report.vulnerabilities.ai.tools.some(t=>t.name==='LangChain'));
+});

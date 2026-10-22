@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { isAiNews } from './newsCategories.js';
 import { LATAM_COUNTRIES } from './ransomwareLive.js';
 import { weeklyProfile } from './weeklyRansomware.js';
+import { classifyAiTool } from './aiToolCatalog.js';
 
 const DAY=86400000;
 const sourceDate=value=>typeof value==='string'&&/^\d{4}-\d\d-\d\d[ T]\d\d:\d\d:\d\d(?:\.\d+)?$/.test(value)?value.replace(' ','T')+'Z':value;
@@ -29,6 +30,15 @@ const aiCategory = row => {
   if (/agent|agente|autogen|crewai/i.test(text)) return 'Agentes de IA';
   if (/open.?webui|dify|flowise|langflow|gradio|comfyui|litellm/i.test(text)) return 'Plataformas de IA';
   return 'IA em outros produtos';
+};
+const aiToolName = row => {
+  if (row.product) return [row.vendor,row.product].filter(Boolean).join(' ');
+  const tools=classifyAiTool({product:row.product,text:row.description,references:row.references||[]});
+  if (tools.length===1) return tools[0].name;
+  // Some new NVD records have no CPE yet. Only use the named subject before
+  // its version clause, never a brand mentioned later in credits/integrations.
+  const subject=row.description?.match(/^([A-Za-z0-9][A-Za-z0-9 ._/@-]{1,80}?)(?=\s+(?:v?\d+\.\d|through\b|before\b|from\b|up to\b|prior to\b))/i)?.[1]?.trim();
+  return subject&&!/^(?:a |an |the vulnerability|vulnerability |improper )/i.test(subject)?subject:row.vendor||row.id;
 };
 
 export function buildWeeklyReport(inputs,{range,profile=null,now=Date.now(),selection=null,retained=null}={}) {
@@ -80,7 +90,7 @@ export function buildWeeklyReport(inputs,{range,profile=null,now=Date.now(),sele
     return {from,to,available,latam:available?rows.length:null,brazil:available?rows.filter(row=>row.country==='BR').length:null,byGroup:available?frequencies(rows.map(row=>row.group)):[]};
   });
   const previousAi=Array.isArray(inputs.previousVulnerabilities)?inputs.previousVulnerabilities.filter(row=>isAiVulnerability(row)&&inWeek(row.published,{from:new Date(Date.parse(range.from)-7*DAY).toISOString(),to:range.from},now)).length:null;
-  const tools=new Map();for(const row of aiCves){const name=[row.vendor,row.product].filter(Boolean).join(' ')||row.id;const old=tools.get(name)||{name,count:0,cvss:null,id:row.id};old.count++;if(row.cvss!=null&&(old.cvss==null||row.cvss>old.cvss)){old.cvss=row.cvss;old.id=row.id;}tools.set(name,old);}
+  const tools=new Map();for(const row of aiCves){const name=aiToolName(row);const old=tools.get(name)||{name,count:0,cvss:null,id:row.id};old.count++;if(row.cvss!=null&&(old.cvss==null||row.cvss>old.cvss)){old.cvss=row.cvss;old.id=row.id;}tools.set(name,old);}
   const reports=(inputs.reports||[]).filter(row=>row.status==='done'&&inWeek(row.updatedAt||row.createdAt,range,now)).map(row=>({id:row.id,title:row.title||row.url,type:row.type,updatedAt:row.updatedAt,sources:row.urls||[row.url]}));
   const selected=[...news,...aiNews];
   const recommendations=kev.slice(0,10).map(row=>({priority:'immediate',action:row.action||'Revisar o advisory e aplicar as medidas indicadas pelo fabricante.',source:`https://www.cisa.gov/known-exploited-vulnerabilities-catalog`,cve:row.id}));

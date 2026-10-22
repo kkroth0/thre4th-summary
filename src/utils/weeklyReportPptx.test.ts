@@ -56,3 +56,10 @@ test('news columns do not split firmware and software versions at decimal points
  const values=slides.find(s=>s.source===6)!.values;
  assert.ok([values.S6_5140,values.S6_5141].some(value=>value.includes('4.0.9.8')));
 });
+test('ransomware table highlights only the recipient sectors and hides markers on empty rows',()=>{
+ const victims=['Technology','Manufacturing'].map((sector,i)=>({id:String(i),name:'Organization '+i,group:'G',country:'BR',sector,published:'2026-10-13',discovered:'2026-10-13',description:'',permalink:'https://example.com/'+i,claimStatus:'unconfirmed' as const}));
+ const slides=buildWeeklySlides({...report,ransomware:{...report.ransomware,victims,focusSectors:['Manufacturing'],focusCount:1}});
+ const table=slides.find(s=>s.source===17)!;
+ assert.deepEqual(table.fills?.slice(0,2),[{id:6038,color:'A3A3AE'},{id:6043,color:'B08A00'}]);
+ assert.ok(table.removeIds?.includes(6047));
+});
