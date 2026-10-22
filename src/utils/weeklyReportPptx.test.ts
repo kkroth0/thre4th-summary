@@ -47,4 +47,12 @@ test('page references follow selected content and no previous-week comparison is
  const ai=slides.find(s=>s.source===20)!;assert.equal(ai.values.S20_5899,'—');
  assert.equal(ai.values.S20_5897,'comparação anterior indisponível');
  assert.ok(slides.every(s=>!s.notes.includes('Do not export this candidate')));
+ assert.equal(slides.find(s=>s.source===12)?.values.S12_11,'Prioridades em vulnerabilidades');
+ assert.equal(slides.find(s=>s.source===15)?.values.S15_13,'Panorama das organizações citadas');
+});
+
+test('news columns do not split firmware and software versions at decimal points',()=>{
+ const slides=buildWeeklySlides({...report,news:[{...news,summary:'O fabricante publicou uma correção. A atualização exige a versão 4.0.9.8 do produto. A equipe deve avaliar a exposição.'}]});
+ const values=slides.find(s=>s.source===6)!.values;
+ assert.ok([values.S6_5140,values.S6_5141].some(value=>value.includes('4.0.9.8')));
 });
