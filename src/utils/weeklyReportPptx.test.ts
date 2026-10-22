@@ -17,7 +17,7 @@ test('weekly PowerPoint paginates the three native CVE blocks without losing rec
   const rows=Array.from({length:23},(_,i)=>({id:'CVE-2026-'+(10000+i),published:'2026-10-13',dateAdded:'',vendor:'Vendor',product:'Product',description:'Description',cvss:8,kev:false,severity:'HIGH',epss:0.1,action:'',references:[]}));
   const slides=buildWeeklySlides({...report,vulnerabilities:{...report.vulnerabilities,priority:rows}});
   for(const row of rows)assert.match(JSON.stringify(slides),new RegExp(row.id));
-  assert.equal(slides.filter(slide=>Object.values(slide.values).some(value=>value.startsWith('Prioridades em vulnerabilidades'))).length,8);
+  assert.equal(slides.filter(slide=>slide.source===13).length,8);
 });
 test('EY template preserves native layouts, country geometry and charts without customer or incident content',async()=>{
   const zip=await JSZip.loadAsync(await fs.readFile('public/templates/weekly-report-ey-v3.pptx'));
