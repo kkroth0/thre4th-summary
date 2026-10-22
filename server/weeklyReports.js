@@ -1,6 +1,8 @@
 import Database from 'better-sqlite3';
 import { createHash } from 'node:crypto';
 import { isAiNews } from './newsCategories.js';
+import { LATAM_COUNTRIES } from './ransomwareLive.js';
+import { weeklyProfile } from './weeklyRansomware.js';
 
 const DAY=86400000;
 const sourceDate=value=>typeof value==='string'&&/^\d{4}-\d\d-\d\d[ T]\d\d:\d\d:\d\d(?:\.\d+)?$/.test(value)?value.replace(' ','T')+'Z':value;
@@ -19,8 +21,18 @@ const names=items=>(items||[]).map(item=>typeof item==='string'?item:item.name).
 const frequencies=values=>Object.entries(values.reduce((counts,value)=>{if(value)counts[value]=(counts[value]||0)+1;return counts;},{})).map(([name,count])=>({name,count})).sort((a,b)=>b.count-a.count||a.name.localeCompare(b.name));
 const assetMatch=(row,assets=[])=>assets.some(asset=>(!asset.vendor||`${row.vendor||''} ${row.description||''}`.toLowerCase().includes(asset.vendor.toLowerCase()))&&(!asset.product||`${row.product||''} ${row.description||''}`.toLowerCase().includes(asset.product.toLowerCase())));
 export const isAiVulnerability=row=>isAiNews({title:`${row.vendor||''} ${row.product||''}`,description:row.description||''})||/\b(?:mlflow|pytorch|tensorflow|llamaindex|langflow|litellm|gradio|comfyui|flowise|open[-_ ]?webui|dify)\b/i.test(`${row.vendor} ${row.product} ${row.description}`);
+const aiCategory = row => {
+  const text = `${row.vendor||''} ${row.product||''} ${row.description||''}`;
+  if (/\bmcp\b|model context protocol/i.test(text)) return 'Conectores MCP';
+  if (/mlflow|pytorch|tensorflow|langchain|llamaindex|transformers|mlops/i.test(text)) return 'Frameworks e MLOps';
+  if (/ollama|vllm|llama.cpp|mooncake|inference server|model server/i.test(text)) return 'Servidores de modelos';
+  if (/agent|agente|autogen|crewai/i.test(text)) return 'Agentes de IA';
+  if (/open.?webui|dify|flowise|langflow|gradio|comfyui|litellm/i.test(text)) return 'Plataformas de IA';
+  return 'IA em outros produtos';
+};
 
 export function buildWeeklyReport(inputs,{range,profile=null,now=Date.now(),selection=null,retained=null}={}) {
+  profile=weeklyProfile(profile);
   const groups=new Map();
   for(const row of inputs.publications||[]) {
     const periodDate=row.publicationTimeKnown===false||row.repository?.dateBasis==='report-date'?row.pubDate?.slice(0,10)+'T12:00:00Z':row.pubDate;
@@ -54,15 +66,27 @@ export function buildWeeklyReport(inputs,{range,profile=null,now=Date.now(),sele
   const aiCves=newCves.filter(isAiVulnerability).sort(prioritize);
   const monitored=profile?.assets?.length?priority.filter(row=>assetMatch(row,profile.assets)):[];
   const uniqueVictims=[...new Map((inputs.victims||[]).map(row=>[row.id||row.permalink||`${row.group}:${row.name}:${row.published||row.discovered}`,row])).values()];
-  const victims=uniqueVictims.filter(row=>inWeek(sourceDate(row.published||row.discovered),range,now)).map(row=>({...row,published:sourceDate(row.published),discovered:sourceDate(row.discovered),claimStatus:'unconfirmed'}));
-  const latamCodes=new Set(['AR','BO','BR','CL','CO','CR','CU','DO','EC','SV','GT','HT','HN','MX','NI','PA','PY','PE','PR','UY','VE']);
-  const latam=victims.filter(row=>latamCodes.has(String(row.country).toUpperCase()));
+  const observationDate=row=>sourceDate(row.discovered||row.published);
+  const victims=uniqueVictims.filter(row=>inWeek(observationDate(row),range,now)).map(row=>({...row,published:sourceDate(row.published),discovered:sourceDate(row.discovered),claimStatus:'unconfirmed'}));
+  const latam=victims.filter(row=>LATAM_COUNTRIES.has(String(row.country).toUpperCase()));
+  const focusSectors=profile?.ransomwareSectors||[];
+  const focusVictims=latam.filter(row=>focusSectors.includes(row.sector));
+  const history=Array.from({length:12},(_,i)=>{
+    const from=new Date(Date.parse(range.from)-(11-i)*7*DAY).toISOString(),to=new Date(Date.parse(from)+7*DAY).toISOString();
+    const months=new Set([from.slice(0,7),new Date(Date.parse(to)-1).toISOString().slice(0,7)]);
+    const coverage=inputs.coverage?.ransomware;
+    const available=(!coverage||coverage.status==='ready')||Boolean(coverage.months?.length&&![...months].some(month=>coverage.missingMonths?.includes(month)||!coverage.months.includes(month)));
+    const rows=uniqueVictims.filter(row=>LATAM_COUNTRIES.has(String(row.country).toUpperCase())&&inWeek(observationDate(row),{from,to},now));
+    return {from,to,available,latam:available?rows.length:null,brazil:available?rows.filter(row=>row.country==='BR').length:null,byGroup:available?frequencies(rows.map(row=>row.group)):[]};
+  });
+  const previousAi=Array.isArray(inputs.previousVulnerabilities)?inputs.previousVulnerabilities.filter(row=>isAiVulnerability(row)&&inWeek(row.published,{from:new Date(Date.parse(range.from)-7*DAY).toISOString(),to:range.from},now)).length:null;
+  const tools=new Map();for(const row of aiCves){const name=[row.vendor,row.product].filter(Boolean).join(' ')||row.id;const old=tools.get(name)||{name,count:0,cvss:null,id:row.id};old.count++;if(row.cvss!=null&&(old.cvss==null||row.cvss>old.cvss)){old.cvss=row.cvss;old.id=row.id;}tools.set(name,old);}
   const reports=(inputs.reports||[]).filter(row=>row.status==='done'&&inWeek(row.updatedAt||row.createdAt,range,now)).map(row=>({id:row.id,title:row.title||row.url,type:row.type,updatedAt:row.updatedAt,sources:row.urls||[row.url]}));
   const selected=[...news,...aiNews];
   const recommendations=kev.slice(0,10).map(row=>({priority:'immediate',action:row.action||'Revisar o advisory e aplicar as medidas indicadas pelo fabricante.',source:`https://www.cisa.gov/known-exploited-vulnerabilities-catalog`,cve:row.id}));
-  const data={range,profile:profile?{id:profile.id,name:profile.name,assets:profile.assets,sectors:profile.sectors}:null,generatedAt:new Date(now).toISOString(),
-    news,aiNews,candidates,selection:{mode:selection?'manual':'suggested',newsIds:news.map(row=>row.id),aiNewsIds:aiNews.map(row=>row.id)},vulnerabilities:{total:newCves.length,kevCount:kev.length,critical:newCves.filter(row=>row.severity==='CRITICAL').length,kev,priority:priority.slice(0,50),monitored,ai:{total:aiCves.length,critical:aiCves.filter(row=>row.severity==='CRITICAL').length,items:aiCves.slice(0,50),vendors:frequencies(aiCves.map(row=>row.vendor))}},
-    ransomware:{total:victims.length,latam:latam.length,brazil:latam.filter(row=>row.country==='BR').length,victims:latam,byCountry:frequencies(latam.map(row=>row.country)),byGroup:frequencies(latam.map(row=>row.group)),bySector:frequencies(latam.map(row=>row.sector)),claimsAreUnconfirmed:true},
+  const data={range,profile:profile?{id:profile.id,name:profile.name,assets:profile.assets,sectors:profile.sectors,ransomwareSectors:focusSectors}:null,generatedAt:new Date(now).toISOString(),
+    news,aiNews,candidates,selection:{mode:selection?'manual':'suggested',newsIds:news.map(row=>row.id),aiNewsIds:aiNews.map(row=>row.id)},vulnerabilities:{total:newCves.length,kevCount:kev.length,critical:newCves.filter(row=>row.severity==='CRITICAL').length,kev,priority:priority.slice(0,50),monitored,ai:{total:aiCves.length,kevCount:aiCves.filter(row=>row.kev).length,critical:aiCves.filter(row=>row.severity==='CRITICAL').length,items:aiCves.slice(0,50),vendors:frequencies(aiCves.map(row=>row.vendor)),categories:frequencies(aiCves.map(aiCategory)),previousTotal:previousAi,tools:[...tools.values()].sort((a,b)=>(b.cvss??-1)-(a.cvss??-1)||b.count-a.count).slice(0,4)}},
+    ransomware:{total:victims.length,latam:latam.length,brazil:latam.filter(row=>row.country==='BR').length,victims:latam,byCountry:frequencies(latam.map(row=>row.country)),byGroup:frequencies(latam.map(row=>row.group)),bySector:frequencies(latam.map(row=>row.sector)),focusSectors,focusCount:focusVictims.length,focusBySector:focusSectors.map(name=>({name,count:focusVictims.filter(row=>row.sector===name).length})),history,claimsAreUnconfirmed:true},
     reports,recommendations,actors:frequencies(selected.flatMap(row=>row.actors)),malware:frequencies(selected.flatMap(row=>row.malware)),ttps:frequencies(selected.flatMap(row=>row.ttps)),
     coverage:inputs.coverage||{},sources:[...new Map(selected.flatMap(row=>row.sources).map(row=>[row.link,row])).values()]};
   return data;

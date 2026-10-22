@@ -19,7 +19,7 @@ As escolhas ficam vinculadas à conta e à semana, persistem após reinícios e 
 
 ## Conteúdo e exportação
 
-O PPTX usa oito layouts editáveis adaptados do template fornecido: capa, resumo, notícia, vulnerabilidades, ransomware, recomendações, entidades citadas e metodologia. Tabelas são paginadas; as URLs completas das fontes ficam nas notas dos slides. O modelo público foi sanitizado e não contém os incidentes, números ou destinatário do documento original.
+O PPTX usa os objetos nativos do boletim EY aprovado: formato A4 vertical, fonte Overpass, capas, marca EY, divisórias, resumo executivo, três blocos de CVEs por página, mapa vetorial da América Latina, panorama de vítimas, dois gráficos editáveis de 12 semanas, painel de IA, TLP e aviso. Conteúdo variável é paginado no mesmo layout. As referências ficam nas notas e os títulos/fontes e CVEs têm links. O template distribuído contém 19 layouts sanitizados, sem notícias, números, destinatários ou planilhas da edição original. Cada exportação escreve os próprios dados nos gráficos e em suas planilhas Excel incorporadas. Não reutiliza os números do exemplo.
 
 CVEs publicadas na semana e entradas novas no KEV são recortes separados: uma CVE antiga pode ter entrado no KEV nesta semana. As prioridades usam KEV, CVSS e EPSS. Correspondências com produtos monitorados exigem validação de versões e exposição. Ransomware.live fornece alegações não confirmadas; as contagens refletem os registros coletados, não um censo de todos os incidentes.
 
@@ -28,3 +28,11 @@ Datas das notícias mostram o horário publicado quando disponível, com convers
 ## Verificação
 
 Testes cobrem fronteiras da semana, limites editoriais, deduplicação, preservação de escolhas, isolamento por conta, retomada após reinício, atualização com atraso, falhas de fontes, tabelas paginadas, fonte de horário e ausência de conteúdo confidencial no template público. `news-pipeline-audit.yml` verifica os dados persistidos e a disponibilidade de candidatos e CVEs em produção sem criar relatórios de usuários.
+
+## Histórico e setores do destinatário
+
+A chave Pro da Ransomware.live permite consultar meses completos, além do feed de 100 registros recentes. O semanal reúne os meses que cobrem 12 semanas, compartilha requisições concorrentes e persiste as observações normalizadas em cache. O mês em andamento é revalidado a cada hora e os anteriores a cada dia. Meses truncados ou indisponíveis deixam a cobertura parcial e as semanas afetadas sem valor no gráfico. Nunca são apresentados como zero confirmado. As contagens usam `discovered` (observação pela fonte), preservando separadamente a data atribuída ao ataque.
+
+Para perfis cujo nome identifica Grupo Ultrapar, o recorte solicitado usa os nomes conferidos no endpoint Pro `/listsectors`: `Financial Services` (financeiro), `Transportation` (logística e mobilidade), `Manufacturing` (indústria e manufatura) e `Energy & Utilities` (energia). Cada organização é contada uma vez. Outros perfis não herdam esse recorte. O perfil e os setores ficam registrados na versão semanal.
+
+As chaves ficam somente no servidor. `NVD_API_KEY` e `RANSOMWARE_LIVE_API_KEY` são sincronizadas pelo workflow manual de segredos para a VPS. O navegador recebe os dados consolidados, nunca as credenciais.

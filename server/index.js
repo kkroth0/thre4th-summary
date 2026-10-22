@@ -49,6 +49,7 @@ import { publishNewsSnapshot } from './publishNewsSnapshot.js';
 import { createIocIntelligence } from './iocIntelligence.js';
 import { createIntelligenceCollector, sourceObservations } from './intelligenceSources.js';
 import { createWeeklyReports, weeklyWindow } from './weeklyReports.js';
+import { createWeeklyRansomware } from './weeklyRansomware.js';
 import { createPublicationRequest, resolvePublicationHost } from './publicationHttp.js';
 import { actorPublications, buildActorActivity, buildActorEvidence } from './actorEvidence.js';
 import { otxThrottled, OTX_TIMEOUT_MS } from './otxGate.js';
@@ -3394,15 +3395,24 @@ if (process.env.NODE_ENV !== 'test') {
 }
 
 const weeklySourceCache=new Map();
+const weeklyRansomware=createWeeklyRansomware({http:axios,apiKey:process.env.RANSOMWARE_LIVE_API_KEY,filePath:process.env.NODE_ENV==='test'?undefined:path.join(__dirname,'.feed-cache','weekly-ransomware.json')});
 async function weeklyInputs(range){
     const cached=weeklySourceCache.get(range.id);
     if(cached&&cached.until>Date.now())return cached.task;
     const task=(async()=>{
         const coverage={};
-        let victims=[];try{victims=await getRecentRansomwareVictims();coverage.ransomware={status:'ready',checkedAt:new Date().toISOString()};}catch{coverage.ransomware={status:'error',message:'Ransomware.live indisponível nesta atualização.'};}
-        let vulnerabilities=[];try{const data=await queryVulnerabilities('weekly',range);vulnerabilities=data.rows;coverage.vulnerabilities=data.status;}catch{coverage.vulnerabilities={status:'error',message:'Catálogo de vulnerabilidades indisponível nesta atualização.'};}
+        let victims=[],vulnerabilities=[],previousVulnerabilities=null;
+        await Promise.all([
+            (async()=>{try{const data=await weeklyRansomware.get(range);victims=data.victims;coverage.ransomware=data.coverage;if(!victims.length)victims=await getRecentRansomwareVictims();}catch{coverage.ransomware={status:'error',message:'Ransomware.live indisponível nesta atualização.'};}})(),
+            (async()=>{
+                try{const data=await queryVulnerabilities('weekly',range);vulnerabilities=data.rows;coverage.vulnerabilities=data.status;}
+                catch{coverage.vulnerabilities={status:'error',message:'Catálogo de vulnerabilidades indisponível nesta atualização.'};}
+                try{const previous={from:new Date(Date.parse(range.from)-7*86400000).toISOString(),to:range.from};const data=await queryVulnerabilities('weekly',previous);if(['ready','stale'].includes(data.status?.sources?.nvd?.status))previousVulnerabilities=data.rows;}
+                catch{/* The previous period is optional. Never replace it with a zero. */}
+            })(),
+        ]);
         coverage.news={publications:newsArchiveStore.size(),lastCollectedAt:rssCollectionCache.get('newsletter:snapshot')?.at||null};
-        return {publications:actorPublications(newsArchiveStore.all(),newsStoryStore.all()),victims,vulnerabilities,coverage};
+        return {publications:actorPublications(newsArchiveStore.all(),newsStoryStore.all()),victims,vulnerabilities,previousVulnerabilities,coverage};
     })();weeklySourceCache.set(range.id,{task,until:Date.now()+5*60000});
     if(weeklySourceCache.size>2)weeklySourceCache.delete(weeklySourceCache.keys().next().value);
     return task;

@@ -39,6 +39,7 @@ jobs:
       # extend. Empty/unset secrets are skipped, so partial rollout is safe.
       SHODAN_API_KEY: ${{ secrets.SHODAN_API_KEY }}
       RANSOMWARE_LIVE_API_KEY: ${{ secrets.RANSOMWARE_LIVE_API_KEY }}
+      NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
       SECRETS_ENCRYPTION_KEY: ${{ secrets.SECRETS_ENCRYPTION_KEY }}
       # Geração de hunt/KQL e resumo de notícias (OpenRouter).
       OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
@@ -79,7 +80,7 @@ jobs:
 
           # Build the KEY=VALUE payload from only the secrets that are set.
           payload="$(mktemp)"
-          for k in SHODAN_API_KEY RANSOMWARE_LIVE_API_KEY SECRETS_ENCRYPTION_KEY OPENROUTER_API_KEY ALIENVAULT_API_KEY ABUSE_CH_API_KEY PHISHSTATS_API_KEY WHOIS_API_KEY; do
+          for k in SHODAN_API_KEY RANSOMWARE_LIVE_API_KEY NVD_API_KEY SECRETS_ENCRYPTION_KEY OPENROUTER_API_KEY ALIENVAULT_API_KEY ABUSE_CH_API_KEY PHISHSTATS_API_KEY WHOIS_API_KEY; do
             v="${!k-}"
             [ -n "$v" ] && printf '%s=%s\n' "$k" "$v" >> "$payload"
           done
