@@ -1,5 +1,7 @@
 # Relatório semanal
 
+O padrão de redação e revisão está em [Padrão editorial do boletim semanal](weekly-report-editorial.md): voz de revista semanal de segurança, em português brasileiro, com contexto, análise executiva e pontos de atenção específicos por matéria. Esse documento registra a orientação editorial; regras ainda não automatizadas exigem revisão antes da publicação.
+
 `/relatorios?view=weekly` reúne o acervo de notícias correlacionadas, o catálogo local NVD/KEV/EPSS e as publicações de ransomware.live. Não dispara extração de artigos ou chamadas de LLM ao abrir a página.
 
 ## Seleção editorial
