@@ -77,3 +77,37 @@ payloads. Idle IOC/CVE readers terminate after ten seconds; the write worker
 terminates after five idle seconds, releasing its SQLite and JavaScript memory.
 Low-memory hosts default to two concurrent feed requests and one article IOC
 extraction; configured concurrency overrides remain respected.
+
+
+## Deployment and measured result
+
+Runtime release a527bcb passed CI (893 server tests and 267 frontend unit tests).
+The first backend deployment rolled back when readiness did not complete in its
+initial window. The existing HTTP health check and automatic rollback were kept;
+the bounded cold-start allowance increased to 60 attempts. Manual deployment
+39684984224 then completed successfully, with 344.1 MiB service memory (357.2 MiB
+peak) reported at startup. Frontend deployment 39683926046 also succeeded.
+
+Final authenticated audit 39685584004:
+
+| Endpoint | Result | Time |
+|---|---|---|
+| Base actor catalog | 200, 385,448 bytes | 1,986 ms |
+| Full account actor catalog | probe timed out twice | >20 s |
+| G1024 profile | 200 | 1,751 ms |
+| Complete news snapshot | 200, 14,681,130 bytes | 8,997 ms |
+| Unchanged news snapshot | 304, no body | 455 ms |
+| Authentication during aggregation | 200 | 1,487 ms |
+| Actor activity aggregation | 503 | 15,692 ms |
+| IOC inventory first page | probe timed out twice | >20 s |
+
+The UI is improved, but the full performance objective is not complete. Remaining
+work: prevent publication aggregation from allocating unreferenced Axur IOC groups;
+replace repeated full account aggregates/counts with maintained summaries; reduce
+the first full-news transfer. All observations remain retained. The Axur cursor
+advanced to 3,010,000 records read in the final audit.
+
+A local synthetic 5,000-row write benchmark retained all 5,000 evidence records:
+inline writes 857 ms overall / 59.51 ms event-loop p95, isolated writes 972 ms
+overall / 19.76 ms p95. This measures responsiveness on the development machine,
+not production throughput or a guaranteed server latency reduction.
