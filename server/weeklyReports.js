@@ -4,6 +4,7 @@ import { isAiNews } from './newsCategories.js';
 import { LATAM_COUNTRIES } from './ransomwareLive.js';
 import { weeklyProfile } from './weeklyRansomware.js';
 import { classifyAiTool } from './aiToolCatalog.js';
+import { selectWeeklyVulnerabilities } from './weeklyVulnerabilitySelection.js';
 
 const DAY=86400000;
 const sourceDate=value=>typeof value==='string'&&/^\d{4}-\d\d-\d\d[ T]\d\d:\d\d:\d\d(?:\.\d+)?$/.test(value)?value.replace(' ','T')+'Z':value;
@@ -73,6 +74,7 @@ export function buildWeeklyReport(inputs,{range,profile=null,now=Date.now(),sele
   const kev=vulnerabilities.filter(row=>row.kev&&inWeek(row.dateAdded?row.dateAdded+'T12:00:00Z':null,range,now));
   const prioritize=(a,b)=>Number(b.kev)-Number(a.kev)||(b.cvss||0)-(a.cvss||0)||(b.epss||0)-(a.epss||0)||a.id.localeCompare(b.id);
   const priority=[...new Map([...kev,...newCves].map(row=>[row.id,row])).values()].sort(prioritize);
+  const editorial=selectWeeklyVulnerabilities(newCves,kev,ranked);
   const aiCves=newCves.filter(isAiVulnerability).sort(prioritize);
   const monitored=profile?.assets?.length?priority.filter(row=>assetMatch(row,profile.assets)):[];
   const uniqueVictims=[...new Map((inputs.victims||[]).map(row=>[row.id||row.permalink||`${row.group}:${row.name}:${row.published||row.discovered}`,row])).values()];
@@ -95,7 +97,7 @@ export function buildWeeklyReport(inputs,{range,profile=null,now=Date.now(),sele
   const selected=[...news,...aiNews];
   const recommendations=kev.slice(0,10).map(row=>({priority:'immediate',action:row.action||'Revisar o advisory e aplicar as medidas indicadas pelo fabricante.',source:`https://www.cisa.gov/known-exploited-vulnerabilities-catalog`,cve:row.id}));
   const data={range,profile:profile?{id:profile.id,name:profile.name,assets:profile.assets,sectors:profile.sectors,ransomwareSectors:focusSectors}:null,generatedAt:new Date(now).toISOString(),
-    news,aiNews,candidates,selection:{mode:selection?'manual':'suggested',newsIds:news.map(row=>row.id),aiNewsIds:aiNews.map(row=>row.id)},vulnerabilities:{total:newCves.length,kevCount:kev.length,critical:newCves.filter(row=>row.severity==='CRITICAL').length,kev,priority:priority.slice(0,50),monitored,ai:{total:aiCves.length,kevCount:aiCves.filter(row=>row.kev).length,critical:aiCves.filter(row=>row.severity==='CRITICAL').length,items:aiCves.slice(0,50),vendors:frequencies(aiCves.map(row=>row.vendor)),categories:frequencies(aiCves.map(aiCategory)),previousTotal:previousAi,tools:[...tools.values()].sort((a,b)=>(b.cvss??-1)-(a.cvss??-1)||b.count-a.count).slice(0,4)}},
+    news,aiNews,candidates,selection:{mode:selection?'manual':'suggested',newsIds:news.map(row=>row.id),aiNewsIds:aiNews.map(row=>row.id)},vulnerabilities:{total:newCves.length,kevCount:kev.length,critical:newCves.filter(row=>row.severity==='CRITICAL').length,kev,priority:priority.slice(0,50),editorial,monitored,ai:{total:aiCves.length,kevCount:aiCves.filter(row=>row.kev).length,critical:aiCves.filter(row=>row.severity==='CRITICAL').length,items:aiCves.slice(0,50),vendors:frequencies(aiCves.map(row=>row.vendor)),categories:frequencies(aiCves.map(aiCategory)),previousTotal:previousAi,tools:[...tools.values()].sort((a,b)=>(b.cvss??-1)-(a.cvss??-1)||b.count-a.count).slice(0,4)}},
     ransomware:{total:victims.length,latam:latam.length,brazil:latam.filter(row=>row.country==='BR').length,victims:latam,byCountry:frequencies(latam.map(row=>row.country)),byGroup:frequencies(latam.map(row=>row.group)),bySector:frequencies(latam.map(row=>row.sector)),focusSectors,focusCount:focusVictims.length,focusBySector:focusSectors.map(name=>({name,count:focusVictims.filter(row=>row.sector===name).length})),history,claimsAreUnconfirmed:true},
     reports,recommendations,actors:frequencies(selected.flatMap(row=>row.actors)),malware:frequencies(selected.flatMap(row=>row.malware)),ttps:frequencies(selected.flatMap(row=>row.ttps)),
     coverage:inputs.coverage||{},sources:[...new Map(selected.flatMap(row=>row.sources).map(row=>[row.link,row])).values()]};

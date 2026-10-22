@@ -25,7 +25,7 @@ const reader = createVulnerabilityQueries({ filePath: path.join(root, 'server/.v
 try {
   const catalog = await reader.query('weekly', range);
   const report = buildWeeklyReport({ victims: history.victims, vulnerabilities: catalog.rows, coverage: { ransomware: history.coverage } }, { range, profile: { name: 'Grupo Ultrapar' } });
-  result.catalog = { sources: catalog.status.sources, weeklyCves: report.vulnerabilities.total, weeklyKev: report.vulnerabilities.kevCount, aiCves: report.vulnerabilities.ai.total };
+  result.catalog = { sources: catalog.status.sources, weeklyCves: report.vulnerabilities.total, weeklyKev: report.vulnerabilities.kevCount, aiCves: report.vulnerabilities.ai.total, editorial: { highlights: report.vulnerabilities.editorial.highlights.map(row=>({id:row.id,family:row.editorialFamily})), exploited: report.vulnerabilities.editorial.exploited.map(row=>row.id), missingFocus: report.vulnerabilities.editorial.missingFocus } };
   result.ransomware = { coverage: history.coverage, observations: history.victims.length, latam: report.ransomware.latam, brazil: report.ransomware.brazil, focus: report.ransomware.focusCount, weeksAvailable: report.ransomware.history.filter(w => w.available).length };
 } catch (error) { result.catalog = { status: error.code || error.name }; }
 finally { await reader.close(); }

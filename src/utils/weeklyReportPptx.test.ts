@@ -13,11 +13,22 @@ test('weekly PowerPoint exports the editorial selection with publisher time and 
   assert.match(content,/Selected publication/);assert.match(content,/13\/10\/2026 · 12:25/);
   assert.match(content,/https:\/\/example.com\/selected/);assert.doesNotMatch(content,/Do not export this candidate/);
 });
-test('weekly PowerPoint paginates the three native CVE blocks without losing records',()=>{
+test('weekly PowerPoint caps legacy priorities at three native CVE cards on one page',()=>{
   const rows=Array.from({length:23},(_,i)=>({id:'CVE-2026-'+(10000+i),published:'2026-10-13',dateAdded:'',vendor:'Vendor',product:'Product',description:'Description',cvss:8,kev:false,severity:'HIGH',epss:0.1,action:'',references:[]}));
   const slides=buildWeeklySlides({...report,vulnerabilities:{...report.vulnerabilities,priority:rows}});
-  for(const row of rows)assert.match(JSON.stringify(slides),new RegExp(row.id));
-  assert.equal(slides.filter(slide=>slide.source===13).length,8);
+  for(const row of rows.slice(0,3))assert.match(JSON.stringify(slides),new RegExp(row.id));
+  for(const row of rows.slice(3))assert.doesNotMatch(JSON.stringify(slides),new RegExp(row.id));
+  assert.equal(slides.filter(slide=>slide.source===13).length,1);
+});
+
+test('weekly PowerPoint uses curated runtime highlights and only confirmed KEV entries',()=>{
+  const make=(id:number,editorialFamily:string,kev=false)=>({id:`CVE-2026-${id}`,editorialFamily,published:'2026-10-13',dateAdded:'2026-10-13',vendor:'',product:'',description:'Description',cvss:9.1,kev,severity:'CRITICAL',epss:null,action:'',references:[]});
+  const highlights=[make(10001,'Java'),make(10002,'PHP'),make(10003,'Node.js')],exploited=[make(20001,'Siemens',true),make(20002,'Plex',true),make(20003,'SiteGuard',true),make(20004,'Not KEV')];
+  const slides=buildWeeklySlides({...report,vulnerabilities:{...report.vulnerabilities,total:3716,kevCount:6,priority:[make(99999,'Unselected')],editorial:{focus:['Java','PHP','Node.js'],highlights,exploited,missingFocus:[]}}});
+  assert.equal(slides.filter(slide=>slide.source===13).length,1);assert.equal(slides.filter(slide=>slide.source===14).length,1);
+  for(const row of [...highlights,...exploited.slice(0,3)])assert.match(JSON.stringify(slides),new RegExp(row.id));
+  assert.doesNotMatch(JSON.stringify(slides),/CVE-2026-99999|CVE-2026-20004/);
+  assert.equal(slides.find(s=>s.source===13)?.values.S13_9,'Java');
 });
 test('EY template preserves native layouts, country geometry and charts without customer or incident content',async()=>{
   const zip=await JSZip.loadAsync(await fs.readFile('public/templates/weekly-report-ey-v3.pptx'));
