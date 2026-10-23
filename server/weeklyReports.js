@@ -5,6 +5,7 @@ import { LATAM_COUNTRIES } from './ransomwareLive.js';
 import { weeklyProfile } from './weeklyRansomware.js';
 import { classifyAiTool } from './aiToolCatalog.js';
 import { selectWeeklyVulnerabilities } from './weeklyVulnerabilitySelection.js';
+import { weeklyNewsPriority } from './weeklyNewsSelection.js';
 
 const DAY=86400000;
 const sourceDate=value=>typeof value==='string'&&/^\d{4}-\d\d-\d\d[ T]\d\d:\d\d:\d\d(?:\.\d+)?$/.test(value)?value.replace(' ','T')+'Z':value;
@@ -51,13 +52,15 @@ export function buildWeeklyReport(inputs,{range,profile=null,now=Date.now(),sele
     // stand in for this week's news. Collection time is not publication time.
     if(!row.link||row.dateInferred===true||row.securityRelevant===false||!inWeek(periodDate,range,now))continue;
     const key=row.storyId||row.link;
-    const relevance=(Number(row.score)||0)+(row.kev?25:0)+(profile?.sectors?.some(sector=>(row.sectors||[]).includes(sector))?15:0);
+    const priority=weeklyNewsPriority(row,profile);
+    if(!priority)continue;
+    const relevance=priority.score;
     const existing=groups.get(key);
     const dateMetadata={dateInferred:row.dateInferred===true,publicationTimeKnown:row.publicationTimeKnown,publicationDateBasis:row.publicationDateBasis,firstCollectedAt:row.firstCollectedAt,repository:row.repository};
     const source={title:row.title,source:row.source,link:row.link,published:row.pubDate,...dateMetadata};
     const signals={actors:[...new Set([...(existing?.actors||[]),...names(row.actors)])],malware:[...new Set([...(existing?.malware||[]),...names(row.malware)])],cves:[...new Set([...(existing?.cves||[]),...(row.cves||[])])],ttps:[...new Set([...(existing?.ttps||[]),...(row.ttpIds||row.ttps||[])])],iocs:Object.fromEntries(['ips','domains','hashes','urls'].map(type=>[type,[...new Set([...(existing?.iocs?.[type]||[]),...(row.iocs?.[type]||[])])]]))};
     if(existing){if(!existing.sources.some(item=>item.link===row.link))existing.sources.push(source);existing.ai ||= (row.categories||row.newsCategories||[]).includes('Artificial Intelligence')||isAiNews(row);Object.assign(existing,signals);if(relevance<=existing.score)continue;}
-    groups.set(key,{id:key,title:row.title,summary:row.description||'',published:row.pubDate,...dateMetadata,score:relevance,severity:row.severity||'',sources:existing?.sources||[source],
+    groups.set(key,{id:key,title:row.title,summary:row.description||'',published:row.pubDate,...dateMetadata,...priority,score:relevance,severity:row.severity||'',sources:existing?.sources||[source],
       ai:existing?.ai||(row.categories||row.newsCategories||[]).includes('Artificial Intelligence')||isAiNews(row),categories:row.categories||row.newsCategories||[],
       ...signals});
   }

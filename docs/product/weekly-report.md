@@ -52,3 +52,6 @@ Os advisories das seis CVEs selecionadas também são consultados quando dispon�
 Rascunhos e cache ficam isolados por conta em tabelas do mesmo `.weekly-reports.sqlite`, preservado no deploy. O cache inclui versão editorial, modelo, conteúdo e perfil; mudanças invalidam a redação. Uma tarefa interrompida pode ser retomada sem cobrar novamente por matérias idênticas já verificadas. Uma edição é processada por vez, com até duas matérias simultâneas. `OPENROUTER_WEEKLY_MODEL` pode selecionar o modelo; na ausência, utiliza a configuração já existente de `OPENROUTER_MODEL`. Chaves ficam no servidor.
 
 O workflow manual `weekly-editorial-audit.yml` lê uma notícia pública e testa a IA em memória, sem criar ou alterar relatórios de clientes. As contagens desse teste são uma fixture, nunca uma edição publicável.
+
+### Prioridade editorial das sugestões
+As sugestões semanais priorizam ativos do perfil, setores monitorados, fontes oficiais e veículos especializados reconhecidos. Medium e textos predominantemente em escritas asiáticas ficam fora da seleção automática; a nacionalidade do fabricante ou do ator não é um critério de exclusão. A preferência não altera a ingestão geral nem remove escolhas manuais já salvas. A interface apresenta os motivos da prioridade. A lista de fontes é uma preferência editorial, não uma certificação automática de veracidade.
