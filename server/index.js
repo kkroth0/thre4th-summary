@@ -43,6 +43,7 @@ import { REPOSITORY_SOURCES, createRepositoryResolver } from './repositorySource
 import { prepareFeedJobDocuments } from './feedJobDocuments.js';
 import { reviewReport } from './reportReview.js';
 import { completeReportEvidence } from './reportEvidence.js';
+import { createReportActorContext } from './reportActorContext.js';
 import { completeNewsFeed, reviewNewsEvidence, removeVersionIndicators, recoverJoinedTableIps } from './newsQuality.js';
 import { rebuildStoryCorrelationsAsync } from './newsStories.js';
 import { persistNewsEvidence } from './persistNewsEvidence.js';
@@ -2788,7 +2789,9 @@ app.get('/api/feed/job/:id/related', requirePremium, (req, res) => {
 });
 
 // Worker (VPS) lê os jobs pendentes. 🔒   GET /api/feed/jobs/pending
-app.get('/api/feed/jobs/pending', (req, res) => {
+const reportActorContext = createReportActorContext({ http: axios,
+    cacheFile: path.join(__dirname, '.report-actor-context-cache.json'), enabled: process.env.NODE_ENV !== 'test' });
+app.get('/api/feed/jobs/pending', async (req, res) => {
     if (!requireFeedSecret(req, res)) return;
     expireStaleJobs();
     // Sem BYOK: todo job pending vai pro worker. A chave OpenRouter é do servidor
@@ -2819,6 +2822,13 @@ app.get('/api/feed/jobs/pending', (req, res) => {
                 : { documents: j.documents?.length ? j.documents : prepareFeedJobDocuments(j.urls || [j.url], { items: [...(memoryCache.newsletter.data || []),...newsArchiveStore.all()], articleCache: articleCollectionCache, rssCache: rssCollectionCache }) }),
             ...(workerModel ? { model: workerModel } : {}),
         }));
+    if (pending.length) {
+        const actors = loadActors().actors, items = newsArchiveStore.all();
+        await Promise.all(pending.map(async job => {
+            job.platformContext = await reportActorContext({ ...jobsStore[job.id], renderReport: job.report },
+                { actors, items, documents: job.documents || [] }).catch(() => ({ profiles: [], iocs: [] }));
+        }));
+    }
     res.json({ pending });
 });
 
