@@ -363,6 +363,7 @@ const addUrl = (set, raw) => {
     // Inparseável fica: antes entrava sem checagem, e só o code host sai daqui.
     try { host = new URL(url).hostname.toLowerCase(); } catch { /* keep */ }
     if (isCodeHost(host)) return;
+    try { if (/\.(?:md|markdown)$/i.test(decodeURIComponent(new URL(url).pathname))) return; } catch { /* existing parse handling */ }
     set.add(url);
 };
 
