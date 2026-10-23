@@ -26,3 +26,12 @@ test('weekly grouped story uses eligible representative and preserves manual cho
  const retained=buildWeeklyReport({publications:[medium]},{range,now,selection:{newsIds:['old'],aiNewsIds:[]},retained:{news:[old]}});
  assert.equal(retained.candidates.news.length,0);assert.equal(retained.news[0].id,'old');
 });
+test('organization actor relationships and OT context prioritize matching stories',()=>{
+ const profile={actors:['apt1'],ot:{present:true},sectors:['Energy'],threatModel:{actorIds:['apt1'],actors:[{id:'apt1',name:'Example APT'}]}};
+ const base=row('https://www.cisa.gov/report');
+ const result=weeklyNewsPriority({...base,actors:[{id:'apt1'}],categories:['OT/ICS'],sectors:['Energy']},profile);
+ assert.ok(result.score>weeklyNewsPriority(base,profile).score);
+ assert.ok(result.selectionReasons.some(reason=>reason.includes('Example APT')));
+ assert.ok(weeklyNewsPriority({...base,actors:['Example APT']},profile).selectionReasons.some(reason=>reason.includes('Example APT')));
+ assert.ok(!weeklyNewsPriority({...base,actors:[{id:'unrelated',name:'Other'}]},profile).selectionReasons.some(reason=>reason.includes('Ator')));
+});

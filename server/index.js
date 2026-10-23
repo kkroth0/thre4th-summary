@@ -3420,7 +3420,7 @@ async function weeklyInputs(range){
     return task;
 }
 const weeklyReports=createWeeklyReports({filePath:process.env.NODE_ENV==='test'?':memory:':path.join(__dirname,'.weekly-reports.sqlite'),
-    getProfile:(owner,id)=>orgProfileStore.get(owner,id),
+    getProfile:(owner,id)=>{const profile=orgProfileStore.get(owner,id);return {...profile,threatModel:cachedThreatModel(profile)};},
     getInputs:async(owner,range)=>({...await weeklyInputs(range),reports:Object.values(jobsStore).filter(job=>job.ownerSub===owner)}),
 });
 const weeklyEditorial=createWeeklyEditorial({
@@ -3453,6 +3453,8 @@ app.post('/api/reports/weekly/editorial',requirePremium,scanLimiter,(req,res)=>{
     if(req.get('Origin')&&req.get('Origin')!==new URL(APP_BASE_URL).origin)return res.status(403).json({error:'Origem não autorizada.'});
     try{
         const week=weeklyWindow(new Date(),String(req.body?.week||'')).id;
+        const current=weeklyReports.get(req.user.sub,week);
+        if(week===weeklyWindow().id&&(current.report?.profile?.id||'')!==current.plan.profileId)return res.status(409).json({error:'Aguarde a atualização do perfil escolhido.'});
         const editorial=weeklyEditorial.start(req.user.sub,week);
         res.set('Cache-Control','private, no-store').status(editorial.status==='ready'?200:202).json({editorial});
     }catch(error){

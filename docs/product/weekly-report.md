@@ -55,3 +55,7 @@ O workflow manual `weekly-editorial-audit.yml` lê uma notícia pública e testa
 
 ### Prioridade editorial das sugestões
 As sugestões semanais priorizam ativos do perfil, setores monitorados, fontes oficiais e veículos especializados reconhecidos. Medium e textos predominantemente em escritas asiáticas ficam fora da seleção automática; a nacionalidade do fabricante ou do ator não é um critério de exclusão. A preferência não altera a ingestão geral nem remove escolhas manuais já salvas. A interface apresenta os motivos da prioridade. A lista de fontes é uma preferência editorial, não uma certificação automática de veracidade.
+
+### Cliente e contexto da organização
+O seletor Cliente usa os perfis privados da organização. O modelo existente relaciona atores por setores, regiões e atores fixados; o semanal reutiliza esse modelo em memória, sem consultas externas extras. Notícias recebem prioridade por ativos, atores, setores e ambiente OT. Para perfis com contexto, os três destaques de CVEs usam os ativos e as relações das publicações, seguidos de KEV/CVSS/EPSS; sem contexto, permanece o recorte Java/PHP/Node.js. As três exploradas continuam restritas ao KEV. Totais globais não são reduzidos pelo perfil.
+As escolhas editoriais são guardadas por cliente e semana e restauradas ao voltar ao cliente. Trocar o perfil invalida a redação e bloqueia ações enquanto a atualização estiver pendente. Semanas anteriores preservam o contexto registrado. As relações são sinais de relevância, não prova de exposição ou atribuição.

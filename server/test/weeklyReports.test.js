@@ -7,6 +7,17 @@ import {weeklyWindow,buildWeeklyReport,createWeeklyReports} from '../weeklyRepor
 const NOW=Date.parse('2026-10-13T12:00:00Z');
 const range=weeklyWindow(new Date(NOW));
 const publication=(id,score=1,ai=false)=>({title:ai?'OpenAI model vulnerability '+id:'Security report '+id,link:'https://lab.example/'+id,pubDate:'2026-10-12T12:00:00Z',score,storyId:'story-'+id,categories:ai?['Artificial Intelligence']:[],iocs:{ips:['46.101.130.1']}});
+test('switching client restores its own saved selection rather than reusing another client choices',async()=>{
+ const store=createWeeklyReports({now:()=>NOW,getInputs:async()=>({publications:[publication('one'),publication('two')]}),getProfile:(owner,id)=>({id,name:id,assets:[]})});
+ store.configure('owner',{enabled:true,profileId:'client-a'});await store.refresh('owner');
+ store.select('owner',range.id,{newsIds:['story-one'],aiNewsIds:[]});
+ store.configure('owner',{enabled:true,profileId:'client-b'});
+ assert.throws(()=>store.select('owner',range.id,{newsIds:['story-one'],aiNewsIds:[]}));
+ await store.refresh('owner');assert.equal(store.get('owner').report.selection.mode,'suggested');
+ store.select('owner',range.id,{newsIds:['story-two'],aiNewsIds:[]});
+ store.configure('owner',{enabled:true,profileId:'client-a'});await store.refresh('owner');
+ assert.equal(store.get('owner').report.profile.id,'client-a');assert.deepEqual(store.get('owner').report.selection.newsIds,['story-one']);store.close();
+});
 
 test('Sunday boundaries use Fortaleza time, excluding the following Sunday without overlap',()=>{
  assert.equal(range.from,'2026-10-11T03:00:00.000Z');assert.equal(range.to,'2026-10-18T03:00:00.000Z');

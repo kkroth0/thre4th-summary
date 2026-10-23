@@ -9,6 +9,16 @@ const contains = (text, value) => {
   const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   return new RegExp(`(?<![\\p{L}\\p{N}])${escaped}(?![\\p{L}\\p{N}])`, 'u').test(text);
 };
+export function weeklyProfileMatches(row, profile) {
+  if (!profile) return {assets:[],actors:[],sector:false,ot:false};
+  const text=normalize(`${row.title||''} ${row.description||''} ${row.vendor||''} ${row.product||''}`);
+  const assets=(profile.assets||[]).filter(asset=>asset.product?contains(text,asset.product):contains(text,asset.vendor)).map(asset=>[asset.vendor,asset.product].filter(Boolean).join(' '));
+  const model=profile.threatModel;
+  const relevant=new Set(model?.actorIds||profile.actors||[]);
+  const known=new Map((model?.actors||[]).map(actor=>[actor.id,actor.name]));
+  const actors=[...new Set((row.actors||[]).filter(actor=>typeof actor==='string'?(relevant.has(actor)||[...known].some(([id,name])=>relevant.has(id)&&normalize(name)===normalize(actor))):relevant.has(actor.id)).map(actor=>typeof actor==='string'?(known.get(actor)||actor):known.get(actor.id)||actor.name||actor.id))];
+  return {assets:[...new Set(assets)],actors,sector:!!profile.sectors?.some(value=>(row.sectors||[]).includes(value)),ot:!!profile.ot?.present&&(row.categories||row.newsCategories||[]).includes('OT/ICS')};
+}
 export function weeklyNewsPriority(row, profile) {
   let host;
   try { const url = new URL(row.link); if (!['https:', 'http:'].includes(url.protocol)) return null; host = url.hostname.toLowerCase(); } catch { return null; }
@@ -20,14 +30,17 @@ export function weeklyNewsPriority(row, profile) {
   if (script >= 8 && script / Math.max(1, letters) > .2) return null;
   const tier = official.some(domain => belongs(host, domain)) ? 'official' : press.some(domain => belongs(host, domain)) ? 'press' : 'other';
   const reasons = tier === 'official' ? ['Fonte oficial / pesquisa do fabricante'] : tier === 'press' ? ['Veículo especializado reconhecido'] : [];
-  const matchedAssets = (profile?.assets || []).filter(asset => asset.product ? contains(text, asset.product) : contains(text, asset.vendor)).map(asset => [asset.vendor, asset.product].filter(Boolean).join(' '));
+  const context=weeklyProfileMatches(row,profile);
+  const matchedAssets = context.assets;
   if (matchedAssets.length) reasons.push(`Ativo do perfil: ${[...new Set(matchedAssets)].slice(0, 3).join(', ')}`);
-  const sector = profile?.sectors?.some(value => (row.sectors || []).includes(value));
+  const sector = context.sector;
   if (sector) reasons.push('Setor monitorado');
+  if(context.actors.length)reasons.push(`Ator relacionado ao perfil: ${context.actors.slice(0,3).join(', ')}`);
+  if(context.ot)reasons.push('Ambiente OT/ICS do perfil');
   const majorAsset = /\b(?:microsoft|windows|entra|active directory|exchange|fortinet|fortigate|cisco|palo alto|vmware|sap|oracle|java|php|node\.?js|siemens|schneider|rockwell)\b/i.test(text);
   if (!matchedAssets.length && majorAsset) reasons.push('Tecnologia amplamente utilizada');
   const raw = Math.max(0, Number(row.score) || 0);
   const base = Math.min(raw, 100) + (raw > 100 ? Math.min(5, Math.log10(raw - 99)) : 0);
-  const score = base + (tier === 'official' ? 65 : tier === 'press' ? 45 : 0) + (matchedAssets.length ? 60 : majorAsset ? 15 : 0) + (row.kev ? 25 : 0) + (sector ? 15 : 0);
+  const score = base + (tier === 'official' ? 65 : tier === 'press' ? 45 : 0) + (matchedAssets.length ? 60 : majorAsset ? 15 : 0) + (row.kev ? 25 : 0) + (sector ? 15 : 0)+(context.actors.length?40:0)+(context.ot?20:0);
   return {score: Math.round(score * 100) / 100, selectionReasons: reasons, sourceTier: tier};
 }

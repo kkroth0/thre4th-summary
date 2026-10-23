@@ -77,7 +77,7 @@ export function buildWeeklyReport(inputs,{range,profile=null,now=Date.now(),sele
   const kev=vulnerabilities.filter(row=>row.kev&&inWeek(row.dateAdded?row.dateAdded+'T12:00:00Z':null,range,now));
   const prioritize=(a,b)=>Number(b.kev)-Number(a.kev)||(b.cvss||0)-(a.cvss||0)||(b.epss||0)-(a.epss||0)||a.id.localeCompare(b.id);
   const priority=[...new Map([...kev,...newCves].map(row=>[row.id,row])).values()].sort(prioritize);
-  const editorial=selectWeeklyVulnerabilities(newCves,kev,ranked);
+  const editorial=selectWeeklyVulnerabilities(newCves,kev,ranked,profile);
   const aiCves=newCves.filter(isAiVulnerability).sort(prioritize);
   const monitored=profile?.assets?.length?priority.filter(row=>assetMatch(row,profile.assets)):[];
   const uniqueVictims=[...new Map((inputs.victims||[]).map(row=>[row.id||row.permalink||`${row.group}:${row.name}:${row.published||row.discovered}`,row])).values()];
@@ -99,7 +99,7 @@ export function buildWeeklyReport(inputs,{range,profile=null,now=Date.now(),sele
   const reports=(inputs.reports||[]).filter(row=>row.status==='done'&&inWeek(row.updatedAt||row.createdAt,range,now)).map(row=>({id:row.id,title:row.title||row.url,type:row.type,updatedAt:row.updatedAt,sources:row.urls||[row.url]}));
   const selected=[...news,...aiNews];
   const recommendations=kev.slice(0,10).map(row=>({priority:'immediate',action:row.action||'Revisar o advisory e aplicar as medidas indicadas pelo fabricante.',source:`https://www.cisa.gov/known-exploited-vulnerabilities-catalog`,cve:row.id}));
-  const data={range,profile:profile?{id:profile.id,name:profile.name,assets:profile.assets,sectors:profile.sectors,ransomwareSectors:focusSectors}:null,generatedAt:new Date(now).toISOString(),
+  const data={range,profile:profile?{id:profile.id,name:profile.name,assets:profile.assets,sectors:profile.sectors,actors:profile.actors,regions:profile.regions,ot:profile.ot,threatModel:profile.threatModel,ransomwareSectors:focusSectors}:null,generatedAt:new Date(now).toISOString(),
     news,aiNews,candidates,selection:{mode:selection?'manual':'suggested',newsIds:news.map(row=>row.id),aiNewsIds:aiNews.map(row=>row.id)},vulnerabilities:{total:newCves.length,kevCount:kev.length,critical:newCves.filter(row=>row.severity==='CRITICAL').length,kev,priority:priority.slice(0,50),editorial,monitored,ai:{total:aiCves.length,kevCount:aiCves.filter(row=>row.kev).length,critical:aiCves.filter(row=>row.severity==='CRITICAL').length,items:aiCves.slice(0,50),vendors:frequencies(aiCves.map(row=>row.vendor)),categories:frequencies(aiCves.map(aiCategory)),previousTotal:previousAi,tools:[...tools.values()].sort((a,b)=>(b.cvss??-1)-(a.cvss??-1)||b.count-a.count).slice(0,4)}},
     ransomware:{total:victims.length,latam:latam.length,brazil:latam.filter(row=>row.country==='BR').length,victims:latam,byCountry:frequencies(latam.map(row=>row.country)),byGroup:frequencies(latam.map(row=>row.group)),bySector:frequencies(latam.map(row=>row.sector)),focusSectors,focusCount:focusVictims.length,focusBySector:focusSectors.map(name=>({name,count:focusVictims.filter(row=>row.sector===name).length})),history,claimsAreUnconfirmed:true},
     reports,recommendations,actors:frequencies(selected.flatMap(row=>row.actors)),malware:frequencies(selected.flatMap(row=>row.malware)),ttps:frequencies(selected.flatMap(row=>row.ttps)),
@@ -113,6 +113,7 @@ export function createWeeklyReports({filePath=':memory:',getInputs,getProfile=()
     CREATE TABLE IF NOT EXISTS weekly_reports(owner TEXT NOT NULL,week TEXT NOT NULL,updated TEXT NOT NULL,fingerprint TEXT NOT NULL,revision INTEGER NOT NULL,payload TEXT NOT NULL,PRIMARY KEY(owner,week));
     CREATE TABLE IF NOT EXISTS ransomware_observations(id TEXT PRIMARY KEY,payload TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS weekly_selections(owner TEXT NOT NULL,week TEXT NOT NULL,payload TEXT NOT NULL,PRIMARY KEY(owner,week));
+    CREATE TABLE IF NOT EXISTS weekly_profile_selections(owner TEXT NOT NULL,week TEXT NOT NULL,profile TEXT NOT NULL,payload TEXT NOT NULL,PRIMARY KEY(owner,week,profile));
     CREATE TABLE IF NOT EXISTS weekly_editorial(owner TEXT NOT NULL,week TEXT NOT NULL,payload TEXT NOT NULL,PRIMARY KEY(owner,week));
     CREATE TABLE IF NOT EXISTS weekly_editorial_cache(owner TEXT NOT NULL,key TEXT NOT NULL,created INTEGER NOT NULL,payload TEXT NOT NULL,PRIMARY KEY(owner,key));`);
   const pending=new Map();
@@ -139,9 +140,12 @@ export function createWeeklyReports({filePath=':memory:',getInputs,getProfile=()
         if(inputs.victims?.length)db.transaction(()=>{const insert=db.prepare('INSERT OR REPLACE INTO ransomware_observations VALUES(?,?)');for(const row of inputs.victims)insert.run(String(row.id||row.permalink||`${row.group}:${row.name}:${row.published||row.discovered}`),JSON.stringify(row));})();
         inputs.victims=db.prepare('SELECT payload FROM ransomware_observations').all().map(row=>JSON.parse(row.payload));
         const storedSelection=db.prepare('SELECT payload FROM weekly_selections WHERE owner=? AND week=?').get(owner,range.id);
-        const data=buildWeeklyReport(inputs,{range,profile,now:now(),selection:storedSelection?JSON.parse(storedSelection.payload):null,retained:read(owner,range.id)});
+        const retained=read(owner,range.id);
+        const data=buildWeeklyReport(inputs,{range,profile,now:now(),selection:storedSelection?JSON.parse(storedSelection.payload):null,retained:(retained?.profile?.id||'')===(profile?.id||'')?retained:null});
+        // A profile switch while collection is pending must never publish the old client's result.
+        if(range.id===weeklyWindow(new Date(now())).id&&ensure(owner).profile!==plan.profile)return read(owner,range.id);
         if(storedSelection)db.prepare('UPDATE weekly_selections SET payload=? WHERE owner=? AND week=?').run(JSON.stringify({newsIds:data.selection.newsIds,aiNewsIds:data.selection.aiNewsIds}),owner,range.id);
-        if(inputs.coverage?.vulnerabilities?.status==='error'&&last)data.vulnerabilities=last.vulnerabilities;
+        if(inputs.coverage?.vulnerabilities?.status==='error'&&last&&(last.profile?.id||'')===(profile?.id||''))data.vulnerabilities=last.vulnerabilities;
         write(owner,range.id,data);
         db.prepare('UPDATE weekly_plans SET attempted=?,error=NULL WHERE owner=?').run(new Date(now()).toISOString(),owner);
         return read(owner,range.id);
@@ -157,6 +161,7 @@ export function createWeeklyReports({filePath=':memory:',getInputs,getProfile=()
     },
     select:(owner,week,selection)=>{
       const report=read(owner,week);if(!report)throw Error('Report not found');
+      if(week===weeklyWindow(new Date(now())).id&&(report.profile?.id||'')!==ensure(owner).profile)throw Error('Profile update pending');
       if(Array.isArray(selection.newsIds)&&Array.isArray(selection.aiNewsIds)&&selection.newsIds.some(id=>selection.aiNewsIds.includes(id)))throw Error('Duplicate event');
       const validate=(ids,candidates,previous,max)=>{
         if(!Array.isArray(ids)||ids.length>max||ids.some(id=>typeof id!=='string')||new Set(ids).size!==ids.length)throw Error('Invalid selection');
@@ -171,7 +176,20 @@ export function createWeeklyReports({filePath=':memory:',getInputs,getProfile=()
       })();return read(owner,week);
     },
     get:(owner,week)=>{const plan=ensure(owner);return {plan:{enabled:!!plan.enabled,profileId:plan.profile,lastAttemptedAt:plan.attempted,error:plan.error},updating:pending.has(owner+':'+(week||weeklyWindow(new Date(now())).id)),report:read(owner,week||weeklyWindow(new Date(now())).id),weeks:db.prepare('SELECT week,updated,revision FROM weekly_reports WHERE owner=? ORDER BY week DESC LIMIT 104').all(owner)};},
-    configure:(owner,{enabled,profileId=''})=>{ensure(owner);if(profileId&&!getProfile(owner,profileId))throw Error('Profile not found');db.prepare('UPDATE weekly_plans SET enabled=?,profile=? WHERE owner=?').run(enabled?1:0,profileId,owner);},
+    configure:(owner,{enabled,profileId=''})=>{
+      const previous=ensure(owner);if(profileId&&!getProfile(owner,profileId))throw Error('Profile not found');
+      db.transaction(()=>{
+        if(previous.profile!==profileId){
+          const week=weeklyWindow(new Date(now())).id;
+          const saved=db.prepare('SELECT payload FROM weekly_selections WHERE owner=? AND week=?').get(owner,week);
+          if(saved)db.prepare('INSERT OR REPLACE INTO weekly_profile_selections VALUES(?,?,?,?)').run(owner,week,previous.profile,saved.payload);
+          const restored=db.prepare('SELECT payload FROM weekly_profile_selections WHERE owner=? AND week=? AND profile=?').get(owner,week,profileId);
+          db.prepare('DELETE FROM weekly_selections WHERE owner=? AND week=?').run(owner,week);
+          if(restored)db.prepare('INSERT INTO weekly_selections VALUES(?,?,?)').run(owner,week,restored.payload);
+        }
+        db.prepare('UPDATE weekly_plans SET enabled=?,profile=?,attempted=NULL WHERE owner=?').run(enabled?1:0,profileId,owner);
+      })();
+    },
     tick:async()=>{const range=weeklyWindow(new Date(now()));for(const plan of db.prepare('SELECT * FROM weekly_plans WHERE enabled=1').all())if(!read(plan.owner,range.id)||!plan.attempted||Date.parse(plan.attempted)<now()-15*60000){await refresh(plan.owner).catch(()=>{});const previous=weeklyWindow(new Date(now()),new Date(Date.parse(range.from)-7*DAY).toISOString().slice(0,10));if(now()-Date.parse(range.from)<2*DAY&&read(plan.owner,previous.id))await refresh(plan.owner,{week:previous.id}).catch(()=>{});}},
     close:()=>db.close(),
   };
