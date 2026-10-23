@@ -150,7 +150,10 @@ export function createWeeklyReports({filePath=':memory:',getInputs,getProfile=()
         db.prepare('UPDATE weekly_plans SET attempted=?,error=NULL WHERE owner=?').run(new Date(now()).toISOString(),owner);
         return read(owner,range.id);
       }catch{db.prepare('UPDATE weekly_plans SET attempted=?,error=? WHERE owner=?').run(new Date(now()).toISOString(),'Não foi possível atualizar. A última versão foi preservada.',owner);throw Error('Weekly update failed');}
-    })().finally(()=>pending.delete(key));pending.set(key,work);return work;
+    })().finally(()=>{
+      pending.delete(key);
+      if(range.id===weeklyWindow(new Date(now())).id&&ensure(owner).profile!==plan.profile)void refresh(owner,{force:true,week:range.id}).catch(()=>{});
+    });pending.set(key,work);return work;
   }
   return {refresh,
     editorialStore:{

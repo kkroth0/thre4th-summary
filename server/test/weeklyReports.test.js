@@ -18,6 +18,13 @@ test('switching client restores its own saved selection rather than reusing anot
  store.configure('owner',{enabled:true,profileId:'client-a'});await store.refresh('owner');
  assert.equal(store.get('owner').report.profile.id,'client-a');assert.deepEqual(store.get('owner').report.selection.newsIds,['story-one']);store.close();
 });
+test('switching client during collection completes the new profile even with automatic updates disabled',async()=>{
+ let release,calls=0;
+ const store=createWeeklyReports({now:()=>NOW,getProfile:(owner,id)=>({id,name:id}),getInputs:async()=>{if(++calls===1)await new Promise(resolve=>{release=resolve;});return {publications:[publication('one')]};}});
+ store.configure('owner',{enabled:false,profileId:'client-a'});const pending=store.refresh('owner',{force:true});
+ store.configure('owner',{enabled:false,profileId:'client-b'});release();await pending;
+ await store.refresh('owner',{force:true});assert.equal(store.get('owner').report.profile.id,'client-b');store.close();
+});
 
 test('Sunday boundaries use Fortaleza time, excluding the following Sunday without overlap',()=>{
  assert.equal(range.from,'2026-10-11T03:00:00.000Z');assert.equal(range.to,'2026-10-18T03:00:00.000Z');
