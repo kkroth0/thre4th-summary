@@ -4,9 +4,16 @@ export interface WeeklyCve {selectionReasons?:string[];editorialFamily?:string|n
 interface PublicationMetadata {dateInferred?:boolean;publicationTimeKnown?:boolean;publicationDateBasis?:string;firstCollectedAt?:string;repository?:{dateBasis?:string}}
 export interface WeeklyNews extends PublicationMetadata {
   selectionReasons?: string[];
-  sourceTier?: 'official' | 'press' | 'other';id:string;title:string;summary:string;published:string;score:number;severity:string;sources:({title:string;source:string;link:string;published:string}&PublicationMetadata)[];categories:string[];actors:string[];malware:string[];cves:string[];ttps:string[]}
+  sourceKind?: 'official'|'research'|'vendor'|'press'|'complementary'|'other';
+  sourceRole?: 'primary'|'coverage'|'unclassified';
+  bodyStatus?: 'read'|'summary';
+  contextMatched?:boolean;
+  editorialTopic?:string;
+  scoreBreakdown?:{context:number;impact:number;evidence:number;quality:number;novelty:number};
+  sourceTier?: 'official' | 'press' | 'other';id:string;title:string;summary:string;published:string;score:number;severity:string;sources:({title:string;source:string;link:string;published:string;sourceRole?:'primary'|'coverage'|'unclassified';sourceKind?:string;editorialScore?:number}&PublicationMetadata)[];categories:string[];actors:string[];malware:string[];cves:string[];ttps:string[]}
 export interface WeeklyVictim {id:string;name:string;group:string;country:string;sector:string;published:string;discovered:string;permalink:string;description:string;claimStatus:'unconfirmed'}
 export interface WeeklyReportData {
+  curation?:{version:number;weights:Record<string,number>;reviewedEvents:number;cachedBodiesRead:number;externalRequests:number};
   editorial?:WeeklyEditorial;
   range:{custom?:boolean;id:string;from:string;to:string;timezone:string;exclusiveEnd:boolean};profile:{id:string;name:string;ransomwareSectors?:string[];assets?:{vendor:string;product:string}[];sectors?:string[];actors?:string[];threatModel?:{actors:{id:string;name:string}[]}}|null;generatedAt:string;updatedAt:string;revision:number;
   news:WeeklyNews[];aiNews:WeeklyNews[];
@@ -18,5 +25,5 @@ export interface WeeklyReportData {
   recommendations:{priority:string;action:string;source:string;cve:string}[];
   actors:{name:string;count:number}[];malware:{name:string;count:number}[];ttps:{name:string;count:number}[];
   coverage:{news:{publications:number;lastCollectedAt:string|null};ransomware:{status:string;checkedAt?:string;message?:string};vulnerabilities:{status?:string;message?:string;sources?:Record<string,{status:string;at?:string}>}};
-  sources:({title:string;source:string;link:string;published:string}&PublicationMetadata)[];
+  sources:({title:string;source:string;link:string;published:string;sourceRole?:'primary'|'coverage'|'unclassified';sourceKind?:string;editorialScore?:number}&PublicationMetadata)[];
 }

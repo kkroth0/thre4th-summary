@@ -6,8 +6,11 @@ const hash = value => createHash('sha256').update(typeof value === 'string' ? va
 const plain = text => String(text || '').replace(/\s+/g, ' ').trim();
 const stamp = now => new Date(now()).toISOString();
 const coverageState = report => ({ ransomware:report.coverage?.ransomware?.status,vulnerabilities:report.coverage?.vulnerabilities?.status,sources:Object.fromEntries(Object.entries(report.coverage?.vulnerabilities?.sources||{}).map(([key,value])=>[key,value.status])) });
+const editorialPublication = item => ({id:item.id,title:item.title,summary:item.summary,published:item.published,
+  actors:item.actors,malware:item.malware,cves:item.cves,ttps:item.ttps,categories:item.categories,
+  sources:(item.sources||[]).map(source=>({link:source.link,title:source.title,source:source.source,published:source.published})).sort((a,b)=>a.link.localeCompare(b.link))});
 export function weeklyEditorialKey(report) {
-  return hash({ version: WEEKLY_EDITORIAL_VERSION, range: report.range, partialWeek:Date.parse(report.generatedAt)<Date.parse(report.range.to),coverage:coverageState(report),profile: report.profile, news: [...report.news, ...report.aiNews], vulnerabilities: report.vulnerabilities, ransomware: report.ransomware });
+  return hash({ version: WEEKLY_EDITORIAL_VERSION, range: report.range, partialWeek:Date.parse(report.generatedAt)<Date.parse(report.range.to),coverage:coverageState(report),profile: report.profile, news: [...report.news, ...report.aiNews].map(editorialPublication), vulnerabilities: report.vulnerabilities, ransomware: report.ransomware });
 }
 export const WEEKLY_EDITORIAL_VOICE = `Você escreve uma revista semanal de segurança cibernética para leitores executivos, em português brasileiro.
 O texto é humanizado, desenvolvido e explicativo. Conduza o leitor do fato ao mecanismo e à consequência para operação, dados, continuidade ou terceiros. Executivo não significa telegráfico. Conecte as frases com naturalidade, uma ideia por parágrafo.
@@ -111,7 +114,7 @@ export function createWeeklyEditorial({ storage, getReport, readArticle, generat
           for (const source of item.sources.slice(4)) evidence.push({ url: source.link, status: 'not_used', message: 'A matéria usa até quatro fontes legíveis.' });
           const save = article => { state.completed++; state.articles.push(article); storage.put(owner, week, state); return article; };
           if (!documents.length) return save({ id: item.id, status: 'blocked', reason: 'O conteúdo da notícia não pôde ser lido. Escolha outra fonte ou tente novamente.', evidence });
-          const fingerprint = hash({ version: WEEKLY_EDITORIAL_VERSION, model: generate.identity, item: { ...item, published: undefined }, profile: report.profile, documents: documents.map(d => ({ url: d.url, hash: hash(d.text) })) });
+          const fingerprint = hash({ version: WEEKLY_EDITORIAL_VERSION, model: generate.identity, item: { ...editorialPublication(item), published: undefined }, profile: report.profile, documents: documents.map(d => ({ url: d.url, hash: hash(d.text) })) });
           try {
             let draft = storage.cacheGet(owner, fingerprint);
             if (!draft) {

@@ -5,7 +5,7 @@ import { LATAM_COUNTRIES } from './ransomwareLive.js';
 import { weeklyProfile } from './weeklyRansomware.js';
 import { classifyAiTool } from './aiToolCatalog.js';
 import { selectWeeklyVulnerabilities } from './weeklyVulnerabilitySelection.js';
-import { weeklyNewsPriority } from './weeklyNewsSelection.js';
+import { weeklyNewsPriority, diverseWeeklySuggestions, WEEKLY_EDITORIAL_WEIGHTS } from './weeklyNewsSelection.js';
 
 const DAY=86400000;
 const sourceDate=value=>typeof value==='string'&&/^\d{4}-\d\d-\d\d[ T]\d\d:\d\d:\d\d(?:\.\d+)?$/.test(value)?value.replace(' ','T')+'Z':value;
@@ -58,27 +58,53 @@ const aiToolName = row => {
 
 export function buildWeeklyReport(inputs,{range,profile=null,now=Date.now(),selection=null,retained=null}={}) {
   profile=weeklyProfile(profile);
-  const groups=new Map();
+  const groups=new Map(),sourceRows=new Map();
   for(const row of inputs.publications||[]) {
     const periodDate=row.publicationTimeKnown===false||row.repository?.dateBasis==='report-date'?row.pubDate?.slice(0,10):row.pubDate;
     // Unknown publication dates remain searchable in the archive, but cannot
     // stand in for this week's news. Collection time is not publication time.
     if(!row.link||row.dateInferred===true||row.securityRelevant===false||!inWeek(periodDate,range,now))continue;
     const key=row.storyId||row.link;
-    const priority=weeklyNewsPriority(row,profile);
+    const priority=weeklyNewsPriority(row,profile,{now:Math.min(now,Date.parse(range.to))});
     if(!priority)continue;
+    sourceRows.set(row.link,row);
     const relevance=priority.score;
     const existing=groups.get(key);
     const dateMetadata={dateInferred:row.dateInferred===true,publicationTimeKnown:row.publicationTimeKnown,publicationDateBasis:row.publicationDateBasis,firstCollectedAt:row.firstCollectedAt,repository:row.repository};
-    const source={title:row.title,source:row.source,link:row.link,published:row.pubDate,...dateMetadata};
+    const source={title:row.title,source:row.source,link:row.link,published:row.pubDate,...dateMetadata,sourceKind:priority.sourceKind,sourceRole:priority.sourceRole,editorialScore:priority.score};
     const signals={actors:[...new Set([...(existing?.actors||[]),...names(row.actors)])],malware:[...new Set([...(existing?.malware||[]),...names(row.malware)])],cves:[...new Set([...(existing?.cves||[]),...(row.cves||[])])],ttps:[...new Set([...(existing?.ttps||[]),...(row.ttpIds||row.ttps||[])])],iocs:Object.fromEntries(['ips','domains','hashes','urls'].map(type=>[type,[...new Set([...(existing?.iocs?.[type]||[]),...(row.iocs?.[type]||[])])]]))};
     if(existing){if(!existing.sources.some(item=>item.link===row.link))existing.sources.push(source);existing.ai ||= (row.categories||row.newsCategories||[]).includes('Artificial Intelligence')||isAiNews(row);Object.assign(existing,signals);if(relevance<=existing.score)continue;}
     groups.set(key,{id:key,title:row.title,summary:row.description||'',published:row.pubDate,...dateMetadata,...priority,score:relevance,severity:row.severity||'',sources:existing?.sources||[source],
       ai:existing?.ai||(row.categories||row.newsCategories||[]).includes('Artificial Intelligence')||isAiNews(row),categories:row.categories||row.newsCategories||[],
       ...signals});
   }
-  const ranked=[...groups.values()].sort((a,b)=>b.score-a.score||b.published.localeCompare(a.published)||a.id.localeCompare(b.id));
-  const candidates={news:ranked.filter(row=>!row.ai).slice(0,25),aiNews:ranked.filter(row=>row.ai).slice(0,25)};
+  const compare=(a,b)=>b.score-a.score||b.published.localeCompare(a.published)||a.id.localeCompare(b.id);
+  const preliminary=[...groups.values()].sort(compare);
+  const reviewPool=[...preliminary.filter(row=>!row.ai).slice(0,40),...preliminary.filter(row=>row.ai).slice(0,40)];
+  const bodies=new Map();let readBodies=0;
+  if(typeof inputs.bodyFor==='function')for(const event of reviewPool){
+    const evaluated=[];
+    const orderedSources=[...event.sources].sort((a,b)=>b.editorialScore-a.editorialScore);
+    const technicalSource=orderedSources.find(source=>source.sourceKind==='research')||orderedSources.find(source=>['official','vendor'].includes(source.sourceKind));
+    const sourcesToRead=[...new Set([technicalSource,...orderedSources].filter(Boolean))].slice(0,2);
+    for(const source of sourcesToRead){
+      if(!bodies.has(source.link)){
+        try{const value=inputs.bodyFor(source.link);bodies.set(source.link,typeof value==='string'?value:value?.text||'');}catch{bodies.set(source.link,'');}
+      }
+      const body=bodies.get(source.link)||sourceRows.get(source.link)?.text||'';
+      const next=weeklyNewsPriority(sourceRows.get(source.link),profile,{now:Math.min(now,Date.parse(range.to)),body});
+      if(!next){source.editorialExcluded=true;continue;}
+      if(next.bodyStatus==='read')readBodies++;
+      Object.assign(source,{sourceKind:next.sourceKind,sourceRole:next.sourceRole,editorialScore:next.score});
+      evaluated.push({source,next});
+    }
+    evaluated.sort((a,b)=>b.next.score-a.next.score);
+    const best=evaluated.find(item=>item.next.sourceRole==='primary'&&item.next.score>=evaluated[0].next.score-5)||evaluated[0];
+    if(best){const raw=sourceRows.get(best.source.link);Object.assign(event,best.next,{title:raw.title,summary:raw.description||'',published:raw.pubDate,publicationTimeKnown:raw.publicationTimeKnown});event.sources=event.sources.filter(source=>!source.editorialExcluded);}else event.editorialEligible=false;
+    event.sources.sort((a,b)=>Number(b.sourceRole==='primary')-Number(a.sourceRole==='primary')||b.editorialScore-a.editorialScore||a.link.localeCompare(b.link));
+  }
+  const ranked=preliminary.sort(compare);
+  const candidates={news:diverseWeeklySuggestions(ranked.filter(row=>!row.ai)),aiNews:diverseWeeklySuggestions(ranked.filter(row=>row.ai))};
   const pick=(ids,rows,previous)=>[...new Map(ids.map(id=>{
     const old=previous?.find(row=>row.id===id);
     return rows.find(row=>row.id===id)||rows.find(row=>old?.sources.some(source=>row.sources.some(next=>next.link===source.link)))||old;
@@ -113,7 +139,7 @@ export function buildWeeklyReport(inputs,{range,profile=null,now=Date.now(),sele
   const selected=[...news,...aiNews];
   const recommendations=kev.slice(0,10).map(row=>({priority:'immediate',action:row.action||'Revisar o advisory e aplicar as medidas indicadas pelo fabricante.',source:`https://www.cisa.gov/known-exploited-vulnerabilities-catalog`,cve:row.id}));
   const data={range,profile:profile?{id:profile.id,name:profile.name,assets:profile.assets,sectors:profile.sectors,actors:profile.actors,regions:profile.regions,ot:profile.ot,threatModel:profile.threatModel,ransomwareSectors:focusSectors}:null,generatedAt:new Date(now).toISOString(),
-    news,aiNews,candidates,selection:{mode:selection?'manual':'suggested',newsIds:news.map(row=>row.id),aiNewsIds:aiNews.map(row=>row.id)},vulnerabilities:{total:newCves.length,kevCount:kev.length,critical:newCves.filter(row=>row.severity==='CRITICAL').length,kev,priority:priority.slice(0,50),editorial,monitored,ai:{total:aiCves.length,kevCount:aiCves.filter(row=>row.kev).length,critical:aiCves.filter(row=>row.severity==='CRITICAL').length,items:aiCves.slice(0,50),vendors:frequencies(aiCves.map(row=>row.vendor)),categories:frequencies(aiCves.map(aiCategory)),previousTotal:previousAi,tools:[...tools.values()].sort((a,b)=>(b.cvss??-1)-(a.cvss??-1)||b.count-a.count).slice(0,4)}},
+    curation:{version:2,weights:WEEKLY_EDITORIAL_WEIGHTS,reviewedEvents:typeof inputs.bodyFor==='function'?reviewPool.length:0,cachedBodiesRead:readBodies,externalRequests:0},news,aiNews,candidates,selection:{mode:selection?'manual':'suggested',newsIds:news.map(row=>row.id),aiNewsIds:aiNews.map(row=>row.id)},vulnerabilities:{total:newCves.length,kevCount:kev.length,critical:newCves.filter(row=>row.severity==='CRITICAL').length,kev,priority:priority.slice(0,50),editorial,monitored,ai:{total:aiCves.length,kevCount:aiCves.filter(row=>row.kev).length,critical:aiCves.filter(row=>row.severity==='CRITICAL').length,items:aiCves.slice(0,50),vendors:frequencies(aiCves.map(row=>row.vendor)),categories:frequencies(aiCves.map(aiCategory)),previousTotal:previousAi,tools:[...tools.values()].sort((a,b)=>(b.cvss??-1)-(a.cvss??-1)||b.count-a.count).slice(0,4)}},
     ransomware:{total:victims.length,latam:latam.length,brazil:latam.filter(row=>row.country==='BR').length,victims:latam,byCountry:frequencies(latam.map(row=>row.country)),byGroup:frequencies(latam.map(row=>row.group)),bySector:frequencies(latam.map(row=>row.sector)),focusSectors,focusCount:focusVictims.length,focusBySector:focusSectors.map(name=>({name,count:focusVictims.filter(row=>row.sector===name).length})),history,claimsAreUnconfirmed:true},
     reports,recommendations,actors:frequencies(selected.flatMap(row=>row.actors)),malware:frequencies(selected.flatMap(row=>row.malware)),ttps:frequencies(selected.flatMap(row=>row.ttps)),
     coverage:inputs.coverage||{},sources:[...new Map(selected.flatMap(row=>row.sources).map(row=>[row.link,row])).values()]};

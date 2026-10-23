@@ -3428,7 +3428,7 @@ async function weeklyInputs(range){
 }
 const weeklyReports=createWeeklyReports({filePath:process.env.NODE_ENV==='test'?':memory:':path.join(__dirname,'.weekly-reports.sqlite'),
     getProfile:(owner,id)=>{const profile=orgProfileStore.get(owner,id);return {...profile,threatModel:cachedThreatModel(profile)};},
-    getInputs:async(owner,range)=>({...await weeklyInputs(range),reports:Object.values(jobsStore).filter(job=>job.ownerSub===owner)}),
+    getInputs:async(owner,range)=>({...await weeklyInputs(range),bodyFor:link=>articleCollectionCache.get(link)?.text||'',reports:Object.values(jobsStore).filter(job=>job.ownerSub===owner)}),
 });
 const weeklyEditorial=createWeeklyEditorial({
     storage:weeklyReports.editorialStore,

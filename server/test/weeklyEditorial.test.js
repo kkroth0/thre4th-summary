@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createWeeklyEditorial,createWeeklyEditorialGenerator,WEEKLY_EDITORIAL_VOICE} from '../weeklyEditorial.js';
+import {createWeeklyEditorial,createWeeklyEditorialGenerator,WEEKLY_EDITORIAL_VOICE,weeklyEditorialKey} from '../weeklyEditorial.js';
 import {createWeeklyReports,weeklyWindow} from '../weeklyReports.js';
 
 const now=()=>Date.parse('2026-10-22T17:00:00Z'),range=weeklyWindow(new Date(now()));
@@ -57,4 +57,11 @@ test('advisories are read for selected CVEs and correction versions must occur i
   const service=createWeeklyEditorial({storage:store.editorialStore,getReport:()=>report,readArticle:async url=>{assert.equal(url,'https://vendor.example/advisory');read++;return {text:body+' Fixed version 4.0.9.8.'};},generate:async()=>({...sections(),cves:[{id:original.id,description:'Uma falha no Software Center permite carregar arquivos de locais não controlados.',action:correction}]}),now});
   service.start('one',range.id);await service.wait('one',range.id);assert.equal(read,1);assert.equal(service.status('one',report).status,correction.includes('99.99.99')?'error':'ready');store.close();
  }
+});
+
+
+test('editorial priority changes alone do not invalidate verified writing',()=>{
+ const report={range,generatedAt:new Date(now()).toISOString(),profile:null,news:[{id:'one',title:'Story',summary:'Text',published:'2026-10-21',score:80,sources:[{link:'https://example.com/story',title:'Story',source:'Example',editorialScore:80}]}],aiNews:[],vulnerabilities:{},ransomware:{},coverage:{}};
+ const before=weeklyEditorialKey(report);report.news[0].score=60;report.news[0].sources[0].editorialScore=60;
+ assert.equal(weeklyEditorialKey(report),before);report.news[0].title='Changed content';assert.notEqual(weeklyEditorialKey(report),before);
 });
