@@ -3463,8 +3463,11 @@ app.post('/api/reports/weekly/editorial',requirePremium,scanLimiter,(req,res)=>{
     }
 });
 app.put('/api/reports/weekly',requirePremium,(req,res)=>{
-    try{if(typeof req.body?.enabled!=='boolean')return res.status(400).json({error:'Configuração inválida.'});weeklyReports.configure(req.user.sub,{enabled:req.body.enabled,profileId:String(req.body.profileId||'')});
-        if(req.body.enabled)void weeklyReports.refresh(req.user.sub,{force:true}).catch(()=>{});
+    try{if(typeof req.body?.enabled!=='boolean')return res.status(400).json({error:'Configuração inválida.'});
+        const previousProfile=weeklyReports.get(req.user.sub).plan.profileId;
+        const profileId=String(req.body.profileId||'');
+        weeklyReports.configure(req.user.sub,{enabled:req.body.enabled,profileId});
+        if(req.body.enabled||previousProfile!==profileId)void weeklyReports.refresh(req.user.sub,{force:true}).catch(()=>{});
         res.set('Cache-Control','private, no-store').json(weeklyReports.get(req.user.sub));
     }catch{res.status(400).json({error:'Perfil ou configuração inválida.'});}
 });
