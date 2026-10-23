@@ -32,6 +32,16 @@ test('Sunday boundaries use Fortaleza time, excluding the following Sunday witho
  assert.equal(weeklyWindow(new Date('2026-10-18T03:00:00Z')).id,'2026-10-18');
  assert.throws(()=>weeklyWindow(new Date(NOW),'2026-10-12'));assert.throws(()=>weeklyWindow(new Date(NOW),'2026-02-31'));
 });
+test('custom periods retain precise timestamps and reject invalid or oversized ranges',()=>{
+ const from=Date.parse('2026-10-12T14:30:00-03:00'),to=Date.parse('2026-10-12T18:15:00-03:00');
+ const range=weeklyWindow(new Date(NOW),`period_${from}_${to}`);
+ assert.equal(range.from,'2026-10-12T17:30:00.000Z');assert.equal(range.to,'2026-10-12T21:15:00.000Z');assert.equal(range.custom,true);
+ const report=buildWeeklyReport({publications:[{...publication('before'),pubDate:new Date(from-1).toISOString()},{...publication('included'),pubDate:new Date(from).toISOString()},{...publication('cutoff'),pubDate:new Date(to).toISOString()},{...publication('date-only'),pubDate:'2026-10-12',publicationTimeKnown:false}],vulnerabilities:[{id:'CVE-2026-10000',kev:true,dateAdded:'2026-10-12'}]},{range,now:NOW});
+ assert.deepEqual(new Set(report.news.map(row=>row.id)),new Set(['story-included','story-date-only']));assert.equal(report.vulnerabilities.kevCount,1);
+ assert.throws(()=>weeklyWindow(new Date(NOW),`period_${to}_${from}`));
+ assert.throws(()=>weeklyWindow(new Date(NOW),`period_${from}_${from+32*86400000}`));
+ assert.throws(()=>weeklyWindow(new Date(NOW),'period_broken'));
+});
 test('weekly selection ranks and deduplicates events, with independent caps of 10 general and 5 AI news',()=>{
  const publications=[...Array.from({length:20},(_,i)=>publication(i,i)),...Array.from({length:12},(_,i)=>publication('ai'+i,i,true)),{...publication(19,19),link:'https://other.example/19'}, {...publication('future',1000),pubDate:range.to}, {...publication('old',1000),pubDate:'2026-10-10T12:00:00Z'}];
  const report=buildWeeklyReport({publications},{range,now:NOW});

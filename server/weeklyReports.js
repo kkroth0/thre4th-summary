@@ -11,6 +11,13 @@ const DAY=86400000;
 const sourceDate=value=>typeof value==='string'&&/^\d{4}-\d\d-\d\d[ T]\d\d:\d\d:\d\d(?:\.\d+)?$/.test(value)?value.replace(' ','T')+'Z':value;
 const localDay=date=>new Intl.DateTimeFormat('en-CA',{timeZone:'America/Fortaleza',year:'numeric',month:'2-digit',day:'2-digit'}).format(date);
 export function weeklyWindow(now=new Date(),startDay) {
+  if(typeof startDay==='string'&&startDay.startsWith('period_')){
+    const match=/^period_(\d{13})_(\d{13})(?:_[A-Za-z0-9_-]{1,100})?$/.exec(startDay);
+    if(!match)throw Error('Invalid period');
+    const from=Number(match[1]),to=Number(match[2]);
+    if(!Number.isFinite(from)||!Number.isFinite(to)||from>=to||to-from>31*DAY||from>now.getTime()||from<Date.parse('2000-01-01T00:00:00Z'))throw Error('Invalid period');
+    return {id:startDay,from:new Date(from).toISOString(),to:new Date(to).toISOString(),timezone:'America/Fortaleza',exclusiveEnd:true,custom:true};
+  }
   const day=startDay||localDay(now);
   if(!/^\d{4}-\d{2}-\d{2}$/.test(day)||new Date(day+'T12:00:00Z').toISOString().slice(0,10)!==day)throw Error('Invalid week');
   let from=new Date(day+'T03:00:00Z');
@@ -19,7 +26,13 @@ export function weeklyWindow(now=new Date(),startDay) {
   const to=new Date(from.getTime()+7*DAY);
   return {id:from.toISOString().slice(0,10),from:from.toISOString(),to:to.toISOString(),timezone:'America/Fortaleza',exclusiveEnd:true};
 }
-const inWeek=(date,range,now)=>Number.isFinite(Date.parse(date))&&Date.parse(date)>=Date.parse(range.from)&&Date.parse(date)<Math.min(Date.parse(range.to),now+1);
+const inWeek=(date,range,now)=>{
+  if(typeof date==='string'&&/^\d{4}-\d\d-\d\d$/.test(date)){
+    const day=Date.parse(date+'T03:00:00Z');
+    return day<Math.min(Date.parse(range.to),now+1)&&day+DAY>Date.parse(range.from);
+  }
+  return Number.isFinite(Date.parse(date))&&Date.parse(date)>=Date.parse(range.from)&&Date.parse(date)<Math.min(Date.parse(range.to),now+1);
+};
 const names=items=>(items||[]).map(item=>typeof item==='string'?item:item.name).filter(Boolean);
 const frequencies=values=>Object.entries(values.reduce((counts,value)=>{if(value)counts[value]=(counts[value]||0)+1;return counts;},{})).map(([name,count])=>({name,count})).sort((a,b)=>b.count-a.count||a.name.localeCompare(b.name));
 const assetMatch=(row,assets=[])=>assets.some(asset=>(!asset.vendor||`${row.vendor||''} ${row.description||''}`.toLowerCase().includes(asset.vendor.toLowerCase()))&&(!asset.product||`${row.product||''} ${row.description||''}`.toLowerCase().includes(asset.product.toLowerCase())));
@@ -47,7 +60,7 @@ export function buildWeeklyReport(inputs,{range,profile=null,now=Date.now(),sele
   profile=weeklyProfile(profile);
   const groups=new Map();
   for(const row of inputs.publications||[]) {
-    const periodDate=row.publicationTimeKnown===false||row.repository?.dateBasis==='report-date'?row.pubDate?.slice(0,10)+'T12:00:00Z':row.pubDate;
+    const periodDate=row.publicationTimeKnown===false||row.repository?.dateBasis==='report-date'?row.pubDate?.slice(0,10):row.pubDate;
     // Unknown publication dates remain searchable in the archive, but cannot
     // stand in for this week's news. Collection time is not publication time.
     if(!row.link||row.dateInferred===true||row.securityRelevant===false||!inWeek(periodDate,range,now))continue;
@@ -74,7 +87,7 @@ export function buildWeeklyReport(inputs,{range,profile=null,now=Date.now(),sele
   const aiNews=selection?pick(selection.aiNewsIds,ranked.filter(row=>row.ai),retained?.aiNews):candidates.aiNews.slice(0,5);
   const vulnerabilities=inputs.vulnerabilities||[];
   const newCves=vulnerabilities.filter(row=>inWeek(row.published,range,now));
-  const kev=vulnerabilities.filter(row=>row.kev&&inWeek(row.dateAdded?row.dateAdded+'T12:00:00Z':null,range,now));
+  const kev=vulnerabilities.filter(row=>row.kev&&inWeek(row.dateAdded||null,range,now));
   const prioritize=(a,b)=>Number(b.kev)-Number(a.kev)||(b.cvss||0)-(a.cvss||0)||(b.epss||0)-(a.epss||0)||a.id.localeCompare(b.id);
   const priority=[...new Map([...kev,...newCves].map(row=>[row.id,row])).values()].sort(prioritize);
   const editorial=selectWeeklyVulnerabilities(newCves,kev,ranked,profile);
@@ -94,7 +107,7 @@ export function buildWeeklyReport(inputs,{range,profile=null,now=Date.now(),sele
     const rows=uniqueVictims.filter(row=>LATAM_COUNTRIES.has(String(row.country).toUpperCase())&&inWeek(observationDate(row),{from,to},now));
     return {from,to,available,latam:available?rows.length:null,brazil:available?rows.filter(row=>row.country==='BR').length:null,byGroup:available?frequencies(rows.map(row=>row.group)):[]};
   });
-  const previousAi=Array.isArray(inputs.previousVulnerabilities)?inputs.previousVulnerabilities.filter(row=>isAiVulnerability(row)&&inWeek(row.published,{from:new Date(Date.parse(range.from)-7*DAY).toISOString(),to:range.from},now)).length:null;
+  const previousAi=!range.custom&&Array.isArray(inputs.previousVulnerabilities)?inputs.previousVulnerabilities.filter(row=>isAiVulnerability(row)&&inWeek(row.published,{from:new Date(Date.parse(range.from)-7*DAY).toISOString(),to:range.from},now)).length:null;
   const tools=new Map();for(const row of aiCves){const name=aiToolName(row);const old=tools.get(name)||{name,count:0,cvss:null,id:row.id};old.count++;if(row.cvss!=null&&(old.cvss==null||row.cvss>old.cvss)){old.cvss=row.cvss;old.id=row.id;}tools.set(name,old);}
   const reports=(inputs.reports||[]).filter(row=>row.status==='done'&&inWeek(row.updatedAt||row.createdAt,range,now)).map(row=>({id:row.id,title:row.title||row.url,type:row.type,updatedAt:row.updatedAt,sources:row.urls||[row.url]}));
   const selected=[...news,...aiNews];

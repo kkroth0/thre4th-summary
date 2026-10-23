@@ -8,7 +8,7 @@ export interface WeeklyNews extends PublicationMetadata {
 export interface WeeklyVictim {id:string;name:string;group:string;country:string;sector:string;published:string;discovered:string;permalink:string;description:string;claimStatus:'unconfirmed'}
 export interface WeeklyReportData {
   editorial?:WeeklyEditorial;
-  range:{id:string;from:string;to:string;timezone:string;exclusiveEnd:boolean};profile:{id:string;name:string;ransomwareSectors?:string[];assets?:{vendor:string;product:string}[];sectors?:string[];actors?:string[];threatModel?:{actors:{id:string;name:string}[]}}|null;generatedAt:string;updatedAt:string;revision:number;
+  range:{custom?:boolean;id:string;from:string;to:string;timezone:string;exclusiveEnd:boolean};profile:{id:string;name:string;ransomwareSectors?:string[];assets?:{vendor:string;product:string}[];sectors?:string[];actors?:string[];threatModel?:{actors:{id:string;name:string}[]}}|null;generatedAt:string;updatedAt:string;revision:number;
   news:WeeklyNews[];aiNews:WeeklyNews[];
   candidates:{news:WeeklyNews[];aiNews:WeeklyNews[]};
   selection:{mode:'suggested'|'manual';newsIds:string[];aiNewsIds:string[]};

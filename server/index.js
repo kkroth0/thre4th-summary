@@ -2860,7 +2860,7 @@ app.post('/api/feed/job/result', (req, res) => {
 
 // ─── OpenRouter-powered on-demand advisory analysis ───────────────────────
 const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1';
-const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL || 'deepseek/deepseek-v4-flash';
+const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL || 'deepseek/deepseek-v4.1-flash-1017';
 
 // Com mais de uma fonte o resumo vira uma linha por veículo. Um parágrafo único
 // funde os relatos numa voz só e apaga de quem é cada afirmação — que é
@@ -3378,7 +3378,7 @@ function huntingCves() {
 const huntingService = createHuntingService({
     library: huntingLibrary, filePath: process.env.HUNTING_DB_PATH || (process.env.NODE_ENV === 'test' ? ':memory:' : path.join(__dirname, '.hunting.sqlite')),
     getNews: owner => filterMonitoredNews(newsArchiveStore.all(), newsMonitoringStore.get(owner)), getCves: huntingCves,
-    generate: process.env.NODE_ENV !== 'test' && process.env.OPENROUTER_API_KEY ? createHuntingGenerator({ http: axios, getKey: () => process.env.OPENROUTER_API_KEY, model: process.env.OPENROUTER_HUNTING_MODEL || 'deepseek/deepseek-v4.1-flash' }) : undefined,
+    generate: process.env.NODE_ENV !== 'test' && process.env.OPENROUTER_API_KEY ? createHuntingGenerator({ http: axios, getKey: () => process.env.OPENROUTER_API_KEY, model: process.env.OPENROUTER_HUNTING_MODEL || OPENROUTER_MODEL }) : undefined,
     onError: error => console.warn('Hunting AI unavailable:', error.response?.status || error.code || error.name),
 });
 const huntingLimiter = rateLimit({ windowMs: 60000, max: 45, keyGenerator: req => req.user.sub, standardHeaders: true, legacyHeaders: false, message: { error: 'Aguarde um minuto para atualizar as caças.' } });
@@ -3443,8 +3443,9 @@ const weeklyEditorial=createWeeklyEditorial({
 app.get('/api/reports/weekly',requirePremium,(req,res)=>{
     try {
         const week=req.query.week?weeklyWindow(new Date(),String(req.query.week)).id:undefined;
-        if(week&&week>weeklyWindow().id)return res.status(400).json({error:'Semana futura inválida.'});
+        if(week&&Date.parse(weeklyWindow(new Date(),week).from)>Date.now())return res.status(400).json({error:'Período futuro inválido.'});
         const data=weeklyReports.get(req.user.sub,week);
+        if(week?.startsWith('period_')&&!data.report){void weeklyReports.refresh(req.user.sub,{force:true,week}).catch(()=>{});data.updating=true;}
         if(!week&&data.plan.enabled&&(!data.report||!data.plan.lastAttemptedAt||Date.parse(data.plan.lastAttemptedAt)<Date.now()-15*60000)){void weeklyReports.refresh(req.user.sub).catch(()=>{});data.updating=true;}
         res.set('Cache-Control','private, no-store').json({...data,report:weeklyEditorial.attach(req.user.sub,data.report)});
     }catch{res.status(400).json({error:'Informe o domingo inicial da semana.'});}
@@ -3471,9 +3472,9 @@ app.put('/api/reports/weekly',requirePremium,(req,res)=>{
         res.set('Cache-Control','private, no-store').json(weeklyReports.get(req.user.sub));
     }catch{res.status(400).json({error:'Perfil ou configuração inválida.'});}
 });
-app.post('/api/reports/weekly/refresh',requirePremium,(req,res)=>{void weeklyReports.refresh(req.user.sub,{force:true}).catch(()=>{});res.status(202).json({status:'updating'});});
+app.post('/api/reports/weekly/refresh',requirePremium,(req,res)=>{try{const week=req.body?.week?weeklyWindow(new Date(),String(req.body.week)).id:undefined;void weeklyReports.refresh(req.user.sub,{force:true,week}).catch(()=>{});res.status(202).json({status:'updating'});}catch{res.status(400).json({error:'Período inválido.'});}});
 app.post('/api/reports/weekly/selection',requirePremium,(req,res)=>{
-    try{const week=weeklyWindow(new Date(),String(req.body?.week||'')).id;if(week>weeklyWindow().id)return res.status(400).json({error:'Semana futura inválida.'});
+    try{const week=weeklyWindow(new Date(),String(req.body?.week||'')).id;if(Date.parse(weeklyWindow(new Date(),week).from)>Date.now())return res.status(400).json({error:'Período futuro inválido.'});
         const report=weeklyReports.select(req.user.sub,week,{newsIds:req.body.newsIds,aiNewsIds:req.body.aiNewsIds});res.set('Cache-Control','private, no-store').json({report});
     }catch{res.status(400).json({error:'Escolha até 10 notícias gerais e 5 de IA entre as sugestões desta semana.'});}
 });
