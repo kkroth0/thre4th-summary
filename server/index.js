@@ -1,3 +1,4 @@
+import { filterReportIocNoise } from './reportIocNoise.js';
 import express from 'express';
 import cors from 'cors';
 import rateLimit from 'express-rate-limit';
@@ -2298,6 +2299,8 @@ const ADMIN_LOGINS = (process.env.GITHUB_ADMIN_LOGINS || process.env.GITHUB_ALLO
 function isAdmin(login) {
     return ADMIN_LOGINS.includes((login || '').toLowerCase());
 }
+// PDF access belongs to the product owner's account, independently of admin roles.
+const canDownloadReportPdf = login => (login || '').toLowerCase() === 'kkroth0';
 function requireAdmin(req, res, next) {
     const p = verifySession(getCookie(req, 'ts_session'));
     if (!p) return res.status(401).json({ error: 'não autenticado', needAuth: true });
@@ -2372,6 +2375,7 @@ app.get('/api/auth/me', (req, res) => {
         authenticated: true,
         login: p.login,
         isAdmin: isAdmin(p.login),
+        canDownloadReportPdf: canDownloadReportPdf(p.login),
         isPremium: sessionHasPremium(p),
     });
 });
@@ -2687,7 +2691,7 @@ app.get('/api/feed/job', requirePremium, (req, res) => {
             (j) => j.status === 'pending' && j.createdAt < job.createdAt,
         ).length;
     }
-    const clientJob = { ...job };
+    const clientJob = { ...job, json: filterReportIocNoise(job.json) };
     delete clientJob.documents;
     delete clientJob.renderReport;
     res.json({ ...clientJob, queuePosition });
@@ -2704,7 +2708,7 @@ app.post('/api/feed/job/:id/render', requirePremium, scanLimiter, (req, res) => 
     expireStaleJobs();
     if (pendingCount() >= FEED_MAX_QUEUE) return res.status(503).json({ error: 'Servidor ocupado. Tente novamente em alguns minutos.' });
     let reviewed;
-    try { reviewed = reviewReport(savedReport, req.body?.patch ?? {}); }
+    try { reviewed = reviewReport(filterReportIocNoise(savedReport), req.body?.patch ?? {}); }
     catch (error) { return res.status(400).json({ error: error.message }); }
     const id = crypto.randomUUID(), now = new Date().toISOString();
     const job = { id, ownerSub: req.user.sub, url: original.url, urls: original.urls || [original.url],
@@ -2738,6 +2742,9 @@ app.get('/api/feed/job/deck', requirePremium, (req, res) => {
     const job = jobsStore[id];
     if (!job) return res.status(404).json({ error: 'job não encontrado' });
     if (job.ownerSub !== req.user.sub) return res.status(403).json({ error: 'job pertence a outro usuário' });
+    if (kind === 'pdf' && !canDownloadReportPdf(req.user.login)) {
+        return res.status(403).json({ error: 'Download de PDF restrito à conta proprietária.' });
+    }
     if (kind === 'pptx' && !isAdmin(req.user.login)) {
         return res.status(403).json({ error: 'PPTX é somente para administrador' });
     }
@@ -2824,7 +2831,7 @@ app.post('/api/feed/job/result', (req, res) => {
     else if (req.body?.json && typeof req.body.json === 'object') {
         job.status = 'done';
         job.error = null;
-        job.json = completeReportEvidence(req.body.json,job,{items:newsArchiveStore.all()});
+        job.json = filterReportIocNoise(completeReportEvidence(req.body.json,job,{items:newsArchiveStore.all()}));
         delete job.renderReport;
         // O pedido pode ter sido 'auto' (motor decide depois de raspar a URL);
         // o JSON que volta sempre tem o tipo concreto que o motor escolheu

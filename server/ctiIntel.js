@@ -333,7 +333,7 @@ const BENIGN_IPS = new Set([
 ]);
 
 // A bare filename (malware.exe) matches the domain shape but is not a domain.
-const RE_FILE_EXT = /\.(exe|dll|sys|bin|dat|dmp|zip|rar|tar|gz|7z|png|jpe?g|gif|svg|css|js|html?|txt|log|json|xml|pdf|docx?|xlsx?|pptx?|csv|ya?ml|md|ps1|sh|py)$/i;
+const RE_FILE_EXT = /\.(exe|dll|sys|bin|dat|dmp|zip|rar|tar|gz|7z|png|jpe?g|gif|svg|css|js|html?|txt|log|json|xml|pdf|docx?|xlsx?|pptx?|csv|ya?ml|md|ts|ps1|sh|py)$/i;
 
 // Code hosting is never the indicator. An appendix that LIVES in a repo cites its
 // own repo, the raw file host and neighbouring projects on every other line, and

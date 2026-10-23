@@ -117,9 +117,9 @@ function ExportMenu({ job, pt }: { job: BoletimJob; pt: boolean }) {
             oferecer o item levaria a um 404 — ou pior, num navegador com a aba
             velha em memória, a um arquivo montado pelo código antigo, com o nome
             certo e o conteúdo errado. */}
-        <DropdownMenuItem disabled={!job.deck?.pdf} onSelect={() => void run("pdf")}>
+        {auth.canDownloadReportPdf && <DropdownMenuItem disabled={!job.deck?.pdf} onSelect={() => void run("pdf")}>
           PDF{job.deck?.pdf ? "" : pt ? " — indisponível" : " — unavailable"}
-        </DropdownMenuItem>
+        </DropdownMenuItem>}
         {/* O PPTX é a fonte editável no template SRR: só admin. O servidor
             também recusa — esconder aqui é só não oferecer o que dá 403. */}
         {auth.isAdmin && (

@@ -20,11 +20,14 @@ test('assistant HTTP routes start safely, enforce account gates and origin, and 
     const payload = Buffer.from(JSON.stringify({ sub, login, exp: Math.floor(Date.now() / 1000) + 600 })).toString('base64url');
     return 'ts_session=' + payload + '.' + createHmac('sha256', secret).update(payload).digest('base64url');
   };
+  const deckId='11111111-1111-4111-8111-111111111111';
+  fs.writeFileSync(path.join(directory,deckId+'.pdf'),'%PDF-1.4\n%%EOF');
   const child = spawn(process.execPath, ['server/index.js'], { cwd: root, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true, env: { ...process.env,
     NODE_ENV: 'test', PORT: String(port), SESSION_SECRET: secret, SECRETS_ENCRYPTION_KEY: randomBytes(32).toString('hex'),
-    APP_BASE_URL: 'https://app.example', OPENROUTER_API_KEY: '', GITHUB_ALLOWED_LOGINS: 'assistant-tests', GITHUB_ALLOWED_ORG: '',
-    PREMIUM_OPEN_PATH: write('premium.json', false), USERS_STORE_PATH: write('users.json', { one: { login: 'assistant-tests' }, two: { login: 'outsider' } }),
+    APP_BASE_URL: 'https://app.example', OPENROUTER_API_KEY: '', GITHUB_ALLOWED_LOGINS: 'assistant-tests,kkroth0', GITHUB_ADMIN_LOGINS:'assistant-tests,kkroth0', GITHUB_ALLOWED_ORG: '',
+    PREMIUM_OPEN_PATH: write('premium.json', false), USERS_STORE_PATH: write('users.json', { one: { login: 'assistant-tests' }, two: { login: 'outsider' }, three:{login:'kkroth0'} }),
     NEWS_ARCHIVE_PATH: write('archive.json', [{ title: 'Mirai research from saved ETL', source: 'Research', link: 'https://research.example/mirai', description: 'Mirai malware investigation.', pubDate: new Date(Date.now() - 3600000).toISOString(), score: 80, cves: [], actors: [], malware: [{ id: 'mirai', name: 'Mirai' }], iocs: {} }]),
+    FEED_DECKS_DIR:directory,FEED_JOBS_PATH:write('jobs.json',{['22222222-2222-4222-8222-222222222222']:{id:'22222222-2222-4222-8222-222222222222',ownerSub:'one',status:'done',deck:{pdf:'report.pdf'}},[deckId]:{id:deckId,ownerSub:'three',status:'done',deck:{pdf:'report.pdf'},json:{iocs:[{valor:'security.md'},{valor:'45.148.10.95'}]}}}),
     NEWS_STORIES_PATH: write('stories.json', []), IOC_INTELLIGENCE_PATH: ':memory:',
   } });
   child.stdout.resume(); child.stderr.resume();
@@ -43,6 +46,19 @@ test('assistant HTTP routes start safely, enforce account gates and origin, and 
   }
   assert.equal(ready, true, 'isolated backend did not become ready within the bounded startup budget');
   const headers = { Cookie: cookie('assistant-tests', 'one'), 'Content-Type': 'application/json' };
+  const ownerHeaders={Cookie:cookie('kkroth0','three')};
+  const ownerAuth=await (await fetch(base+'/api/auth/me',{headers:ownerHeaders})).json();
+  assert.equal(ownerAuth.canDownloadReportPdf,true);
+  const otherAuth=await (await fetch(base+'/api/auth/me',{headers})).json();
+  assert.equal(otherAuth.isAdmin,true);assert.equal(otherAuth.canDownloadReportPdf,false);
+  assert.equal((await fetch(base+'/api/feed/job/deck?id='+deckId+'&kind=pdf')).status,401);
+  assert.equal((await fetch(base+'/api/feed/job/deck?id='+deckId+'&kind=pdf',{headers})).status,403);
+  assert.equal((await fetch(base+'/api/feed/job/deck?id=22222222-2222-4222-8222-222222222222&kind=pdf',{headers})).status,403,'Another admin cannot download even their own PDF');
+  const ownPdf=await fetch(base+'/api/feed/job/deck?id='+deckId+'&kind=pdf',{headers:ownerHeaders});
+  assert.equal(ownPdf.status,200);assert.match(await ownPdf.text(),/%PDF/);
+  const cleaned=await (await fetch(base+'/api/feed/job?id='+deckId,{headers:ownerHeaders})).json();
+  assert.deepEqual(cleaned.json.iocs,[{valor:'45.148.10.95'}]);
+
   assert.equal((await fetch(base + '/api/integrations/telegram', { headers: { Cookie: cookie('outsider', 'two') } })).status, 403);
   assert.equal((await fetch(base + '/api/reports/weekly/editorial', { method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({week:'2026-10-18'}) })).status,401);
   assert.equal((await fetch(base + '/api/reports/weekly/editorial', { method:'POST',headers:{...headers,Cookie:cookie('outsider','two')},body:JSON.stringify({week:'2026-10-18'}) })).status,403);

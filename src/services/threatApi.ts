@@ -1170,7 +1170,7 @@ export const fetchThreatSectors = async (): Promise<ThreatSectorsResponse> => {
 };
 
 // ── Auth GitHub (allow-list). Geração usa a chave OpenRouter do servidor ─────
-export interface AuthState { authenticated: boolean; login?: string; isAdmin?: boolean; isPremium?: boolean; }
+export interface AuthState { authenticated: boolean; login?: string; isAdmin?: boolean; canDownloadReportPdf?: boolean; isPremium?: boolean; }
 
 // Estado de login (cookie de sessão é httpOnly — o front só sabe via /me).
 export const fetchAuth = async (): Promise<AuthState> => {
