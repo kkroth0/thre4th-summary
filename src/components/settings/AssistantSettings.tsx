@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Bot, CheckCircle2, Clock3, ExternalLink, Loader2, RefreshCw, Send, Unplug } from 'lucide-react';
 import { toast } from 'sonner';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -10,12 +11,13 @@ import { Badge } from '@/components/ui/badge';
 import { connectTelegram, createTelegramLink, disconnectTelegram, fetchTelegramStatus, queryAssistant, updateTelegram, type AssistantAnswer } from '@/services/assistant';
 
 export function AssistantSettings() {
+  const { auth } = useAuth();
   const { language } = useLanguage(), pt = language === 'pt';
   const [token, setToken] = useState(''), [busy, setBusy] = useState('');
   const [link, setLink] = useState<{ url: string; expiresAt: string } | null>(null);
   const [question, setQuestion] = useState('/briefing'), [previewAi, setPreviewAi] = useState(false), [reply, setReply] = useState<AssistantAnswer | null>(null);
   const [ai, setAi] = useState(false), [daily, setDaily] = useState(false), [hour, setHour] = useState(8);
-  const status = useQuery({ queryKey: ['telegram-settings'], queryFn: fetchTelegramStatus, staleTime: 30000, refetchInterval: link ? 5000 : false, retry: false });
+  const status = useQuery({ queryKey: ['telegram-settings', auth.login || ''], queryFn: fetchTelegramStatus, staleTime: 30000, refetchInterval: link ? 5000 : false, retry: false });
   const data = status.data;
   const serverAi = data?.aiEnabled, serverDaily = data?.dailyEnabled, serverHour = data?.dailyHour;
   useEffect(() => { if (serverAi !== undefined) setAi(serverAi); if (serverDaily !== undefined) setDaily(serverDaily); if (serverHour !== undefined) setHour(serverHour); }, [serverAi, serverDaily, serverHour]);

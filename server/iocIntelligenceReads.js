@@ -7,8 +7,9 @@ export function createIocIntelligenceReads(db, normalizeIndicator) {
   const scopeSql=owner=>({sql:owner?'o.scope IN (?,?)':'o.scope=?',args:scopes(owner)});
   const coveringIndex = () => db.prepare("SELECT 1 FROM sqlite_master WHERE type='index' AND name='observations_inventory'").get() ? ' INDEXED BY observations_inventory' : '';
   const actorIndexReady = () => !!db.prepare("SELECT 1 FROM intelligence_state WHERE id='actor-observations-v1'").get();
+  const integer=(value,fallback,min,max)=>{const number=Number(value);return Number.isFinite(number)?Math.min(max,Math.max(min,Math.trunc(number||fallback))):fallback;};
   function list({owner='',type='',query='',page=1,size=50,actor='',malware=''}={}) {
-    size=Math.min(100,Math.max(1,Number(size)||50));page=Math.max(1,Number(page)||1);
+    size=integer(size,50,1,100);page=integer(page,1,1,Math.floor(Number.MAX_SAFE_INTEGER/size));
     const scope=scopeSql(owner),clauses=[scope.sql],args=[...scope.args];
     const indexed = coveringIndex();
     if (indexed && !type && !query && !actor && !malware) {
@@ -32,7 +33,7 @@ export function createIocIntelligenceReads(db, normalizeIndicator) {
   function detail(value,owner='',{offset=0,size=100}={}) {
     const indicator=normalizeIndicator(value);if(!indicator)return null;
     const key=idFor(`${indicator.type}:${indicator.value}`),scope=scopeSql(owner);
-    offset=Math.max(0,Number(offset)||0);size=Math.min(100,Math.max(1,Number(size)||100));
+    offset=integer(offset,0,0,Number.MAX_SAFE_INTEGER);size=integer(size,100,1,100);
     const total=db.prepare(`SELECT COUNT(*) count FROM observations o WHERE o.indicator=? AND ${scope.sql}`).get(key,...scope.args).count;
     if(!total)return null;
     const observations=db.prepare(`SELECT o.* FROM observations o WHERE o.indicator=? AND ${scope.sql} ORDER BY published DESC,id LIMIT ? OFFSET ?`).all(key,...scope.args,size,offset);

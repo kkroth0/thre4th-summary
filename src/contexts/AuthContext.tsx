@@ -1,4 +1,6 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from "react";
+import { useQueryClient } from '@tanstack/react-query';
+import { resetSessionCache, sessionScope } from '@/lib/sessionCache';
 import { fetchAuth, logout as apiLogout, loginUrl, signupUrl, type AuthState } from "@/services/threatApi";
 import { identify } from "@/lib/analytics";
 
@@ -24,9 +26,16 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [auth, setAuth] = useState<AuthState>({ authenticated: false });
   const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
+  const currentAuth = useRef<AuthState>({ authenticated: false });
+  const refreshSequence = useRef(0);
 
   const refresh = useCallback(async () => {
+    const sequence = ++refreshSequence.current;
     const a = await fetchAuth();
+    if (sequence !== refreshSequence.current) return;
+    resetSessionCache(queryClient, currentAuth.current, a);
+    currentAuth.current = a;
     setAuth(a);
     setLoading(false);
     // Identify the signed-in user to Himetrica. The browser only knows the
@@ -35,7 +44,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (a.authenticated && a.login) {
       identify({ name: a.login, metadata: { login: a.login } });
     }
-  }, []);
+  }, [queryClient]);
 
   useEffect(() => { refresh(); }, [refresh]);
 
@@ -46,7 +55,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   return (
     <AuthContext.Provider value={{ auth, loading, refresh, signOut, loginUrl, signupUrl }}>
-      {children}
+      <React.Fragment key={sessionScope(auth)}>{children}</React.Fragment>
     </AuthContext.Provider>
   );
 };

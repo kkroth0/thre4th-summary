@@ -426,11 +426,14 @@ const corsOptionsDelegate = (req, callback) => {
 
     callback(null, {
         origin: isAllowed,
-        methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
+        methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
         allowedHeaders: ['Content-Type', 'Authorization'],
     });
 };
 app.use(cors(corsOptionsDelegate));
+// Personal endpoints must not inherit a browser/proxy cache policy. Public
+// catalog routes can still opt into their explicit public cache headers.
+app.use('/api/', (_req,res,next) => { res.set('Cache-Control','private, no-store'); next(); });
 
 // Express Settings - Payload Limits
 // Padrão apertado (10kb) p/ todas as rotas; a rota interna autenticada de upload
@@ -2213,7 +2216,10 @@ function getCookie(req, name) {
     if (!h) return null;
     for (const part of h.split(';')) {
         const i = part.indexOf('=');
-        if (i > -1 && part.slice(0, i).trim() === name) return decodeURIComponent(part.slice(i + 1).trim());
+        if (i > -1 && part.slice(0, i).trim() === name) {
+            try { return decodeURIComponent(part.slice(i + 1).trim()); }
+            catch { return null; }
+        }
     }
     return null;
 }

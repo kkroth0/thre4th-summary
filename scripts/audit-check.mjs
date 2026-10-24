@@ -9,34 +9,8 @@
 
 import { execFileSync } from 'node:child_process';
 
-const ACCEPTED = [
-    {
-        id: 'GHSA-qwww-vcr4-c8h2',
-        package: 'react-router',
-        since: '2026-08-04',
-        reason:
-            'CSRF em modo RSC. Não aplicável: SPA estática no Cloudflare Pages, sem SSR e sem RSC. ' +
-            'A faixa vulnerável é 7.12–8.2 e a única saída do npm audit é o downgrade forçado pra ' +
-            '7.11, que quebra a aplicação. Revisar quando sair correção acima de 8.2.0.',
-    },
-    {
-        id: 'GHSA-w3rx-r6r6-pgpr',
-        package: 'image-size',
-        since: '2026-08-10',
-        reason:
-            'DoS por loop infinito no parser ICNS. Não alcançável: o image-size entra só como ' +
-            'dependência do pptxgenjs, e nenhum export chama addImage — os slides são texto puro, ' +
-            'então nenhum parser de imagem roda. Não há versão corrigida (a faixa é <=2.0.2 e a ' +
-            'última publicada é 2.0.2); o npm audit só oferece downgrade do pptxgenjs 4 para 1.1.5, ' +
-            'que quebra a exportação PPTX. Revisar quando sair image-size acima de 2.0.2.',
-    },
-    {
-        id: 'GHSA-5p2g-fcmc-qvqq',
-        package: 'image-size',
-        since: '2026-08-10',
-        reason: 'Mesma dependência e mesmo motivo do GHSA-w3rx-r6r6-pgpr, nos parsers JXL e HEIF.',
-    },
-];
+// No accepted high/critical advisories remain after the 2026-10-24 update.
+const ACCEPTED = [];
 
 const prefixIndex = process.argv.indexOf('--prefix');
 const args = ['audit', '--json'];

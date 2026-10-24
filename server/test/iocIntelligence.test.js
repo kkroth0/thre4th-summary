@@ -9,6 +9,26 @@ import { buildActorEvidence } from '../actorEvidence.js';
 import { correlateMalware } from '../malwareCatalog.js';
 const now=()=>Date.parse('2026-10-13T12:00:00Z');
 const actor={id:'G0032',name:'Lazarus'};
+
+test('indicator identity rejects malformed DNS labels and non-public reserved IPs in direct values and URLs',()=>{
+  for(const value of ['bad..example.com','-bad.example.com','bad-.example.com','a'.repeat(64)+'.com','a.'.repeat(130)+'com',
+    'https://bad..example.com/path','https://-bad.example.com/path','https://invalid_name.example.com/path',
+    '192.0.2.1','198.51.100.2','203.0.113.3','198.18.0.1','https://192.0.2.1/path','2002:0808:0808::1'])assert.equal(normalizeIndicator(value),null,value);
+  assert.deepEqual(normalizeIndicator('bad.example.com.'),{type:'domain',value:'bad.example.com'});
+  assert.equal(normalizeIndicator('https://bücher.de/report').value,'https://xn--bcher-kva.de/report');
+  assert.ok(normalizeIndicator('abcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefgh.onion'));
+});
+
+test('IOC pagination safely normalizes fractional, infinite and excessive input',async()=>{
+  const store=createIocIntelligence();
+  try{
+    await store.ingest([{value:'8.8.8.8',provider:'OTX',externalId:'page',scope:'one'}]);
+    assert.equal(store.list({owner:'one',page:'1.5',size:'1.5'}).page,1);
+    assert.equal(store.list({owner:'one',page:'Infinity',size:'Infinity'}).size,50);
+    assert.equal(store.detail('8.8.8.8','one',{offset:'0.5',size:'1.5'}).size,1);
+    assert.ok(Number.isSafeInteger(store.list({owner:'one',page:'1e300'}).page));
+  }finally{await store.close();}
+});
 const matchActors=text=>/lazarus/i.test(text)?[actor]:[];
 const matchMalware=text=>/vidar/i.test(text)?[{id:'win.vidar',name:'Vidar'}]:[];
 const tf={query_status:'ok',data:[{id:'123',ioc:'46.101.130.1:443',ioc_type:'ip:port',malware:'win.vidar',malware_printable:'Vidar',first_seen:'2026-10-12 12:00:00 UTC',tags:['Lazarus'],reporter:'AnotherActor'}]};

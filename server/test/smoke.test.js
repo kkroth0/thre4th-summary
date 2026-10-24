@@ -31,6 +31,21 @@ const outsiderSig = crypto.createHmac('sha256', SESSION_SECRET).update(outsiderB
 const OUTSIDER_HEADERS = { Cookie: `ts_session=${outsiderBody}.${outsiderSig}` };
 let proc;
 
+test('malformed session cookies fail closed without turning API requests into server errors',async()=>{
+    const response=await fetch(BASE+'/api/auth/me',{headers:{Cookie:'ts_session=%E0%A4%A'}});
+    assert.equal(response.status,200);assert.deepEqual(await response.json(),{authenticated:false});
+    assert.equal((await fetch(BASE+'/api/user/keys',{headers:{Cookie:'ts_session=%'}})).status,401);
+});
+
+test('personal API responses are not cached and preflight supports PUT settings updates',async()=>{
+    for(const url of ['/api/auth/me','/api/user/keys','/api/user/scans','/api/feed/jobs']){
+        const response=await fetch(BASE+url,{headers:AUTH_HEADERS});assert.equal(response.status,200);
+        assert.match(response.headers.get('cache-control')||'',/no-store/);
+    }
+    const response=await fetch(BASE+'/api/user/keys/shodan',{method:'OPTIONS',headers:{Origin:'http://localhost:8080','Access-Control-Request-Method':'PUT'}});
+    assert.match(response.headers.get('access-control-allow-methods')||'',/PUT/);
+});
+
 test('actor aliases share one catalog identity and legacy profile/evidence URLs remain valid',async()=>{
     const catalog=await fetch(BASE+'/api/actors?catalogOnly=1').then(r=>r.json());
     assert.ok(catalog.actors.some(actor=>actor.id==='G1034'&&actor.aliases.includes('Evasive Panda')));
