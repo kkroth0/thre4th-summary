@@ -147,7 +147,7 @@ const response = (findings: AttackSurfaceFinding[]): AttackSurfaceResponse => ({
 const build = (findings: AttackSurfaceFinding[], investida?: string) =>
   buildAttackSurfaceWorkbook(response(findings), FakeExcelLib, { investida }) as unknown as FakeWorkbook;
 
-test("Base de dados follows the EY reference columns, in PT-BR", () => {
+test("Base de dados follows the approved reference columns, in PT-BR", () => {
   const workbook = build([finding()], "Auren");
   const sheet = workbook.getWorksheet("Base de dados")!;
 

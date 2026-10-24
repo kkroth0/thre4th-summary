@@ -12,7 +12,7 @@
 
 ## Global Constraints
 
-- **Nenhum artefato pode conter "EY" ou "Votorantim"** — nem dado, nem prompt, nem tela, nem PDF. Os padrões proibidos são `/\bEY\b/gi` e `/votorantim\w*/gi`, verificados por teste.
+- **Nenhum artefato pode conter "consultoria de origem" ou "Votorantim"** — nem dado, nem prompt, nem tela, nem PDF. Os padrões proibidos são `/\bEY\b/gi` e `/votorantim\w*/gi`, verificados por teste.
 - `hunting-docs/` está no `.gitignore` e **nunca** é commitado. Os XLSX são insumo; o artefato versionado é `server/data/*.json`.
 - Copy de interface e mensagem de erro em **português do Brasil**.
 - **Nenhuma dependência nova.** `exceljs`, `jspdf` e `jspdf-autotable` já estão no `package.json`.
@@ -111,12 +111,12 @@ test('linha sem KQL não vira item da biblioteca', () => {
 });
 
 test('anonimização tira os termos proibidos do texto', () => {
-    assert.equal(anonymize('Mapeamento EY - Microsoft Sentinel Votorantim'), 'Mapeamento - Microsoft Sentinel');
+    assert.equal(anonymize('Mapeamento consultoria de origem - Microsoft Sentinel Votorantim'), 'Mapeamento - Microsoft Sentinel');
     assert.equal(anonymize('inventário da Votorantim S.A.'), 'inventário da S.A.');
 });
 
 test('assertAnonymous barra o artefato que ainda tem termo proibido', () => {
-    assert.throws(() => assertAnonymous({ table: 'X', note: 'padrão EY' }), /termo proibido/);
+    assert.throws(() => assertAnonymous({ table: 'X', note: 'padrão consultoria de origem' }), /termo proibido/);
     assert.throws(() => assertAnonymous('inventário Votorantim'), /termo proibido/);
     assert.doesNotThrow(() => assertAnonymous({ table: 'SigninLogs' }));
 });
@@ -2406,7 +2406,7 @@ Run: `npm run test:unit && npm run test:server && npm run typecheck && npm run l
 Expected: tudo verde.
 
 Run: `npm run dev` — criar hunt com duas consultas, abrir execução, fechar com janela e evidência, exportar PDF.
-Expected: PDF com as sete seções, KQL quebrada por operador no anexo, rodapé com CONFIDENCIAL e paginação, e **nenhuma** ocorrência de EY ou Votorantim.
+Expected: PDF com as sete seções, KQL quebrada por operador no anexo, rodapé com CONFIDENCIAL e paginação, e **nenhuma** ocorrência de consultoria de origem ou Votorantim.
 
 - [ ] **Step 8: Commit**
 

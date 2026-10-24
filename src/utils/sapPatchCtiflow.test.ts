@@ -1,3 +1,4 @@
+import { publisherNamePatterns } from './exportPublisher.testSupport';
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { SapNote, SapPatchSummary } from "@/services/sapApi";
@@ -108,7 +109,7 @@ test("recomendações e referências saem prontas, sem duplicar links", () => {
 
 test("o JSON não identifica a consultoria nem o cliente", () => {
     const json = JSON.stringify(buildSapPatchCtiflowDeck(sample));
-    for (const identifier of [/\bEY\b/i, /Ernst\s*&\s*Young/i, /Votorantim/i, /\bcliente\b/i, /\bconsultoria\b/i]) {
+    for (const identifier of [...publisherNamePatterns, /Votorantim/i, /\bcliente\b/i, /\bconsultoria\b/i]) {
         assert.doesNotMatch(json, identifier, String(identifier));
     }
     assert.equal(buildSapPatchCtiflowDeck(sample).slides.cover.audienceLine, "");

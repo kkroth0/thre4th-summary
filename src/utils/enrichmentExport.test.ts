@@ -1,3 +1,4 @@
+import { publisherNamePatterns } from './exportPublisher.testSupport';
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createRequire } from "node:module";
@@ -46,7 +47,7 @@ const report: EnrichmentReport = {
     byCountry: [{ name: "AU", count: 1 }, { name: "RU", count: 1 }],
 };
 
-test("a planilha sai nas três abas do padrão EY", () => {
+test("a planilha sai nas três abas do padrão do relatório", () => {
     const wb = buildEnrichmentWorkbook(report, ExcelJS);
     assert.deepEqual(wb.worksheets.map((ws) => ws.name), ["Indicadores", "Evidências", "Sumário"]);
 
@@ -154,7 +155,7 @@ test("a planilha não identifica a consultoria em nenhum metadado", async () => 
     const xml = (await Promise.all(files.map((f) => f.async("string")))).join("\n");
 
     assert.match(xml, /Wizard Spider/);
-    for (const identifier of [/\bEY\b/i, /Ernst\s*&\s*Young/i, /\bcliente\b/i, /\bconsultoria\b/i]) {
+    for (const identifier of [...publisherNamePatterns, /\bcliente\b/i, /\bconsultoria\b/i]) {
         assert.doesNotMatch(xml, identifier, String(identifier));
     }
 });

@@ -1,4 +1,4 @@
-// Planilha do Enriquecimento de Indicadores, no mesmo padrão EY do Patch
+// Planilha do Enriquecimento de Indicadores, no mesmo padrão do relatório do Patch
 // Tuesday e do SAP: cabeçalho preto com Calibri 14 amarelo, aba amarela, linha
 // de cabeçalho congelada, autofiltro e nenhuma cor nas linhas de dados — quem
 // recebe filtra por coluna em vez de caçar cor.

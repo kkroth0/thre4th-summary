@@ -1,3 +1,4 @@
+import { publisherNamePatterns } from './exportPublisher.testSupport';
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createRequire } from "node:module";
@@ -109,7 +110,7 @@ test("o deck SAP sai em PT-BR, na sequência do relatório, sem identificar a co
     // Severity terms SAP publishes stay as published even though the deck is PT-BR.
     assert.match(xml, /Hot News/, "severidade da SAP preservada");
 
-    for (const identifier of [/\bEY\b/i, /Ernst\s*&\s*Young/i, /\bcliente\b/i, /\bconsultoria\b/i, /executive summary/i]) {
+    for (const identifier of [...publisherNamePatterns, /\bcliente\b/i, /\bconsultoria\b/i, /executive summary/i]) {
         assert.doesNotMatch(xml, identifier, String(identifier));
     }
 });
@@ -269,7 +270,7 @@ test("os artefatos SAP não identificam a consultoria em nenhum metadado", async
     assert.equal(workbook.company, "");
     assert.equal(workbook.subject, "Relatório automático do SAP Security Patch Day");
     assert.match(workbook.title, /julho de 2026/);
-    for (const identifier of [/\bEY\b/i, /Ernst\s*&\s*Young/i, /\bcliente\b/i, /\bconsultoria\b/i]) {
+    for (const identifier of [...publisherNamePatterns, /\bcliente\b/i, /\bconsultoria\b/i]) {
         assert.doesNotMatch(xml, identifier, String(identifier));
     }
 });

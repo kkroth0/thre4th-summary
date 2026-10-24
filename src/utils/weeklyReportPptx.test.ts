@@ -1,3 +1,4 @@
+import templateManifest from '@/config/weeklyReportTemplate.json';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
@@ -49,13 +50,13 @@ test('weekly PowerPoint uses curated runtime highlights and only confirmed KEV e
   assert.doesNotMatch(JSON.stringify(slides),/CVE-2026-99999|CVE-2026-20004/);
   assert.equal(slides.find(s=>s.source===13)?.values.S13_9,'Java');
 });
-test('EY template preserves native layouts, country geometry and charts without customer or incident content',async()=>{
-  const zip=await JSZip.loadAsync(await fs.readFile('public/templates/weekly-report-ey-v3.pptx'));
+test('Approved template preserves native layouts, country geometry and charts without customer or incident content',async()=>{
+  const zip=await JSZip.loadAsync(await fs.readFile('public/templates/weekly-report-template-v3.pptx'));
   const slides=Object.keys(zip.files).filter(name=>/^ppt\/slides\/slide\d+\.xml$/.test(name));assert.equal(slides.length,19);
   const xml=(await Promise.all(Object.keys(zip.files).filter(name=>name.endsWith('.xml')).map(name=>zip.file(name)!.async('string')))).join('\n');
   assert.doesNotMatch(xml,/Votorantim|Ultrapar|BRBJUS|BPMoney|Hospital Israelita|Flax Typhoon|The Gentlemen/i);
   assert.match(await zip.file('ppt/presentation.xml')!.async('string'),/cx="7562088" cy="10689336"/);
-  assert.match(await zip.file('ppt/slides/slide1.xml')!.async('string'),/logo EY/i);
+  assert.match(await zip.file('ppt/slides/slide1.xml')!.async('string'),new RegExp(templateManifest.publisher.logoName,'i'));
   assert.ok((await zip.file('ppt/slides/slide16.xml')!.async('string')).match(/name="País /g)!.length>100);
   assert.equal(Object.keys(zip.files).filter(name=>/^ppt\/charts\/chart\d+\.xml$/.test(name)).length,2);
   assert.ok(!Object.keys(zip.files).some(name=>name.startsWith('ppt/embeddings/')));

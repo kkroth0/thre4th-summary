@@ -1,7 +1,7 @@
 import JSZip from 'jszip';
-import manifest from '@/config/weeklyEyTemplate.json';
+import manifest from '@/config/weeklyReportTemplate.json';
 import type {WeeklyReportData} from '@/types/weekly-report';
-import {buildWeeklySlides,countryNames} from './weeklyEySlides';
+import {buildWeeklySlides,countryNames} from './weeklyTemplateSlides';
 import {fillWeeklyCharts} from './weeklyPptxCharts';
 import {fillWeeklyProductLogos} from './weeklyPptxLogos';
 import {A,P,R,REL,children,first,parse,serialize,escapeXml,relation,override,writeText,setFill} from './weeklyPptxXml';
@@ -43,7 +43,7 @@ export async function createWeeklyPptx(report:WeeklyReportData,bytes:ArrayBuffer
  }
  await fillWeeklyCharts(zip,report,types);
  zip.file('ppt/presentation.xml',serialize(presentation));zip.file('ppt/_rels/presentation.xml.rels',serialize(rels));zip.file('[Content_Types].xml',serialize(types));
- const core=parse(await load('docProps/core.xml'));for(const[name,value]of Object.entries({title:`Boletim Semanal EY CTI Brasil - ${report.range.id}`,creator:'EY CTI Brasil',lastModifiedBy:'ThreatSumm4ry'}))for(const node of Array.from(core.getElementsByTagNameNS('*',name)))node.textContent=value;zip.file('docProps/core.xml',serialize(core));
+ const core=parse(await load('docProps/core.xml'));for(const[name,value]of Object.entries({title:`Boletim Semanal ${manifest.publisher.name} - ${report.range.id}`,creator:manifest.publisher.name,lastModifiedBy:'ThreatSumm4ry'}))for(const node of Array.from(core.getElementsByTagNameNS('*',name)))node.textContent=value;zip.file('docProps/core.xml',serialize(core));
  const app=parse(await load('docProps/app.xml'));for(const[name,value]of Object.entries({Slides:String(slides.length),Notes:String(slides.length)}))for(const node of Array.from(app.getElementsByTagNameNS('*',name)))node.textContent=value;zip.file('docProps/app.xml',serialize(app));
  return zip.generateAsync({type:'blob',mimeType:'application/vnd.openxmlformats-officedocument.presentationml.presentation',compression:'DEFLATE'});
 }

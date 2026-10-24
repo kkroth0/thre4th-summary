@@ -1,7 +1,7 @@
 import JSZip from 'jszip';
-import manifest from '@/config/weeklyEyTemplate.json';
+import manifest from '@/config/weeklyReportTemplate.json';
 import type {WeeklyReportData} from '@/types/weekly-report';
-import {day} from './weeklyEySlides';
+import {day} from './weeklyTemplateSlides';
 import {R,REL,CT,children,first,parse,serialize,escapeXml,relation} from './weeklyPptxXml';
 
 export async function fillWeeklyCharts(zip:JSZip,report:WeeklyReportData,types:Document){

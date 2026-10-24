@@ -1,6 +1,6 @@
 {
   "version": 3,
-  "url": "/templates/weekly-report-ey-v3.pptx",
+  "url": "/templates/weekly-report-template-v3.pptx",
   "roles": {
     "cover": 1,
     "intro": 2,
@@ -1056,5 +1056,15 @@
     "ppt/charts/chart2.xml",
     "ppt/charts/chart1.xml"
   ],
-  "source": "EY weekly bulletin, approved reference; A4 portrait, Overpass"
+  "source": "Approved weekly bulletin reference; A4 portrait, Overpass",
+  "publisher": {
+    "name": "EY CTI Brasil",
+    "shortName": "EY",
+    "copyright": "© 2026 EYGM Limited. Todos os direitos reservados.",
+    "logoName": "Logo EY",
+    "restrictedNames": [
+      "EY",
+      "Ernst & Young"
+    ]
+  }
 }

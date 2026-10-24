@@ -1,3 +1,4 @@
+import { publisherNamePatterns } from './exportPublisher.testSupport';
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { PatchTuesdaySummary, PatchVulnerability } from "@/services/msrcApi";
@@ -147,7 +148,7 @@ test("a tela de conclusão traz seis recomendações, a primeira orientada pelo 
 
 test("o JSON não identifica a consultoria nem o cliente", () => {
     const json = JSON.stringify(buildPatchTuesdayCtiflowDeck(sample));
-    for (const identifier of [/\bEY\b/i, /Ernst\s*&\s*Young/i, /Votorantim/i, /\bcliente\b/i, /\bconsultoria\b/i]) {
+    for (const identifier of [...publisherNamePatterns, /Votorantim/i, /\bcliente\b/i, /\bconsultoria\b/i]) {
         assert.doesNotMatch(json, identifier, String(identifier));
     }
     // The audience line is a slot CTIFLOW fills, left blank by the app.

@@ -1,3 +1,4 @@
+import { publisherNamePatterns } from './exportPublisher.testSupport';
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createRequire } from "node:module";
@@ -79,7 +80,7 @@ test("o deck sai em PT-BR, no padrão executivo, sem identificar a consultoria",
     assert.doesNotMatch(xml, /Execução remota de código/, "termo técnico não traduzido");
 
     // Whoever presents this puts their own name on it.
-    for (const identifier of [/\bEY\b/i, /Ernst\s*&\s*Young/i, /\bcliente\b/i, /\bconsultoria\b/i]) {
+    for (const identifier of [...publisherNamePatterns, /\bcliente\b/i, /\bconsultoria\b/i]) {
         assert.doesNotMatch(xml, identifier, String(identifier));
     }
 });
@@ -230,7 +231,7 @@ test("a planilha não identifica a consultoria em nenhum metadado", async () => 
     const xml = (await Promise.all(files.map((f) => f.async("string")))).join("\n");
 
     assert.match(xml, /Fonte oficial Microsoft/);
-    for (const identifier of [/\bEY\b/i, /Ernst\s*&\s*Young/i, /\bcliente\b/i, /\bconsultoria\b/i]) {
+    for (const identifier of [...publisherNamePatterns, /\bcliente\b/i, /\bconsultoria\b/i]) {
         assert.doesNotMatch(xml, identifier, String(identifier));
     }
 });

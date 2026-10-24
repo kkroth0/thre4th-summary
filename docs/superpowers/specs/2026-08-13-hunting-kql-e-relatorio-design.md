@@ -30,7 +30,7 @@ em vez de anexo de e-mail.
 | Consultas por hunt | Lista (`queries[]`), não campo único |
 
 Restrição transversal: nenhum artefato — dado, prompt, tela ou PDF — pode
-conter "EY" ou "Votorantim". A regra é verificada por teste, não por revisão.
+conter "consultoria de origem" ou "Votorantim". A regra é verificada por teste, não por revisão.
 
 ## Arquitetura
 
@@ -233,7 +233,7 @@ devolve `ReportSection[]` na ordem do formulário:
    observado: …" vindo de `evidence`.
 
 Seção sem conteúdo não é impressa, como no boletim. Rodapé: CONFIDENCIAL,
-empresa do perfil, página X de Y. Marca do app; nunca EY.
+empresa do perfil, página X de Y. Marca do app; nunca consultoria de origem.
 
 ### 6. Telas
 

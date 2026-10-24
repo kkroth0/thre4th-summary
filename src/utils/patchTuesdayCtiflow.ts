@@ -95,7 +95,7 @@ export interface CtiflowDeck {
             subtitle: string;
             consolidatedLabel: string;
             dateText: string;
-            // CTIFLOW injects the audience line ("EY para o CoE da Votorantim…").
+            // CTIFLOW injects the audience line ("Equipe de inteligência para a organização destinatária…").
             // The app never emits a client or consultancy name of its own.
             audienceLine: string;
         };

@@ -1,7 +1,7 @@
 import type ExcelJS from "exceljs";
 import type { AttackSurfaceFinding, AttackSurfaceResponse, AttackSurfaceRisk } from "@/services/threatApi";
 
-// Padrão EY, igual ao modelo entregue ao cliente: cabeçalho vermelho escuro,
+// Padrão do relatório, igual ao modelo entregue ao cliente: cabeçalho vermelho escuro,
 // Calibri 14 em branco, borda fina, linha congelada e autofiltro. Nada de cor
 // nas linhas de dados — quem lê filtra pela coluna "Grau de Exposição".
 const HEADER_FILL = "C00000";
