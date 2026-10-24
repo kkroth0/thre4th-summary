@@ -564,7 +564,7 @@ test('gate premium não aceita sessão anônima', async () => {
 });
 
 
-test('weekly reports enforce account access, Sunday boundaries and profile ownership', async () => {
+test('global weekly reports enforce account access, Sunday boundaries and reject client selectors', async () => {
     assert.equal((await fetch(`${BASE}/api/reports/weekly`)).status,401);
     assert.equal((await fetch(`${BASE}/api/reports/weekly?week=2026-10-12`,{headers:AUTH_HEADERS})).status,400);
     const historical=await fetch(`${BASE}/api/reports/weekly?week=2026-10-04`,{headers:AUTH_HEADERS});
@@ -572,8 +572,10 @@ test('weekly reports enforce account access, Sunday boundaries and profile owner
     assert.equal((await historical.json()).report,null);
     const response=await fetch(`${BASE}/api/reports/weekly`,{method:'PUT',headers:{...AUTH_HEADERS,'Content-Type':'application/json'},body:JSON.stringify({enabled:false,profileId:'private'})});
     assert.equal(response.status,400);
-    const allowed=await fetch(`${BASE}/api/reports/weekly`,{method:'PUT',headers:{...AUTH_HEADERS,'Content-Type':'application/json'},body:JSON.stringify({enabled:false,profileId:'owned'})});
-    assert.equal(allowed.status,200);assert.equal((await allowed.json()).plan.profileId,'owned');
+    const obsolete=await fetch(`${BASE}/api/reports/weekly`,{method:'PUT',headers:{...AUTH_HEADERS,'Content-Type':'application/json'},body:JSON.stringify({enabled:false,profileId:'owned'})});
+    assert.equal(obsolete.status,400);
+    const allowed=await fetch(`${BASE}/api/reports/weekly`,{method:'PUT',headers:{...AUTH_HEADERS,'Content-Type':'application/json'},body:JSON.stringify({enabled:false})});
+    assert.equal(allowed.status,200);assert.equal((await allowed.json()).plan.profileId,'');
 });
 
 test('OT monthly payload keeps the accumulated product inventory behind an on-demand endpoint', async () => {

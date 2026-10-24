@@ -3,10 +3,26 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import Database from 'better-sqlite3';
 import {weeklyWindow,buildWeeklyReport,createWeeklyReports} from '../weeklyReports.js';
 const NOW=Date.parse('2026-10-13T12:00:00Z');
 const range=weeklyWindow(new Date(NOW));
 const publication=(id,score=1,ai=false)=>({title:ai?'OpenAI model vulnerability '+id:'Security report '+id,link:'https://lab.example/'+id,pubDate:'2026-10-12T12:00:00Z',score,storyId:'story-'+id,categories:ai?['Artificial Intelligence']:[],iocs:{ips:['46.101.130.1']}});
+
+test('saved legacy recommendations and manual selections obey the language policy before any refresh',async t=>{
+ const dir=fs.mkdtempSync(path.join(os.tmpdir(),'weekly-language-')),file=path.join(dir,'weekly.sqlite');
+ const options={filePath:file,now:()=>NOW,getInputs:async()=>({publications:[publication('one')]})};
+ let store=createWeeklyReports(options);await store.refresh('owner');store.configure('owner',{enabled:false});
+ const original=store.get('owner').report;store.close();
+ const bad={...original.news[0],id:'legacy-ko',title:'2026년 3분기 랜섬웨어 동향보고서',score:125,scoreBreakdown:undefined,summary:'An English RSS description. '.repeat(30),sources:[{title:'2026년 3분기 랜섬웨어 동향보고서',source:'Research',link:'https://asec.ahnlab.com/ko/report'}]};
+ const stale={...original,news:[bad],candidates:{news:[bad,...original.candidates.news],aiNews:[]},selection:{mode:'manual',newsIds:[bad.id],aiNewsIds:[]}};
+ const db=new Database(file);db.prepare('UPDATE weekly_reports SET payload=? WHERE owner=? AND week=?').run(JSON.stringify(stale),'owner',range.id);db.prepare('INSERT OR REPLACE INTO weekly_selections VALUES(?,?,?)').run('owner',range.id,JSON.stringify(stale.selection));db.close();
+ store=createWeeklyReports(options);t.after(()=>{store.close();fs.rmSync(dir,{recursive:true,force:true});});
+ const report=store.get('owner').report;
+ assert.equal(report.news.length,0);assert.deepEqual(report.selection.newsIds,[]);assert.ok(!report.candidates.news.some(item=>item.id===bad.id));
+ assert.throws(()=>store.select('owner',range.id,{newsIds:[bad.id],aiNewsIds:[]}),/Unknown candidate/);
+ await store.refresh('owner',{force:true});assert.equal(store.get('owner').report.news.length,0);
+});
 test('switching client restores its own saved selection rather than reusing another client choices',async()=>{
  const store=createWeeklyReports({now:()=>NOW,getInputs:async()=>({publications:[publication('one'),publication('two')]}),getProfile:(owner,id)=>({id,name:id,assets:[]})});
  store.configure('owner',{enabled:true,profileId:'client-a'});await store.refresh('owner');
@@ -113,4 +129,17 @@ test('scheduled historical refresh keeps the recipient used for that week',async
  store.configure('owner',{enabled:true,profileId:'first'});await store.refresh('owner');
  clock=Date.parse('2026-10-18T03:01:00Z');store.configure('owner',{enabled:true,profileId:'second'});await store.tick();
  assert.equal(store.get('owner').report.profile.id,'second');assert.equal(store.get('owner','2026-10-11').report.profile.id,'first');store.close();
+});
+
+test('global bulletin includes all countries and never applies client priorities',async()=>{
+ const victims=['BR','US','DE'].map((country,i)=>({id:String(i),name:'Victim '+i,country,sector:'Manufacturing',group:'Group',discovered:'2026-10-12T12:00:00Z'}));
+ const report=buildWeeklyReport({victims,publications:[publication('global')],vulnerabilities:[{id:'CVE-2026-11111',vendor:'Other',product:'Gateway',published:'2026-10-12',cvss:9.8}]},{range,now:NOW,scope:'global',profile:{id:'client',name:'Client'}});
+ assert.equal(report.scope,'global');assert.equal(report.profile,null);
+ assert.deepEqual(report.curation.weights,{impact:40,evidence:30,quality:23,novelty:7});assert.equal(report.news[0].scoreBreakdown.context,0);assert.ok(report.news[0].score<=100);
+ assert.equal(report.ransomware.total,3);assert.equal(report.ransomware.latam,1);
+ assert.equal(report.ransomware.victims.length,3);assert.equal(report.ransomware.byCountry.length,3);
+ assert.equal(report.ransomware.history.at(-1).global,3);
+ assert.equal(report.vulnerabilities.editorial.highlights[0].product,'Gateway');
+ const store=createWeeklyReports({scope:'global',now:()=>NOW,getInputs:async()=>({victims}),getProfile:()=>{throw Error('Must not resolve a client');}});
+ try{assert.throws(()=>store.configure('owner',{enabled:true,profileId:'client'}),/Global/);await store.refresh('owner');assert.equal(store.get('owner').report.profile,null);assert.equal(store.get('owner').report.scope,'global');}finally{store.close();}
 });

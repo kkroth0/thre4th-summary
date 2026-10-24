@@ -8,6 +8,17 @@ const press=['bleepingcomputer.com','thehackernews.com','securityweek.com','secu
 const complementary=['cybersecuritynews.com','cyberpress.org','securityboulevard.com','hackread.com','dailysecurityreview.com','thecyberexpress.com'];
 const belongs = (host, domain) => host === domain || host.endsWith('.' + domain);
 const normalize = value => String(value || '').normalize('NFKC').toLowerCase();
+const unsupportedLetters = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}\p{Script=Thai}]/gu;
+const dominantScript = (value, minimum, ratio) => {
+  const text=normalize(value),count=text.match(unsupportedLetters)?.length||0;
+  return count>=minimum&&count/Math.max(1,text.match(/\p{L}/gu)?.length||0)>ratio;
+};
+export function isWeeklyLanguageEligible(row, body='') {
+  // Judge the headline independently: English RSS boilerplate cannot make an
+  // untranslated headline eligible. Native names inside English titles remain valid.
+  if(dominantScript(row?.title,2,.5))return false;
+  return !dominantScript(`${row?.title||''} ${row?.description||row?.summary||''} ${String(body).slice(0,24000)}`,8,.2);
+}
 const contains = (text, value) => {
   const term = normalize(value).trim();
   if (term.length < 3) return false;
@@ -25,13 +36,12 @@ export function weeklyProfileMatches(row, profile) {
   return {assets:[...new Set(assets)],actors,sector:!!profile.sectors?.some(value=>(row.sectors||[]).includes(value)),ot:!!profile.ot?.present&&(row.categories||row.newsCategories||[]).includes('OT/ICS')};
 }
 export function weeklyNewsPriority(row, profile, {now=Date.now(),body=''}={}) {
+  if(!isWeeklyLanguageEligible(row,body))return null;
   let url;
   try {url=new URL(row.link);if(!['https:','http:'].includes(url.protocol))return null;}catch{return null;}
   const host=url.hostname.toLowerCase();
   if(belongs(host,'medium.com'))return null;
   const text=normalize(`${row.title||''} ${row.description||''} ${String(body).slice(0,24000)}`);
-  const script=text.match(/[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}\p{Script=Thai}]/gu)?.length||0;
-  if(script>=8&&script/Math.max(1,text.match(/\p{L}/gu)?.length||0)>.2)return null;
   const isResearch=research.some(domain=>belongs(host,domain));
   const isVendor=vendor.some(domain=>belongs(host,domain));
   const kind=official.some(domain=>belongs(host,domain))?'official':isResearch?'research':isVendor?'vendor':press.some(domain=>belongs(host,domain))?'press':complementary.some(domain=>belongs(host,domain))?'complementary':'other';

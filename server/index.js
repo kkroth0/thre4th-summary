@@ -3447,7 +3447,7 @@ async function weeklyInputs(range){
     if(weeklySourceCache.size>2)weeklySourceCache.delete(weeklySourceCache.keys().next().value);
     return task;
 }
-const weeklyReports=createWeeklyReports({filePath:process.env.NODE_ENV==='test'?':memory:':path.join(__dirname,'.weekly-reports.sqlite'),
+const weeklyReports=createWeeklyReports({scope:'global',filePath:process.env.NODE_ENV==='test'?':memory:':path.join(__dirname,'.weekly-global-reports.sqlite'),
     getProfile:(owner,id)=>{const profile=orgProfileStore.get(owner,id);return {...profile,threatModel:cachedThreatModel(profile)};},
     getInputs:async(owner,range)=>({...await weeklyInputs(range),bodyFor:link=>articleCollectionCache.get(link)?.text||'',reports:Object.values(jobsStore).filter(job=>job.ownerSub===owner)}),
 });

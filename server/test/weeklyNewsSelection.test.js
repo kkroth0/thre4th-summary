@@ -1,8 +1,31 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {weeklyNewsPriority,diverseWeeklySuggestions,WEEKLY_EDITORIAL_WEIGHTS} from '../weeklyNewsSelection.js';
-import {buildWeeklyReport,weeklyWindow} from '../weeklyReports.js';
+import {buildWeeklyReport,weeklyWindow,filterWeeklyReportLanguages} from '../weeklyReports.js';
 const row=(link,title='Security update',score=20)=>({link,title,score,pubDate:'2026-10-21T12:00:00Z'});
+
+test('a Korean headline cannot be diluted by English summaries or cached article boilerplate',()=>{
+ const title='2026년 3분기 랜섬웨어 동향보고서';
+ const description='Quarterly ransomware threat intelligence report with indicators and technical analysis. '.repeat(30);
+ assert.equal(weeklyNewsPriority({...row('https://asec.ahnlab.com/ko/report',title,125),description},null,{body:researchBody,now:dateNow}),null);
+ for(const title of ['脅威調査報告','威胁调查报告','랜섬웨어 보고서','รายงานภัยคุกคาม'])assert.equal(weeklyNewsPriority({...row('https://research.example/report',title),description}),null,title);
+ assert.ok(weeklyNewsPriority({...row('https://asec.ahnlab.com/en/report','Asian threat actors target European companies'),description}));
+});
+
+test('a saved event can keep its supported-language coverage and selection without retaining a Korean headline',()=>{
+ const now=Date.parse('2026-10-22T12:00:00Z');
+ const english={...row('https://asec.ahnlab.com/en/report','Quarterly ransomware research'),storyId:'same'};
+ const report=buildWeeklyReport({publications:[english]},{now,range:weeklyWindow(new Date(now))});
+ const ko={link:'https://asec.ahnlab.com/ko/report',title:'2026년 3분기 랜섬웨어 동향보고서',source:'Research'};
+ const stale={...report.news[0],title:ko.title,sources:[ko,...report.news[0].sources]};
+ const before={...report,news:[stale],candidates:{news:[stale],aiNews:[]},selection:{mode:'manual',newsIds:['same'],aiNewsIds:[]}};
+ const cleaned=filterWeeklyReportLanguages(before);
+ assert.equal(cleaned.news[0].title,english.title);assert.deepEqual(cleaned.selection,before.selection);
+ assert.equal(cleaned.news[0].sources.length,1);assert.equal(cleaned.sources[0].link,english.link);
+ assert.deepEqual(Object.keys(cleaned).sort(),Object.keys(before).sort());
+ assert.equal(filterWeeklyReportLanguages(cleaned),cleaned);
+ assert.equal(filterWeeklyReportLanguages(report),report);
+});
 test('weekly preferences exclude Medium and dominant Asian-language text, not Asian publishers in English',()=>{
  assert.equal(weeklyNewsPriority(row('https://research.medium.com/report')),null);
  assert.equal(weeklyNewsPriority(row('https://example.com/report','最新网络安全漏洞分析与攻击技术研究报告')),null);

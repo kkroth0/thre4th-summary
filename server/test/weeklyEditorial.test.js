@@ -65,3 +65,18 @@ test('editorial priority changes alone do not invalidate verified writing',()=>{
  const before=weeklyEditorialKey(report);report.news[0].score=60;report.news[0].sources[0].editorialScore=60;
  assert.equal(weeklyEditorialKey(report),before);report.news[0].title='Changed content';assert.notEqual(weeklyEditorialKey(report),before);
 });
+
+
+test('editorial cache keys separate global editions from organization drafts',async()=>{
+ const {store,report}=await setup();try{assert.notEqual(weeklyEditorialKey({...report(),scope:'global'}),weeklyEditorialKey({...report(),scope:'organization'}));}finally{store.close();}
+});
+
+
+test('global magazine accepts developed sourced stories and rejects short or padded replacements',async()=>{
+ for(const count of [2,4]){
+  const store=createWeeklyReports({scope:'global',now,getInputs:async()=>({publications:[{storyId:'event',title:'Remote access campaign',source:'Research',link:'https://research.example/article',pubDate:'2026-10-21T12:00:00Z'}]})});
+  await store.refresh('one');store.select('one',range.id,{newsIds:['event'],aiNewsIds:[]});
+  const service=createWeeklyEditorial({storage:store.editorialStore,getReport:()=>store.get('one').report,readArticle:async()=>({text:body}),generate:async(kind,input)=>{assert.equal(input.scope,'global');assert.equal(input.organization,null);if(kind==='sections'){assert.equal(input.ransomware.victims,undefined);return sections();}return {...article(),body:[...article().body,'O alcance acompanha as permissões atribuídas às identidades usadas na integração.','Os registros do caso delimitam as conclusões; a presença da tecnologia em outro ambiente não demonstra comprometimento.'].slice(0,count)};},now});
+  try{service.start('one',range.id);await service.wait('one',range.id);assert.equal(service.status('one',store.get('one').report).status,count===4?'ready':'partial');}finally{store.close();}
+ }
+});

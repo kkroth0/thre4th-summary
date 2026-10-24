@@ -68,3 +68,6 @@ server/.hunting.sqlite*
 .codex-weekly-template/
 
 server/.cti-fyi.json*
+
+# Runtime state for the global weekly bulletin
+server/.weekly-global-reports.sqlite*

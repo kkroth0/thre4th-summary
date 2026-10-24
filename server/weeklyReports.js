@@ -5,7 +5,7 @@ import { LATAM_COUNTRIES } from './ransomwareLive.js';
 import { weeklyProfile } from './weeklyRansomware.js';
 import { classifyAiTool } from './aiToolCatalog.js';
 import { selectWeeklyVulnerabilities } from './weeklyVulnerabilitySelection.js';
-import { weeklyNewsPriority, diverseWeeklySuggestions, WEEKLY_EDITORIAL_WEIGHTS } from './weeklyNewsSelection.js';
+import { weeklyNewsPriority, diverseWeeklySuggestions, WEEKLY_EDITORIAL_WEIGHTS, isWeeklyLanguageEligible } from './weeklyNewsSelection.js';
 
 const DAY=86400000;
 const sourceDate=value=>typeof value==='string'&&/^\d{4}-\d\d-\d\d[ T]\d\d:\d\d:\d\d(?:\.\d+)?$/.test(value)?value.replace(' ','T')+'Z':value;
@@ -35,6 +35,34 @@ const inWeek=(date,range,now)=>{
 };
 const names=items=>(items||[]).map(item=>typeof item==='string'?item:item.name).filter(Boolean);
 const frequencies=values=>Object.entries(values.reduce((counts,value)=>{if(value)counts[value]=(counts[value]||0)+1;return counts;},{})).map(([name,count])=>({name,count})).sort((a,b)=>b.count-a.count||a.name.localeCompare(b.name));
+// Apply current language preferences to historical snapshots as well as fresh
+// rankings. This is a read projection; it never edits the collected publications.
+export function filterWeeklyReportLanguages(report) {
+  if(!report)return report;
+  const cleanItem=item=>{
+    const sources=Array.isArray(item.sources)?item.sources:[];
+    const accepted=sources.filter(source=>isWeeklyLanguageEligible({...source,title:source.title||item.title}));
+    if(sources.length&&!accepted.length)return null;
+    if(isWeeklyLanguageEligible(item))return accepted.length===sources.length?item:{...item,sources:accepted};
+    const alternative=accepted.find(source=>source.title&&isWeeklyLanguageEligible(source));
+    if(!alternative)return null;
+    const summary=alternative.description||alternative.summary||(isWeeklyLanguageEligible({description:item.summary})?item.summary:'');
+    return {...item,title:alternative.title,summary,published:alternative.published||item.published,sources:accepted};
+  };
+  const cleanList=rows=>{const next=(rows||[]).map(cleanItem).filter(Boolean);return next.length===(rows||[]).length&&next.every((item,index)=>item===rows[index])?rows:next;};
+  const news=cleanList(report.news),aiNews=cleanList(report.aiNews);
+  const candidates={...report.candidates,news:cleanList(report.candidates?.news),aiNews:cleanList(report.candidates?.aiNews)};
+  const changedSelection=news!==report.news||aiNews!==report.aiNews;
+  if(!changedSelection&&candidates.news===report.candidates?.news&&candidates.aiNews===report.candidates?.aiNews)return report;
+  const result={...report,news,aiNews,candidates};
+  if(changedSelection){
+    const selected=[...(news||[]),...(aiNews||[])];
+    result.selection={...report.selection,newsIds:(news||[]).map(item=>item.id),aiNewsIds:(aiNews||[]).map(item=>item.id)};
+    for(const field of ['actors','malware','ttps'])result[field]=frequencies(selected.flatMap(item=>item[field]||[]));
+    result.sources=[...new Map(selected.flatMap(item=>item.sources||[]).map(source=>[source.link,source])).values()];
+  }
+  return result;
+}
 const assetMatch=(row,assets=[])=>assets.some(asset=>(!asset.vendor||`${row.vendor||''} ${row.description||''}`.toLowerCase().includes(asset.vendor.toLowerCase()))&&(!asset.product||`${row.product||''} ${row.description||''}`.toLowerCase().includes(asset.product.toLowerCase())));
 export const isAiVulnerability=row=>isAiNews({title:`${row.vendor||''} ${row.product||''}`,description:row.description||''})||/\b(?:mlflow|pytorch|tensorflow|llamaindex|langflow|litellm|gradio|comfyui|flowise|open[-_ ]?webui|dify)\b/i.test(`${row.vendor} ${row.product} ${row.description}`);
 const aiCategory = row => {
@@ -56,8 +84,15 @@ const aiToolName = row => {
   return subject&&!/^(?:a |an |the vulnerability|vulnerability |improper )/i.test(subject)?subject:row.vendor||row.id;
 };
 
-export function buildWeeklyReport(inputs,{range,profile=null,now=Date.now(),selection=null,retained=null}={}) {
-  profile=weeklyProfile(profile);
+export function buildWeeklyReport(inputs,{range,profile=null,now=Date.now(),selection=null,retained=null,scope='organization'}={}) {
+  profile=scope==='global'?null:weeklyProfile(profile);
+  const newsPriority=(row,options)=>{
+    const result=weeklyNewsPriority(row,profile,options);
+    if(!result||scope!=='global')return result;
+    const old=result.scoreBreakdown;
+    const breakdown={context:0,impact:Math.round(old.impact*40/25*100)/100,evidence:Math.round(old.evidence*30/20*100)/100,quality:Math.round(old.quality*23/15*100)/100,novelty:Math.round(old.novelty*7/5*100)/100};
+    return {...result,scoreBreakdown:breakdown,score:Math.round(Object.values(breakdown).reduce((sum,n)=>sum+n,0)*100)/100};
+  };
   const groups=new Map(),sourceRows=new Map();
   for(const row of inputs.publications||[]) {
     const periodDate=row.publicationTimeKnown===false||row.repository?.dateBasis==='report-date'?row.pubDate?.slice(0,10):row.pubDate;
@@ -65,7 +100,7 @@ export function buildWeeklyReport(inputs,{range,profile=null,now=Date.now(),sele
     // stand in for this week's news. Collection time is not publication time.
     if(!row.link||row.dateInferred===true||row.securityRelevant===false||!inWeek(periodDate,range,now))continue;
     const key=row.storyId||row.link;
-    const priority=weeklyNewsPriority(row,profile,{now:Math.min(now,Date.parse(range.to))});
+    const priority=newsPriority(row,{now:Math.min(now,Date.parse(range.to))});
     if(!priority)continue;
     sourceRows.set(row.link,row);
     const relevance=priority.score;
@@ -92,7 +127,7 @@ export function buildWeeklyReport(inputs,{range,profile=null,now=Date.now(),sele
         try{const value=inputs.bodyFor(source.link);bodies.set(source.link,typeof value==='string'?value:value?.text||'');}catch{bodies.set(source.link,'');}
       }
       const body=bodies.get(source.link)||sourceRows.get(source.link)?.text||'';
-      const next=weeklyNewsPriority(sourceRows.get(source.link),profile,{now:Math.min(now,Date.parse(range.to)),body});
+      const next=newsPriority(sourceRows.get(source.link),{now:Math.min(now,Date.parse(range.to)),body});
       if(!next){source.editorialExcluded=true;continue;}
       if(next.bodyStatus==='read')readBodies++;
       Object.assign(source,{sourceKind:next.sourceKind,sourceRole:next.sourceRole,editorialScore:next.score});
@@ -116,7 +151,7 @@ export function buildWeeklyReport(inputs,{range,profile=null,now=Date.now(),sele
   const kev=vulnerabilities.filter(row=>row.kev&&inWeek(row.dateAdded||null,range,now));
   const prioritize=(a,b)=>Number(b.kev)-Number(a.kev)||(b.cvss||0)-(a.cvss||0)||(b.epss||0)-(a.epss||0)||a.id.localeCompare(b.id);
   const priority=[...new Map([...kev,...newCves].map(row=>[row.id,row])).values()].sort(prioritize);
-  const editorial=selectWeeklyVulnerabilities(newCves,kev,ranked,profile);
+  const editorial=selectWeeklyVulnerabilities(newCves,kev,ranked,profile,{global:scope==='global'});
   const aiCves=newCves.filter(isAiVulnerability).sort(prioritize);
   const monitored=profile?.assets?.length?priority.filter(row=>assetMatch(row,profile.assets)):[];
   const uniqueVictims=[...new Map((inputs.victims||[]).map(row=>[row.id||row.permalink||`${row.group}:${row.name}:${row.published||row.discovered}`,row])).values()];
@@ -131,22 +166,23 @@ export function buildWeeklyReport(inputs,{range,profile=null,now=Date.now(),sele
     const coverage=inputs.coverage?.ransomware;
     const available=(!coverage||coverage.status==='ready')||Boolean(coverage.months?.length&&![...months].some(month=>coverage.missingMonths?.includes(month)||!coverage.months.includes(month)));
     const rows=uniqueVictims.filter(row=>LATAM_COUNTRIES.has(String(row.country).toUpperCase())&&inWeek(observationDate(row),{from,to},now));
-    return {from,to,available,latam:available?rows.length:null,brazil:available?rows.filter(row=>row.country==='BR').length:null,byGroup:available?frequencies(rows.map(row=>row.group)):[]};
+    const globalRows=uniqueVictims.filter(row=>inWeek(observationDate(row),{from,to},now));
+    return {from,to,available,global:available?globalRows.length:null,latam:available?rows.length:null,brazil:available?rows.filter(row=>row.country==='BR').length:null,byGroup:available?frequencies((scope==='global'?globalRows:rows).map(row=>row.group)):[]};
   });
   const previousAi=!range.custom&&Array.isArray(inputs.previousVulnerabilities)?inputs.previousVulnerabilities.filter(row=>isAiVulnerability(row)&&inWeek(row.published,{from:new Date(Date.parse(range.from)-7*DAY).toISOString(),to:range.from},now)).length:null;
   const tools=new Map();for(const row of aiCves){const name=aiToolName(row);const old=tools.get(name)||{name,count:0,cvss:null,id:row.id};old.count++;if(row.cvss!=null&&(old.cvss==null||row.cvss>old.cvss)){old.cvss=row.cvss;old.id=row.id;}tools.set(name,old);}
   const reports=(inputs.reports||[]).filter(row=>row.status==='done'&&inWeek(row.updatedAt||row.createdAt,range,now)).map(row=>({id:row.id,title:row.title||row.url,type:row.type,updatedAt:row.updatedAt,sources:row.urls||[row.url]}));
   const selected=[...news,...aiNews];
   const recommendations=kev.slice(0,10).map(row=>({priority:'immediate',action:row.action||'Revisar o advisory e aplicar as medidas indicadas pelo fabricante.',source:`https://www.cisa.gov/known-exploited-vulnerabilities-catalog`,cve:row.id}));
-  const data={range,profile:profile?{id:profile.id,name:profile.name,assets:profile.assets,sectors:profile.sectors,actors:profile.actors,regions:profile.regions,ot:profile.ot,threatModel:profile.threatModel,ransomwareSectors:focusSectors}:null,generatedAt:new Date(now).toISOString(),
-    curation:{version:2,weights:WEEKLY_EDITORIAL_WEIGHTS,reviewedEvents:typeof inputs.bodyFor==='function'?reviewPool.length:0,cachedBodiesRead:readBodies,externalRequests:0},news,aiNews,candidates,selection:{mode:selection?'manual':'suggested',newsIds:news.map(row=>row.id),aiNewsIds:aiNews.map(row=>row.id)},vulnerabilities:{total:newCves.length,kevCount:kev.length,critical:newCves.filter(row=>row.severity==='CRITICAL').length,kev,priority:priority.slice(0,50),editorial,monitored,ai:{total:aiCves.length,kevCount:aiCves.filter(row=>row.kev).length,critical:aiCves.filter(row=>row.severity==='CRITICAL').length,items:aiCves.slice(0,50),vendors:frequencies(aiCves.map(row=>row.vendor)),categories:frequencies(aiCves.map(aiCategory)),previousTotal:previousAi,tools:[...tools.values()].sort((a,b)=>(b.cvss??-1)-(a.cvss??-1)||b.count-a.count).slice(0,4)}},
-    ransomware:{total:victims.length,latam:latam.length,brazil:latam.filter(row=>row.country==='BR').length,victims:latam,byCountry:frequencies(latam.map(row=>row.country)),byGroup:frequencies(latam.map(row=>row.group)),bySector:frequencies(latam.map(row=>row.sector)),focusSectors,focusCount:focusVictims.length,focusBySector:focusSectors.map(name=>({name,count:focusVictims.filter(row=>row.sector===name).length})),history,claimsAreUnconfirmed:true},
+  const data={scope,range,profile:profile?{id:profile.id,name:profile.name,assets:profile.assets,sectors:profile.sectors,actors:profile.actors,regions:profile.regions,ot:profile.ot,threatModel:profile.threatModel,ransomwareSectors:focusSectors}:null,generatedAt:new Date(now).toISOString(),
+    curation:{version:3,weights:scope==='global'?{impact:40,evidence:30,quality:23,novelty:7}:WEEKLY_EDITORIAL_WEIGHTS,reviewedEvents:typeof inputs.bodyFor==='function'?reviewPool.length:0,cachedBodiesRead:readBodies,externalRequests:0},news,aiNews,candidates,selection:{mode:selection?'manual':'suggested',newsIds:news.map(row=>row.id),aiNewsIds:aiNews.map(row=>row.id)},vulnerabilities:{total:newCves.length,kevCount:kev.length,critical:newCves.filter(row=>row.severity==='CRITICAL').length,kev,priority:priority.slice(0,50),editorial,monitored,ai:{total:aiCves.length,kevCount:aiCves.filter(row=>row.kev).length,critical:aiCves.filter(row=>row.severity==='CRITICAL').length,items:aiCves.slice(0,50),vendors:frequencies(aiCves.map(row=>row.vendor)),categories:frequencies(aiCves.map(aiCategory)),previousTotal:previousAi,tools:[...tools.values()].sort((a,b)=>(b.cvss??-1)-(a.cvss??-1)||b.count-a.count).slice(0,4)}},
+    ransomware:{total:victims.length,latam:latam.length,brazil:latam.filter(row=>row.country==='BR').length,victims:scope==='global'?victims:latam,byCountry:frequencies((scope==='global'?victims:latam).map(row=>row.country)),byGroup:frequencies((scope==='global'?victims:latam).map(row=>row.group)),bySector:frequencies((scope==='global'?victims:latam).map(row=>row.sector)),focusSectors,focusCount:focusVictims.length,focusBySector:focusSectors.map(name=>({name,count:focusVictims.filter(row=>row.sector===name).length})),history,claimsAreUnconfirmed:true},
     reports,recommendations,actors:frequencies(selected.flatMap(row=>row.actors)),malware:frequencies(selected.flatMap(row=>row.malware)),ttps:frequencies(selected.flatMap(row=>row.ttps)),
     coverage:inputs.coverage||{},sources:[...new Map(selected.flatMap(row=>row.sources).map(row=>[row.link,row])).values()]};
-  return data;
+  return filterWeeklyReportLanguages(data);
 }
 
-export function createWeeklyReports({filePath=':memory:',getInputs,getProfile=()=>null,now=()=>Date.now()}={}) {
+export function createWeeklyReports({filePath=':memory:',getInputs,getProfile=()=>null,now=()=>Date.now(),scope='organization'}={}) {
   const db=new Database(filePath);db.pragma('journal_mode = WAL');db.pragma('cache_size = -3000');
   db.exec(`CREATE TABLE IF NOT EXISTS weekly_plans(owner TEXT PRIMARY KEY,enabled INTEGER NOT NULL,profile TEXT NOT NULL,attempted TEXT,error TEXT);
     CREATE TABLE IF NOT EXISTS weekly_reports(owner TEXT NOT NULL,week TEXT NOT NULL,updated TEXT NOT NULL,fingerprint TEXT NOT NULL,revision INTEGER NOT NULL,payload TEXT NOT NULL,PRIMARY KEY(owner,week));
@@ -157,7 +193,7 @@ export function createWeeklyReports({filePath=':memory:',getInputs,getProfile=()
     CREATE TABLE IF NOT EXISTS weekly_editorial_cache(owner TEXT NOT NULL,key TEXT NOT NULL,created INTEGER NOT NULL,payload TEXT NOT NULL,PRIMARY KEY(owner,key));`);
   const pending=new Map();
   const ensure=owner=>{db.prepare("INSERT OR IGNORE INTO weekly_plans VALUES(?,1,'',NULL,NULL)").run(owner);return db.prepare('SELECT * FROM weekly_plans WHERE owner=?').get(owner);};
-  const read=(owner,week)=>{const row=db.prepare('SELECT * FROM weekly_reports WHERE owner=? AND week=?').get(owner,week);return row?{...JSON.parse(row.payload),updatedAt:row.updated,revision:row.revision}:null;};
+  const read=(owner,week)=>{const row=db.prepare('SELECT * FROM weekly_reports WHERE owner=? AND week=?').get(owner,week);return row?filterWeeklyReportLanguages({...JSON.parse(row.payload),updatedAt:row.updated,revision:row.revision}):null;};
   const write=(owner,week,data)=>{
     const clean={...data,updatedAt:undefined,revision:undefined};
     const fingerprint=createHash('sha256').update(JSON.stringify({...clean,generatedAt:undefined,coverage:undefined})).digest('hex');
@@ -174,13 +210,13 @@ export function createWeeklyReports({filePath=':memory:',getInputs,getProfile=()
     const work=(async()=>{
       try {
         const last=read(owner,range.id);
-        const profile=range.id!==weeklyWindow(new Date(now())).id&&last?last.profile:(plan.profile?getProfile(owner,plan.profile):null);
+        const profile=scope==='global'?null:range.id!==weeklyWindow(new Date(now())).id&&last?last.profile:(plan.profile?getProfile(owner,plan.profile):null);
         const inputs=await getInputs(owner,range,profile);
         if(inputs.victims?.length)db.transaction(()=>{const insert=db.prepare('INSERT OR REPLACE INTO ransomware_observations VALUES(?,?)');for(const row of inputs.victims)insert.run(String(row.id||row.permalink||`${row.group}:${row.name}:${row.published||row.discovered}`),JSON.stringify(row));})();
         inputs.victims=db.prepare('SELECT payload FROM ransomware_observations').all().map(row=>JSON.parse(row.payload));
         const storedSelection=db.prepare('SELECT payload FROM weekly_selections WHERE owner=? AND week=?').get(owner,range.id);
         const retained=read(owner,range.id);
-        const data=buildWeeklyReport(inputs,{range,profile,now:now(),selection:storedSelection?JSON.parse(storedSelection.payload):null,retained:(retained?.profile?.id||'')===(profile?.id||'')?retained:null});
+        const data=buildWeeklyReport(inputs,{range,profile,scope,now:now(),selection:storedSelection?JSON.parse(storedSelection.payload):null,retained:(retained?.profile?.id||'')===(profile?.id||'')?retained:null});
         // A profile switch while collection is pending must never publish the old client's result.
         if(range.id===weeklyWindow(new Date(now())).id&&ensure(owner).profile!==plan.profile)return read(owner,range.id);
         if(storedSelection)db.prepare('UPDATE weekly_selections SET payload=? WHERE owner=? AND week=?').run(JSON.stringify({newsIds:data.selection.newsIds,aiNewsIds:data.selection.aiNewsIds}),owner,range.id);
@@ -219,6 +255,7 @@ export function createWeeklyReports({filePath=':memory:',getInputs,getProfile=()
     },
     get:(owner,week)=>{const plan=ensure(owner);return {plan:{enabled:!!plan.enabled,profileId:plan.profile,lastAttemptedAt:plan.attempted,error:plan.error},updating:pending.has(owner+':'+(week||weeklyWindow(new Date(now())).id)),report:read(owner,week||weeklyWindow(new Date(now())).id),weeks:db.prepare('SELECT week,updated,revision FROM weekly_reports WHERE owner=? ORDER BY week DESC LIMIT 104').all(owner)};},
     configure:(owner,{enabled,profileId=''})=>{
+      if(scope==='global'&&profileId)throw Error('Global bulletin does not use organization profiles');
       const previous=ensure(owner);if(profileId&&!getProfile(owner,profileId))throw Error('Profile not found');
       db.transaction(()=>{
         if(previous.profile!==profileId){

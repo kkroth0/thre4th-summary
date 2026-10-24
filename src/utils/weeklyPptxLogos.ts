@@ -3,6 +3,8 @@ import type {WeeklyCve} from '@/types/weekly-report';
 import {A,P,R,first,parse,relation} from './weeklyPptxXml';
 
 export function weeklyProductLogo(row:WeeklyCve):string|null{
+ // An ecosystem label must not override an explicitly identified dependency.
+ if(row.product&&((row.editorialFamily==='Node.js'&&!/^node[._ ]?js$/i.test(row.product))||(row.editorialFamily==='PHP'&&!/^php$/i.test(row.product))||(row.editorialFamily==='Java'&&!/java|jdk|jre|graal/i.test(row.product))))return null;
  if(row.editorialFamily==='Java')return 'java';if(row.editorialFamily==='PHP')return 'php';if(row.editorialFamily==='Node.js')return 'node';
  const product=`${row.vendor} ${row.product}`.toLowerCase();
  if(/\bsiemens\b/.test(product))return 'siemens';if(/\bplex\b/.test(product))return 'plex';if(/\bsiteguard\b/.test(product))return 'siteguard';return null;

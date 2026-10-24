@@ -1,12 +1,11 @@
-import manifest from '@/config/weeklyReportTemplate.json';
 import type { WeeklyReportData } from '@/types/weekly-report';
+import { createThreatSumm4ryWeeklyPptx, weeklyBrandFilename } from './weeklyThreatSumm4ry';
+// Legacy layout helpers are retained for historical exports, not the website's download.
 export { buildWeeklySlides } from './weeklyTemplateSlides';
-export { createWeeklyPptx } from './weeklyPptxPackage';
-import { createWeeklyPptx } from './weeklyPptxPackage';
+export { createThreatSumm4ryWeeklyPptx as createWeeklyPptx } from './weeklyThreatSumm4ry';
 export async function exportWeeklyPptx(report:WeeklyReportData){
  if(report.editorial?.status!=='ready')throw Error('Redija o boletim a partir das fontes antes de exportar.');
- const response=await fetch(manifest.url);if(!response.ok)throw Error('Template indisponível');
- const blob=await createWeeklyPptx(report,await response.arrayBuffer());const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;
- const recipient=report.profile?.name?.replace(/[^\p{L}\p{N}]+/gu,'_')||manifest.publisher.shortName;a.download=`Boletim_Semanal_${recipient}_${report.range.id}_v${report.revision}.pptx`;
+ const blob=await createThreatSumm4ryWeeklyPptx(report);const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;
+ a.download=weeklyBrandFilename(report);
  a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
 }
