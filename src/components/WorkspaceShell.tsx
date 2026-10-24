@@ -73,7 +73,7 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
       </div>)}
     </nav>
     <div className="shrink-0 space-y-0.5 border-t border-sidebar-border p-2">
-      {[catalog.find(item => item.path === '/vendors'), auth.authenticated ? { path: '/settings', label: pt ? 'Configurações' : 'Settings', icon: Settings } : null].filter(Boolean).map(item => {
+      {[auth.authenticated ? { path: '/settings', label: pt ? 'Configurações' : 'Settings', icon: Settings } : null].filter(Boolean).map(item => {
         const Icon = item!.icon; const active = isRouteActive(item!.path, pathname);
         return <Link key={item!.path} to={item!.path} onClick={() => setMobileOpen(false)} aria-current={active ? 'page' : undefined} aria-label={item!.label} title={rail ? item!.label : undefined} className={cn('flex min-h-8 items-center gap-2 rounded px-2 py-1.5 text-xs hover:bg-sidebar-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring', rail && 'justify-center px-0', active ? 'bg-primary/10 font-semibold text-primary' : 'text-muted-foreground')}><Icon className="h-4 w-4 shrink-0" />{!rail && <span>{item!.label}</span>}</Link>;
       })}

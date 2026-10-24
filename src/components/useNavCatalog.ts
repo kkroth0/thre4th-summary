@@ -1,5 +1,5 @@
 import type React from "react";
-import { Activity, Layers, Bug, Rss, Bookmark, FileSearch, Users, MapPinned, BookOpen, Shield, CalendarCheck, ShieldCheck, Search, Mail, Radar, Globe, Crosshair } from "lucide-react";
+import { Activity, Layers, Bug, Rss, Bookmark, FileSearch, Users, MapPinned, Shield, CalendarCheck, ShieldCheck, Search, Mail, Radar, Globe, Crosshair } from "lucide-react";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { actorPageCopy } from "@/pages/actorsView";
 
@@ -62,12 +62,6 @@ export function useNavCatalog() {
           label: tr({ pt: "Vítimas de Ransomware", en: "Ransomware Victims", es: "Víctimas de Ransomware", fr: "Victimes de rançongiciels" }),
           description: pt ? "Vítimas de ransomware por país." : "Ransomware victims by country.",
           icon: MapPinned,
-        },
-        {
-          path: "/vendors",
-          label: tr({ pt: "Fontes de Dados", en: "Data Sources", es: "Fuentes de Datos", fr: "Sources de Données" }),
-          description: pt ? "Origem e cobertura dos dados." : "Data origin and coverage.",
-          icon: BookOpen,
         },
       ],
     },
