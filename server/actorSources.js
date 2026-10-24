@@ -1,4 +1,6 @@
 import * as cheerio from 'cheerio';
+import { actorNameKey, canonicalizeActors } from './actorIdentity.js';
+export { actorNameKey } from './actorIdentity.js';
 
 export const ACTOR_SOURCES = {
   mitre: 'https://attack.mitre.org/groups/',
@@ -7,7 +9,6 @@ export const ACTOR_SOURCES = {
   icic: 'https://instituteforcriticalinfrastructurecybersecurity.org/apt-profiles',
   domains: 'https://github.com/marktsec/Ransomware_Official_Domains',
 };
-export const actorNameKey = value => String(value || '').normalize('NFKD').toLowerCase().replace(/[^a-z0-9]/g, '');
 const validName = value => typeof value === 'string' && value.trim().length >= 3 && value.length <= 180 && !/[<>\r\n]/.test(value) && !/^[GST]\d{3,4}$|^\[|^operation\b|^unknown$|^none$|^n\/a$/i.test(value);
 
 export function parseEtda(data) {
@@ -74,7 +75,7 @@ function nameIndex(actors) {
 }
 
 export function enrichActorCatalog(actors, snapshot = {}) {
-  const copies=actors.map(actor=>({...actor,aliases:[...(actor.aliases || [])],aliasEvidence:[],relatedNames:[],infrastructure:[],refs:[...(actor.refs || [])]}));
+  const copies=canonicalizeActors(actors).map(actor=>({...actor,aliasEvidence:[],infrastructure:[],refs:[...(actor.refs || [])]}));
   const byId=new Map(copies.map(actor=>[actor.id,actor])), index=nameIndex(copies);
   const softwareNames=new Set((snapshot.nonActorNames || []).map(actorNameKey));
   function resolve(record) {
@@ -116,5 +117,5 @@ export function enrichActorCatalog(actors, snapshot = {}) {
     if(!actor.infrastructure.some(row=>row.host===site.host))actor.infrastructure.push({...site});
     else {const existing=actor.infrastructure.find(row=>row.host===site.host),rank={listed:0,historical:1,'reported-offline':2,'reported-seized':3};if(rank[site.reportedStatus]>rank[existing.reportedStatus])existing.reportedStatus=site.reportedStatus;}
   }
-  return copies;
+  return canonicalizeActors(copies);
 }

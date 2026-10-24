@@ -54,14 +54,19 @@ test('infrastructure binds only to one existing actor, keeps unavailable status 
   const host='a'.repeat(56)+'.onion';const base=[{id:'rl-qilin',name:'Qilin',aliases:[],refs:[]}];
   const domains=parseRansomwareDomains(`## Qilin\nhttp://${host}/ - Offline\nhttp://${host}/`);
   const merged=enrichActorCatalog(base,{domains});assert.equal(merged[0].infrastructure.length,1);assert.equal(merged[0].infrastructure[0].reportedStatus,'reported-offline');assert.equal(merged[0].infrastructure[0].relation,'listed-in-source');
-  const ambiguous=enrichActorCatalog([...base,{id:'other',name:'Other',aliases:['Qilin'],refs:[]}],{domains});assert.ok(ambiguous.every(row=>row.infrastructure.length===0));
+  const ambiguous=enrichActorCatalog([...base,{id:'other',name:'Other',aliases:['Qilin'],refs:[]}],{domains});
+  assert.equal(ambiguous.find(row=>row.id==='rl-qilin').infrastructure.length,1);
+  assert.equal(ambiguous.find(row=>row.id==='other').infrastructure.length,0);
+  const shared=enrichActorCatalog([{id:'one',name:'One',aliases:['Shared Fox']},{id:'two',name:'Two',aliases:['Shared Fox']}],{domains:[{name:'Shared Fox',host,reportedStatus:'listed'}]});
+  assert.ok(shared.every(row=>row.infrastructure.length===0));
 });
 
 test('real snapshot expands aliases without merging Lazarus/APT38 and includes provenance and ransomware sites',()=>{
   const base=JSON.parse(fs.readFileSync(new URL('../data/actors.json',import.meta.url),'utf8')).actors;
   const snapshot=JSON.parse(fs.readFileSync(new URL('../data/actor-sources.json',import.meta.url),'utf8'));
   const merged=enrichActorCatalog(base,snapshot);
-  assert.equal(merged.length,base.length);assert.equal(new Set(merged.map(row=>row.id)).size,base.length);
+  assert.ok(merged.length<=base.length);assert.equal(new Set(merged.map(row=>row.id)).size,merged.length);
+  assert.deepEqual(new Set(merged.flatMap(row=>[row.id,...row.redirectIds])),new Set(base.map(row=>row.id)));
   assert.ok(merged.find(row=>row.id==='G0016').aliases.includes('Blue Kitsune'));
   assert.ok(!merged.find(row=>row.id==='G0032').aliases.includes('APT38'));
   assert.ok(merged.some(row=>/akira/i.test(row.name)&&row.infrastructure.length));

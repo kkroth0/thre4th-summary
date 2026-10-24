@@ -55,12 +55,12 @@ test('isolated reads retain the exact scoped evidence and keep the main event lo
     assert.deepEqual(await reader.query('publications', { owner }), store.publications({ owner }));
     assert.deepEqual(await reader.query('list', { owner, size: 2 }), store.list({ owner, size: 2 }));
     assert.deepEqual(await reader.query('detail', { owner, value: '1.1.1.1' }), store.detail('1.1.1.1', owner));
-    const sources = store.publications({ owner });
+    const sources = store.publications({ owner,kind:'actor' });
     const activity = await reader.query('actorActivity', { owner, archive: [], stories: [] });
     assert.deepEqual(activity, buildActorActivity(actorPublications(sources, [])));
   }
-  // Grouping a shared pulse must retain its co-mentioned infrastructure too.
-  assert.equal((await reader.query('actorActivity', { owner: 'one', archive: [], stories: [] })).actor.ips, 2);
+  // A shared pulse cannot lend an unrelated IOC its other observation's actor.
+  assert.equal((await reader.query('actorActivity', { owner: 'one', archive: [], stories: [] })).actor.ips, 1);
 });
 
 test('read cache coalesces identical calls, isolates accounts, and observes new commits after invalidation', async t => {

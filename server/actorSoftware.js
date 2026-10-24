@@ -1,4 +1,5 @@
 // Índice família de malware → grupos, para o enriquecimento de indicadores.
+import { buildActorIdentityIndex } from './actorIdentity.js';
 //
 // ThreatFox e VirusTotal quase sempre devolvem a família ("QakBot", "Emotet") e
 // nunca o grupo; o catálogo de atores guarda o inverso — cada ator lista o
@@ -19,7 +20,7 @@ export const softwareKey = (name) =>
 
 export const buildSoftwareIndex = (actors) => {
     const index = {};
-    for (const actor of actors || []) {
+    for (const actor of buildActorIdentityIndex(actors || []).actors) {
         // Grupo sem nome não atribui nada — "[Unnamed group]" numa planilha de
         // cliente é pior do que a célula vazia.
         if (!actor?.name || actor.name.toLowerCase() === PLACEHOLDER) continue;
@@ -50,13 +51,15 @@ export const buildSoftwareIndex = (actors) => {
 // O alias também colapsa duplicata: UNC2452 e APT29 viram uma linha só.
 export const buildActorNameIndex = (actors) => {
     const index = {};
-    for (const actor of actors || []) {
+    const identities = buildActorIdentityIndex(actors || []);
+    for (const actor of identities.actors) {
         if (!actor?.name || actor.name.toLowerCase() === PLACEHOLDER) continue;
         for (const label of [actor.name, ...(actor.aliases || [])]) {
             const key = softwareKey(label);
             // O primeiro a reivindicar a chave fica: alias colidindo entre dois
             // atores é raro e ambíguo, e trocar de dono a cada rebuild seria pior.
-            if (key && !index[key]) index[key] = actor.name;
+            const resolved = identities.resolve(label);
+            if (key && resolved) index[key] = resolved.name;
         }
     }
     return index;

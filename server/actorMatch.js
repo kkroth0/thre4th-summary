@@ -1,3 +1,4 @@
+import { actorNameKey, buildActorIdentityIndex } from './actorIdentity.js';
 // Actor names are attacker-chosen and often ordinary words — Akira, Reaper,
 // Mantis, Elfin. Matching every alias against every headline would attribute a
 // Kurosawa retrospective to a ransomware gang, so the index is split in two:
@@ -56,28 +57,36 @@ const normalize = (value) =>
 // Strip trailing sentence punctuation (., !, ?) but preserve internal punctuation.
 const tokenize = (value) =>
     normalize(value)
-        .split(/[^a-z0-9.@+-]+/)
+        .split(/[^\p{L}\p{N}.@+-]+/u)
         .filter(Boolean)
         .map(t => t.replace(/[.!?]+$/, ''))
         .filter(Boolean);
 
 export function buildActorIndex(actors) {
+    const identities = buildActorIdentityIndex(Array.isArray(actors) ? actors : []);
     const distinctive = new Map();
     const common = new Map();
-    for (const actor of Array.isArray(actors) ? actors : []) {
-        if (!actor || !actor.id) continue;
+    const conflicts = new Set();
+    const put = (map, key, entry) => {
+        const previous = map.get(key);
+        if (conflicts.has(key)) return;
+        if (previous && previous.id !== entry.id) { distinctive.delete(key); common.delete(key); conflicts.add(key); return; }
+        map.set(key, entry);
+    };
+    for (const actor of identities.actors) {
+        if (!actor || !actor.id || normalize(actor.name) === PLACEHOLDER) continue;
         for (const raw of [actor.name, ...(actor.aliases || [])]) {
             const alias = String(raw || '').trim();
-            const key = normalize(alias);
+            const key = tokenize(alias).join(' ');
             if (!key || key === PLACEHOLDER) continue;
             if (alias.replace(/[^a-z0-9]/gi, '').length < MIN_ALIAS_LENGTH) continue;
             const entry = { id: actor.id, name: actor.name, matched: alias };
             if (CODENAME.test(alias)) {
-                if (!distinctive.has(key)) distinctive.set(key, { ...entry, via: 'codename' });
-            } else if (/\s/.test(alias)) {
-                if (!distinctive.has(key)) distinctive.set(key, { ...entry, via: 'multiword' });
-            } else if (!COMMON_TIER_STOPLIST.has(key) && !common.has(key)) {
-                common.set(key, { ...entry, via: 'context' });
+                put(distinctive, key, { ...entry, via: 'codename' });
+            } else if (key.includes(' ')) {
+                put(distinctive, key, { ...entry, via: 'multiword' });
+            } else if (!COMMON_TIER_STOPLIST.has(key)) {
+                put(common, key, { ...entry, via: 'context' });
             }
 
             // Notícia em português e espanhol inverte a ordem: o catálogo tem
@@ -89,7 +98,7 @@ export function buildActorIndex(actors) {
             const flipped = /^(.+?)\s+(?:group|gang|team|crew|collective)$/i.exec(alias);
             for (const prefix of flipped ? ['grupo', 'quadrilha'] : []) {
                 const flippedKey = normalize(`${prefix} ${flipped[1]}`);
-                if (!distinctive.has(flippedKey)) distinctive.set(flippedKey, { ...entry, via: 'multiword' });
+                put(distinctive, flippedKey, { ...entry, via: 'multiword' });
             }
         }
     }
@@ -102,10 +111,15 @@ export function buildActorIndex(actors) {
             maxGram = wordCount;
         }
     }
-    return { distinctive, common, maxGram };
+    const exact=new Map();
+    for(const actor of identities.actors)for(const label of [actor.name,...actor.aliases]){
+        const resolved=identities.resolve(label);if(resolved)exact.set(actorNameKey(label),resolved);
+    }
+    return { distinctive, common, maxGram, exact };
 }
 
-export function matchActors(text, index) {
+export function matchActors(text, index, { structured = false } = {}) {
+    if (structured) { const actor = index.exact?.get(actorNameKey(text)); return actor ? [actor] : []; }
     const found = new Map();
     // Sentence-scoped: "A ransomware gang emerged. Akira Kurosawa died." must not
     // let the first sentence's context vouch for the second sentence's noun.

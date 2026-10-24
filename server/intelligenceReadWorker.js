@@ -3,6 +3,7 @@ import { parentPort, workerData } from 'node:worker_threads';
 import { normalizeIndicator } from './indicatorIdentity.js';
 import { createIocIntelligenceReads } from './iocIntelligenceReads.js';
 import { actorPublications, buildActorActivity } from './actorEvidence.js';
+import { buildActorIdentityIndex, canonicalActorReferences } from './actorIdentity.js';
 
 const db = new Database(workerData.filePath, { readonly: true, fileMustExist: true });
 db.pragma('query_only = ON');
@@ -19,8 +20,9 @@ parentPort.on('message', ({ id, method, params }) => {
     else if (method === 'detail') data = reads.detail(params.value, params.owner, params);
     else if (method === 'publications') data = reads.publications(params);
     else if (method === 'actorActivity') {
-      const sources = reads.publications({ owner: params.owner });
-      data = buildActorActivity(actorPublications([...params.archive, ...sources], params.stories));
+      const identities=buildActorIdentityIndex(params.catalog||[]);
+      const news=canonicalActorReferences(actorPublications(params.archive,params.stories),identities);
+      data=buildActorActivity((function*(){yield* news;for(const row of reads.actorActivityRows(params.owner))yield* canonicalActorReferences([row],identities);})());
     } else throw Error('Unsupported read');
     db.exec('COMMIT');
     parentPort.postMessage({ id, data });

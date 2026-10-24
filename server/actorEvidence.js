@@ -1,8 +1,13 @@
 const validDate = value => Number.isFinite(Date.parse(value));
+const publicationKey=value=>{
+    try{const url=new URL(value);for(const key of [...url.searchParams.keys()])if(/^utm_|^(?:fbclid|gclid)$/i.test(key))url.searchParams.delete(key);
+        if(!url.hash.startsWith('#claim-'))url.hash='';return url.href;
+    }catch{return value;}
+};
 export function actorPublications(archive, stories) {
     const rows = new Map();
-    for (const row of archive || []) if (row.link) rows.set(row.link, row);
-    for (const story of stories || []) for (const source of story.sources || []) if (source.link) rows.set(source.link, { ...rows.get(source.link), ...Object.fromEntries(Object.entries(source).filter(([,value])=>value!==undefined)), storyId: story.id });
+    for (const row of archive || []) if (row.link) rows.set(publicationKey(row.link), row);
+    for (const story of stories || []) for (const source of story.sources || []) if (source.link) rows.set(publicationKey(source.link), { ...rows.get(publicationKey(source.link)), ...Object.fromEntries(Object.entries(source).filter(([,value])=>value!==undefined)), storyId: story.id });
     return [...rows.values()];
 }
 export function buildActorActivity(rows, { days = 180, now = Date.now() } = {}) {

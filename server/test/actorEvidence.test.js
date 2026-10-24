@@ -3,6 +3,13 @@ import assert from 'node:assert/strict';
 import { actorPublications, buildActorActivity, buildActorEvidence } from '../actorEvidence.js';
 const now = Date.parse('2026-10-12T12:00:00Z'); const hash = 'a'.repeat(64);
 const row = (extra = {}) => ({ link: 'https://lab.example/report', title: 'Report', pubDate: '2026-10-01T00:00:00Z', source: 'Lab', actors: [{ id: 'G1', name: 'Actor One' }], iocs: { ips: ['1.1.1.1'], domains: ['c2.example.com'], hashes: [hash, 'b'.repeat(32)] }, ...extra });
+
+test('tracking parameters and section fragments do not multiply publications, while distinct victim claims survive',()=>{
+  const rows=actorPublications([row(),row({link:'https://lab.example/report?utm_source=feed#iocs'})],[]);
+  assert.equal(rows.length,1);
+  const claims=actorPublications([row({link:'https://cti.example/posts#claim-one'}),row({link:'https://cti.example/posts#claim-two'})],[]);
+  assert.equal(claims.length,2);
+});
 test('actor evidence uses article attribution and deduplicates indicators and publications', () => {
     const publications = actorPublications([row()], [{ id: 'story', actors: [{ id: 'G2' }], sources: [row(), row({ link: 'https://other.example/post', actors: [] })] }]);
     const data = buildActorEvidence(publications, 'G1', { now });

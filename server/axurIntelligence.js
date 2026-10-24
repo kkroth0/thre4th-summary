@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 import { normalizeIndicator } from './iocIntelligence.js';
+import { actorNameKey } from './actorIdentity.js';
 
 const BASE = 'https://api.axur.com/gateway/1.0/api';
 const REQUEST_POLICY = 'latency-v2';
@@ -38,7 +39,7 @@ function entities(values, kind, match) {
   return names(values).map(name => {
     // Resolve only an exact catalog name/alias. The report's narrative must not
     // turn a different actor into an attribution for this indicator.
-    const known = (match?.(kind === 'actor' ? `Threat actor group: ${name}` : name, { structured: kind === 'malware' }) || []).find(entity => [entity.name, entity.matched, ...(entity.aliases || [])].some(alias => String(alias || '').toLowerCase() === name.toLowerCase()));
+    const known = (match?.(name, { structured: true }) || []).find(entity => [entity.name, entity.matched, ...(entity.aliases || [])].some(alias => kind==='actor'?actorNameKey(alias)===actorNameKey(name):String(alias || '').toLowerCase() === name.toLowerCase()));
     return known || { id: `axur:${kind}:${id(name)}`, name };
   });
 }

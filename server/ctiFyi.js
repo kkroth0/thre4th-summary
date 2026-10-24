@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { domainToASCII } from 'node:url';
 import { normalizeVictim } from './ransomwareLive.js';
+import { canonicalizeActors } from './actorIdentity.js';
 
 const DAY = 86400000;
 const text = value => typeof value === 'string' ? value.trim().slice(0, 6000) : '';
@@ -41,7 +42,7 @@ export function normalizeCtiGroups(payload) {
   });
 }
 export function mergeCtiActors(actors, groups) {
-  const rows = actors.map(row => ({ ...row })); const names = new Map(), primary = new Map();
+  const rows = canonicalizeActors(actors); const names = new Map(), primary = new Map();
   for (const actor of rows) { const ids = primary.get(key(actor.name)) || new Set(); ids.add(actor.id); primary.set(key(actor.name), ids); }
   const index = actor => { for (const name of [actor.name, ...array(actor.aliases)]) { const ids = names.get(key(name)) || new Set(); ids.add(actor.id); names.set(key(name), ids); } };
   rows.forEach(index);
@@ -58,10 +59,10 @@ export function mergeCtiActors(actors, groups) {
     } else {
       const row = { id: `cti-fyi:${encodeURIComponent(group.name.toLowerCase())}`, name: group.name, aliases: group.aliases, description: group.description,
         country: '', motivation: '', sectors: [], targets: [], techniques: group.techniques, software: [], refs: group.refs, source: 'CTI.fyi', verification: 'source-reported', ctiFyi };
-      rows.push(row); index(row);
+      rows.push(row); index(row); const ids = primary.get(key(row.name)) || new Set(); ids.add(row.id); primary.set(key(row.name), ids);
     }
   }
-  return rows;
+  return canonicalizeActors(rows);
 }
 export function ctiPublications(victims, actors) {
   const groups = new Map(actors.filter(row => row.ctiFyi).flatMap(row => [...array(row.ctiFyi.groups), row.ctiFyi.group].map(name => [key(name), row])));

@@ -13,6 +13,8 @@ import { createNewsPersistence } from './newsPersistence.js';
 import { createWatchSuggestions } from './watchSuggestions.js';
 import { canonicalJsonEvidence } from './jsonEvidence.js';
 import { actorNameKey } from './actorSources.js';
+import { buildActorIdentityIndex } from './actorIdentity.js';
+import { ensureActorObservationIndex } from './actorObservationIndex.js';
 
 const idFor = value => crypto.createHash('sha256').update(value).digest('hex');
 const iocValues = row => ['ips','domains','hashes','urls'].flatMap(type => (row.iocs?.[type] || []).map(value=>({value})));
@@ -28,6 +30,7 @@ export function createIocIntelligence({filePath=':memory:',now=()=>Date.now(),is
     CREATE TABLE IF NOT EXISTS observation_revisions(id INTEGER PRIMARY KEY,observation TEXT NOT NULL,at TEXT NOT NULL,payload TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS intelligence_state(id TEXT PRIMARY KEY,value TEXT NOT NULL);`);
   const news = createNewsPersistence(db, { now });
+  ensureActorObservationIndex(db);
   // Existing provider/news links predate the name registry. Backfill their
   // own scopes and IDs once, without changing links or promoting reputation.
   if (!db.prepare("SELECT 1 FROM intelligence_state WHERE id='entity-name-backfill-v1'").get()) db.transaction(() => {
@@ -56,7 +59,7 @@ export function createIocIntelligence({filePath=':memory:',now=()=>Date.now(),is
   };
   const scopes=owner=>owner?['global',String(owner)]:['global'];
   const scopeSql=owner=>({sql:owner?'o.scope IN (?,?)':'o.scope=?',args:scopes(owner)});
-  const { list, detail, publications, entities, status } = createIocIntelligenceReads(db, normalizeIndicator);
+  const { list, detail, publications, entities, status, actorActivityRows } = createIocIntelligenceReads(db, normalizeIndicator);
   async function ingestNews(rows) {
     await writeBarrier;
     rows=rows.map(row=>row.repository?{...row,malware:[...new Map([...declaredRepositoryMalware({...row,repositoryReport:true}),...(row.malware||[])].map(family=>[family.name.toLowerCase(),family])).values()]}:row);
@@ -128,7 +131,9 @@ export function createIocIntelligence({filePath=':memory:',now=()=>Date.now(),is
     })();
   }
   async function reconcileActorAliases(catalog) {
-    const revision='actor-aliases-v1:'+idFor(JSON.stringify(catalog.map(actor=>[actor.id,actor.name,actor.aliases || []])));
+    const identities=buildActorIdentityIndex(catalog);
+    catalog=identities.actors;
+    const revision='actor-aliases-v2:'+idFor(JSON.stringify(catalog.map(actor=>[actor.id,actor.name,actor.aliases || [],actor.redirectIds])));
     if(db.prepare('SELECT 1 FROM intelligence_state WHERE id=?').get(revision))return {changed:0};
     const owners=new Map(),known=new Set(catalog.map(actor=>actor.id));
     for(const actor of catalog)for(const name of [actor.name,...(actor.aliases || [])]){
@@ -141,22 +146,28 @@ export function createIocIntelligence({filePath=':memory:',now=()=>Date.now(),is
       const retire=db.prepare("DELETE FROM entity_links WHERE observation=? AND kind='actor' AND entity=?");
       const revise=db.prepare('INSERT INTO observation_revisions(observation,at,payload) VALUES(?,?,?)');
       const registered=new Set();
+      const moveNames=db.prepare("INSERT OR IGNORE INTO intelligence_entity_names SELECT scope,kind,?,?,alias,source FROM intelligence_entity_names WHERE scope=? AND kind='actor' AND entity=? AND source=?");
+      const retireNames=db.prepare("DELETE FROM intelligence_entity_names WHERE scope=? AND kind='actor' AND entity=? AND source=?");
       const update=db.transaction((rows,actor)=>{
         for(const row of rows){
           revise.run(row.observation,new Date(now()).toISOString(),JSON.stringify({reason:'actor-alias-reconciliation',previousLink:{kind:row.kind,entity:row.entity,name:row.name,relation:row.relation},canonicalActor:actor.id}));
           db.prepare('INSERT OR IGNORE INTO entity_links VALUES(?,?,?,?,?)').run(row.observation,'actor',actor.id,actor.name,row.relation);
           retire.run(row.observation,row.entity);
           const registryKey=JSON.stringify([row.scope,row.provider,actor.id]);
-          if(!registered.has(registryKey)){news.registerEntities([{...actor,kind:'actor'}],row.scope,row.provider);registered.add(registryKey);}
+          moveNames.run(actor.id,actor.name,row.scope,row.entity,row.provider);
+          retireNames.run(row.scope,row.entity,row.provider);
+          if(!registered.has(registryKey)){news.registerEntities([{...actor,aliases:[...actor.aliases,row.name],kind:'actor'}],row.scope,row.provider);registered.add(registryKey);}
           changed++;
         }
       });
       for(const candidate of candidates){
-        // Catalog actors retain their identities, including subgroups. Only
-        // source-created identities with one exact alias owner are canonicalized.
+        // Current catalog groups/subgroups stay separate. Retired source/catalog
+        // IDs redirect only through an explicit canonical identity or unique name.
+        const redirected=identities.ids.get(candidate.entity);
         if(known.has(candidate.entity))continue;
-        const matches=owners.get(actorNameKey(candidate.name));if(matches?.size!==1)continue;
-        const actor=[...matches.values()][0];
+        const matches=owners.get(actorNameKey(candidate.name));
+        const actor=redirected || (matches?.size===1?[...matches.values()][0]:null);
+        if(!actor)continue;
         for(let rows=read.all(candidate.entity,candidate.name);rows.length;rows=read.all(candidate.entity,candidate.name)){
           update(rows,actor);await yieldLoop();
         }
@@ -165,7 +176,7 @@ export function createIocIntelligence({filePath=':memory:',now=()=>Date.now(),is
     });
     flight=work.catch(()=>{});return work;
   }
-  return {ingest,list,detail,publications,replayProviderPayloads,news,watchSuggestions:createWatchSuggestions(db),phishing:createPhishingEvolution(db,{now}),
+  return {ingest,list,detail,publications,actorActivityRows,replayProviderPayloads,news,watchSuggestions:createWatchSuggestions(db),phishing:createPhishingEvolution(db,{now}),
     deferWritesUntil: promise => { writeBarrier=Promise.resolve(promise); flight=flight.then(()=>writeBarrier); },
     exportRows:({owner='',from,to})=>{
       const scope=scopeSql(owner);

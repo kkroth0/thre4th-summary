@@ -31,6 +31,15 @@ const outsiderSig = crypto.createHmac('sha256', SESSION_SECRET).update(outsiderB
 const OUTSIDER_HEADERS = { Cookie: `ts_session=${outsiderBody}.${outsiderSig}` };
 let proc;
 
+test('actor aliases share one catalog identity and legacy profile/evidence URLs remain valid',async()=>{
+    const catalog=await fetch(BASE+'/api/actors?catalogOnly=1').then(r=>r.json());
+    assert.ok(catalog.actors.some(actor=>actor.id==='G1034'&&actor.aliases.includes('Evasive Panda')));
+    assert.ok(!catalog.actors.some(actor=>actor.id==='misp-171d0590'));
+    const profile=await fetch(BASE+'/api/actors/misp-171d0590').then(r=>r.json());assert.equal(profile.id,'G1034');
+    const evidence=await fetch(BASE+'/api/actors/misp-171d0590/evidence?days=0',{headers:AUTH_HEADERS}).then(r=>r.json());
+    assert.equal(evidence.actorId,'G1034');assert.ok(Array.isArray(evidence.publications));
+});
+
 async function waitForBoot(timeoutMs = 15000) {
     const deadline = Date.now() + timeoutMs;
     while (Date.now() < deadline) {

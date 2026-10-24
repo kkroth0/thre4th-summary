@@ -43,7 +43,7 @@ export function createIntelligenceReads({ filePath, ttl = 15000, timeout = 60000
   }
   function query(method, params = {}, { revision = '' } = {}) {
     if (closed) return Promise.reject(unavailable());
-    const { archive: _archive, stories: _stories, ...identity } = params;
+    const { archive: _archive, stories: _stories, catalog: _catalog, ...identity } = params;
     const key = JSON.stringify([method, identity, revision]);
     const hit = cache.get(key);
     if (hit?.until > Date.now()) { cache.delete(key); cache.set(key, hit); return Promise.resolve(hit.data); }
