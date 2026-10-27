@@ -99,3 +99,19 @@ test('URLhaus URL results expose all payload families and tags without becoming 
   assert.equal(formatVendorData('URLhaus',{query_status:'ok'},'evil.example.org').Status,'No data');
   assert.deepEqual(resolveVendorsForQuery('46.101.130.1',['URLhaus']),['URLhaus']);
 });
+
+test('retry incomplete retains successful sources and only requests failed sources', async () => {
+  const original = globalThis.fetch;
+  const calls: string[] = [];
+  const previous = { query: '8.8.8.8', overallScore: 0, threatLevel: 'unknown' as const, totalVendors: 2, detections: 0,
+    vendorData: [{ name: 'VirusTotal', data: { Status: 'Clean', Malicious: 0 }, rawPayload: { retained: true } },
+      { name: 'AbuseIPDB', data: {}, error: 'Fonte aguardando disponibilidade.' }] };
+  globalThis.fetch = async path => { calls.push(String(path)); return new Response(JSON.stringify({ data: { data: { ipAddress: '8.8.8.8', abuseConfidenceScore: 0 } } })); };
+  try {
+    const result = await fetchThreatDataProgressive('8.8.8.8', ['VirusTotal', 'AbuseIPDB'], () => {}, { previous });
+    assert.deepEqual(calls, ['/api/abuseipdb']);
+    assert.deepEqual(result.vendorData.find(v => v.name === 'VirusTotal')?.rawPayload, { retained: true });
+    assert.ok(result.vendorData.every(v => !v.error));
+  } finally { globalThis.fetch = original; }
+});
+

@@ -1,4 +1,4 @@
-import { buildBulkExcelWorkbook, type NewsExcelPayload } from './iocExcelWorkbook';
+import type { NewsExcelPayload } from './iocExcelWorkbook';
 import type { BulkRow } from './bulkEnrichment';
 export { buildNewsExcelWorkbook, buildBulkExcelWorkbook, type NewsExcelPayload } from './iocExcelWorkbook';
 const mime = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
@@ -10,7 +10,7 @@ function download(buffer: ArrayBuffer, filename: string) {
   setTimeout(() => URL.revokeObjectURL(url), 60000);
 }
 
-export async function exportNewsExcel(payload: NewsExcelPayload, filename: string) {
+export async function exportNewsExcel(payload: NewsExcelPayload | { kind: 'bulk'; rows: BulkRow[] }, filename: string) {
   // ExcelJS ZIP generation can block the page for tens of seconds on large
   // inventories. Keep the workbook and compression off the UI thread.
   const worker = new Worker(new URL('./iocExcelExport.worker.ts', import.meta.url), { type: 'module' });
@@ -32,7 +32,5 @@ export async function exportNewsExcel(payload: NewsExcelPayload, filename: strin
   download(buffer, filename);
 }
 export async function exportBulkExcel(rows: BulkRow[]) {
-  const { default: ExcelLib } = await import('exceljs');
-  const wb = buildBulkExcelWorkbook(rows, ExcelLib);
-  download(await wb.xlsx.writeBuffer() as ArrayBuffer, 'threatsumm4ry-bulk-' + new Date().toISOString().replace(/[:.]/g, '-') + '.xlsx');
+  await exportNewsExcel({ kind: 'bulk', rows }, 'threatsumm4ry-bulk-' + new Date().toISOString().replace(/[:.]/g, '-') + '.xlsx');
 }

@@ -1,3 +1,4 @@
+import { enrichmentRequest, EnrichmentRequestError } from './enrichmentRequest';
 /// <reference types="vite/client" />
 import { ThreatIntelligenceResult, VendorData, TimelineEvent } from "@/types/threat-intelligence";
 import { detectAnalyzerQueryType, isPublicIpv6, type AnalyzerQueryType } from "@/utils/iocExtract";
@@ -6,7 +7,8 @@ import type { OrgThreatModel } from '@/utils/orgRelevance';
 // Helper to handle response
 const handleResponse = async (response: Response, vendorName: string) => {
     if (!response.ok) {
-        const errorText = await response.text();
+        const payload = await response.json().catch(() => null);
+        const errorText = typeof payload?.error === "string" ? payload.error.slice(0, 180) : "Fonte temporariamente indisponível.";
         throw new Error(`${vendorName} API error: ${response.status} ${response.statusText} - ${errorText}`);
     }
     return response.json();
@@ -535,25 +537,13 @@ const extractVendorTimestamps = (vendorName: string, data: any): TimelineEvent[]
 };
 
 // Generic fetcher for backend API
-export interface LookupOptions { fresh?: boolean; includeRaw?: boolean }
+export interface LookupOptions { fresh?: boolean; includeRaw?: boolean; previous?: ThreatIntelligenceResult; signal?: AbortSignal; onRetry?: (vendor: string, at: number) => void }
 const fetchFromBackend = async (endpoint: string, query: string, vendorName: string, options: LookupOptions = {}): Promise<VendorData> => {
     try {
-        const request = () => fetch(`/api/${endpoint}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+        const response = await enrichmentRequest(`/api/${endpoint}`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: options.signal,
             body: JSON.stringify({ query, ...(options.fresh ? { fresh: true } : {}) })
-        });
-        let response = await request();
-        // A credential may just be occupied by another IOC in the same batch.
-        // Retry short, explicit server windows; long quota waits remain visible.
-        for (let attempt = 0; attempt < 3 && response.status === 429; attempt++) {
-            if (!['virustotal', 'abuseipdb', 'alienvault', 'threatfox', 'urlhaus', 'malwarebazaar'].includes(endpoint)) break;
-            const seconds = Number(response.headers.get('Retry-After'));
-            if (!Number.isFinite(seconds) || seconds <= 0 || seconds > 5) break;
-            await response.arrayBuffer();
-            await new Promise(resolve => setTimeout(resolve, seconds * 1000));
-            response = await request();
-        }
+        }, { onWait: at => options.onRetry?.(vendorName, at) });
         if(response.status===404&&['virustotal','shodan'].includes(endpoint)){
             const missing=await response.clone().json().catch(()=>null);
             if(missing?.error==='Resource not found')return {name:vendorName,data:{Status:'No data'},link:getVendorLink(vendorName,query),timeline:[],...(options.includeRaw?{rawPayload:{...missing,httpStatus:404,queryStatus:'not_found'}}:{})};
@@ -568,7 +558,7 @@ const fetchFromBackend = async (endpoint: string, query: string, vendorName: str
             ...(options.includeRaw ? { rawPayload: data } : {}),
         };
     } catch (error) {
-        return { name: vendorName, data: {}, error: (error as Error).message };
+        return { name: vendorName, data: {}, error: (error as Error).message, ...(error instanceof EnrichmentRequestError ? { httpStatus: error.status, retryAt: error.retryAt } : {}) };
     }
 };
 
@@ -739,14 +729,19 @@ export const fetchThreatDataProgressive = async (
     onProgress: (data: VendorData) => void,
     options: LookupOptions = {},
 ): Promise<ThreatIntelligenceResult> => {
-    const vendorMap = buildVendorMap(query, options);
+    const controller = new AbortController();
+    const vendorMap = buildVendorMap(query, { ...options, signal: controller.signal,
+        onRetry: (name, at) => { options.onRetry?.(name, at); onProgress({ name, data: { Status: 'Aguardando nova tentativa', 'Próxima tentativa': new Date(at).toISOString() }, isLoading: true }); }
+    });
     const vendorsToQuery = resolveVendorsToQuery(query, vendorMap, selectedVendors);
 
     // Each vendor is wrapped in a timeout + catch so one slow/failed provider
     // doesn't lose the whole scan, and onProgress streams each result to the UI.
-    const VENDOR_TIMEOUT_MS = 30_000;
+    const VENDOR_TIMEOUT_MS = 80_000;
 
     const fetchPromises = vendorsToQuery.map(vendor => {
+        const retained = options.previous?.query === query ? options.previous.vendorData.find(item => item.name === vendor && !item.error && !item.isLoading) : undefined;
+        if (retained && !options.fresh) { onProgress(retained); return Promise.resolve(retained); }
         let timer: ReturnType<typeof setTimeout>;
         const timeoutPromise = new Promise<never>((_, reject) =>
             timer = setTimeout(() => reject(new Error(`${vendor} timed out after ${VENDOR_TIMEOUT_MS / 1000}s`)), VENDOR_TIMEOUT_MS)
@@ -769,6 +764,7 @@ export const fetchThreatDataProgressive = async (
     });
 
     const results = await Promise.all(fetchPromises);
+    controller.abort();
     return scoreThreatResults(query, results);
 };
 
@@ -792,7 +788,8 @@ export const fetchDnsLookup = async (domain: string): Promise<DnsLookupResult> =
         body: JSON.stringify({ query: domain })
     });
     if (!response.ok) {
-        const errorText = await response.text();
+        const payload = await response.json().catch(() => null);
+        const errorText = typeof payload?.error === "string" ? payload.error.slice(0, 180) : "Fonte temporariamente indisponível.";
         throw new Error(`DNS Lookup API error: ${response.status} - ${errorText}`);
     }
     return response.json();

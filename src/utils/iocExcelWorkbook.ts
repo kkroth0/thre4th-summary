@@ -4,13 +4,16 @@ import { bulkField, type BulkRow } from './bulkEnrichment';
 import { detectAnalyzerQueryType } from './iocExtract';
 import { addOtPatchClientSheets } from './otPatchClientWorkbook';
 import type { OtReportContext } from './otPatchIntelligence';
+import { addEnrichmentPresentation, styleEnrichmentDetails } from './enrichmentPresentation';
 
 type RecordRow = Record<string, unknown>;
 type Column = [string, string, number];
 type ExcelFactory = { Workbook: new () => ExcelJS.Workbook };
 export interface NewsExcelPayload { dataset: string; range: { from: string; to: string }; rows: RecordRow[]; generatedAt?: string; report?: OtReportContext }
 const valueText = (value: unknown): string => value == null ? '' : typeof value === 'object'
-  ? Array.isArray(value) && value.every(item => typeof item === 'string') ? value.join(' | ') : JSON.stringify(value)
+  // JSON Unicode escapes preserve astral characters through ExcelJS's UTF-8
+  // serialization chunks. JSON.parse restores the original provider payload.
+  ? Array.isArray(value) && value.every(item => typeof item === 'string') ? value.join(' | ') : JSON.stringify(value).replace(/[\uD800-\uDFFF]/g, unit => '\\u' + unit.charCodeAt(0).toString(16).padStart(4, '0'))
   : String(value);
 
 function tables(wb: ExcelJS.Workbook) {
@@ -28,6 +31,7 @@ function tables(wb: ExcelJS.Workbook) {
     for (const record of rows) {
       const values = columns.map(([key]) => {
         const value = record[key];
+        if (value == null || value === '') return null;
         if (typeof value === 'number' && Number.isFinite(value)) return value;
         if (typeof value === 'boolean') return value;
         const text = scrubXml(valueText(value));
@@ -89,12 +93,13 @@ export function buildNewsExcelWorkbook(payload: NewsExcelPayload, ExcelLib: Exce
 
 export function buildBulkExcelWorkbook(rows: BulkRow[], ExcelLib: ExcelFactory) {
   const wb = new ExcelLib.Workbook();
+  wb.addWorksheet('Dashboard'); wb.addWorksheet('Resumo executivo');
   workbookMetadata(wb, 'Enriquecimento em lote', new Date().toISOString(), 'IOC, enriquecimento, fontes, evidências');
   const table = tables(wb);
-  table('Indicadores', [['indicator', 'Indicador', 70], ['type', 'Tipo', 14], ['state', 'Estado da consulta', 20], ['verdict', 'Veredito', 20], ['score', 'Score', 12], ['detections', 'Detecções', 14], ['country', 'País', 14], ['asn', 'ASN', 20], ['organization', 'Organização', 35], ['completedAt', 'Concluído em (ISO)', 28], ['sources', 'Fontes', 50], ['error', 'Erro', 55], ['contextErrors', 'Falhas de contexto', 70], ['result', 'Resultado completo (JSON)', 90]], rows.map(row => ({
-    indicator: row.query, type: detectAnalyzerQueryType(row.query), state: row.state, verdict: row.result?.threatLevel || 'unknown', score: row.result?.overallScore ?? '', detections: row.result?.detections ?? '',
+  table('Indicadores', [['indicator', 'Indicador', 70], ['type', 'Tipo', 14], ['state', 'Estado da consulta', 20], ['verdict', 'Veredito', 20], ['score', 'Score', 12], ['detections', 'Detecções', 14], ['country', 'País', 14], ['asn', 'ASN', 20], ['organization', 'Organização', 35], ['completedAt', 'Concluído em (ISO)', 28], ['sources', 'Fontes', 50], ['error', 'Erro', 55], ['contextErrors', 'Falhas de contexto', 70], ['reverseDns', 'Nome reverso (rDNS)', 48], ['falsePositiveReview', 'Revisão de falso positivo (abuse.ch)', 65], ['result', 'Resultado completo (JSON)', 90]], rows.map(row => ({
+    indicator: row.query, type: ({ ip: 'IP', domain: 'Domínio', url: 'URL', hash: 'Hash', unknown: 'Não reconhecido' })[detectAnalyzerQueryType(row.query)], state: ({ queued: 'Na fila', running: 'Consultando', complete: 'Concluído', partial: 'Parcial', error: 'Falha', unsupported: 'Sem fonte compatível', stopped: 'Interrompido' })[row.state], verdict: ({ malicious: 'Malicioso', suspicious: 'Suspeito', safe: 'Sem sinal nas fontes', unknown: 'Indeterminado' })[row.result?.threatLevel || 'unknown'], score: row.result?.overallScore ?? '', detections: row.result?.detections ?? '',
     country: bulkField(row, ['Country']).value, asn: bulkField(row, ['ASN', 'AS']).value, organization: bulkField(row, ['Organization', 'ISP']).value,
-    completedAt: row.completedAt, sources: row.result?.vendorData.map(vendor => vendor.name) || [], error: row.error, contextErrors: row.context?.errors || [], result: row.result || null,
+    reverseDns: row.result?.vendorData.find(v => v.name === 'DNS / Team Cymru')?.data['Reverse Hostname'] || '', falsePositiveReview: bulkField(row, ['FP Review']).value, completedAt: row.completedAt, sources: row.result?.vendorData.map(vendor => vendor.name) || [], error: row.error, contextErrors: row.context?.errors || [], result: row.result || null,
   })));
   table('Fontes', [['indicator', 'Indicador', 70], ['source', 'Fonte', 24], ['state', 'Estado da fonte', 40], ['reference', 'Referência', 65], ['data', 'Dados normalizados (JSON)', 90], ['raw', 'Resposta completa (JSON)', 90], ['timeline', 'Timeline (JSON)', 90], ['quota', 'Cota observada (JSON)', 55]], rows.flatMap(row => (row.result?.vendorData || []).map(vendor => ({
     indicator: row.query, source: vendor.name, state: vendor.error || (vendor.isLoading ? 'pending' : 'ok'), reference: vendor.link, data: vendor.data, raw: vendor.rawPayload ?? null, timeline: vendor.timeline || [], quota: vendor.quota || null,
@@ -102,5 +107,26 @@ export function buildBulkExcelWorkbook(rows: BulkRow[], ExcelLib: ExcelFactory) 
   table('Publicações', [['indicator', 'Indicador', 70], ...common], rows.flatMap(row => (row.context?.publications || []).map(publication => ({ ...publication, indicator: row.query, url: publication.link, date: publication.pubDate }))));
   table('Evidências', [['indicator', 'Indicador', 70], ['provider', 'Provedor', 24], ['source', 'Fonte', 24], ['title', 'Título', 65], ['link', 'Referência', 65], ['published', 'Publicação (ISO)', 28], ['collectedAt', 'Coleta (ISO)', 28], ['confidence', 'Confiança', 14], ['reputation', 'Reputação (JSON)', 70], ['entities', 'Entidades e relações (JSON)', 90]], rows.flatMap(row => (row.context?.evidence || []).map(evidence => ({ ...evidence, indicator: row.query }))));
   table('Resumo', [['key', 'Campo', 40], ['value', 'Valor', 90]], [{ key: 'Indicadores exportados', value: rows.length }, { key: 'Gerado em (ISO)', value: new Date().toISOString() }, { key: 'Escopo', value: 'Todas as linhas do filtro atual, incluindo parciais e falhas. Exportar não faz novas consultas às fontes.' }]);
+  const relations = rows.flatMap(row => (row.context?.evidence || []).flatMap(evidence => evidence.entities.map(entity => ({ indicator: row.query, kind: entity.kind, name: entity.name, relation: entity.relation, confidence: evidence.confidence, source: evidence.provider, title: evidence.title, link: evidence.link, date: evidence.published }))));
+  table('Relações', [['indicator', 'Indicador', 46], ['kind', 'Tipo de entidade', 20], ['name', 'Entidade', 32], ['relation', 'Relação informada pela base', 30], ['confidence', 'Confiança na fonte', 20], ['source', 'Fonte', 22], ['title', 'Publicação / evidência', 65], ['link', 'Referência', 65], ['date', 'Data', 26]], relations);
+  table('Detalhes por fonte', [['indicator', 'Indicador', 46], ['source', 'Fonte', 22], ['field', 'Campo', 34], ['value', 'Resultado', 100]], rows.flatMap(row => (row.result?.vendorData || []).flatMap(vendor => Object.entries(vendor.data || {}).map(([field, value]) => ({ indicator: row.query, source: vendor.name, field, value })))));
+  const count = (entries: { indicator: string; name: string }[]) => {
+    const grouped = new Map<string, Set<string>>();
+    for (const { indicator, name } of entries) { if (!grouped.has(name)) grouped.set(name, new Set()); grouped.get(name)!.add(indicator); }
+    return [...grouped].map(([name, values]) => ({ name, count: values.size }));
+  };
+  const pending = rows.filter(row => ['queued', 'running', 'stopped'].includes(row.state)).length;
+  addEnrichmentPresentation(wb, {
+    total: rows.length, completed: rows.filter(row => row.state === 'complete').length,
+    partial: rows.filter(row => ['partial', 'error', 'unsupported'].includes(row.state)).length, pending,
+    malicious: rows.filter(row => row.result?.threatLevel === 'malicious').length,
+    suspicious: rows.filter(row => row.result?.threatLevel === 'suspicious').length,
+    related: new Set(relations.filter(r => r.kind === 'actor').map(r => r.indicator)).size,
+    evidence: rows.reduce((n, row) => n + (row.context?.evidence.length || 0), 0),
+    actors: count(relations.filter(r => r.kind === 'actor').map(r => ({ indicator: r.indicator, name: r.name }))),
+    coverage: count(rows.flatMap(row => (row.result?.vendorData || []).filter(v => !v.error && !v.isLoading).map(v => ({ indicator: row.query, name: v.name })))),
+    generatedAt: new Date().toISOString(),
+  });
+  styleEnrichmentDetails(wb);
   return wb;
 }
