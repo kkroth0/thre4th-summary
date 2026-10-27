@@ -538,11 +538,22 @@ const extractVendorTimestamps = (vendorName: string, data: any): TimelineEvent[]
 export interface LookupOptions { fresh?: boolean; includeRaw?: boolean }
 const fetchFromBackend = async (endpoint: string, query: string, vendorName: string, options: LookupOptions = {}): Promise<VendorData> => {
     try {
-        const response = await fetch(`/api/${endpoint}`, {
+        const request = () => fetch(`/api/${endpoint}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ query, ...(options.fresh ? { fresh: true } : {}) })
         });
+        let response = await request();
+        // A credential may just be occupied by another IOC in the same batch.
+        // Retry short, explicit server windows; long quota waits remain visible.
+        for (let attempt = 0; attempt < 3 && response.status === 429; attempt++) {
+            if (!['virustotal', 'abuseipdb', 'alienvault', 'threatfox', 'urlhaus', 'malwarebazaar'].includes(endpoint)) break;
+            const seconds = Number(response.headers.get('Retry-After'));
+            if (!Number.isFinite(seconds) || seconds <= 0 || seconds > 5) break;
+            await response.arrayBuffer();
+            await new Promise(resolve => setTimeout(resolve, seconds * 1000));
+            response = await request();
+        }
         if(response.status===404&&['virustotal','shodan'].includes(endpoint)){
             const missing=await response.clone().json().catch(()=>null);
             if(missing?.error==='Resource not found')return {name:vendorName,data:{Status:'No data'},link:getVendorLink(vendorName,query),timeline:[],...(options.includeRaw?{rawPayload:{...missing,httpStatus:404,queryStatus:'not_found'}}:{})};
@@ -1520,6 +1531,23 @@ export const deleteScan = async (id: string): Promise<SavedScan[]> => {
 
 // BYOK genérico: quais providers têm chave configurada (booleans, nunca os valores).
 export type ApiKeysState = Record<string, boolean>;
+export interface CredentialPoolStatus {
+    keys: { id: string; label: string; status: string; retryAt: number | null; usedToday: number; lastStatus: number | null }[];
+    effectiveCount: number; personal: boolean; limits: { perMinute: number; perDay: number };
+}
+export async function fetchCredentialPools(): Promise<Record<string, CredentialPoolStatus>> {
+    const response = await fetch('/api/user/key-pools');
+    if (!response.ok) throw new Error('Não foi possível carregar o roteamento das chaves.');
+    return (await response.json()).pools;
+}
+export async function addCredentialKeys(provider: string, keys: string[]): Promise<void> {
+    const response = await fetch(`/api/user/key-pools/${encodeURIComponent(provider)}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ keys }) });
+    if (!response.ok) throw new Error((await response.json().catch(() => ({}))).error || 'Não foi possível adicionar as chaves.');
+}
+export async function removeCredentialKey(provider: string, id: string): Promise<void> {
+    const response = await fetch(`/api/user/key-pools/${encodeURIComponent(provider)}/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    if (!response.ok) throw new Error('Não foi possível remover a chave.');
+}
 export interface AxurImportStatus {
     configured: boolean; status: 'pending' | 'running' | 'retrying' | 'complete';
     page: number; processed: number; observations: number; total?: number; skipped?: number;

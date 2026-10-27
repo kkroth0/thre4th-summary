@@ -22,6 +22,10 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { deleteApiKey, fetchApiKeys, saveApiKey, fetchAxurImportStatus, type AxurImportStatus, type ApiKeysState } from "@/services/threatApi";
 
+import { CredentialPoolRow } from './CredentialPoolRow';
+import { fetchCredentialPools, type CredentialPoolStatus } from '@/services/threatApi';
+const POOL_IDS = new Set(['virustotal','abuseipdb','otx','abuse_ch','threatfox','urlhaus','malwarebazaar']);
+
 interface Provider {
   id: string;
   label: string;
@@ -53,6 +57,10 @@ const CATALOG: Group[] = [
     items: [{ id: 'abuse_ch', label: 'Abuse.ch', url: 'https://auth.abuse.ch/', placeholder: 'Auth-Key',
       description: { pt: 'Usa sua Auth-Key no MalwareBazaar, ThreatFox e URLhaus, incluindo buscas de famílias e hashes. A chave é armazenada cifrada por conta.', en: 'Uses your Auth-Key for MalwareBazaar, ThreatFox and URLhaus, including family and hash lookups. The key is encrypted per account.' } }],
   },
+  { title: { pt: 'Enriquecimento e chaves dedicadas', en: 'Enrichment and dedicated keys' }, items: [
+    { id: 'virustotal', label: 'VirusTotal', url: 'https://www.virustotal.com/gui/my-apikey' },
+    ...[{ id: 'threatfox', label: 'ThreatFox' }, { id: 'urlhaus', label: 'URLhaus' }, { id: 'malwarebazaar', label: 'MalwareBazaar' }].map(provider => ({ ...provider, url: 'https://auth.abuse.ch/', description: { pt: 'Opcional: cadastre um conjunto dedicado. Sem ele, esta fonte usa as chaves compartilhadas de Abuse.ch acima.', en: 'Optional: configure a dedicated pool. Otherwise this source uses the shared Abuse.ch keys above.' } })),
+  ] },
   {
     title: { pt: "Superfície de Ataque", en: "Attack Surface" },
     items: [
@@ -100,7 +108,7 @@ function AxurProgress() {
   </div>;
 }
 
-function KeyRow({ provider, configured, onChanged }: { provider: Provider; configured: boolean; onChanged: () => void }) {
+function KeyRow({ provider, configured, pool, onChanged }: { provider: Provider; configured: boolean; pool?: CredentialPoolStatus; onChanged: () => void }) {
   const { language } = useLanguage();
   const pt = language === "pt";
   const [editing, setEditing] = useState(false);
@@ -158,7 +166,7 @@ function KeyRow({ provider, configured, onChanged }: { provider: Provider; confi
       {provider.description ? <p className="text-xs leading-relaxed text-muted-foreground">{pt ? provider.description.pt : provider.description.en}</p> : null}
       {provider.id === 'axur' && configured && <AxurProgress />}
 
-      {configured && !editing ? (
+      {POOL_IDS.has(provider.id) ? <CredentialPoolRow provider={provider} pool={pool} pt={pt} onChanged={onChanged} /> : configured && !editing ? (
         <div className="flex flex-1 items-center gap-2">
           <span className="flex-1 rounded-md border border-border bg-secondary/40 px-3 py-2 font-mono text-sm tracking-wider text-muted-foreground">••••••••••••</span>
           <Button variant="outline" size="sm" disabled={busy} onClick={() => setEditing(true)}>{pt ? "Alterar" : "Change"}</Button>
@@ -205,11 +213,13 @@ export function ApiKeysSettings() {
   const { refresh } = useAuth();
   const pt = language === "pt";
   const [keys, setKeys] = useState<ApiKeysState>({});
+  const [pools, setPools] = useState<Record<string, CredentialPoolStatus>>({});
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
     try {
-      setKeys(await fetchApiKeys());
+      const [nextKeys, nextPools] = await Promise.all([fetchApiKeys(), fetchCredentialPools()]);
+      setKeys(nextKeys); setPools(nextPools);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Falha ao carregar chaves");
     } finally {
@@ -217,7 +227,7 @@ export function ApiKeysSettings() {
     }
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { void load(); const timer = setInterval(() => { if (document.visibilityState === 'visible') void load(); }, 15000); return () => clearInterval(timer); }, [load]);
 
   const onChanged = () => {
     void queryClient.invalidateQueries({ predicate: query => ['malware-catalog', 'malware-family', 'malware-sample', 'cidr-shodan', 'cidr-abuse'].includes(String(query.queryKey[0])) });
@@ -239,7 +249,7 @@ export function ApiKeysSettings() {
               ser dita com todas as letras. */}
           <p className="mt-1 text-sm text-muted-foreground">
             {pt
-              ? "Conecte suas fontes para consultar e ampliar sua base de inteligência."
+              ? "Conecte suas fontes e adicione até 50 chaves por fonte. As consultas distribuem a carga entre credenciais disponíveis e respeitam a espera informada pelo provedor."
               : "Connect your sources to query and expand your intelligence inventory."}
           </p>
         </div>
@@ -256,7 +266,7 @@ export function ApiKeysSettings() {
                 <CardTitle className="flex items-center gap-2 text-sm"><KeyRound className="h-4 w-4 text-muted-foreground" /> {pt ? group.title.pt : group.title.en}</CardTitle>
               </CardHeader>
               <CardContent className="divide-y divide-border/50 px-4 pb-2 pt-0">
-                {group.items.map((provider) => <KeyRow key={provider.id} provider={provider} configured={!!keys[provider.id]} onChanged={onChanged} />)}
+                {group.items.map((provider) => <KeyRow key={provider.id} provider={provider} configured={!!keys[provider.id]} pool={pools[provider.id]} onChanged={onChanged} />)}
               </CardContent>
             </Card>
           ))}

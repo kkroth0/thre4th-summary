@@ -1,0 +1,15 @@
+# Roteamento de credenciais do enriquecimento
+
+Configurações → Chaves de API permite acrescentar até 50 chaves por fonte, uma por linha, preservando as existentes e ignorando repetições. A lista fica cifrada pelo mecanismo de segredos já usado pela plataforma. A interface recebe apenas identificadores, disponibilidade e contadores; não recebe os valores salvos. As chaves continuam privadas por usuário.
+
+VirusTotal, AbuseIPDB, OTX, ThreatFox, URLhaus e MalwareBazaar usam o mesmo roteador. As três fontes abuse.ch podem herdar o conjunto compartilhado ou usar conjuntos dedicados. Credenciais pessoais têm prioridade sobre as da plataforma. rDNS e Team Cymru não precisam de chave. A Axur continua alimentando este fluxo pela base privada importada, com sua credencial e seu cursor próprios; não se alternam contas Axur no meio da paginação de um acervo.
+
+O roteador distribui consultas sucessivas, reserva uma chamada em voo por credencial e mantém o estado de consumo por serviço e impressão criptográfica da chave. Reutilizar a mesma chave em outra conta da plataforma não cria nova cota. Um 429 retira a credencial até Retry-After/reset; limites explicitamente identificados pelo provedor como compartilhados por IP ou serviço suspendem o conjunto. Falhas de autenticação suspendem a credencial por dez minutos, sem expor a resposta que possa conter segredos. Uma resposta legítima 404 não provoca tentativas com todas as chaves.
+
+Quando existem, PREFIX_REQUESTS_PER_MINUTE e PREFIX_REQUESTS_PER_DAY são aplicados por credencial; o prefixo corresponde ao nome da variável de API, sem _API_KEY. A janela diária desse contador local usa UTC. Na ausência de configuração não se inventa uma cota contratada: o roteador segue as respostas reais do provedor. Os contadores mostram tentativas realizadas pela plataforma, não o saldo total da conta no fornecedor. Limites de IP, conta e serviço podem restringir a capacidade, mesmo com várias chaves.
+
+O cache continua separado por usuário, consulta e conjunto de credenciais, sem trocar de identidade a cada chave escolhida. Assim, consultas repetidas não desperdiçam cota. Se todo o conjunto estiver ocupado ou em espera, a API devolve 429 e Retry-After; o navegador repete até três esperas curtas de até cinco segundos. Esperas maiores preservam a pausa já existente do lote e os resultados concluídos. O lote continua exigindo a aba aberta; esta alteração não adiciona uma fila de tarefas em segundo plano.
+
+Endpoints autenticados: GET /api/user/key-pools, POST /api/user/key-pools/:provider (acrescentar), DELETE /api/user/key-pools/:provider/:id (remoção individual). As rotas antigas de chave única permanecem compatíveis. O armazenamento legado de uma chave é lido sem migração destrutiva.
+
+Validação: testes de distribuição entre 20 chaves, concorrência, persistência de cooldown, janela diária, limites compartilhados, autenticação e respostas 404; teste HTTP de armazenamento cifrado, deduplicação e isolamento entre usuários; seis integrações com 20 credenciais sintéticas cada, alternância após 429 e confirmação de cache. Nenhuma carga de 10 mil IOCs foi enviada a provedores reais.

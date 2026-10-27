@@ -1,4 +1,5 @@
 import { filterReportIocNoise } from './reportIocNoise.js';
+import { createCredentialPool, credentialId, decodeCredentials, parseCredentialInput, POOL_PROVIDERS } from './credentialPool.js';
 import express from 'express';
 import cors from 'cors';
 import rateLimit from 'express-rate-limit';
@@ -597,26 +598,39 @@ const withKeyRotation = async (envName, makeRequest) => {
 };
 
 const quotaReader = createQuotaReader({ getKeys, loadState: key => iocIntelligence.state(key), saveState: (key, value) => iocIntelligence.setState(key, value) });
-const lookupCache = createLookupCache();
-function abuseKeys(req) {
-    const session=verifySession(getCookie(req,'ts_session'));
-    const personal=getUserApiKey(session?.sub,'abuseipdb');
-    return personal?[personal]:getKeys('ABUSEIPDB_API_KEY');
+const credentialPool = createCredentialPool({ load: key => iocIntelligence.state(key), save: (key, value) => iocIntelligence.setState(key, value) });
+const PROVIDER_ENVS = { virustotal: 'VIRUSTOTAL_API_KEY', abuseipdb: 'ABUSEIPDB_API_KEY', otx: 'ALIENVAULT_API_KEY', abuse_ch: 'ABUSE_CH_API_KEY', threatfox: 'THREATFOX_API_KEY', urlhaus: 'URLHAUS_API_KEY', malwarebazaar: 'MALWAREBAZAAR_API_KEY' };
+function providerKeys(req, provider) {
+    const owner = req?.user?.sub || (req ? verifySession(getCookie(req, 'ts_session'))?.sub : null);
+    const personal = getUserApiKeys(owner, provider);
+    if (personal.length) return personal;
+    if (['threatfox', 'urlhaus', 'malwarebazaar'].includes(provider)) {
+        const shared = getUserApiKeys(owner, 'abuse_ch');
+        if (shared.length) return shared;
+    }
+    const own = getKeys(PROVIDER_ENVS[provider]);
+    if (own.length) return own;
+    if (['abuse_ch', 'threatfox', 'urlhaus', 'malwarebazaar'].includes(provider)) return [...new Set(['ABUSE_CH_API_KEY','THREATFOX_API_KEY','URLHAUS_API_KEY','MALWAREBAZAAR_API_KEY'].flatMap(getKeys))];
+    return [];
 }
-function withAbuseKey(req,load,operation='check') {
-    const session=verifySession(getCookie(req,'ts_session'));
-    const personal=getUserApiKey(session?.sub,'abuseipdb');
-    const request = async key => {
-        try {
-            const response = await load(key);
-            quotaReader.record('AbuseIPDB', response.headers, { key, operation });
-            return response;
-        } catch (error) {
-            if (error.response?.status === 429) quotaReader.record('AbuseIPDB', error.response.headers, { key, operation });
-            throw error;
-        }
-    };
-    return personal?request(personal):withKeyRotation('ABUSEIPDB_API_KEY',request);
+function providerLimits(provider) {
+    const prefix = PROVIDER_ENVS[provider]?.replace(/_API_KEY$/, '');
+    return { perMinute: Number(process.env[`${prefix}_REQUESTS_PER_MINUTE`]) || 0, perDay: Number(process.env[`${prefix}_REQUESTS_PER_DAY`]) || 0 };
+}
+function withProviderKey(req, provider, request) { return credentialPool.run(provider, providerKeys(req, provider), request, providerLimits(provider)); }
+function providerError(res, error) {
+    const { status, message } = sanitizeError(error);
+    const retry = error.response?.headers?.['retry-after'];
+    if (status === 429 && retry) res.set('Retry-After', String(retry));
+    return res.status(status).json({ error: message, ...(status === 429 && error.retryAt ? { retryAt: error.retryAt } : {}) });
+}
+const lookupCache = createLookupCache();
+function abuseKeys(req) { return providerKeys(req, 'abuseipdb'); }
+function withAbuseKey(req, load, operation = 'check') {
+    return withProviderKey(req, 'abuseipdb', async key => {
+        try { const response = await load(key); quotaReader.record('AbuseIPDB', response.headers, { key, operation }); return response; }
+        catch (error) { if (error.response?.status === 429) quotaReader.record('AbuseIPDB', error.response.headers, { key, operation }); throw error; }
+    });
 }
 async function persistProviderEvidence(req,provider,query,data) {
     const session=verifySession(getCookie(req,'ts_session'));
@@ -666,14 +680,13 @@ app.post('/api/virustotal', scanLimiter, async (req, res) => {
         else if (queryType === "hash") endpoint = `https://www.virustotal.com/api/v3/files/${sanitized}`;
         else endpoint = `https://www.virustotal.com/api/v3/urls/${Buffer.from(sanitized).toString('base64').replace(/=/g, "")}`;
 
-        const response = await cachedProvider(req, res, 'virustotal', sanitized, getKeys('VIRUSTOTAL_API_KEY'), () => withKeyRotation('VIRUSTOTAL_API_KEY', (key) =>
+        const response = await cachedProvider(req, res, 'virustotal', sanitized, providerKeys(req, 'virustotal'), () => withProviderKey(req, 'virustotal', (key) =>
             axios.get(endpoint, { headers: { "x-apikey": key } })
         ));
         sendResponseWithQuota(res, response);
     } catch (error) {
         if (error.noKey) return res.status(500).json({ error: "API Key missing" });
-        const { status, message } = sanitizeError(error);
-        res.status(status).json({ error: message });
+        providerError(res, error);
     }
 });
 
@@ -699,8 +712,7 @@ app.post('/api/abuseipdb', scanLimiter, async (req, res) => {
         sendResponseWithQuota(res, response);
     } catch (error) {
         if (error.noKey) return res.status(500).json({ error: "API Key missing" });
-        const { status, message } = sanitizeError(error);
-        res.status(status).json({ error: message });
+        providerError(res, error);
     }
 });
 
@@ -723,18 +735,14 @@ app.post('/api/abuseipdb/check-block', scanLimiter, async (req, res) => {
         sendResponseWithQuota(res, response);
     } catch (error) {
         if (error.noKey) return res.status(500).json({ error: "API Key missing" });
-        const { status, message } = sanitizeError(error);
-        res.status(status).json({ error: message });
+        providerError(res, error);
     }
 });
 
 // AlienVault OTX
 app.post('/api/alienvault', scanLimiter, async (req, res) => {
     const { query } = req.body;
-    const headers = {};
-    const session = verifySession(getCookie(req,'ts_session'));
-    const otxKey = getUserApiKey(session?.sub,'otx') || getKeys('ALIENVAULT_API_KEY')[0] || '';
-    if (otxKey) headers["X-OTX-API-KEY"] = otxKey;
+    const otxKeys = providerKeys(req, 'otx');
 
     try {
         const queryType = detectQueryType(query);
@@ -748,11 +756,10 @@ app.post('/api/alienvault', scanLimiter, async (req, res) => {
 
         // A OTX morre por concorrência sem devolver 429: o gate segura o lote
         // em 4 chamadas em voo e o timeout impede que uma travada ocupe a vaga.
-        const response = await cachedProvider(req, res, 'otx', sanitized, otxKey, () => otxThrottled(() => axios.get(endpoint, { headers, timeout: OTX_TIMEOUT_MS, family: 4, maxContentLength: 8_000_000, maxRedirects: 0 })));
+        const response = await cachedProvider(req, res, 'otx', sanitized, otxKeys, () => { const request = key => otxThrottled(() => axios.get(endpoint, { headers: key ? { 'X-OTX-API-KEY': key } : {}, timeout: OTX_TIMEOUT_MS, family: 4, maxContentLength: 8_000_000, maxRedirects: 0 })); return otxKeys.length ? withProviderKey(req, 'otx', request) : request(''); });
         sendResponseWithQuota(res, response);
     } catch (error) {
-        const { status, message } = sanitizeError(error);
-        res.status(status).json({ error: message });
+        providerError(res, error);
     }
 });
 
@@ -819,14 +826,11 @@ app.post('/api/urlhaus', scanLimiter, async (req, res) => {
 
         // abuse.ch now requires an Auth-Key header on all URLhaus API queries.
         const headers = { "Content-Type": "application/x-www-form-urlencoded" };
-        const abKey = abuseChKey(req);
-        if (abKey) headers['Auth-Key'] = abKey;
-
-        const response = await cachedProvider(req, res, 'urlhaus', params.toString(), abKey, () => axios.post(endpoint, params.toString(), { headers, timeout: 15000, family: 4, maxContentLength: 8_000_000, maxRedirects: 0 }));
+        const keys = providerKeys(req, 'urlhaus');
+        const response = await cachedProvider(req, res, 'urlhaus', params.toString(), keys, () => withProviderKey(req, 'urlhaus', key => axios.post(endpoint, params.toString(), { headers: { ...headers, 'Auth-Key': key }, timeout: 15000, family: 4, maxContentLength: 8_000_000, maxRedirects: 0 })));
         res.json(response.data);
     } catch (error) {
-        const { status, message } = sanitizeError(error);
-        res.status(status).json({ error: message });
+        providerError(res, error);
     }
 });
 
@@ -846,17 +850,14 @@ app.post('/api/malwarebazaar', scanLimiter, async (req, res) => {
 
         // abuse.ch exige Auth-Key em todas as consultas (inclusive MalwareBazaar).
         const headers = { "Content-Type": "application/x-www-form-urlencoded" };
-        const abKey = abuseChKey(req);
-        if (abKey) headers["Auth-Key"] = abKey;
-
-        const response = await cachedProvider(req, res, 'malwarebazaar', sanitized, abKey, () => axios.post(`https://mb-api.abuse.ch/api/v1/`,
+        const keys = providerKeys(req, 'malwarebazaar');
+        const response = await cachedProvider(req, res, 'malwarebazaar', sanitized, keys, () => withProviderKey(req, 'malwarebazaar', key => axios.post(`https://mb-api.abuse.ch/api/v1/`,
             params.toString(),
-            { headers, timeout: 15000, family: 4, maxContentLength: 8_000_000, maxRedirects: 0 }
-        ));
+            { headers: { ...headers, 'Auth-Key': key }, timeout: 15000, family: 4, maxContentLength: 8_000_000, maxRedirects: 0 }
+        )));
         res.json(response.data);
     } catch (error) {
-        const { status, message } = sanitizeError(error);
-        res.status(status).json({ error: message });
+        providerError(res, error);
     }
 });
 
@@ -872,20 +873,17 @@ app.post('/api/threatfox', scanLimiter, async (req, res) => {
         const sanitized = sanitizeQuery(query, queryType);
 
         const headers = { "Content-Type": "application/json" };
-        const abKey = abuseChKey(req);
-        if (abKey) headers["Auth-Key"] = abKey;
-
-        const response = await cachedProvider(req, res, 'threatfox', sanitized, abKey, () => axios.post(
+        const keys = providerKeys(req, 'threatfox');
+        const response = await cachedProvider(req, res, 'threatfox', sanitized, keys, () => withProviderKey(req, 'threatfox', key => axios.post(
             `https://threatfox-api.abuse.ch/api/v1/`,
             { query: "search_ioc", search_term: sanitized },
-            { headers, timeout: 15000, family: 4, maxContentLength: 8_000_000, maxRedirects: 0 }
-        ));
+            { headers: { ...headers, 'Auth-Key': key }, timeout: 15000, family: 4, maxContentLength: 8_000_000, maxRedirects: 0 }
+        )));
         // A busca segue por curinga (é o que casa `ip:porta` e URL do host),
         // mas o que não é o indicador consultado não sai daqui.
         res.json(filterExactIocs(response.data, sanitized));
     } catch (error) {
-        const { status, message } = sanitizeError(error);
-        res.status(status).json({ error: message });
+        providerError(res, error);
     }
 });
 
@@ -2407,7 +2405,7 @@ app.post('/api/auth/logout', (req, res) => {
 // dnsdumpster) ficavam guardados cifrados, apareciam como "configurado" na tela
 // e nenhuma rota os lia — todas leem só process.env. Prometer o que não
 // acontece é pior do que não oferecer.
-const BYOK_PROVIDERS = new Set(['shodan', 'urlscan', 'abuse_ch', 'otx', 'abuseipdb', 'axur']);
+const BYOK_PROVIDERS = new Set(['shodan', 'urlscan', 'axur', ...POOL_PROVIDERS]);
 const axurImports = new Map();
 function accountAxurImport(owner) {
     if (!axurImports.has(owner)) axurImports.set(owner, createAxurImport({ store: iocIntelligence, scope: owner,
@@ -2468,12 +2466,52 @@ app.delete('/api/user/keys/:provider', requireAuth, (req, res) => {
 function getUserApiKey(userId, provider) {
     const encrypted = usersStore[userId]?.apiKeysEnc?.[provider];
     if (!encrypted) return '';
-    try { return decryptSecret(encrypted); }
+    try { return decodeCredentials(decryptSecret(encrypted))[0] || ''; }
     catch (error) {
         console.error(`failed to decrypt ${provider} key for user:`, error.message);
         return '';
     }
 }
+
+function getUserApiKeys(userId, provider) {
+    const encrypted = usersStore[userId]?.apiKeysEnc?.[provider];
+    if (!encrypted) return [];
+    try { return decodeCredentials(decryptSecret(encrypted)); } catch { return []; }
+}
+app.get('/api/user/key-pools', requireAuth, (req, res) => {
+    res.set('Cache-Control', 'private, no-store');
+    res.json({ pools: Object.fromEntries([...POOL_PROVIDERS].map(provider => [provider, {
+        keys: credentialPool.describe(provider, getUserApiKeys(req.user.sub, provider), providerLimits(provider)),
+        effectiveCount: providerKeys(req, provider).length,
+        personal: getUserApiKeys(req.user.sub, provider).length > 0,
+        limits: providerLimits(provider),
+    }])) });
+});
+app.post('/api/user/key-pools/:provider', requireAuth, (req, res) => {
+    if (!ENC_KEY) return res.status(503).json({ error: 'Armazenamento de chaves indisponível.' });
+    const provider = String(req.params.provider);
+    if (!POOL_PROVIDERS.has(provider)) return res.status(400).json({ error: 'Provedor desconhecido.' });
+    let added;
+    try { added = parseCredentialInput(req.body?.keys); } catch (error) { return res.status(400).json({ error: error.message }); }
+    const keys = [...new Set([...getUserApiKeys(req.user.sub, provider), ...added])];
+    if (keys.length > 50) return res.status(400).json({ error: 'Limite de 50 chaves por fonte.' });
+    const user = usersStore[req.user.sub] || (usersStore[req.user.sub] = { login: req.user.login, createdAt: new Date().toISOString() });
+    (user.apiKeysEnc || (user.apiKeysEnc = {}))[provider] = encryptSecret(JSON.stringify({ version: 1, keys }));
+    user.updatedAt = new Date().toISOString(); saveUsers();
+    res.json({ provider, count: keys.length });
+});
+app.delete('/api/user/key-pools/:provider/:id', requireAuth, (req, res) => {
+    const provider = String(req.params.provider);
+    if (!POOL_PROVIDERS.has(provider)) return res.status(400).json({ error: 'Provedor desconhecido.' });
+    const keys = getUserApiKeys(req.user.sub, provider).filter(key => credentialId(key) !== req.params.id);
+    const user = usersStore[req.user.sub];
+    if (user?.apiKeysEnc?.[provider]) {
+        if (keys.length) user.apiKeysEnc[provider] = encryptSecret(JSON.stringify({ version: 1, keys }));
+        else delete user.apiKeysEnc[provider];
+        user.updatedAt = new Date().toISOString(); saveUsers();
+    }
+    res.json({ provider, count: keys.length });
+});
 
 function buildExposureScanDeps(ownerId) {
     return {
@@ -4232,10 +4270,10 @@ app.post('/api/phishing-watch/run', requirePremium, scanLimiter, async (req, res
 // isenção do rate limiter — quem não tem limite é quem enxerga o teto real.
 app.get('/api/vendors/quotas', requireAuth, async (req, res) => {
     try {
-        const personalProviders = { SHODAN_API_KEY: 'shodan', URLSCAN_API_KEY: 'urlscan', ABUSEIPDB_API_KEY: 'abuseipdb' };
+        const personalProviders = { VIRUSTOTAL_API_KEY: 'virustotal', SHODAN_API_KEY: 'shodan', URLSCAN_API_KEY: 'urlscan', ABUSEIPDB_API_KEY: 'abuseipdb' };
         const keysFor = env => {
-            const personal = personalProviders[env] && getUserApiKey(req.user.sub, personalProviders[env]);
-            return personal ? [personal] : getKeys(env);
+            const personal = personalProviders[env] ? getUserApiKeys(req.user.sub, personalProviders[env]) : [];
+            return personal.length ? personal : getKeys(env);
         };
         const quotas = await quotaReader.read({ keysFor, fresh: req.query.refresh === '1' });
         const quotaEnv = { VirusTotal: 'VIRUSTOTAL_API_KEY', Shodan: 'SHODAN_API_KEY', 'urlscan.io': 'URLSCAN_API_KEY', AbuseIPDB: 'ABUSEIPDB_API_KEY', WHOIS: 'WHOIS_API_KEY' };
@@ -4263,15 +4301,15 @@ app.get('/api/vendors/status', (req, res) => {
     const hasKey = (envName) => getKeys(envName).length > 0;
     const status = {
         // Precisam de chave: sem ela a rota responde erro.
-        "VirusTotal": hasKey('VIRUSTOTAL_API_KEY'),
-        "AbuseIPDB": hasKey('ABUSEIPDB_API_KEY'),
+        "VirusTotal": providerKeys(req, 'virustotal').length > 0,
+        "AbuseIPDB": providerKeys(req, 'abuseipdb').length > 0,
         "Shodan": hasKey('SHODAN_API_KEY') || !!getUserApiKey(verifySession(getCookie(req, 'ts_session'))?.sub, 'shodan'),
         "WHOIS": hasKey('WHOIS_API_KEY'),
         // Conectores públicos permitem consulta sem chave; isto não é um healthcheck.
         "AlienVault OTX": true,
-        "URLhaus": !!abuseChKey(req),
-        "MalwareBazaar": !!abuseChKey(req),
-        "ThreatFox": !!abuseChKey(req),
+        "URLhaus": providerKeys(req, 'urlhaus').length > 0,
+        "MalwareBazaar": providerKeys(req, 'malwarebazaar').length > 0,
+        "ThreatFox": providerKeys(req, 'threatfox').length > 0,
         "PhishTank": true,
         "PhishStats": true,
         "OpenPhish": true,

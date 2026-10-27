@@ -46,6 +46,32 @@ test('personal API responses are not cached and preflight supports PUT settings 
     assert.match(response.headers.get('access-control-allow-methods')||'',/PUT/);
 });
 
+test('credential pools append twenty encrypted keys, deduplicate, isolate accounts and remove only the chosen key', async () => {
+    const endpoint = BASE + '/api/user/key-pools/virustotal';
+    const keys = Array.from({ length: 20 }, (_, index) => 'private-smoke-token-' + index);
+    const post = (value, headers = AUTH_HEADERS) => fetch(endpoint, { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify({ keys: value }) });
+    assert.equal((await post(keys, {})).status, 401);
+    assert.equal((await post(['bad key with spaces'])).status, 400);
+    assert.equal((await post(keys)).status, 200);
+    assert.equal((await post(keys)).status, 200);
+    const response = await fetch(BASE + '/api/user/key-pools', { headers: AUTH_HEADERS });
+    assert.match(response.headers.get('cache-control'), /no-store/);
+    const own = await response.json();
+    assert.equal(own.pools.virustotal.keys.length, 20);
+    for (const key of keys) assert.ok(!JSON.stringify(own).includes(key));
+    const saved = readFileSync(USERS_STORE_PATH, 'utf8');
+    for (const key of keys) assert.ok(!saved.includes(key));
+    const other = await fetch(BASE + '/api/user/key-pools', { headers: OUTSIDER_HEADERS }).then(r => r.json());
+    assert.equal(other.pools.virustotal.keys.length, 0);
+    const id = own.pools.virustotal.keys[0].id;
+    await fetch(endpoint + '/' + id, { method: 'DELETE', headers: OUTSIDER_HEADERS });
+    assert.equal((await fetch(BASE + '/api/user/key-pools', { headers: AUTH_HEADERS }).then(r => r.json())).pools.virustotal.keys.length, 20);
+    await fetch(endpoint + '/' + id, { method: 'DELETE', headers: AUTH_HEADERS });
+    assert.equal((await fetch(BASE + '/api/user/key-pools', { headers: AUTH_HEADERS }).then(r => r.json())).pools.virustotal.keys.length, 19);
+    assert.equal((await fetch(BASE + '/api/vendors/status', { headers: AUTH_HEADERS }).then(r => r.json())).VirusTotal, true);
+    await fetch(BASE + '/api/user/keys/virustotal', { method: 'DELETE', headers: AUTH_HEADERS });
+});
+
 test('actor aliases share one catalog identity and legacy profile/evidence URLs remain valid',async()=>{
     const catalog=await fetch(BASE+'/api/actors?catalogOnly=1').then(r=>r.json());
     assert.ok(catalog.actors.some(actor=>actor.id==='G1034'&&actor.aliases.includes('Evasive Panda')));
@@ -370,7 +396,7 @@ test('urlscan BYOK é cifrado, isolado por conta e ativa a busca sem chave da pl
     assert.equal(saved.status, 200);
     assert.deepEqual(await saved.json(), { provider: 'urlscan', hasKey: true });
     const own = await fetch(`${BASE}/api/user/keys`, { headers: AUTH_HEADERS }).then(r => r.json());
-    assert.deepEqual(own.keys, { shodan: false, urlscan: true, abuse_ch: false, otx:false, abuseipdb:false, axur:false });
+    assert.deepEqual(own.keys, { shodan: false, urlscan: true, abuse_ch: false, otx:false, abuseipdb:false, axur:false, virustotal:false, threatfox:false, urlhaus:false, malwarebazaar:false });
     assert.ok(!JSON.stringify(own).includes(key));
     const other = await fetch(`${BASE}/api/user/keys`, { headers: OUTSIDER_HEADERS }).then(r => r.json());
     assert.equal(other.keys.urlscan, false);
