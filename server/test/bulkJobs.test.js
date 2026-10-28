@@ -70,3 +70,7 @@ test('a newly added Axur source and ready correlations get turns before older fa
   runner.start();try{const deadline=Date.now()+3000;while(f.store.summary(owner.sub,job.id).completed<30&&Date.now()<deadline)await new Promise(resolve=>setTimeout(resolve,10));assert.equal(f.store.summary(owner.sub,job.id).completed,30);assert.ok(seen.indexOf('Axur')<8,JSON.stringify(seen.slice(0,10)));assert.ok(seen.indexOf(BULK_CONTEXT)<12,JSON.stringify(seen.slice(0,15)));}finally{await runner.stop();}
  }finally{f.close();}
 });
+
+test('export coverage metadata is retained and remains scoped to its account',()=>{
+ const f=fixture();try{const job=f.store.create(owner,['8.8.8.8'],['VirusTotal']),at=Date.now();f.store.prepare('INSERT INTO bulk_exports(id,job,owner,state,created,updated,revision,summary) VALUES(?,?,?,?,?,?,?,?)').run(crypto.randomUUID(),job.id,owner.sub,'complete',at,at,1,JSON.stringify({total:1,localChecked:1,axurMatches:0,partial:1,charts:8}));assert.equal(f.store.summary(owner.sub,job.id).exports[0].summary.localChecked,1);assert.equal(f.store.summary(owner.sub,job.id).exports[0].summary.partial,1);assert.equal(f.store.list(other.sub).length,0);}finally{f.close();}
+});

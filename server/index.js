@@ -4351,6 +4351,7 @@ app.get('/api/vendors/status', (req, res) => {
 const bulkService=registerBulkService(app,{
  filePath:process.env.BULK_JOBS_PATH || (process.env.NODE_ENV==='test'?':memory:':path.join(__dirname,'.bulk-enrichment.sqlite')),
  outputDir:process.env.BULK_EXPORTS_PATH || path.join(__dirname,'.bulk-exports'),requirePremium,
+ intelligencePath:process.env.NODE_ENV==='test'?undefined:process.env.IOC_INTELLIGENCE_PATH||path.join(__dirname,'.ioc-intelligence.sqlite'),
  concurrency:lowMemoryHost?2:3,lookup:task=>task.provider==='Axur'?accountAxurLookup(task.owner)(task.query,{fresh:Boolean(task.fresh)}):bulkProviderBridge.lookup(task),canRun:principal=>sessionHasPremium(principal),
  requiredSources:principal=>getUserApiKey(principal.sub,'axur')?['Axur']:[],
  readContext:async task=>{

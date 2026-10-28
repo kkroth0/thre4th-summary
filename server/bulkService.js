@@ -12,7 +12,7 @@ const bad=(message,status=400)=>Object.assign(Error(message),{status});
 const validFilters=input=>({query:String(input?.query||'').slice(0,256),type:['ip','domain','url','hash'].includes(input?.type)?input.type:'all',state:['queued','running','complete','partial','error','unsupported'].includes(input?.state)?input.state:'all'});
 const csv=value=>{let s=valueText(value);if(/^[\s]*[=+@-]/.test(s))s="'"+s;return '"'+s.replace(/"/g,'""')+'"';};
 
-export function registerBulkService(app,{filePath,outputDir,requirePremium,lookup,readContext,canRun,concurrency=3,requiredSources=()=>[]}){
+export function registerBulkService(app,{filePath,outputDir,requirePremium,lookup,readContext,canRun,concurrency=3,requiredSources=()=>[],intelligencePath}){
  const store=createBulkStore({filePath,eligibleSources,composeRow:composeBulkRow}),runner=createBulkRunner({store,lookup,readContext,canRun,concurrency,canSchedule:()=>!exportWorker,onError:()=>console.warn('Bulk scheduling deferred')});
  let exportWorker=null,exportTimer,started=false;
  const handle=fn=>async(req,res)=>{res.set('Cache-Control','private, no-store');try{await fn(req,res);}catch(e){if(!res.headersSent)res.status(e.status||500).json({error:e.status?e.message:'Não foi possível concluir a operação do lote.'});}};
@@ -45,7 +45,7 @@ export function registerBulkService(app,{filePath,outputDir,requirePremium,looku
   await pipeline(Readable.from(data(),{objectMode:false,highWaterMark:65536}),res);
  }));
  app.post(routes+'/:id/exports',requirePremium,handle((req,res)=>{
-  const j=store.owned(req.user.sub,req.params.id),filters=JSON.stringify({...validFilters(req.body),verdictVersion:THREAT_VERDICT_VERSION}),existing=store.prepare("SELECT id,state FROM bulk_exports WHERE job=? AND owner=? AND filters=? AND (state IN ('pending','running') OR (state='complete' AND revision=?)) ORDER BY created DESC LIMIT 1").get(j.id,j.owner,filters,j.revision);
+  const j=store.owned(req.user.sub,req.params.id),filters=JSON.stringify({...validFilters(req.body),verdictVersion:THREAT_VERDICT_VERSION,localSnapshotVersion:'2026-10-28-v1'}),existing=store.prepare("SELECT id,state FROM bulk_exports WHERE job=? AND owner=? AND filters=? AND (state IN ('pending','running') OR (state='complete' AND revision=? AND ?)) ORDER BY created DESC LIMIT 1").get(j.id,j.owner,filters,j.revision,intelligencePath?0:1);
   if(existing)return res.status(202).json(existing);
   if(store.prepare("SELECT COUNT(*) n FROM bulk_exports WHERE owner=? AND state IN ('pending','running')").get(j.owner).n>=2)throw bad('Há duas planilhas em preparação. Aguarde uma delas terminar.',409);
   const id=crypto.randomUUID(),at=Date.now();store.prepare('INSERT INTO bulk_exports(id,job,owner,created,updated,revision,filters) VALUES(?,?,?,?,?,?,?)').run(id,j.id,j.owner,at,at,j.revision,filters);res.status(202).json({id,state:'pending'});tickExports();
@@ -60,9 +60,9 @@ export function registerBulkService(app,{filePath,outputDir,requirePremium,looku
   store.prepare("UPDATE bulk_exports SET state='pending' WHERE state='running' AND updated<?").run(Date.now()-5*60000);
   const item=store.prepare("SELECT * FROM bulk_exports WHERE state='pending' ORDER BY created LIMIT 1").get();if(!item)return;
   store.prepare("UPDATE bulk_exports SET state='running',updated=? WHERE id=?").run(Date.now(),item.id);
-  const worker=new Worker(new URL('./bulkExportWorker.js',import.meta.url),{workerData:{filePath,exportId:item.id,jobId:item.job,owner:item.owner,outputDir},execArgv:[],resourceLimits:{maxOldGenerationSizeMb:192}});exportWorker=worker;
+  const worker=new Worker(new URL('./bulkExportWorker.js',import.meta.url),{workerData:{filePath,exportId:item.id,jobId:item.job,owner:item.owner,outputDir,intelligencePath},execArgv:[],resourceLimits:{maxOldGenerationSizeMb:192}});exportWorker=worker;
   let finished=false;const end=(error)=>{if(finished)return;finished=true;store.prepare('UPDATE bulk_exports SET state=?,updated=?,error=? WHERE id=?').run(error?'error':'complete',Date.now(),error?'Não foi possível gerar a planilha. As respostas do lote foram preservadas.':null,item.id);};
-  worker.on('message',message=>{if(message.progress){store.prepare('UPDATE bulk_exports SET updated=? WHERE id=?').run(Date.now(),item.id);return;}if(message.done&&Number.isInteger(message.revision))store.prepare('UPDATE bulk_exports SET revision=? WHERE id=?').run(message.revision,item.id);end(message.error);});
+  worker.on('message',message=>{if(message.progress){store.prepare('UPDATE bulk_exports SET updated=? WHERE id=?').run(Date.now(),item.id);return;}if(message.done&&Number.isInteger(message.revision))store.prepare('UPDATE bulk_exports SET revision=?,summary=? WHERE id=?').run(message.revision,message.summary?JSON.stringify(message.summary):null,item.id);end(message.error);});
   worker.on('error',()=>end('Falha no gerador'));worker.on('exit',code=>{if(!finished)end(code?'Falha no gerador':'Gerador interrompido');exportWorker=null;});
  }
  return{store,runner,start(){if(started)return;started=true;for(const job of store.prepare("SELECT id,owner,login FROM bulk_jobs WHERE state IN ('active','paused')").all())store.ensureSources(job.owner,job.id,requiredSources({sub:job.owner,login:job.login}));runner.start();exportTimer=setInterval(tickExports,2000);exportTimer.unref();tickExports();},async close(){started=false;clearInterval(exportTimer);await runner.stop();if(exportWorker)await exportWorker.terminate();store.close();}};

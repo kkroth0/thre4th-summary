@@ -10,6 +10,7 @@ export interface BulkContext {
   publications: NewsMention[];
   evidence: BulkEvidence[];
   errors: string[];
+  localSnapshot?: { asOf: string; axurImportStatus: string; axurImportAt: string | null; axurRecordsTraversed: number; axurEvidence: number };
 }
 
 /** Read existing evidence only; no article extraction or extra provider calls. */

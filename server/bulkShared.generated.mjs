@@ -794,7 +794,7 @@ function analyzeBulkRow(row) {
   const normalizedFamilies = excluded ? [] : familyLabels.filter(familyLabel);
   contextual.push(...declaredLabels.filter((s) => !actorLabel(s)));
   for (const technique of distinct(techniques)) tactics.push(...bulkAttackTactics_default.techniques[technique] || []);
-  const directPositive = !fp && (/malicious|malware|phishing/i.test(String(tf.Status || "")) || Number(uh["URL Count"] || 0) > 0 || /malware payload found/i.test(String(uh.Status || "")) || /sample found|malicious/i.test(String(mb.Status || ""))) || Number(vt.Malicious || 0) > 0;
+  const directPositive = row.result?.threatLevel === "malicious" || !fp && (/malicious|malware|phishing/i.test(String(tf.Status || "")) || Number(uh["URL Count"] || 0) > 0 || /malware payload found/i.test(String(uh.Status || "")) || /sample found|malicious/i.test(String(mb.Status || ""))) || Number(vt.Malicious || 0) > 0;
   const abuseHigh = (num(ab["Abuse Confidence Score"]) || 0) >= 75;
   const errors = vendors.filter((v) => v.error || v.isLoading);
   const pending = ["queued", "running"].includes(row.state) || row.contextLoading || vendors.some((v) => v.isLoading);
@@ -814,11 +814,14 @@ function analyzeBulkRow(row) {
     mentions: join(contextual),
     basis: excluded ? "Exclu\xEDdo dos rankings" : declaredActors.length ? "Declara\xE7\xE3o expl\xEDcita da fonte" : "Somente contexto ou reputa\xE7\xE3o",
     notes: notes.join(" "),
+    axLocalStatus: row.context?.localSnapshot ? row.context.localSnapshot.axurEvidence ? `${row.context.localSnapshot.axurEvidence} ${row.context.localSnapshot.axurEvidence === 1 ? "evid\xEAncia" : "evid\xEAncias"} na base importada` : row.context.localSnapshot.axurImportStatus === "complete" ? "Sem registro na base importada" : "Sem registro na parcela importada" : "N\xE3o conferida neste recorte",
+    axImportAt: row.context?.localSnapshot?.axurImportAt || null,
+    localReadAt: row.context?.localSnapshot?.asOf || null,
     axReports: join(reportTitles),
     axLinks: join(reportLinks),
     axActors: join(ax.flatMap((e) => e.entities.filter((x) => x.kind === "actor").map((x) => x.name))),
     axMalware: join(ax.flatMap((e) => e.entities.filter((x) => x.kind === "malware").map((x) => x.name))),
-    axCves: join(cves),
+    axCves: join(ax.flatMap((e) => e.entities.filter((x) => x.kind === "cve").map((x) => x.name))),
     axDates: join(reportDates),
     techniques: join(techniques),
     tactics: join(tactics.map((t) => `${t} ${TACTICS[t] || ""}`)),
@@ -1052,7 +1055,7 @@ function addBulkDashboard(wb, a, date) {
 var status = (source) => ["status:" + source, "Consulta", 19];
 var ANALYTICAL_GROUPS = [
   { title: "IDENTIFICA\xC7\xC3O E TRIAGEM", columns: [["rank", "#", 6], ["priority", "Prioridade", 23], ["indicator", "Indicador", 46], ["type", "Tipo", 13], ["verdict", "Veredito das fontes", 22], ["score", "Score original", 14], ["state", "Processamento", 18], ["actors", "Atores declarados pela fonte", 30], ["families", "Fam\xEDlias de malware", 30], ["basis", "Base da rela\xE7\xE3o", 30], ["notes", "Leitura e ressalvas", 65]] },
-  { title: "AXUR / INTELIG\xCANCIA CORRELACIONADA", columns: [status("Axur"), ["axReports", "Relat\xF3rios que citam o IOC", 60], ["axLinks", "Refer\xEAncias dos relat\xF3rios", 65], ["axActors", "Atores citados no relat\xF3rio", 38], ["axMalware", "Malware citado no relat\xF3rio", 38], ["axCves", "CVEs citadas", 30], ["axDates", "Datas das publica\xE7\xF5es (ISO)", 30]] },
+  { title: "AXUR / INTELIG\xCANCIA CORRELACIONADA", columns: [["status:Axur", "Consulta \xE0 API Axur", 22], ["axLocalStatus", "Consulta \xE0 base importada", 36], ["axImportAt", "\xDAltima varredura Axur (ISO)", 28], ["localReadAt", "Cruzamento local (ISO)", 28], ["axReports", "Relat\xF3rios que citam o IOC", 60], ["axLinks", "Refer\xEAncias dos relat\xF3rios", 65], ["axActors", "Atores citados no relat\xF3rio", 38], ["axMalware", "Malware citado no relat\xF3rio", 38], ["axCves", "CVEs citadas", 30], ["axDates", "Datas das publica\xE7\xF5es (ISO)", 30]] },
   { title: "CONTEXTO E COMPORTAMENTO CITADO", columns: [["mentions", "Atores mencionados no contexto", 38], ["techniques", "T\xE9cnicas ATT&CK citadas", 38], ["tactics", "T\xE1ticas mapeadas", 38], ["publications", "Publica\xE7\xF5es relacionadas", 18], ["evidence", "Evid\xEAncias do hist\xF3rico", 18]] },
   { title: "VIRUSTOTAL", columns: [status("VirusTotal"), ["vtStatus", "Resultado", 26], ["vtDetections", "Detec\xE7\xF5es", 16], ["vtMalicious", "Motores maliciosos", 18], ["vtReputation", "Reputa\xE7\xE3o", 16], ["vtNames", "Classifica\xE7\xE3o de amea\xE7a", 36], ["vtTags", "Tags", 38]] },
   { title: "ABUSEIPDB", columns: [status("AbuseIPDB"), ["abScore", "Confian\xE7a de abuso (%)", 22], ["abReports", "Relatos", 14], ["abReporters", "Relatores distintos", 18], ["abLast", "\xDAltimo relato (ISO)", 28], ["abUsage", "Uso da rede", 26], ["abWhitelisted", "Whitelist da fonte", 20]] },

@@ -16,6 +16,10 @@ test('Axur response status, report links, contextual actors and structured MITRE
  row.context!.evidence=[{...evidence('APT28','mentioned-with','T1566'),...{payload:{relatedTTPs:[{code:'TA0001',name:'Initial access'},{code:'T1059',name:'Command execution'}],attacks:[{code:'T1566.001',name:'Spearphishing Attachment'}]}}}];
  const result=analyzeBulkRow(row);assert.equal(result.record['status:Axur'],'Respondida');assert.equal(result.record.axActors,'APT28');assert.match(String(result.record.axLinks),/https:\/\/lab.example\/report/);assert.ok(result.techniques.includes('T1059'));assert.ok(result.techniques.includes('T1566.001'));assert.match(String(result.record.tactics),/TA0001/);assert.ok(!result.actors.includes('APT28'));assert.ok(result.mentions.includes('APT28'));
 });
+
+test('an existing malicious verdict remains prioritized while other APIs are pending',()=>{
+ const row=base();row.state='running';row.result!.vendorData=[{name:'AbuseIPDB',data:{'Abuse Confidence Score':100}},{name:'Axur',data:{},isLoading:true}];assert.equal(analyzeBulkRow(row).priority,'Investigar');assert.equal(analyzeBulkRows([row]).partial,1);
+});
 test('context is retained without manufacturing an attribution or cross-report actor-technique pairs',()=>{
  const row=base();row.context!.evidence=[evidence('Context Actor','mentioned-with','T1566'),evidence('Actor B','attributed-by-source','T1486')];
  const a=analyzeBulkRow(row);assert.deepEqual(a.actors,['Actor B','Actor A']);assert.ok(a.mentions.includes('Context Actor'));

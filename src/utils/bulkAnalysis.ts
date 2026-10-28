@@ -81,7 +81,7 @@ export function analyzeBulkRow(row: BulkRow): IocAnalysis {
   const normalizedFamilies=excluded?[]:familyLabels.filter(familyLabel);
   contextual.push(...declaredLabels.filter(s=>!actorLabel(s)));
   for(const technique of distinct(techniques))tactics.push(...((attack.techniques as Record<string,string[]>)[technique]||[]));
-  const directPositive=(!fp&&(/malicious|malware|phishing/i.test(String(tf.Status||''))||Number(uh['URL Count']||0)>0||/malware payload found/i.test(String(uh.Status||''))||/sample found|malicious/i.test(String(mb.Status||''))))||Number(vt.Malicious||0)>0;
+  const directPositive=row.result?.threatLevel==='malicious'||(!fp&&(/malicious|malware|phishing/i.test(String(tf.Status||''))||Number(uh['URL Count']||0)>0||/malware payload found/i.test(String(uh.Status||''))||/sample found|malicious/i.test(String(mb.Status||''))))||Number(vt.Malicious||0)>0;
   const abuseHigh=(num(ab['Abuse Confidence Score'])||0)>=75;
   const errors=vendors.filter(v=>v.error||v.isLoading);
   const pending=['queued','running'].includes(row.state)||row.contextLoading||vendors.some(v=>v.isLoading);
@@ -91,7 +91,8 @@ export function analyzeBulkRow(row: BulkRow): IocAnalysis {
   const record:AnalysisRecord={rank:null,priority,indicator:row.query,type:({ip:'IP',domain:'Domínio',hash:'Hash',url:'URL',unknown:'Outro'})[type],score:row.result?.overallScore??null,
     verdict:bulkVerdictLabel(row),state:({complete:'Concluído',partial:'Parcial',error:'Falha',running:'Consultando',queued:'Na fila',stopped:'Interrompido',unsupported:'Sem fonte compatível'})[row.state],
     actors:join(declaredActors),families:join(normalizedFamilies),mentions:join(contextual),basis:excluded?'Excluído dos rankings':declaredActors.length?'Declaração explícita da fonte':'Somente contexto ou reputação',notes:notes.join(' '),
-    axReports:join(reportTitles),axLinks:join(reportLinks),axActors:join(ax.flatMap(e=>e.entities.filter(x=>x.kind==='actor').map(x=>x.name))),axMalware:join(ax.flatMap(e=>e.entities.filter(x=>x.kind==='malware').map(x=>x.name))),axCves:join(cves),axDates:join(reportDates),
+    axLocalStatus:row.context?.localSnapshot?(row.context.localSnapshot.axurEvidence?`${row.context.localSnapshot.axurEvidence} ${row.context.localSnapshot.axurEvidence===1?'evidência':'evidências'} na base importada`:row.context.localSnapshot.axurImportStatus==='complete'?'Sem registro na base importada':'Sem registro na parcela importada'):'Não conferida neste recorte',axImportAt:row.context?.localSnapshot?.axurImportAt||null,localReadAt:row.context?.localSnapshot?.asOf||null,
+    axReports:join(reportTitles),axLinks:join(reportLinks),axActors:join(ax.flatMap(e=>e.entities.filter(x=>x.kind==='actor').map(x=>x.name))),axMalware:join(ax.flatMap(e=>e.entities.filter(x=>x.kind==='malware').map(x=>x.name))),axCves:join(ax.flatMap(e=>e.entities.filter(x=>x.kind==='cve').map(x=>x.name))),axDates:join(reportDates),
     techniques:join(techniques),tactics:join(tactics.map(t=>`${t} ${TACTICS[t]||''}`)),publications:row.context?.publications.length??0,evidence:evidence.length,completedAt:row.completedAt||null,
     vtStatus:value(vt,'Status'),vtDetections:value(vt,'Detection Rate'),vtMalicious:num(vt.Malicious),vtReputation:num(vt.Reputation),vtNames:value(vt,'Threat Names','Threat Classification'),vtTags:value(vt,'All Tags','Tags'),
     abScore:num(ab['Abuse Confidence Score']),abReports:num(ab['Total Reports']),abReporters:num(ab['Distinct Reporters']),abLast:value(ab,'Last Report','Last Reported'),abUsage:value(ab,'Usage Type'),abWhitelisted:value(ab,'Is Whitelisted','Whitelisted'),
