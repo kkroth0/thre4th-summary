@@ -52,6 +52,7 @@ export function createCredentialPool({ now = Date.now, load = () => null, save =
       for (let offset = 0; offset < keys.length; offset++) {
         const index = (start + offset) % keys.length, key = keys[index], id = stateKey(provider, key);
         const at = now(), previous = state(provider, key), until = availableAt(previous, limits, at);
+        if (previous.invalidUntil > at) { lastAuth = true; continue; }
         if (until > at || flights.has(id)) { next = Math.min(next, until > at ? until : at + 1000); continue; }
         flights.add(id);
         cursors.set(provider, (index + 1) % keys.length);
@@ -84,7 +85,7 @@ export function createCredentialPool({ now = Date.now, load = () => null, save =
         } finally { flights.delete(id); }
       }
       if (Number.isFinite(next)) throw waiting(next);
-      if (lastAuth) throw Object.assign(new Error('As credenciais foram recusadas pelo provedor.'), { response: { status: 502 } });
+      if (lastAuth) throw Object.assign(new Error('As credenciais foram recusadas pelo provedor.'), { code: 'PROVIDER_AUTH_FAILED', response: { status: 502 } });
       throw waiting(now() + 60000);
     },
   };

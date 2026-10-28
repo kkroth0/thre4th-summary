@@ -558,7 +558,7 @@ const fetchFromBackend = async (endpoint: string, query: string, vendorName: str
             ...(options.includeRaw ? { rawPayload: data } : {}),
         };
     } catch (error) {
-        return { name: vendorName, data: {}, error: (error as Error).message, ...(error instanceof EnrichmentRequestError ? { httpStatus: error.status, retryAt: error.retryAt } : {}) };
+        return { name: vendorName, data: {}, error: (error as Error).message, ...(error instanceof EnrichmentRequestError ? { httpStatus: error.status, retryAt: error.retryAt, errorCode: error.code } : {}) };
     }
 };
 

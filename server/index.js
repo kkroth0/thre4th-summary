@@ -1,3 +1,4 @@
+import { platformProviderCredentials } from './providerCredentials.js';
 import { createFeedParser } from './feedParser.js';
 import { filterReportIocNoise } from './reportIocNoise.js';
 import { createCredentialPool, credentialId, decodeCredentials, parseCredentialInput, POOL_PROVIDERS } from './credentialPool.js';
@@ -550,7 +551,7 @@ const splitKeys = (raw) => (raw || '').split(',').map(k => k.trim()).filter(Bool
 const getKeys = (envName) => {
     const keys = [...splitKeys(process.env[envName])];
 
-    // Pull in numbered fallbacks, e.g. ABUSEIPDB_API_KEY -> ABUSEIPDB2_API_KEY, ABUSEIPDB3_API_KEY
+    // Also discover numbered fallback environment variables.
     const match = envName.match(/^(.*?)(_API_KEY)$/);
     if (match) {
         const [, prefix, suffix] = match;
@@ -609,10 +610,7 @@ function providerKeys(req, provider) {
         const shared = getUserApiKeys(owner, 'abuse_ch');
         if (shared.length) return shared;
     }
-    const own = getKeys(PROVIDER_ENVS[provider]);
-    if (own.length) return own;
-    if (['abuse_ch', 'threatfox', 'urlhaus', 'malwarebazaar'].includes(provider)) return [...new Set(['ABUSE_CH_API_KEY','THREATFOX_API_KEY','URLHAUS_API_KEY','MALWAREBAZAAR_API_KEY'].flatMap(getKeys))];
-    return [];
+    return platformProviderCredentials(provider, PROVIDER_ENVS[provider], getKeys);
 }
 function providerLimits(provider) {
     const prefix = PROVIDER_ENVS[provider]?.replace(/_API_KEY$/, '');
@@ -623,7 +621,7 @@ function providerError(res, error) {
     const { status, message } = sanitizeError(error);
     const retry = error.response?.headers?.['retry-after'];
     if (status === 429 && retry) res.set('Retry-After', String(retry));
-    return res.status(status).json({ error: message, ...(status === 429 && error.retryAt ? { retryAt: error.retryAt } : {}) });
+    return res.status(status).json({ error: message, ...(error.code === 'PROVIDER_AUTH_FAILED' ? { code: error.code } : {}), ...(status === 429 && error.retryAt ? { retryAt: error.retryAt } : {}) });
 }
 const lookupCache = createLookupCache();
 function abuseKeys(req) { return providerKeys(req, 'abuseipdb'); }

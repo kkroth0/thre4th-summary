@@ -4,7 +4,7 @@ import { VendorContent } from '@/components/VendorContent';
 export function BulkSourceCell({ vendor, pt }: { vendor?: VendorData; pt: boolean }) {
   if (!vendor) return <span className="text-muted-foreground">—</span>;
   if (vendor.isLoading) return <span role="status" className="text-primary">{vendor.data['Próxima tentativa'] ? (pt ? 'Aguardando nova tentativa…' : 'Waiting to retry…') : (pt ? 'Consultando…' : 'Querying…')}</span>;
-  if (vendor.error) return <p className="max-w-64 break-words text-xs text-amber-500">{vendor.error}{vendor.retryAt && <span className="block">{pt ? 'Nova tentativa a partir de ' : 'Retry from '}{new Date(vendor.retryAt).toLocaleString(pt ? 'pt-BR' : 'en-US')}</span>}</p>;
+  if (vendor.error) return <p className="max-w-64 break-words text-xs text-amber-500">{vendor.error}{vendor.retryAt && vendor.errorCode !== 'PROVIDER_AUTH_FAILED' && <span className="block">{pt ? 'Nova tentativa a partir de ' : 'Retry from '}{new Date(vendor.retryAt).toLocaleString(pt ? 'pt-BR' : 'en-US')}</span>}</p>;
   const priority = ['Status', 'Detection Rate', 'Abuse Confidence Score', 'Total Reports', 'Malware', 'IOC Matches', 'Pulse Count', 'Ports', 'ISP', 'Country'];
   const summary = priority.filter(key => vendor.data[key] !== undefined).slice(0, 4);
   return <div className="min-w-48 max-w-72 space-y-2 text-xs">

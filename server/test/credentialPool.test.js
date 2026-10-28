@@ -77,3 +77,9 @@ test('legacy keys migrate without loss and bulk inputs reject invalid or oversiz
   assert.throws(() => parseCredentialInput(['bad key with spaces']));
   assert.throws(() => parseCredentialInput(Array(51).fill('valid-secret')));
 });
+test('rejected credentials remain authentication failures during cooldown, never a misleading 429',async()=>{
+ const {router}=fixture();let calls=0;
+ await assert.rejects(router.run('threatfox',[keys[0]],()=>{calls++;throw failure(401);}),e=>e.code==='PROVIDER_AUTH_FAILED'&&e.response.status===502);
+ await assert.rejects(router.run('threatfox',[keys[0]],()=>{calls++;return {};}),e=>e.code==='PROVIDER_AUTH_FAILED'&&e.response.status===502);
+ assert.equal(calls,1);assert.equal(router.describe('threatfox',[keys[0]])[0].status,'authentication_error');
+});

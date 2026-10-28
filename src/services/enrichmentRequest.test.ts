@@ -5,6 +5,7 @@ const fixture = (statuses: number[], headers: Record<string,string> = {}) => {
   let clock = 0, calls = 0;
   const waits: number[] = [];
   return { get calls() { return calls; }, waits, options: {
+    cooldowns: new Map<string,EnrichmentRequestError>(),
     now: () => clock, sleep: async (ms: number) => { waits.push(ms); clock += ms; },
     fetch: (async () => new Response(statuses[calls++] === 200 ? '{}' : 'gateway html', {status:statuses[calls-1],headers})) as typeof fetch,
   }};
@@ -29,8 +30,15 @@ test('daily cooldown does not trigger another request or a wait that blocks the 
 test('authentication and ordinary client errors are never retried',async()=>{
   let calls=0;
   const fetch=(async()=>{calls++;return new Response(JSON.stringify({error:'Upstream authentication or access configuration failed'}),{status:502,headers:{'Content-Type':'application/json'}});}) as typeof globalThis.fetch;
-  assert.equal((await enrichmentRequest('/api/otx',{},{fetch})).status,502); assert.equal(calls,1);
+  const cooldowns=new Map<string,EnrichmentRequestError>();
+  await assert.rejects(enrichmentRequest('/api/otx',{},{fetch,cooldowns}),e=>e instanceof EnrichmentRequestError&&e.code==='PROVIDER_AUTH_FAILED'); assert.equal(calls,1);
+  await assert.rejects(enrichmentRequest('/api/otx',{},{fetch,cooldowns}));assert.equal(calls,1);
   const f=fixture([400]);assert.equal((await enrichmentRequest('/api/otx',{},f.options)).status,400);assert.equal(f.calls,1);
+});
+test('a long provider cooldown is shared across IOCs without another network request',async()=>{
+ const f=fixture([429],{'Retry-After':'600'});
+ await assert.rejects(enrichmentRequest('/api/threatfox',{},f.options));
+ await assert.rejects(enrichmentRequest('/api/threatfox',{},f.options));assert.equal(f.calls,1);
 });
 test('an aborted lookup does not issue a request',async()=>{
   const f=fixture([200]),controller=new AbortController();controller.abort();

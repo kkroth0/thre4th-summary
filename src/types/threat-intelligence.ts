@@ -13,6 +13,7 @@ export interface VendorData {
     data: Record<string, any>;
     error?: string;
     httpStatus?: number;
+    errorCode?: string;
     retryAt?: number;
     isLoading?: boolean;
     quota?: {
