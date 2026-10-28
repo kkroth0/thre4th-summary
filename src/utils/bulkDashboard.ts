@@ -22,7 +22,7 @@ function page(wb:ExcelJS.Workbook,name:string,title:string,date:string,last=123)
   ws.headerFooter.oddFooter='&LThreatSumm4ry · Enriquecimento de IOCs&R&P / &N';return ws;
 }
 export function bulkChartData(a:BulkAnalysis):Count[][]{
-  return [a.actors,a.families,a.techniques,a.tactics,a.priorities.filter(x=>x.count),a.types,a.asns,a.coverage].map(items=>items.slice(0,10));
+  return [a.actors,a.families,a.techniques,a.tactics,a.priorities.filter(x=>x.count),a.types,a.asns,a.coverage].map(items=>items.slice(0,10).map(x=>({...x,name:x.name.length>48?x.name.slice(0,45)+'…':x.name})));
 }
 const amount=(n:number,one:string,many:string)=>`${n.toLocaleString('pt-BR')} ${n===1?one:many}`;
 /** Every finding and chart uses the same deduplicated export snapshot. */

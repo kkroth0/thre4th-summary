@@ -32,6 +32,10 @@ export interface IocAnalysis {
 export const PRIORITIES = ['Investigar','Atenção','Revisar','Sem sinal nas fontes','Infraestrutura pública','Teste','Pendente'];
 const TACTICS: Record<string,string> = {TA0001:'Acesso inicial',TA0002:'Execução',TA0003:'Persistência',TA0004:'Escalação de privilégios',TA0005:'Evasão de defesa',TA0112:'Comprometimento de defesas',TA0006:'Acesso a credenciais',TA0007:'Descoberta',TA0008:'Movimento lateral',TA0009:'Coleta',TA0010:'Exfiltração',TA0011:'Comando e controle',TA0040:'Impacto',TA0042:'Desenvolvimento de recursos',TA0043:'Reconhecimento'};
 const techs = (value: unknown) => distinct(names(value).flatMap(s => s.match(/\bT\d{4}(?:\.\d{3})?\b/g) || []));
+// Community fields can contain a whole newsletter instead of one entity.
+// Preserve that text in the source columns; do not invent an actor from it.
+const actorLabel = (s: string) => s.length <= 80 && !/[;,|/\n]/.test(s) && !/^(?:global|unattributed|unknown actor|desconhecido)$/i.test(s);
+const familyLabel = (s: string) => s.length <= 100 && !/^(?:generic(?:\s|$)|unknown|unclassified|susp[._-]|heur[.:_/-]|_{2,}|win\.(?:trojan|malware|packed|dropper))/i.test(s) && !/[:\\/!]|\.(?:exe|dll|zip|bin|js|md)$/i.test(s);
 const clean = (v?: VendorData) => v && !v.error && !v.isLoading ? v.data : {};
 const value = (d: Record<string,unknown>, ...keys: string[]) => {for(const k of keys)if(d[k]!=null&&d[k]!==''&&!/^(unknown|none|n\/a)$/i.test(String(d[k])))return typeof d[k]==='number'?d[k] as number:join(names(d[k]));return null;};
 export function analyzeBulkRow(row: BulkRow): IocAnalysis {
@@ -70,14 +74,16 @@ export function analyzeBulkRow(row: BulkRow): IocAnalysis {
   }
   if(!excluded&&!fp)families.push(...names(tf['All Malware']),...names(tf.Malware),...names(mb.Malware),...names(mb.Signature),...names(uh['All Malware']));
   // Vendor summary strings often repeat the full list; prefer exact array labels.
-  const declaredActors=excluded?[]:distinct(declared);
-  const normalizedFamilies=excluded?[]:distinct(families.flatMap(s=>s.split(/,\s*/)));
+  const declaredLabels=distinct(declared),familyLabels=distinct(families.flatMap(s=>s.split(/,\s*/)));
+  const declaredActors=excluded?[]:declaredLabels.filter(actorLabel);
+  const normalizedFamilies=excluded?[]:familyLabels.filter(familyLabel);
+  contextual.push(...declaredLabels.filter(s=>!actorLabel(s)));
   for(const technique of distinct(techniques))tactics.push(...((attack.techniques as Record<string,string[]>)[technique]||[]));
   const directPositive=(!fp&&(/malicious|malware|phishing/i.test(String(tf.Status||''))||Number(uh['URL Count']||0)>0||/malware payload found/i.test(String(uh.Status||''))||/sample found|malicious/i.test(String(mb.Status||''))))||Number(vt.Malicious||0)>0;
   const abuseHigh=(num(ab['Abuse Confidence Score'])||0)>=75;
   const errors=vendors.filter(v=>v.error||v.isLoading);
   const priority=publicResolver?'Infraestrutura pública':reserved||eicar?'Teste':!row.result?'Pendente':directPositive?'Investigar':fp?'Revisar':abuseHigh||row.result.threatLevel==='suspicious'?'Atenção':errors.length||row.context?.errors.length?'Revisar':row.result.threatLevel==='safe'?'Sem sinal nas fontes':'Revisar';
-  const notes=[publicResolver?'Resolvedor DNS público conhecido; fora das contagens de atribuição.':reserved?'Domínio reservado para exemplos; fora dos rankings de ameaça.':eicar?'Arquivo de teste EICAR; detecções de antivírus são esperadas.':'',fp?'Correspondência exata na revisão da abuse.ch; sinais dessas bases exigem revisão. Evidências independentes foram preservadas.':fpRecords.length?'Revisão de falso positivo apenas contextual; validar IP, porta ou URL.':'',!declaredActors.length&&contextual.length&&!excluded?'Há entidades citadas em relatórios, sem atribuição específica recebida para o indicador.':'',errors.length?`${errors.length} fonte(s) com erro ou consulta pendente.`:''].filter(Boolean);
+  const notes=[publicResolver?'Resolvedor DNS público conhecido; fora das contagens de atribuição.':reserved?'Domínio reservado para exemplos; fora dos rankings de ameaça.':eicar?'Arquivo de teste EICAR; detecções de antivírus são esperadas.':'',fp?'Correspondência exata na revisão da abuse.ch; sinais dessas bases exigem revisão. Evidências independentes foram preservadas.':fpRecords.length?'Revisão de falso positivo apenas contextual; validar IP, porta ou URL.':'',!declaredActors.length&&contextual.length&&!excluded?'Há entidades citadas em relatórios, sem atribuição específica recebida para o indicador.':'',declaredLabels.some(s=>!actorLabel(s))?'Campos agregados de adversários foram mantidos como contexto, fora do ranking de atores.':'',familyLabels.some(s=>!familyLabel(s))?'Rótulos genéricos de detecção e nomes de arquivos foram preservados nos dados da fonte, fora do ranking de famílias.':'',errors.length?`${errors.length} fonte(s) com erro ou consulta pendente.`:''].filter(Boolean);
   const sources=vendors.map(v=>v.name),as=bulkField(row,['ASN','AS']).value;
   const record:AnalysisRecord={rank:null,priority,indicator:row.query,type:({ip:'IP',domain:'Domínio',hash:'Hash',url:'URL',unknown:'Outro'})[type],score:row.result?.overallScore??null,
     verdict:({safe:'Sem sinal nas fontes',malicious:'Malicioso',suspicious:'Suspeito',unknown:'Indeterminado'})[row.result?.threatLevel||'unknown'],state:({complete:'Concluído',partial:'Parcial',error:'Falha',running:'Consultando',queued:'Na fila',stopped:'Interrompido',unsupported:'Sem fonte compatível'})[row.state],
@@ -96,7 +102,7 @@ export function analyzeBulkRow(row: BulkRow): IocAnalysis {
   for(const name of ['VirusTotal','AbuseIPDB','AlienVault OTX','ThreatFox','URLhaus','MalwareBazaar','DNS / Team Cymru','abuse.ch Hunting','WHOIS']){
     const v=vendor(name);record['status:'+name]=!v?'Não consultada':v.isLoading?'Consultando':v.error?'Indisponível':'Respondida';
   }
-  return {row,record,excluded,fp,priority,actors:declaredActors,families:normalizedFamilies,techniques:distinct(techniques),pairs:excluded?[]:pairs,mentions:distinct(contextual),asn:as==='—'?'':as};
+  return {row,record,excluded,fp,priority,actors:declaredActors,families:normalizedFamilies,techniques:distinct(techniques),pairs:excluded?[]:pairs.map(p=>({...p,actor:scrubXml(p.actor)})).filter(p=>declaredActors.some(a=>key(a)===key(p.actor))),mentions:distinct(contextual),asn:as==='—'?'':as};
 }
 export function counts(rows:{name:string;indicator:string}[]):Count[]{
   const groups=new Map<string,{name:string;values:Set<string>}>();

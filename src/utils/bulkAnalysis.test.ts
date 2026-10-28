@@ -35,6 +35,11 @@ test('missing responses stay distinct from zero findings, including partial DNS 
 test('canonical deduplication preserves URL path case and the latest source status',()=>{
  const newer={...base('EXAMPLE.ORG'),state:'partial' as const};const rows=canonicalBulkRows([base('example.org'),newer,base('https://example.org/A'),base('https://example.org/a')]);assert.equal(rows.length,3);assert.equal(rows[0],newer);
 });
+test('aggregated OTX adversary text and generic AV/file labels remain in source columns without inflating rankings',()=>{
+ const row=base();row.result!.vendorData[1].data['Pulse Details']=[{adversary:'APT28',malwareFamilies:['HEADLACE','Generic Trojan','ALF:Backdoor:MSIL/Noancooe.KA','___FilesToHash_17jun','SUSP_XORed_Mozilla_Oct19'],attackIds:['T1059.001']},{adversary:'Core Werewolf, Tortoiseshell, PackClient, Abusing Browser Extensions',malwareFamilies:[],attackIds:['T1486']}];
+ const a=analyzeBulkRow(row);assert.deepEqual(a.actors,['APT28']);assert.deepEqual(a.families,['HEADLACE']);assert.deepEqual(a.pairs,[{actor:'APT28',technique:'T1059.001'}]);
+ assert.match(String(a.record.otxActors),/Core Werewolf/);assert.match(String(a.record.otxFamilies),/Generic Trojan/);assert.match(String(a.record.notes),/fora do ranking/);
+});
 test('analytical sheets preserve literal values, headers, source links and editable chart bindings',async()=>{
  const rows=[base(),base('185.220.101.6')];rows[0].context!.evidence=[evidence('Context Actor','mentioned-with','T1566')];
  const wb=buildBulkExcelWorkbook(rows,Excel),sheet=wb.getWorksheet('Indicadores')!;
