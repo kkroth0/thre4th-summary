@@ -1,29 +1,34 @@
 {
-    "name": "intel-vista-server",
-    "version": "1.0.0",
-    "description": "Backend proxy server for Intel Vista threat intelligence dashboard",
-    "main": "index.js",
-    "type": "module",
-    "scripts": {
-        "start": "node index.js",
-        "dev": "nodemon index.js"
-    },
-    "dependencies": {
-        "axios": "^1.18.0",
-        "better-sqlite3": "^13.0.3",
-        "cheerio": "^1.2.0",
-        "compression": "^1.8.1",
-        "cors": "^2.8.5",
-        "dotenv": "^16.4.7",
-        "express": "^5.2.1",
-        "express-rate-limit": "^7.5.0",
-        "helmet": "^8.2.0",
-        "stream-json": "^3.7.0",
-        "tar-stream": "^3.2.2",
-        "tldts": "^7.4.18"
-    },
-    "devDependencies": {
-        "nodemon": "^3.0.1"
-    },
-    "license": "AGPL-3.0-only"
+  "name": "intel-vista-server",
+  "version": "1.0.0",
+  "description": "Backend proxy server for Intel Vista threat intelligence dashboard",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "nodemon index.js"
+  },
+  "dependencies": {
+    "axios": "^1.18.0",
+    "better-sqlite3": "^13.0.3",
+    "cheerio": "^1.2.0",
+    "compression": "^1.8.1",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^5.2.1",
+    "express-rate-limit": "^7.5.0",
+    "helmet": "^8.2.0",
+    "stream-json": "^3.7.0",
+    "tar-stream": "^3.2.2",
+    "tldts": "^7.4.18",
+    "exceljs": "^4.4.0",
+    "jszip": "^3.10.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  },
+  "license": "AGPL-3.0-only",
+  "overrides": {
+    "uuid": "^11.1.1"
+  }
 }

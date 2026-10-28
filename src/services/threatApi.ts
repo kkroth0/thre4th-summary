@@ -409,7 +409,7 @@ export const formatVendorData = (vendorName: string, data: any, query: string): 
 
 
 // Helper to get vendor analysis link
-const getVendorLink = (vendorName: string, query: string): string | undefined => {
+export const getVendorLink = (vendorName: string, query: string): string | undefined => {
     const encodedQuery = encodeURIComponent(query);
     switch (vendorName) {
         case "VirusTotal":
@@ -465,7 +465,7 @@ const pushEvent = (
 
 // Pull dated observations out of a vendor's RAW response (before display
 // formatting) so every feed can contribute to one merged timeline.
-const extractVendorTimestamps = (vendorName: string, data: any): TimelineEvent[] => {
+export const extractVendorTimestamps = (vendorName: string, data: any): TimelineEvent[] => {
     const e: TimelineEvent[] = [];
     const v = vendorName;
     try {
@@ -630,7 +630,7 @@ const resolveVendorsToQuery = (
 // Aggregate per-vendor results into an overall verdict. VirusTotal and AbuseIPDB
 // carry extra weight (a strong signal from either forces "malicious"); every other
 // vendor contributes a simple malicious/clean vote based on its Status string.
-const scoreThreatResults = (query: string, results: VendorData[]): ThreatIntelligenceResult => {
+export const scoreThreatResults = (query: string, results: VendorData[]): ThreatIntelligenceResult => {
     let isMalicious = false;
     let maliciousCount = 0;
     let totalChecked = 0;

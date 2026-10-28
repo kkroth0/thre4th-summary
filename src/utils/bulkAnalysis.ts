@@ -111,6 +111,9 @@ export function counts(rows:{name:string;indicator:string}[]):Count[]{
 }
 export function analyzeBulkRows(rows:BulkRow[]){
   const analyses=canonicalBulkRows(rows).map(analyzeBulkRow).sort((a,b)=>PRIORITIES.indexOf(a.priority)-PRIORITIES.indexOf(b.priority)||Number(b.record.score||0)-Number(a.record.score||0)||a.row.query.localeCompare(b.row.query));
+  return aggregateBulkAnalyses(analyses);
+}
+export function aggregateBulkAnalyses(analyses:IocAnalysis[]){
   analyses.forEach((a,i)=>a.record.rank=i+1);
   const eligible=analyses.filter(a=>!a.excluded),entries=(f:(a:IocAnalysis)=>string[])=>counts(eligible.flatMap(a=>f(a).map(name=>({name,indicator:a.row.query}))));
   const sourceNames=distinct(analyses.flatMap(a=>a.row.result?.vendorData.map(v=>v.name)||[]));

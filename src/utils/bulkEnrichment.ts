@@ -6,6 +6,8 @@ import type { BulkContext } from '../services/bulkContext';
 export const BULK_MAX_BYTES = 3_800_000;
 export type BulkState = 'queued' | 'running' | 'complete' | 'partial' | 'error' | 'unsupported' | 'stopped';
 export interface BulkRow {
+  serverOrdinal?: number;
+  serverVersion?: number;
   query: string;
   state: BulkState;
   result?: ThreatIntelligenceResult;

@@ -1,3 +1,5 @@
+import { createBulkProviderBridge, BULK_PRINCIPAL } from './bulkProviderBridge.js';
+import { registerBulkService } from './bulkService.js';
 import { platformProviderCredentials } from './providerCredentials.js';
 import { createFeedParser } from './feedParser.js';
 import { filterReportIocNoise } from './reportIocNoise.js';
@@ -445,9 +447,11 @@ app.use('/api/', (_req,res,next) => { res.set('Cache-Control','private, no-store
 // O teto subiu de novo quando o worker passou a mandar deck E PDF no mesmo corpo:
 // ~3 MB de .pptx + ~2 MB de .pdf viram ~7 MB depois do base64, e o JSON vai junto.
 const tightJson = express.json({ limit: '10kb' });
+const bulkJobsJson = express.json({ limit: '4mb' });
 const bulkJson = express.json({ limit: '25mb' });
 const telegramJson = express.json({ limit: '64kb' });
 app.use((req, res, next) => {
+    if (req.method === 'POST' && req.path === '/api/bulk/jobs') return bulkJobsJson(req,res,next);
     if (req.method === 'POST' && req.path === '/api/feed/job/result') return bulkJson(req, res, next);
     if (req.method === 'POST' && /^\/api\/integrations\/telegram\/webhook\/\d{5,16}$/.test(req.path)) return telegramJson(req, res, next);
     return tightJson(req, res, next);
@@ -632,13 +636,13 @@ function withAbuseKey(req, load, operation = 'check') {
     });
 }
 async function persistProviderEvidence(req,provider,query,data) {
-    const session=verifySession(getCookie(req,'ts_session'));
+    const session=req[BULK_PRINCIPAL]||verifySession(getCookie(req,'ts_session'));
     if(!session||!sessionHasPremium(session))return;
     await iocIntelligence.ingest(sourceObservations(provider,data,{scope:session.sub,query,
         matchActors:(text, options)=>matchKnownActors(text,options),matchMalware:(text,options)=>matchMalware(text,malwareIndex,options)}).map((row,index)=>({...row,...(index===0?{payload:data}:{})})));
 }
 async function cachedProvider(req, res, provider, query, credentials, load) {
-    const session = verifySession(getCookie(req, 'ts_session'));
+    const session=req[BULK_PRINCIPAL]||verifySession(getCookie(req,'ts_session'));
     const result = await lookupCache.get({ provider, query, owner: session?.sub || '', credentials, fresh: req.body?.fresh === true }, async () => {
         const response = await load();
         // Keep only the JSON and quota headers, never axios sockets/config/keys.
@@ -663,10 +667,12 @@ app.get('/api/admin/performance', requireAdmin, (req, res) => {
     res.json({ lookups: lookupCache.stats() });
 });
 
+const bulkProviderBridge=createBulkProviderBridge(app,scanLimiter);
+
 // --- API Endpoints ---
 
 // VirusTotal
-app.post('/api/virustotal', scanLimiter, async (req, res) => {
+bulkProviderBridge.register('/api/virustotal', 'VirusTotal', async (req, res) => {
     const { query } = req.body;
 
     try {
@@ -680,7 +686,7 @@ app.post('/api/virustotal', scanLimiter, async (req, res) => {
         else endpoint = `https://www.virustotal.com/api/v3/urls/${Buffer.from(sanitized).toString('base64').replace(/=/g, "")}`;
 
         const response = await cachedProvider(req, res, 'virustotal', sanitized, providerKeys(req, 'virustotal'), () => withProviderKey(req, 'virustotal', (key) =>
-            axios.get(endpoint, { headers: { "x-apikey": key } })
+            axios.get(endpoint, { signal: req.signal, headers: { "x-apikey": key } })
         ));
         sendResponseWithQuota(res, response);
     } catch (error) {
@@ -690,7 +696,7 @@ app.post('/api/virustotal', scanLimiter, async (req, res) => {
 });
 
 // AbuseIPDB
-app.post('/api/abuseipdb', scanLimiter, async (req, res) => {
+bulkProviderBridge.register('/api/abuseipdb', 'AbuseIPDB', async (req, res) => {
     const { query } = req.body;
 
     try {
@@ -700,7 +706,7 @@ app.post('/api/abuseipdb', scanLimiter, async (req, res) => {
         const sanitized = sanitizeQuery(query, 'ip');
         const response = await cachedProvider(req, res, 'abuseipdb', sanitized, abuseKeys(req), () => withAbuseKey(req, (key) =>
             axios.get(`https://api.abuseipdb.com/api/v2/check`, {
-                params: {
+                signal: req.signal, params: {
                     ipAddress: sanitized,
                     maxAgeInDays: 90,
                     verbose: true
@@ -739,7 +745,7 @@ app.post('/api/abuseipdb/check-block', scanLimiter, async (req, res) => {
 });
 
 // AlienVault OTX
-app.post('/api/alienvault', scanLimiter, async (req, res) => {
+bulkProviderBridge.register('/api/alienvault', 'AlienVault OTX', async (req, res) => {
     const { query } = req.body;
     const otxKeys = providerKeys(req, 'otx');
 
@@ -755,7 +761,7 @@ app.post('/api/alienvault', scanLimiter, async (req, res) => {
 
         // A OTX morre por concorrência sem devolver 429: o gate segura o lote
         // em 4 chamadas em voo e o timeout impede que uma travada ocupe a vaga.
-        const response = await cachedProvider(req, res, 'otx', sanitized, otxKeys, () => { const request = key => otxThrottled(() => axios.get(endpoint, { headers: key ? { 'X-OTX-API-KEY': key } : {}, timeout: OTX_TIMEOUT_MS, family: 4, maxContentLength: 8_000_000, maxRedirects: 0 })); return otxKeys.length ? withProviderKey(req, 'otx', request) : request(''); });
+        const response = await cachedProvider(req, res, 'otx', sanitized, otxKeys, () => { const request = key => otxThrottled(() => axios.get(endpoint, { signal: req.signal, headers: key ? { 'X-OTX-API-KEY': key } : {}, timeout: OTX_TIMEOUT_MS, family: 4, maxContentLength: 8_000_000, maxRedirects: 0 })); return otxKeys.length ? withProviderKey(req, 'otx', request) : request(''); });
         sendResponseWithQuota(res, response);
     } catch (error) {
         providerError(res, error);
@@ -799,7 +805,7 @@ const abuseChKey = (req) => {
 };
 
 // URLhaus
-app.post('/api/urlhaus', scanLimiter, async (req, res) => {
+bulkProviderBridge.register('/api/urlhaus', 'URLhaus', async (req, res) => {
     const { query } = req.body;
     try {
         const queryType = detectQueryType(query);
@@ -826,7 +832,7 @@ app.post('/api/urlhaus', scanLimiter, async (req, res) => {
         // abuse.ch now requires an Auth-Key header on all URLhaus API queries.
         const headers = { "Content-Type": "application/x-www-form-urlencoded" };
         const keys = providerKeys(req, 'urlhaus');
-        const response = await cachedProvider(req, res, 'urlhaus', params.toString(), keys, () => withProviderKey(req, 'urlhaus', key => axios.post(endpoint, params.toString(), { headers: { ...headers, 'Auth-Key': key }, timeout: 15000, family: 4, maxContentLength: 8_000_000, maxRedirects: 0 })));
+        const response = await cachedProvider(req, res, 'urlhaus', params.toString(), keys, () => withProviderKey(req, 'urlhaus', key => axios.post(endpoint, params.toString(), { signal: req.signal, headers: { ...headers, 'Auth-Key': key }, timeout: 15000, family: 4, maxContentLength: 8_000_000, maxRedirects: 0 })));
         res.json(response.data);
     } catch (error) {
         providerError(res, error);
@@ -834,7 +840,7 @@ app.post('/api/urlhaus', scanLimiter, async (req, res) => {
 });
 
 // MalwareBazaar
-app.post('/api/malwarebazaar', scanLimiter, async (req, res) => {
+bulkProviderBridge.register('/api/malwarebazaar', 'MalwareBazaar', async (req, res) => {
     const { query } = req.body;
     try {
         const queryType = detectQueryType(query);
@@ -852,7 +858,7 @@ app.post('/api/malwarebazaar', scanLimiter, async (req, res) => {
         const keys = providerKeys(req, 'malwarebazaar');
         const response = await cachedProvider(req, res, 'malwarebazaar', sanitized, keys, () => withProviderKey(req, 'malwarebazaar', key => axios.post(`https://mb-api.abuse.ch/api/v1/`,
             params.toString(),
-            { headers: { ...headers, 'Auth-Key': key }, timeout: 15000, family: 4, maxContentLength: 8_000_000, maxRedirects: 0 }
+            { signal: req.signal, headers: { ...headers, 'Auth-Key': key }, timeout: 15000, family: 4, maxContentLength: 8_000_000, maxRedirects: 0 }
         )));
         res.json(response.data);
     } catch (error) {
@@ -862,7 +868,7 @@ app.post('/api/malwarebazaar', scanLimiter, async (req, res) => {
 
 // ThreatFox (abuse.ch) — IOC -> malware/threat attribution. Accepts ip, domain,
 // url and hash. abuse.ch now requires an Auth-Key header on all queries.
-app.post('/api/threatfox', scanLimiter, async (req, res) => {
+bulkProviderBridge.register('/api/threatfox', 'ThreatFox', async (req, res) => {
     const { query } = req.body;
     try {
         const queryType = detectQueryType(query);
@@ -876,7 +882,7 @@ app.post('/api/threatfox', scanLimiter, async (req, res) => {
         const response = await cachedProvider(req, res, 'threatfox', sanitized, keys, () => withProviderKey(req, 'threatfox', key => axios.post(
             `https://threatfox-api.abuse.ch/api/v1/`,
             { query: "search_ioc", search_term: sanitized },
-            { headers: { ...headers, 'Auth-Key': key }, timeout: 15000, family: 4, maxContentLength: 8_000_000, maxRedirects: 0 }
+            { signal: req.signal, headers: { ...headers, 'Auth-Key': key }, timeout: 15000, family: 4, maxContentLength: 8_000_000, maxRedirects: 0 }
         )));
         // A busca segue por curinga (é o que casa `ip:porta` e URL do host),
         // mas o que não é o indicador consultado não sai daqui.
@@ -4342,6 +4348,21 @@ function scheduleDailyEdition() {
     timer.unref?.();
 }
 
+
+const bulkService=registerBulkService(app,{
+ filePath:process.env.BULK_JOBS_PATH || (process.env.NODE_ENV==='test'?':memory:':path.join(__dirname,'.bulk-enrichment.sqlite')),
+ outputDir:process.env.BULK_EXPORTS_PATH || path.join(__dirname,'.bulk-exports'),requirePremium,
+ concurrency:lowMemoryHost?2:3,lookup:task=>bulkProviderBridge.lookup(task),canRun:principal=>sessionHasPremium(principal),
+ readContext:async task=>{
+  const result={publications:findMentions(newsStoryStore.all(),task.query),evidence:[],errors:[]};let offset=0;
+  while(true){const page=await queryIntelligence('detail',{value:task.query,owner:task.owner,offset,size:100});if(!page)break;
+   result.evidence.push(...page.evidence);offset+=page.evidence.length;if(offset>=page.total)break;if(!page.evidence.length)throw Object.assign(Error('A leitura da base correlacionada ficou incompleta.'),{status:503});
+  }
+  const known=new Set(result.publications.map(p=>p.link));for(const item of result.evidence)if(item.provider==='news'&&item.link&&!known.has(item.link)){known.add(item.link);result.publications.push({storyId:'',title:item.title,source:item.source||'Notícias',link:item.link,pubDate:item.published,actors:item.entities.filter(e=>e.kind==='actor').map(e=>e.name),categories:[]});}
+  return result;
+ }
+});
+
 app.listen(PORT, () => {
     // Unit/API tests invoke collectors explicitly with controlled inputs.
     // Booting a test server must not launch real scheduled collections.
@@ -4350,6 +4371,7 @@ app.listen(PORT, () => {
         .then(() => { console.log('Inventory and actor read indexes ready'); actorCatalogIndex(); })
         .catch(() => console.warn('Inventory read index preparation deferred'));
     iocIntelligence.deferWritesUntil(inventoryOptimization);
+    void inventoryOptimization.finally(()=>bulkService.start());
     setInterval(() => { void telegramIntegration.tick().catch(() => console.warn('Telegram worker unavailable')); }, 2000).unref();
     console.log(`Server running on port ${PORT}`);
     setTimeout(()=>{void inventoryOptimization.then(()=>iocIntelligence.replayProviderPayloads((provider,payload,options)=>sourceObservations(provider,payload,{...options,

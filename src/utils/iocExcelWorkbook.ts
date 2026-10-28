@@ -13,7 +13,7 @@ type RecordRow = Record<string, unknown>;
 type Column = [string, string, number];
 type ExcelFactory = { Workbook: new () => ExcelJS.Workbook };
 export interface NewsExcelPayload { dataset: string; range: { from: string; to: string }; rows: RecordRow[]; generatedAt?: string; report?: OtReportContext }
-const valueText = (value: unknown): string => value == null ? '' : typeof value === 'object'
+export const valueText = (value: unknown): string => value == null ? '' : typeof value === 'object'
   // JSON Unicode escapes preserve astral characters through ExcelJS's UTF-8
   // serialization chunks. JSON.parse restores the original provider payload.
   ? Array.isArray(value) && value.every(item => typeof item === 'string') ? value.join(' | ') : JSON.stringify(value).replace(/[\uD800-\uDFFF]/g, unit => '\\u' + unit.charCodeAt(0).toString(16).padStart(4, '0'))

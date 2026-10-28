@@ -37,6 +37,11 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      - name: Verify shared enrichment rules
+        run: |
+          node scripts/build-bulk-shared.mjs
+          git diff --exit-code -- server/bulkShared.generated.mjs
+
       - name: Typecheck
         run: npm run typecheck
 

@@ -23,6 +23,7 @@ const ORG_PROFILES_PATH = path.join(tmpdir(), `threatsumm4ry-smoke-profiles-${PO
 const PHISH_WATCH_PATH = path.join(tmpdir(), `threatsumm4ry-smoke-watch-${PORT}.json`);
 const SECRETS_ENCRYPTION_KEY = 'smoke-only-encryption-secret';
 const SESSION_SECRET = 'test-secret';
+const BULK_JOBS_PATH = path.join(tmpdir(), `threatsumm4ry-smoke-bulk-${PORT}.sqlite`);
 const sessionBody = Buffer.from(JSON.stringify({ sub: 'smoke-user', login: 'tester', exp: Math.floor(Date.now() / 1000) + 3600 })).toString('base64url');
 const sessionSig = crypto.createHmac('sha256', SESSION_SECRET).update(sessionBody).digest('base64url');
 const AUTH_HEADERS = { Cookie: `ts_session=${sessionBody}.${sessionSig}` };
@@ -30,6 +31,7 @@ const outsiderBody = Buffer.from(JSON.stringify({ sub: 'outsider', login: 'outsi
 const outsiderSig = crypto.createHmac('sha256', SESSION_SECRET).update(outsiderBody).digest('base64url');
 const OUTSIDER_HEADERS = { Cookie: `ts_session=${outsiderBody}.${outsiderSig}` };
 let proc;
+let bootStderr='';
 
 test('malformed session cookies fail closed without turning API requests into server errors',async()=>{
     const response=await fetch(BASE+'/api/auth/me',{headers:{Cookie:'ts_session=%E0%A4%A'}});
@@ -90,7 +92,7 @@ async function waitForBoot(timeoutMs = 15000) {
         } catch { /* not up yet */ }
         await new Promise((r) => setTimeout(r, 300));
     }
-    throw new Error('server did not boot within 15s');
+    throw new Error('server did not boot within 15s: '+bootStderr.slice(0,2500));
 }
 
 test('domain investigation and actor archive endpoints enforce premium access and validate targets before upstream calls', async () => {
@@ -141,18 +143,20 @@ before(async () => {
         cwd: path.join(__dirname, '..'),
         env: {
             ...process.env,
-            PORT: String(PORT), NODE_ENV: 'test', SESSION_SECRET,
+            PORT: String(PORT), NODE_ENV: 'test', SESSION_SECRET, BULK_JOBS_PATH,
             GITHUB_ALLOWED_LOGINS: 'tester', PREMIUM_OPEN_PATH, NEWS_MONITORING_PATH,
             USERS_STORE_PATH, NEWS_ARCHIVE_PATH, NEWS_STORIES_PATH, ORG_PROFILES_PATH, PHISH_WATCH_PATH, SECRETS_ENCRYPTION_KEY, URLSCAN_API_KEY: '',
             FEED_JOBS_PATH, FEED_AGENT_SECRET: 'smoke-worker-secret', FEED_DECKS_DIR: path.join(tmpdir(), `threatsumm4ry-smoke-decks-${PORT}`),
         },
-        stdio: 'ignore',
+        stdio: ['ignore','ignore','pipe'],
     });
+    proc.stderr.on('data',chunk=>{bootStderr=(bootStderr+chunk.toString()).slice(-5000);});
     await waitForBoot();
 });
 
-after(() => {
-    proc?.kill('SIGKILL');
+after(async () => {
+    if(proc && proc.exitCode===null && proc.signalCode===null){const done=new Promise(resolve=>proc.once('exit',resolve));proc.kill('SIGKILL');await done;}
+    for(const suffix of ['', '-wal','-shm'])rmSync(BULK_JOBS_PATH+suffix,{force:true});
     rmSync(PREMIUM_OPEN_PATH, { force: true });
     rmSync(`${PREMIUM_OPEN_PATH}.tmp`, { force: true });
     rmSync(NEWS_MONITORING_PATH, { force: true });
@@ -610,4 +614,20 @@ test('OT monthly payload keeps the accumulated product inventory behind an on-de
     const monthly = await response.json(); assert.ok(Array.isArray(monthly.rows)); assert.equal(monthly.productBase, undefined); assert.equal(monthly.productSummary.products, 0);
     const products = await fetch(BASE + '/api/ot-patch-day/products'); assert.equal(products.status, 200);
     const base = await products.json(); assert.deepEqual(base.rows, []); assert.equal(base.summary.products, 0);
+});
+
+
+test('durable bulk accepts a large input, isolates accounts, pages compact rows and preserves a paused job',async()=>{
+ const input=Array.from({length:1200},(_,i)=>`185.199.${Math.floor(i/250)}.${i%250+1}`).join('\n'),requestId=crypto.randomUUID();
+ const create=()=>fetch(BASE+'/api/bulk/jobs',{method:'POST',headers:{...AUTH_HEADERS,'Content-Type':'application/json'},body:JSON.stringify({input,sources:['VirusTotal','AbuseIPDB'],requestId,owner:'outsider'})});
+ assert.equal((await fetch(BASE+'/api/bulk/jobs')).status,401);
+ const response=await create();assert.equal(response.status,201);const job=await response.json();assert.equal(job.total,1200);assert.equal((await(await create()).json()).id,job.id);
+ const body=Buffer.from(JSON.stringify({sub:'different-bulk-owner',login:'tester',exp:Math.floor(Date.now()/1000)+3600})).toString('base64url'),signature=crypto.createHmac('sha256',SESSION_SECRET).update(body).digest('base64url'),headers={Cookie:`ts_session=${body}.${signature}`};
+ assert.equal((await fetch(BASE+'/api/bulk/jobs/'+job.id,{headers})).status,404);
+ assert.equal((await fetch(BASE+'/api/bulk/jobs/'+job.id+'/rows',{headers})).status,404);
+ const pageResponse=await fetch(BASE+'/api/bulk/jobs/'+job.id+'/rows?size=20',{headers:AUTH_HEADERS});assert.equal(pageResponse.status,200);const tag=pageResponse.headers.get('etag'),page=await pageResponse.json();assert.equal(page.rows.length,20);assert.equal(page.total,1200);assert.equal(page.rows[0].result.threatLevel,'unknown');assert.ok(page.rows[0].result.vendorData.every(v=>v.rawDeferred&&!v.rawPayload));
+ assert.equal((await fetch(BASE+'/api/bulk/jobs/'+job.id+'/rows?size=20',{headers:{...AUTH_HEADERS,'If-None-Match':tag}})).status,304);
+ const full=await(await fetch(BASE+'/api/bulk/jobs/'+job.id+'/rows/0',{headers:AUTH_HEADERS})).json();assert.equal(full.serverOrdinal,0);assert.ok(full.contextLoading);
+ const dump=await fetch(BASE+'/api/bulk/jobs/'+job.id+'/download?format=json&type=ip',{headers:AUTH_HEADERS});assert.equal(dump.status,200);assert.match(dump.headers.get('content-disposition'),/attachment/);const json=await dump.json();assert.equal(json.rows.length,1200);assert.equal(json.count,1200);
+ const action=kind=>fetch(BASE+'/api/bulk/jobs/'+job.id+'/action',{method:'POST',headers:{...AUTH_HEADERS,'Content-Type':'application/json'},body:JSON.stringify({action:kind})});assert.equal((await(await action('pause')).json()).state,'paused');assert.equal((await(await fetch(BASE+'/api/bulk/jobs/'+job.id,{headers:AUTH_HEADERS})).json()).state,'paused');assert.equal((await(await action('cancel')).json()).state,'canceled');
 });

@@ -13,7 +13,7 @@ function text(ws:ExcelJS.Worksheet,row:number,from:number,to:number,value:string
   if(typeof value==='number')cell.numFmt='#,##0';return cell;
 }
 function page(wb:ExcelJS.Workbook,name:string,title:string,date:string,last=123){
-  const ws=wb.getWorksheet(name)||wb.addWorksheet(name);ws.views=[{showGridLines:false,zoomScale:85}];ws.properties.tabColor={argb:C.yellow};
+  const ws=wb.getWorksheet(name)||wb.addWorksheet(name);ws.views.splice(0,ws.views.length,{showGridLines:false,zoomScale:85});ws.properties.tabColor={argb:C.yellow};
   ws.pageSetup={paperSize:9,orientation:'portrait',fitToPage:true,fitToWidth:1,fitToHeight:0,printArea:`A1:X${last}`};
   for(let i=1;i<=24;i++)ws.getColumn(i).width=7;
   for(let i=1;i<=last;i++)ws.getRow(i).height=20;

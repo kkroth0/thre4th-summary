@@ -9,6 +9,7 @@ export interface TimelineEvent {
 }
 
 export interface VendorData {
+    rawDeferred?: boolean;
     name: string;
     data: Record<string, any>;
     error?: string;

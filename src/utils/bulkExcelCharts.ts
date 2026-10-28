@@ -7,7 +7,7 @@ import type { BulkRow } from './bulkEnrichment';
 const xml=(s:string)=>s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&apos;');
 const priorityColors:Record<string,string>={'Investigar':'BF4444','Atenção':'E3A328','Revisar':'E7CD73','Sem sinal nas fontes':'138A8A','Infraestrutura pública':'6589AD','Teste':'98A5B5','Pendente':'D6DBE3'};
 /** Native editable charts authored with Artifact Tool, bound to the snapshot's helper cells. */
-export async function addBulkExcelCharts(buffer:Uint8Array,rows:BulkRow[],snapshot?:BulkAnalysis){
+export async function prepareBulkChartZip(buffer:Uint8Array,rows:BulkRow[],snapshot?:BulkAnalysis){
   const zip=await JSZip.loadAsync(buffer),data=bulkChartData(snapshot||analyzeBulkRows(rows));
   for(const [name,source]of Object.entries(parts)){
     if(name==='contentTypes')continue;let value=source;
@@ -45,5 +45,8 @@ export async function addBulkExcelCharts(buffer:Uint8Array,rows:BulkRow[],snapsh
   let rels=zip.file(path)?await zip.file(path)!.async('string'):'<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"></Relationships>';
   rels=rels.replace(/<Relationships([^>]*)\/>/,'<Relationships$1></Relationships>');
   zip.file(path,rels.replace('</Relationships>','<Relationship Id="rIdBulkCharts" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing1.xml"/></Relationships>'));
-  return zip.generateAsync({type:'uint8array',compression:'DEFLATE'});
+  return zip;
+}
+export async function addBulkExcelCharts(buffer:Uint8Array,rows:BulkRow[],snapshot?:BulkAnalysis){
+  return (await prepareBulkChartZip(buffer,rows,snapshot)).generateAsync({type:'uint8array',compression:'DEFLATE'});
 }
