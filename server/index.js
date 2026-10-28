@@ -4325,6 +4325,21 @@ app.get('/api/vendors/status', (req, res) => {
 });
 
 // Serve frontend in production
+// Register API endpoints before the production SPA fallback.
+const bulkService=registerBulkService(app,{
+ filePath:process.env.BULK_JOBS_PATH || (process.env.NODE_ENV==='test'?':memory:':path.join(__dirname,'.bulk-enrichment.sqlite')),
+ outputDir:process.env.BULK_EXPORTS_PATH || path.join(__dirname,'.bulk-exports'),requirePremium,
+ concurrency:lowMemoryHost?2:3,lookup:task=>bulkProviderBridge.lookup(task),canRun:principal=>sessionHasPremium(principal),
+ readContext:async task=>{
+  const result={publications:findMentions(newsStoryStore.all(),task.query),evidence:[],errors:[]};let offset=0;
+  while(true){const page=await queryIntelligence('detail',{value:task.query,owner:task.owner,offset,size:100});if(!page)break;
+   result.evidence.push(...page.evidence);offset+=page.evidence.length;if(offset>=page.total)break;if(!page.evidence.length)throw Object.assign(Error('A leitura da base correlacionada ficou incompleta.'),{status:503});
+  }
+  const known=new Set(result.publications.map(p=>p.link));for(const item of result.evidence)if(item.provider==='news'&&item.link&&!known.has(item.link)){known.add(item.link);result.publications.push({storyId:'',title:item.title,source:item.source||'Notícias',link:item.link,pubDate:item.published,actors:item.entities.filter(e=>e.kind==='actor').map(e=>e.name),categories:[]});}
+  return result;
+ }
+});
+
 if (process.env.NODE_ENV === 'production') {
     app.use(express.static(path.join(__dirname, '../dist')));
     app.get(/(.*)/, (req, res) => {
@@ -4349,19 +4364,6 @@ function scheduleDailyEdition() {
 }
 
 
-const bulkService=registerBulkService(app,{
- filePath:process.env.BULK_JOBS_PATH || (process.env.NODE_ENV==='test'?':memory:':path.join(__dirname,'.bulk-enrichment.sqlite')),
- outputDir:process.env.BULK_EXPORTS_PATH || path.join(__dirname,'.bulk-exports'),requirePremium,
- concurrency:lowMemoryHost?2:3,lookup:task=>bulkProviderBridge.lookup(task),canRun:principal=>sessionHasPremium(principal),
- readContext:async task=>{
-  const result={publications:findMentions(newsStoryStore.all(),task.query),evidence:[],errors:[]};let offset=0;
-  while(true){const page=await queryIntelligence('detail',{value:task.query,owner:task.owner,offset,size:100});if(!page)break;
-   result.evidence.push(...page.evidence);offset+=page.evidence.length;if(offset>=page.total)break;if(!page.evidence.length)throw Object.assign(Error('A leitura da base correlacionada ficou incompleta.'),{status:503});
-  }
-  const known=new Set(result.publications.map(p=>p.link));for(const item of result.evidence)if(item.provider==='news'&&item.link&&!known.has(item.link)){known.add(item.link);result.publications.push({storyId:'',title:item.title,source:item.source||'Notícias',link:item.link,pubDate:item.published,actors:item.entities.filter(e=>e.kind==='actor').map(e=>e.name),categories:[]});}
-  return result;
- }
-});
 
 app.listen(PORT, () => {
     // Unit/API tests invoke collectors explicitly with controlled inputs.
