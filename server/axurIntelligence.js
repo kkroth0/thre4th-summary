@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 import { normalizeIndicator } from './iocIntelligence.js';
 import { actorNameKey } from './actorIdentity.js';
+import { readAxur } from './axurAccess.js';
 
 const BASE = 'https://api.axur.com/gateway/1.0/api';
 const REQUEST_POLICY = 'latency-v2';
@@ -90,7 +91,7 @@ export function createAxurImport({ store, scope, getKey, http, matchActors, matc
     if (!key) throw Object.assign(new Error('Axur key unavailable'), { status: 401 });
     try {
       const timeout=endpoint==='/cyber-iocs/v2/iocs'?IOC_TIMEOUT_MS:INSIGHT_TIMEOUT_MS;
-      return (await http.get(`${BASE}${endpoint}`, { params: { lang: 'pt-BR', ...params }, headers: { Authorization: `Bearer ${key}` }, timeout, maxRedirects: 0, maxContentLength: 32 * 1024 * 1024 })).data;
+      return (await readAxur(scope, http, `${BASE}${endpoint}`, { params: { lang: 'pt-BR', ...params }, headers: { Authorization: `Bearer ${key}` }, timeout, maxRedirects: 0, maxContentLength: 32 * 1024 * 1024 })).data;
     } catch (error) {
       const status = Number(error.response?.status) || 0;
       const retry = error.response?.headers?.['retry-after'];

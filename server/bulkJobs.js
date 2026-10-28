@@ -43,7 +43,7 @@ export function createBulkStore({filePath,now=Date.now,eligibleSources,composeRo
  }
  function row(j,item,compact=false){
   const tasks=sql('SELECT * FROM bulk_tasks WHERE job=? AND ordinal=? ORDER BY provider').all(j.id,item.ordinal);
-  const data=tasks.filter(t=>t.provider!==BULK_CONTEXT).map(t=>t.state==='done'?unpack(t.value):({name:t.provider,data:{...(t.next_at>now()?{'Próxima tentativa':new Date(t.next_at).toISOString()}:{})},...(t.error?{error:t.error,httpStatus:t.http_status,errorCode:t.error_code,retryAt:t.next_at||undefined}:{isLoading:true})}));
+  const data=tasks.filter(t=>t.provider!==BULK_CONTEXT).map(t=>t.state==='done'?unpack(t.value):({name:t.provider,data:{'Estado da fonte':t.state,...(t.next_at>now()?{'Próxima tentativa':new Date(t.next_at).toISOString()}:{})},...(t.error?{error:t.error,httpStatus:t.http_status,errorCode:t.error_code,retryAt:t.next_at||undefined}:{isLoading:true})}));
   let context=unpack(item.context)||{publications:[],evidence:[],errors:item.context_error?[item.context_error]:[]};
   if(compact){for(const v of data){delete v.rawPayload;v.rawDeferred=true;}context={...context,evidence:context.evidence.map(({payload,reputation,...e})=>e)};}
   return {...composeRow(item.query,data,context,item.state,item.completed?new Date(item.completed).toISOString():undefined),contextLoading:!terminal.has(tasks.find(t=>t.provider===BULK_CONTEXT)?.state),serverOrdinal:item.ordinal,serverVersion:item.version};
@@ -86,7 +86,7 @@ export function createBulkStore({filePath,now=Date.now,eligibleSources,composeRo
   const key=excludedProviders.join('|');let select=dispatchStatements.get(key);if(!select){select=sql(`SELECT t.*,j.owner,j.login,j.org_until,j.fresh,i.query FROM bulk_tasks t INDEXED BY bulk_dispatch JOIN bulk_jobs j ON j.id=t.job JOIN bulk_items i ON i.job=t.job AND i.ordinal=t.ordinal LEFT JOIN bulk_blocks b ON b.owner=j.owner AND b.provider=t.provider WHERE t.state=? AND j.state='active' AND t.next_at<=? AND COALESCE(b.until_at,0)<=? ${clause} ORDER BY t.next_at,t.updated,t.job,t.ordinal,t.provider LIMIT 1`);dispatchStatements.set(key,select);}
   const t=select.get('waiting',now(),now(),...excludedProviders)||select.get('pending',now(),now(),...excludedProviders);
   if(!t)return null;const lease=crypto.randomUUID();
-  sql("UPDATE bulk_tasks SET state='running',lease=?,lease_until=?,attempts=attempts+1,updated=? WHERE job=? AND ordinal=? AND provider=?").run(lease,now()+120000,now(),t.job,t.ordinal,t.provider);
+  sql("UPDATE bulk_tasks SET state='running',lease=?,lease_until=?,attempts=attempts+1,updated=? WHERE job=? AND ordinal=? AND provider=?").run(lease,now()+(t.provider==='Axur'?600000:120000),now(),t.job,t.ordinal,t.provider);
   sql("UPDATE bulk_items SET state='running',version=version+1 WHERE job=? AND ordinal=?").run(t.job,t.ordinal);touch(t.job);return{...t,lease,attempts:t.attempts+1};
  });
  const settle=db.transaction((t,value,error)=>{
@@ -101,7 +101,20 @@ export function createBulkStore({filePath,now=Date.now,eligibleSources,composeRo
   if(t.provider===BULK_CONTEXT)sql('UPDATE bulk_items SET context=?,context_error=? WHERE job=? AND ordinal=?').run(error?null:pack(value),error?message:null,t.job,t.ordinal);
   refreshItem(t.job,t.ordinal);
  });
- return{db,prepare:sql,create,claim,settle,page,owned,row,items,
+ const ensureSources=db.transaction((owner,id,sources)=>{
+  const job=owned(owner,id),current=JSON.parse(job.sources),added=[...new Set(sources)].filter(source=>!current.includes(source));
+  if(!added.length||!['active','paused'].includes(job.state))return false;
+  const at=now();
+  for(const item of sql('SELECT ordinal,query FROM bulk_items WHERE job=? ORDER BY ordinal').all(id))for(const provider of eligibleSources(item.query,added)){
+   const inserted=sql("INSERT OR IGNORE INTO bulk_tasks(job,ordinal,provider,state,updated) VALUES(?,?,?,'pending',?)").run(id,item.ordinal,provider,at);
+   if(inserted.changes){
+    sql("UPDATE bulk_items SET state='queued',completed=NULL,version=version+1 WHERE job=? AND ordinal=?").run(id,item.ordinal);
+    sql("UPDATE bulk_tasks SET state='held',next_at=0,lease=NULL,lease_until=0 WHERE job=? AND ordinal=? AND provider=?").run(id,item.ordinal,BULK_CONTEXT);
+   }
+  }
+  sql('UPDATE bulk_jobs SET sources=? WHERE id=?').run(JSON.stringify([...current,...added]),id);touch(id);return true;
+ });
+ return{db,prepare:sql,create,claim,settle,page,owned,row,items,ensureSources,
   summary:(owner,id)=>publicSummary(owned(owner,id)),list:owner=>sql('SELECT * FROM bulk_jobs WHERE owner=? ORDER BY created DESC LIMIT 20').all(owner).map(publicSummary),
   action(owner,id,action,principal){const j=owned(owner,id);if(!['pause','resume','retry','cancel'].includes(action))throw fail('Ação inválida.');
    if(action==='pause'||action==='cancel'){sql('UPDATE bulk_jobs SET state=? WHERE id=?').run(action==='pause'?'paused':'canceled',id);touch(id);return publicSummary(getJob(id));}

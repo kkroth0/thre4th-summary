@@ -42,3 +42,23 @@ test('numeric account identifiers survive SQLite serialization',()=>{const f=fix
 test('completed snapshots are reusable only by their owner and a refresh request reaches the provider task',()=>{
  const f=fixture();try{const j=f.store.create(owner,['8.8.8.8'],['VirusTotal'],{},undefined,true),task=f.store.claim();assert.equal(task.fresh,1);f.store.settle(task,{name:'VirusTotal',data:{Status:'Clean'},rawPayload:{data:{data:{attributes:{last_analysis_stats:{malicious:0}}}}}});assert.equal(f.store.savedProvider(other.sub,'VirusTotal','8.8.8.8'),null);assert.equal(f.store.savedProvider(owner.sub,'AbuseIPDB','8.8.8.8'),null);assert.equal(f.store.savedProvider(owner.sub,'VirusTotal','9.9.9.9'),null);assert.equal(f.store.savedProvider(owner.sub,'VirusTotal','8.8.8.8').vendor.rawPayload.data.data.attributes.last_analysis_stats.malicious,0);assert.equal(f.store.summary(owner.sub,j.id).refreshSources,true);}finally{f.close();}
 });
+
+test('adding Axur backfills the active batch without redoing or deleting completed provider results',()=>{
+ const f=fixture();try{
+  const j=f.store.create(owner,['8.8.8.8','9.9.9.9'],['VirusTotal']);finish(f.store);
+  // Completed batches retain their original scope; only ongoing work migrates.
+  assert.equal(f.store.ensureSources(owner.sub,j.id,['Axur']),false);
+  f.store.prepare("UPDATE bulk_jobs SET state='active' WHERE id=?").run(j.id);
+  assert.throws(()=>f.store.ensureSources(other.sub,j.id,['Axur']),e=>e.status===404);
+  assert.equal(f.store.ensureSources(owner.sub,j.id,['Axur']),true);
+  assert.equal(f.store.ensureSources(owner.sub,j.id,['Axur']),false);
+  const before=f.store.completeRow(owner.sub,j.id,0);assert.ok(before.result.vendorData.find(v=>v.name==='VirusTotal').rawPayload);
+  assert.equal(before.contextLoading,true);assert.equal(before.result.vendorData.find(v=>v.name==='Axur').isLoading,true);
+  const providers=[];let t;while((t=f.store.claim())){providers.push(t.provider);f.store.settle(t,t.provider===BULK_CONTEXT?context:{name:t.provider,data:{'Registros Axur':0}});}
+  assert.deepEqual(providers.sort(),['@context','@context','Axur','Axur']);assert.equal(f.store.summary(owner.sub,j.id).completed,2);assert.deepEqual(f.store.summary(owner.sub,j.id).sources,['VirusTotal','Axur']);
+ }finally{f.close();}
+});
+
+test('an Axur request has a longer lease and is not duplicated by the normal two-minute recovery',()=>{
+ const f=fixture();try{const j=f.store.create(owner,['8.8.8.8'],['Axur']);const task=f.store.claim();assert.equal(task.provider,'Axur');f.advance(120001);assert.equal(f.store.claim(),null);f.advance(480001);assert.equal(f.store.claim().provider,'Axur');assert.equal(f.store.summary(owner.sub,j.id).sources[0],'Axur');}finally{f.close();}
+});

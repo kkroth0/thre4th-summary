@@ -131,6 +131,7 @@ import { createHuntingService } from './huntingService.js';
 import { createHuntingGenerator } from './huntingAi.js';
 import { createTelegramIntegration } from './telegramIntegration.js';
 import { createAxurImport } from './axurIntelligence.js';
+import { createAxurLookup } from './axurLookup.js';
 import { enrichActorCatalog } from './actorSources.js';
 import { canonicalizeActors, buildActorIdentityIndex, canonicalActorReferences } from './actorIdentity.js';
 import { ORG_REGIONS, ORG_SECTORS, createProfileStore } from './orgProfiles.js';
@@ -2425,6 +2426,15 @@ app.post('/api/auth/logout', (req, res) => {
 // acontece é pior do que não oferecer.
 const BYOK_PROVIDERS = new Set(['shodan', 'urlscan', 'axur', ...POOL_PROVIDERS]);
 const axurImports = new Map();
+const axurLookups = new Map();
+function accountAxurLookup(owner) {
+    if (!axurLookups.has(owner)) axurLookups.set(owner, createAxurLookup({ scope: owner,
+        getKey: () => getUserApiKey(owner, 'axur'), http: axios, cache: lookupCache, store: iocIntelligence,
+        readDetail: (params, options) => queryIntelligence('detail', params, options),
+        matchActors: (text, options) => matchKnownActors(text, options), matchMalware: (text, options) => matchMalware(text, malwareIndex, options) }));
+    return axurLookups.get(owner);
+}
+
 function accountAxurImport(owner) {
     if (!axurImports.has(owner)) axurImports.set(owner, createAxurImport({ store: iocIntelligence, scope: owner,
         getKey: () => getUserApiKey(owner, 'axur'), http: axios,
@@ -4341,13 +4351,14 @@ app.get('/api/vendors/status', (req, res) => {
 const bulkService=registerBulkService(app,{
  filePath:process.env.BULK_JOBS_PATH || (process.env.NODE_ENV==='test'?':memory:':path.join(__dirname,'.bulk-enrichment.sqlite')),
  outputDir:process.env.BULK_EXPORTS_PATH || path.join(__dirname,'.bulk-exports'),requirePremium,
- concurrency:lowMemoryHost?2:3,lookup:task=>bulkProviderBridge.lookup(task),canRun:principal=>sessionHasPremium(principal),
+ concurrency:lowMemoryHost?2:3,lookup:task=>task.provider==='Axur'?accountAxurLookup(task.owner)(task.query,{fresh:Boolean(task.fresh)}):bulkProviderBridge.lookup(task),canRun:principal=>sessionHasPremium(principal),
+ requiredSources:principal=>getUserApiKey(principal.sub,'axur')?['Axur']:[],
  readContext:async task=>{
   const result={publications:findMentions(newsStoryStore.all(),task.query),evidence:[],errors:[]};let offset=0;
-  while(true){const page=await queryIntelligence('detail',{value:task.query,owner:task.owner,offset,size:100});if(!page)break;
+  while(true){const page=await queryIntelligence('detail',{value:task.query,owner:task.owner,offset,size:100},{revision:`bulk-context:${task.job}:${task.ordinal}:${task.attempts}`});if(!page)break;
    result.evidence.push(...page.evidence);offset+=page.evidence.length;if(offset>=page.total)break;if(!page.evidence.length)throw Object.assign(Error('A leitura da base correlacionada ficou incompleta.'),{status:503});
   }
-  const known=new Set(result.publications.map(p=>p.link));for(const item of result.evidence)if(item.provider==='news'&&item.link&&!known.has(item.link)){known.add(item.link);result.publications.push({storyId:'',title:item.title,source:item.source||'Notícias',link:item.link,pubDate:item.published,actors:item.entities.filter(e=>e.kind==='actor').map(e=>e.name),categories:[]});}
+  const known=new Set(result.publications.map(p=>p.link));for(const item of result.evidence)if(['news','Axur'].includes(item.provider)&&item.link&&!known.has(item.link)){known.add(item.link);result.publications.push({storyId:'',title:item.title,source:item.source||item.provider,link:item.link,pubDate:item.published,actors:item.entities.filter(e=>e.kind==='actor').map(e=>e.name),categories:[]});}
   return result;
  }
 });

@@ -1,6 +1,6 @@
 import type { ThreatIntelligenceResult, VendorData, VerdictSignal } from '../types/threat-intelligence';
 
-export const THREAT_VERDICT_VERSION = '2026-10-28-signals-v2';
+export const THREAT_VERDICT_VERSION = '2026-10-28-signals-v3-axur';
 const IMPORTANT_AV_VENDORS = ['Microsoft','Kaspersky','Bitdefender','ESET-NOD32','Avira','Sophos','McAfee','Symantec','TrendMicro','F-Secure','Fortinet','Palo Alto Networks','CrowdStrike'];
 const numeric = (value: unknown): number | null => {
     if (value == null || value === '') return null;
@@ -36,6 +36,10 @@ export function scoreThreatResults(query: string, results: VendorData[]): Threat
         if (vendor.name === 'AlienVault OTX') {
             const pulses = numeric(data['Pulse Count']) ?? (Array.isArray(data['Pulse Details']) ? data['Pulse Details'].length : 0);
             if (pulses > 0 || status.includes('suspicious')) signal(`${pulses} pulse(s) associado(s); contexto para revisão, sem confirmar autoria`, 'context');
+            continue;
+        }
+        if (vendor.name === 'Axur') {
+            if ((numeric(data['Registros Axur']) || 0) > 0) signal('Registro exato na Axur; relações do relatório são contexto para revisão', 'context');
             continue;
         }
         if (vendor.name === 'WHOIS' || vendor.name === 'DNS / Team Cymru' || vendor.name === 'abuse.ch Hunting') continue;

@@ -60,7 +60,9 @@ export function analyzeBulkRow(row: BulkRow): IocAnalysis {
       families.push(...attributed.filter(x=>x.kind==='malware').map(x=>x.name));
     }
     const payload:any=(e as any).payload||{};
-    const ids=techs([...names(payload.relatedTTPs),...list(payload.relatedTTPs).map((t:any)=>t?.id||t?.name||'')]);
+    const patterns=[...list(payload.relatedTTPs),...list(payload.attacks)];
+    const ids=techs([...names(payload.relatedTTPs),...patterns.map((t:any)=>t?.code||t?.id||t?.name||'')]);
+    tactics.push(...patterns.flatMap((t:any)=>String(t?.code||t?.id||t||'').match(/\bTA\d{4}\b/g)||[]));
     techniques.push(...ids);
     if(!excluded)for(const actor of attributed.filter(x=>x.kind==='actor'))for(const technique of ids)pairs.push({actor:actor.name,technique});
     if(e.provider==='Axur'){reportTitles.push(e.title);if(e.link)reportLinks.push(e.link);if(e.published)reportDates.push(e.published);}
@@ -100,7 +102,7 @@ export function analyzeBulkRow(row: BulkRow): IocAnalysis {
     fpStatus:value(hunt,'FP Review'),fpScope:fp?'Exata':fpRecords.length?'Contextual':vendor('abuse.ch Hunting')?.error?'Indisponível':vendor('abuse.ch Hunting')?.isLoading?'Consultando':vendor('abuse.ch Hunting')?'Sem correspondência':'Não consultada',
     country:bulkField(row,['Country']).value,asn:as,organization:bulkField(row,['Organization','AS Owner','ISP']).value,isp:value(ab,'ISP'),prefix:value(dns,'Prefix')||value(ab,'CIDR')||value(vt,'Network'),rdns:value(dns,'Reverse Hostname')||bulkField(row,['Reverse Hostname']).value,
     registrar:value(whois,'Registrar'),created:value(whois,'Created'),sources:join(sources),failedSources:join(errors.map(v=>v.name)),sourceErrors:[...errors.map(v=>`${v.name}: ${v.error||'Consulta em andamento'}`),...(row.context?.errors||[]),...(row.error?[row.error]:[])].join('; ')};
-  for(const name of ['VirusTotal','AbuseIPDB','AlienVault OTX','ThreatFox','URLhaus','MalwareBazaar','DNS / Team Cymru','abuse.ch Hunting','WHOIS']){
+  for(const name of ['Axur','VirusTotal','AbuseIPDB','AlienVault OTX','ThreatFox','URLhaus','MalwareBazaar','DNS / Team Cymru','abuse.ch Hunting','WHOIS']){
     const v=vendor(name);record['status:'+name]=!v?'Não consultada':v.isLoading?'Consultando':v.error?'Indisponível':'Respondida';
   }
   return {row,record,excluded,fp,priority,actors:declaredActors,families:normalizedFamilies,techniques:distinct(techniques),pairs:excluded?[]:pairs.map(p=>({...p,actor:scrubXml(p.actor)})).filter(p=>declaredActors.some(a=>key(a)===key(p.actor))),mentions:distinct(contextual),asn:as==='—'?'':as};

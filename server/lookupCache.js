@@ -22,6 +22,7 @@ export function createLookupCache({ now = () => Date.now(), ttlMs = 300000, maxB
         if(provider==='virustotal')return !!data?.data?.attributes;
         if(provider==='abuseipdb')return !!data?.data?.ipAddress&&data.data.abuseConfidenceScore!=null;
         if(provider==='otx')return !!data?.pulse_info&&(data.pulse_info.count!=null||Array.isArray(data.pulse_info.pulses));
+        if(provider==='axur')return data?.lookupComplete===true&&Array.isArray(data.iocs)&&Array.isArray(data.insights);
         if(['threatfox','urlhaus','malwarebazaar'].includes(provider))return /^(no_results?|hash_not_found|url_not_found|host_not_found)$/.test(data?.query_status||'') || data?.query_status==='ok'&&(provider==='urlhaus'||Array.isArray(data.data));
         return true;
     };

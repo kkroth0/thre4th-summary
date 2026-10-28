@@ -12,15 +12,15 @@ const bad=(message,status=400)=>Object.assign(Error(message),{status});
 const validFilters=input=>({query:String(input?.query||'').slice(0,256),type:['ip','domain','url','hash'].includes(input?.type)?input.type:'all',state:['queued','running','complete','partial','error','unsupported'].includes(input?.state)?input.state:'all'});
 const csv=value=>{let s=valueText(value);if(/^[\s]*[=+@-]/.test(s))s="'"+s;return '"'+s.replace(/"/g,'""')+'"';};
 
-export function registerBulkService(app,{filePath,outputDir,requirePremium,lookup,readContext,canRun,concurrency=3}){
+export function registerBulkService(app,{filePath,outputDir,requirePremium,lookup,readContext,canRun,concurrency=3,requiredSources=()=>[]}){
  const store=createBulkStore({filePath,eligibleSources,composeRow:composeBulkRow}),runner=createBulkRunner({store,lookup,readContext,canRun,concurrency,canSchedule:()=>!exportWorker,onError:()=>console.warn('Bulk scheduling deferred')});
  let exportWorker=null,exportTimer,started=false;
  const handle=fn=>async(req,res)=>{res.set('Cache-Control','private, no-store');try{await fn(req,res);}catch(e){if(!res.headersSent)res.status(e.status||500).json({error:e.status?e.message:'Não foi possível concluir a operação do lote.'});}};
  const routes='/api/bulk/jobs';
- app.get(routes,requirePremium,handle((req,res)=>res.json({jobs:store.list(req.user.sub),sources:BULK_SOURCES})));
+ app.get(routes,requirePremium,handle((req,res)=>res.json({jobs:store.list(req.user.sub),sources:BULK_SOURCES,requiredSources:requiredSources(req.user)})));
  app.post(routes,requirePremium,handle((req,res)=>{
   if(typeof req.body.input!=='string'||Buffer.byteLength(req.body.input)>3_800_000)throw bad('Envie uma lista de até 3,8 MB.');
-  const parsed=prepareBulkInput(req.body.input),sources=[...new Set(Array.isArray(req.body.sources)?req.body.sources:[])].filter(s=>BULK_SOURCES.includes(s));
+  const parsed=prepareBulkInput(req.body.input),sources=[...new Set([...(Array.isArray(req.body.sources)?req.body.sources:[]),...requiredSources(req.user)])].filter(s=>BULK_SOURCES.includes(s));
   if(!sources.length)throw bad('Selecione ao menos uma fonte.');
   if(!parsed.indicators.some(q=>eligibleSources(q,sources).length))throw bad('Nenhuma fonte selecionada é compatível com os indicadores.');
   const job=store.create(req.user,parsed.indicators,sources,parsed.excluded,req.body.requestId,req.body.fresh===true);res.status(201).json(job);runner.wake();
@@ -65,5 +65,5 @@ export function registerBulkService(app,{filePath,outputDir,requirePremium,looku
   worker.on('message',message=>{if(message.progress){store.prepare('UPDATE bulk_exports SET updated=? WHERE id=?').run(Date.now(),item.id);return;}if(message.done&&Number.isInteger(message.revision))store.prepare('UPDATE bulk_exports SET revision=? WHERE id=?').run(message.revision,item.id);end(message.error);});
   worker.on('error',()=>end('Falha no gerador'));worker.on('exit',code=>{if(!finished)end(code?'Falha no gerador':'Gerador interrompido');exportWorker=null;});
  }
- return{store,runner,start(){if(started)return;started=true;runner.start();exportTimer=setInterval(tickExports,2000);exportTimer.unref();tickExports();},async close(){started=false;clearInterval(exportTimer);await runner.stop();if(exportWorker)await exportWorker.terminate();store.close();}};
+ return{store,runner,start(){if(started)return;started=true;for(const job of store.prepare("SELECT id,owner,login FROM bulk_jobs WHERE state IN ('active','paused')").all())store.ensureSources(job.owner,job.id,requiredSources({sub:job.owner,login:job.login}));runner.start();exportTimer=setInterval(tickExports,2000);exportTimer.unref();tickExports();},async close(){started=false;clearInterval(exportTimer);await runner.stop();if(exportWorker)await exportWorker.terminate();store.close();}};
 }

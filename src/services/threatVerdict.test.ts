@@ -6,6 +6,11 @@ import {analyzeBulkRow} from '../utils/bulkAnalysis';
 import type {VendorData} from '../types/threat-intelligence';
 const source=(name:string,data:Record<string,unknown>):VendorData=>({name,data});
 const absent=[source('ThreatFox',{Status:'No data'}),source('URLhaus',{Status:'No data'}),source('AlienVault OTX',{Status:'Clean','Pulse Count':'0 pulses'})];
+
+test('an exact Axur record is contextual evidence, while an absence abstains and never proves safety',()=>{
+ const hit=scoreThreatResults('94.154.43.158',[source('Axur',{'Registros Axur':2,Status:'Contexto encontrado'}),...absent]);assert.equal(hit.threatLevel,'suspicious');assert.equal(hit.signals?.[0].kind,'context');
+ assert.equal(scoreThreatResults('94.154.43.158',[source('Axur',{'Registros Axur':0,Status:'Sem registro exato na Axur'})]).threatLevel,'unknown');
+});
 test('the observed 116.179.37.176 findings remain visible and explain their sources',()=>{
  const result=scoreThreatResults('116.179.37.176',[source('VirusTotal',{Malicious:4,Status:'Malicious'}),source('AbuseIPDB',{'Abuse Confidence Score':'80%','Total Reports':177}),source('AlienVault OTX',{'Pulse Count':'40 pulses',Status:'Suspicious Activity'}),...absent.slice(0,2)]);
  assert.equal(result.threatLevel,'malicious');assert.equal(result.detections,3);assert.deepEqual(result.signals?.map(s=>s.source),['VirusTotal','AbuseIPDB','AlienVault OTX']);

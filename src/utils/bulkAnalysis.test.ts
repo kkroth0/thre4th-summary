@@ -10,6 +10,12 @@ import type { BulkEvidence } from '../services/bulkContext';
 const Excel=createRequire(`${process.cwd()}/package.json`)('exceljs') as typeof import('exceljs');
 const base=(query='185.220.101.5'):BulkRow=>({query,state:'complete',result:{query,overallScore:90,threatLevel:'malicious',totalVendors:2,detections:1,vendorData:[{name:'VirusTotal',data:{Malicious:12,'Detection Rate':'12/90'}},{name:'AlienVault OTX',data:{'Pulse Details':[{adversary:'Actor A',malwareFamilies:['Family A'],attackIds:['T1059.001'],tags:[]}]}}]},context:{errors:[],publications:[],evidence:[]}});
 const evidence=(name:string,relation:string,technique:string):BulkEvidence=>({provider:'Axur',title:'Source report',link:'https://lab.example/report',published:'2026-10-27',collectedAt:'2026-10-27',confidence:90,reputation:null,entities:[{id:name,kind:'actor',name,relation}],...{payload:{relatedTTPs:[technique]}}});
+
+test('Axur response status, report links, contextual actors and structured MITRE codes reach the analytical export',()=>{
+ const row=base();row.result!.vendorData.push({name:'Axur',data:{'Registros Axur':2,Status:'Contexto encontrado'}});
+ row.context!.evidence=[{...evidence('APT28','mentioned-with','T1566'),...{payload:{relatedTTPs:[{code:'TA0001',name:'Initial access'},{code:'T1059',name:'Command execution'}],attacks:[{code:'T1566.001',name:'Spearphishing Attachment'}]}}}];
+ const result=analyzeBulkRow(row);assert.equal(result.record['status:Axur'],'Respondida');assert.equal(result.record.axActors,'APT28');assert.match(String(result.record.axLinks),/https:\/\/lab.example\/report/);assert.ok(result.techniques.includes('T1059'));assert.ok(result.techniques.includes('T1566.001'));assert.match(String(result.record.tactics),/TA0001/);assert.ok(!result.actors.includes('APT28'));assert.ok(result.mentions.includes('APT28'));
+});
 test('context is retained without manufacturing an attribution or cross-report actor-technique pairs',()=>{
  const row=base();row.context!.evidence=[evidence('Context Actor','mentioned-with','T1566'),evidence('Actor B','attributed-by-source','T1486')];
  const a=analyzeBulkRow(row);assert.deepEqual(a.actors,['Actor B','Actor A']);assert.ok(a.mentions.includes('Context Actor'));
