@@ -81,6 +81,7 @@ export function createBulkStore({filePath,now=Date.now,eligibleSources,composeRo
  }
  const dispatchStatements=new Map();
  const claim=db.transaction((excludedProviders=[])=>{
+  excludedProviders=[...new Set(excludedProviders)].sort();
   sql("UPDATE bulk_tasks SET state='waiting',lease=NULL,lease_until=0,next_at=? WHERE state='running' AND lease_until<=?").run(now(),now());
   const clause=excludedProviders.length?` AND t.provider NOT IN (${excludedProviders.map(()=>'?').join(',')})`:'';
   const key=excludedProviders.join('|');let select=dispatchStatements.get(key);if(!select){select=sql(`SELECT t.*,j.owner,j.login,j.org_until,j.fresh,i.query FROM bulk_tasks t INDEXED BY bulk_dispatch JOIN bulk_jobs j ON j.id=t.job JOIN bulk_items i ON i.job=t.job AND i.ordinal=t.ordinal LEFT JOIN bulk_blocks b ON b.owner=j.owner AND b.provider=t.provider WHERE t.state=? AND j.state='active' AND t.next_at<=? AND COALESCE(b.until_at,0)<=? ${clause} ORDER BY t.next_at,t.updated,t.job,t.ordinal,t.provider LIMIT 1`);dispatchStatements.set(key,select);}
@@ -136,11 +137,11 @@ export function createBulkStore({filePath,now=Date.now,eligibleSources,composeRo
 
 /** Bounded scheduling continues independently of browsers and observes provider cooldowns. */
 export function createBulkRunner({store,lookup,readContext,canRun,concurrency=3,onError=()=>{},canSchedule=()=>true}){
- let stopped=true,timer;const active=new Map();
+ let stopped=true,timer;const active=new Map();let served=[];
  async function run(t){try{
    if(!canRun({sub:t.owner,login:t.login,premiumViaOrg:t.org_until>Date.now(),exp:Math.floor(t.org_until/1000)}))throw Object.assign(Error('Acesso ao lote precisa ser renovado.'),{status:403,code:'PROVIDER_AUTH_FAILED'});
    const value=t.provider===BULK_CONTEXT?await readContext(t):await lookup(t);store.settle(t,value);
   }catch(e){store.settle(t,null,e);}finally{active.delete(t.lease);if(!stopped)queueMicrotask(tick);}}
- function tick(){if(stopped||!canSchedule())return;try{while(active.size<concurrency){const task=store.claim([...active.values()].map(t=>t.provider));if(!task)break;active.set(task.lease,task);void run(task);}}catch(e){onError(e);}}
+ function tick(){if(stopped||!canSchedule())return;try{while(active.size<concurrency){const busy=[...active.values()].map(t=>t.provider);let task=store.claim([...busy,...served]);if(!task){served=[];task=store.claim(busy);}if(!task)break;served.push(task.provider);active.set(task.lease,task);void run(task);}}catch(e){onError(e);}}
  return{start(){if(!stopped)return;stopped=false;timer=setInterval(tick,1000);timer.unref();tick();},wake:tick,async stop(){stopped=true;clearInterval(timer);while(active.size)await new Promise(r=>setTimeout(r,20));},active:()=>active.size};
 }

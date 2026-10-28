@@ -62,3 +62,11 @@ test('adding Axur backfills the active batch without redoing or deleting complet
 test('an Axur request has a longer lease and is not duplicated by the normal two-minute recovery',()=>{
  const f=fixture();try{const j=f.store.create(owner,['8.8.8.8'],['Axur']);const task=f.store.claim();assert.equal(task.provider,'Axur');f.advance(120001);assert.equal(f.store.claim(),null);f.advance(480001);assert.equal(f.store.claim().provider,'Axur');assert.equal(f.store.summary(owner.sub,j.id).sources[0],'Axur');}finally{f.close();}
 });
+
+test('a newly added Axur source and ready correlations get turns before older fast-source backlogs drain',async()=>{
+ const f=fixture(),seen=[];try{
+  const job=f.store.create(owner,Array.from({length:30},(_,i)=>`8.8.4.${i+1}`),['VirusTotal','ThreatFox','URLhaus']);f.advance(10000);f.store.ensureSources(owner.sub,job.id,['Axur']);
+  const runner=createBulkRunner({store:f.store,concurrency:2,canRun:()=>true,lookup:async task=>{seen.push(task.provider);await new Promise(resolve=>setTimeout(resolve,1));return{name:task.provider,data:{Status:'No data'}};},readContext:async()=>{seen.push(BULK_CONTEXT);return context;}});
+  runner.start();try{const deadline=Date.now()+3000;while(f.store.summary(owner.sub,job.id).completed<30&&Date.now()<deadline)await new Promise(resolve=>setTimeout(resolve,10));assert.equal(f.store.summary(owner.sub,job.id).completed,30);assert.ok(seen.indexOf('Axur')<8,JSON.stringify(seen.slice(0,10)));assert.ok(seen.indexOf(BULK_CONTEXT)<12,JSON.stringify(seen.slice(0,15)));}finally{await runner.stop();}
+ }finally{f.close();}
+});
