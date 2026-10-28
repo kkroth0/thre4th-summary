@@ -366,6 +366,7 @@ export const VendorContent = ({ vendor, onPivot }: VendorContentProps) => {
         <div className="space-y-3">
             {Object.entries(data).filter(([key]) => !GENERIC_HIDDEN_KEYS.has(key)).slice(0, 8).map(([key, value]) => {
                 if (key === "Status" && typeof value === "string") {
+                    if (name === 'Axur') return <div key={key}><p className="text-sm text-muted-foreground mb-2">{key}</p><ThreatBadge level={Number(data['Registros Axur']) > 0 ? 'suspicious' : 'unknown'} label={value} /><p className="mt-2 text-xs text-muted-foreground">{Number(data['Registros Axur']) > 0 ? 'A relação informada pela fonte precisa ser analisada no contexto do relatório.' : 'A ausência de registro nesta fonte não confirma que o indicador seja seguro.'}</p></div>;
                     return (<div key={key}><p className="text-sm text-muted-foreground mb-2">{key}</p><ThreatBadge level={value.toLowerCase().includes("malicious") || value.toLowerCase().includes("suspicious") ? "malicious" : "safe"} label={value} /></div>);
                 }
                 return (
