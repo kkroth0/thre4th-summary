@@ -13,7 +13,8 @@ const sources=db.prepare("SELECT provider,SUM(state='done') completed,SUM(state=
 const sourceErrors=db.prepare("SELECT provider,http_status,error_code,COUNT(*) count FROM bulk_tasks WHERE job=? AND state IN ('blocked','error') GROUP BY provider,http_status,error_code").all(item.job);
 const checks={};
 const finalFile=path.join(folder,item.id+'.xlsx');
-if(item.state==='complete'&&fs.existsSync(finalFile)){
+console.log(JSON.stringify({readOnly:true,exportId:item.id,downloadPath:'/api/bulk/exports/'+item.id+'/download',state:item.state,summary:item.summary?JSON.parse(item.summary):null}));
+if(item.state==='complete'&&fs.existsSync(finalFile)&&process.argv[4]==='verify'){
  const {createRequire}=await import('node:module'),require=createRequire(path.join(root,'server/package.json')),unzipper=require('unzipper');
  const zip=await unzipper.Open.file(finalFile);checks.charts=zip.files.filter(f=>/(?:^|\/)charts\/chart\d+\.xml$/.test(f.path)).length;checks.sheets=[];
  const workbook=(await zip.files.find(f=>f.path==='xl/workbook.xml').buffer()).toString(),names=[...workbook.matchAll(/<sheet\b[^>]*\bname="([^"]+)"/g)].map(m=>m[1]);
