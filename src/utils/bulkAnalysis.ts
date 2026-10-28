@@ -104,7 +104,7 @@ export function analyzeBulkRow(row: BulkRow): IocAnalysis {
     country:bulkField(row,['Country']).value,asn:as,organization:bulkField(row,['Organization','AS Owner','ISP']).value,isp:value(ab,'ISP'),prefix:value(dns,'Prefix')||value(ab,'CIDR')||value(vt,'Network'),rdns:value(dns,'Reverse Hostname')||bulkField(row,['Reverse Hostname']).value,
     registrar:value(whois,'Registrar'),created:value(whois,'Created'),sources:join(sources),failedSources:join(errors.map(v=>v.name)),sourceErrors:[...errors.map(v=>`${v.name}: ${v.error||'Consulta em andamento'}`),...(row.context?.errors||[]),...(row.error?[row.error]:[])].join('; ')};
   for(const name of ['Axur','VirusTotal','AbuseIPDB','AlienVault OTX','ThreatFox','URLhaus','MalwareBazaar','DNS / Team Cymru','abuse.ch Hunting','WHOIS']){
-    const v=vendor(name);record['status:'+name]=!v?'Não consultada':v.isLoading?'Consultando':v.error?'Indisponível':'Respondida';
+    const v=vendor(name);record['status:'+name]=!v?'Não consultada':v.isLoading?'Consultando':v.error?'Indisponível':name==='Axur'&&String(v.data.Origem||'').startsWith('Base Axur importada')?'Base importada':'Respondida';
   }
   return {row,record,excluded,fp,priority,actors:declaredActors,families:normalizedFamilies,techniques:distinct(techniques),pairs:excluded?[]:pairs.map(p=>({...p,actor:scrubXml(p.actor)})).filter(p=>declaredActors.some(a=>key(a)===key(p.actor))),mentions:distinct(contextual),asn:as==='—'?'':as};
 }

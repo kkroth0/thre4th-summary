@@ -55,3 +55,24 @@ test('Axur import and lookup share one serialized GET queue per account',async()
   const http={get:async()=>{peak=Math.max(peak,++active);await gate;active--;return {data:{}};}};
   const first=readAxur('serialized',http,'https://api.axur.com/one',{}),second=readAxur('serialized',http,'https://api.axur.com/two',{});await Promise.resolve();await Promise.resolve();release();await Promise.all([first,second]);assert.equal(peak,1);
 });
+
+test('bulk can finish against a completed account import with explicit coverage date and no new API absence',async t=>{
+  const f=setup(t,()=>{throw Error('No remote read expected');});
+  const importAt='2026-10-22T10:56:53.959Z';
+  f.store.setState('axur-import-v1:owner',{status:'complete',total:4341526,processed:4341526,lastSuccessfulAt:importAt,pagination:'live-offset-not-snapshot'});
+  const value=await f.lookup('94.154.43.158',{completedInventory:true});
+  assert.equal(f.calls.length,0);assert.equal(value.cacheState,'inventory-miss');assert.equal(value.collectedAt,importAt);
+  assert.equal(value.data['Última varredura'],importAt);assert.equal(value.data.Status,'Sem correspondência na base Axur importada');assert.equal(value.rawPayload.lookupComplete,true);
+  assert.equal(value.rawPayload.inventory.recordsTraversed,4341526);assert.equal(value.rawPayload.iocs,undefined);
+  await f.store.ingest(axurObservations([ioc],[report],{scope:'owner'}));
+  const hit=await f.lookup('94.154.43.158',{completedInventory:true});assert.equal(hit.cacheState,'inventory-hit');assert.equal(hit.data.Relatórios,1);assert.deepEqual(hit.data['Atores mencionados'],['APT28']);
+});
+test('partial or invalid imports, other accounts, interactive reads and explicit refresh cannot use a completed-import absence',async t=>{
+  const states=[{status:'running',total:100,processed:50,lastSuccessfulAt:'2026-10-22T10:56:53.959Z'},{status:'complete',total:100,processed:50,lastSuccessfulAt:'2026-10-22T10:56:53.959Z'},{status:'complete',total:100,processed:100,lastSuccessfulAt:'invalid'}];
+  for(const state of states){const f=setup(t,()=>response([]));f.store.setState('axur-import-v1:owner',state);await f.lookup('94.154.43.158',{completedInventory:true});assert.equal(f.calls.length,1);}
+  const f=setup(t,()=>response([]));f.store.setState('axur-import-v1:other',{status:'complete',total:100,processed:100,lastSuccessfulAt:'2026-10-22T10:56:53.959Z'});
+  await f.lookup('94.154.43.158',{completedInventory:true});assert.equal(f.calls.length,1);
+  f.store.setState('axur-import-v1:owner',{status:'complete',total:100,processed:100,lastSuccessfulAt:'2026-10-22T10:56:53.959Z'});
+  await f.lookup('94.154.43.158',{fresh:true,completedInventory:true});assert.equal(f.calls.length,2);
+  const interactive=setup(t,()=>response([]));interactive.store.setState('axur-import-v1:owner',f.store.state('axur-import-v1:owner'));await interactive.lookup('94.154.43.158');assert.equal(interactive.calls.length,1);
+});

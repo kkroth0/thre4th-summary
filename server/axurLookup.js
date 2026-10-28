@@ -65,21 +65,28 @@ export function createAxurLookup({ scope, getKey, http, cache, store, readDetail
     }
     return { data: { iocs, insights, lookupComplete: true }, headers: {} };
   }
-  function vendor(query, evidence, { rawPayload, mode, collectedAt, cacheState }) {
+  function vendor(query, evidence, { rawPayload, mode, collectedAt, cacheState, inventory }) {
     const reports = unique(evidence.map(row => row.link).filter(link => /^https:\/\/cti\.axur\.com\/insight\//.test(link || '')));
     const entities = evidence.flatMap(row => row.entities || []);
     const names = kind => unique(entities.filter(entity => entity.kind === kind).map(entity => entity.name));
-    return { name: 'Axur', data: { Status: evidence.length ? 'Contexto encontrado' : 'Sem registro exato na Axur', 'Registros Axur': evidence.length, 'Relatórios': reports.length, 'Origem': mode,
+    return { name: 'Axur', data: { Status: evidence.length ? 'Contexto encontrado' : inventory ? 'Sem correspondência na base Axur importada' : 'Sem registro exato na Axur', 'Registros Axur': evidence.length, 'Relatórios': reports.length, 'Origem': mode,
+      ...(inventory ? { 'Última varredura': inventory.importAt, 'Cruzamento realizado em': inventory.checkedAt, 'Registros percorridos na varredura': inventory.recordsTraversed, 'Escopo da consulta': 'Base integral importada. A data da varredura identifica a cobertura; não representa uma nova consulta à API.' } : {}),
       'Atores mencionados': names('actor'), Malware: names('malware'), CVEs: names('cve'), 'Referências': reports,
       'Limite da relação': 'Entidades citadas no mesmo relatório não confirmam autoria ou uso atual do IOC.' }, collectedAt, cacheState, rawPayload, ...(reports[0] ? { link: reports[0] } : {}) };
   }
-  return async function lookup(query, { fresh = false } = {}) {
+  return async function lookup(query, { fresh = false, completedInventory = false } = {}) {
     const indicator = normalizeIndicator(query);
     if (!indicator) throw problem('Indicador inválido para consulta Axur.', 400);
     // A completed local match already carries its original source/date/links.
     // A local miss is never treated as an API miss while the import is partial.
     if (!fresh) {
       const local = await imported(query);
+      const state = completedInventory ? store.state(`axur-import-v1:${scope}`) : null;
+      const importTime = Date.parse(state?.lastSuccessfulAt || '');
+      if (state?.status === 'complete' && Number.isSafeInteger(state.total) && state.total > 0 && Number.isSafeInteger(state.processed) && state.processed >= state.total && Number.isFinite(importTime) && importTime <= now()) {
+        const inventory = { importAt: new Date(importTime).toISOString(), checkedAt: new Date(now()).toISOString(), recordsTraversed: state.processed, pagination: state.pagination || 'live-offset-not-snapshot' };
+        return vendor(query, local, { rawPayload: { evidence: local, inventory, lookupComplete: true }, mode: 'Base Axur importada · varredura concluída', collectedAt: inventory.importAt, cacheState: local.length ? 'inventory-hit' : 'inventory-miss', inventory });
+      }
       if (local.length) return vendor(query, local, { rawPayload: { evidence: local }, mode: 'Base Axur importada', collectedAt: local.map(row => row.collectedAt).filter(Boolean).sort().at(-1), cacheState: 'inventory-hit' });
     }
     const signal = AbortSignal.timeout(540000);

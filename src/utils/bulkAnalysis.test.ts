@@ -20,6 +20,10 @@ test('Axur response status, report links, contextual actors and structured MITRE
 test('an existing malicious verdict remains prioritized while other APIs are pending',()=>{
  const row=base();row.state='running';row.result!.vendorData=[{name:'AbuseIPDB',data:{'Abuse Confidence Score':100}},{name:'Axur',data:{},isLoading:true}];assert.equal(analyzeBulkRow(row).priority,'Investigar');assert.equal(analyzeBulkRows([row]).partial,1);
 });
+test('completed Axur inventory coverage is labelled as an imported base rather than a new API response',()=>{
+ const row=base();row.result!.vendorData.push({name:'Axur',data:{Status:'Sem correspondência na base Axur importada',Origem:'Base Axur importada · varredura concluída','Última varredura':'2026-10-22T10:56:53.959Z'},cacheState:'inventory-miss',collectedAt:'2026-10-22T10:56:53.959Z'});
+ assert.equal(analyzeBulkRow(row).record['status:Axur'],'Base importada');assert.equal(analyzeBulkRows([row]).partial,0);
+});
 test('context is retained without manufacturing an attribution or cross-report actor-technique pairs',()=>{
  const row=base();row.context!.evidence=[evidence('Context Actor','mentioned-with','T1566'),evidence('Actor B','attributed-by-source','T1486')];
  const a=analyzeBulkRow(row);assert.deepEqual(a.actors,['Actor B','Actor A']);assert.ok(a.mentions.includes('Context Actor'));

@@ -1,6 +1,6 @@
 import { createBulkProviderBridge, BULK_PRINCIPAL } from './bulkProviderBridge.js';
 import { registerBulkService } from './bulkService.js';
-import { platformProviderCredentials } from './providerCredentials.js';
+import { platformProviderCredentials, personalProviderCredentials } from './providerCredentials.js';
 import { providerCredentialLimits } from './providerLimits.js';
 import { createFeedParser } from './feedParser.js';
 import { filterReportIocNoise } from './reportIocNoise.js';
@@ -610,12 +610,8 @@ const credentialPool = createCredentialPool({ load: key => iocIntelligence.state
 const PROVIDER_ENVS = { virustotal: 'VIRUSTOTAL_API_KEY', abuseipdb: 'ABUSEIPDB_API_KEY', otx: 'ALIENVAULT_API_KEY', abuse_ch: 'ABUSE_CH_API_KEY', threatfox: 'THREATFOX_API_KEY', urlhaus: 'URLHAUS_API_KEY', malwarebazaar: 'MALWAREBAZAAR_API_KEY' };
 function providerKeys(req, provider) {
     const owner = req?.user?.sub || (req ? verifySession(getCookie(req, 'ts_session'))?.sub : null);
-    const personal = getUserApiKeys(owner, provider);
+    const personal = personalProviderCredentials(provider, name => getUserApiKeys(owner, name));
     if (personal.length) return personal;
-    if (['threatfox', 'urlhaus', 'malwarebazaar'].includes(provider)) {
-        const shared = getUserApiKeys(owner, 'abuse_ch');
-        if (shared.length) return shared;
-    }
     return platformProviderCredentials(provider, PROVIDER_ENVS[provider], getKeys);
 }
 function providerLimits(provider) {
@@ -4353,7 +4349,7 @@ const bulkService=registerBulkService(app,{
  filePath:process.env.BULK_JOBS_PATH || (process.env.NODE_ENV==='test'?':memory:':path.join(__dirname,'.bulk-enrichment.sqlite')),
  outputDir:process.env.BULK_EXPORTS_PATH || path.join(__dirname,'.bulk-exports'),requirePremium,
  intelligencePath:process.env.NODE_ENV==='test'?undefined:process.env.IOC_INTELLIGENCE_PATH||path.join(__dirname,'.ioc-intelligence.sqlite'),
- concurrency:lowMemoryHost?2:3,lookup:task=>task.provider==='Axur'?accountAxurLookup(task.owner)(task.query,{fresh:Boolean(task.fresh)}):bulkProviderBridge.lookup(task),canRun:principal=>sessionHasPremium(principal),
+ concurrency:lowMemoryHost?2:3,lookup:task=>task.provider==='Axur'?accountAxurLookup(task.owner)(task.query,{fresh:Boolean(task.fresh),completedInventory:true}):bulkProviderBridge.lookup(task),canRun:principal=>sessionHasPremium(principal),
  requiredSources:principal=>getUserApiKey(principal.sub,'axur')?['Axur']:[],
  readContext:async task=>{
   const result={publications:findMentions(newsStoryStore.all(),task.query),evidence:[],errors:[]};let offset=0;

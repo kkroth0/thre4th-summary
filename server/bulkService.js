@@ -6,6 +6,7 @@ import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { setImmediate as yieldTurn } from 'node:timers/promises';
 import { createBulkStore,createBulkRunner } from './bulkJobs.js';
+import { releaseCompletedBulkExports } from './bulkExportQueue.js';
 import { prepareBulkInput,eligibleSources,composeBulkRow,BULK_SOURCES,THREAT_VERDICT_VERSION,analyzeBulkRow,ANALYTICAL_COLUMNS,valueText } from './bulkShared.generated.mjs';
 
 const bad=(message,status=400)=>Object.assign(Error(message),{status});
@@ -45,10 +46,10 @@ export function registerBulkService(app,{filePath,outputDir,requirePremium,looku
   await pipeline(Readable.from(data(),{objectMode:false,highWaterMark:65536}),res);
  }));
  app.post(routes+'/:id/exports',requirePremium,handle((req,res)=>{
-  const j=store.owned(req.user.sub,req.params.id),filters=JSON.stringify({...validFilters(req.body),verdictVersion:THREAT_VERDICT_VERSION,localSnapshotVersion:'2026-10-28-v1'}),existing=store.prepare("SELECT id,state FROM bulk_exports WHERE job=? AND owner=? AND filters=? AND (state IN ('pending','running') OR (state='complete' AND revision=? AND ?)) ORDER BY created DESC LIMIT 1").get(j.id,j.owner,filters,j.revision,intelligencePath?0:1);
+  const j=store.owned(req.user.sub,req.params.id),waitForComplete=req.body.waitForComplete===true,filters=JSON.stringify({...validFilters(waitForComplete?{}:req.body),verdictVersion:THREAT_VERDICT_VERSION,localSnapshotVersion:'2026-10-28-v1',...(waitForComplete?{waitForComplete:true}:{})}),existing=store.prepare("SELECT id,state FROM bulk_exports WHERE job=? AND owner=? AND filters=? AND (state IN ('pending','running','awaiting_completion') OR (state='complete' AND revision=? AND ?)) ORDER BY created DESC LIMIT 1").get(j.id,j.owner,filters,j.revision,intelligencePath?0:1);
   if(existing)return res.status(202).json(existing);
-  if(store.prepare("SELECT COUNT(*) n FROM bulk_exports WHERE owner=? AND state IN ('pending','running')").get(j.owner).n>=2)throw bad('Há duas planilhas em preparação. Aguarde uma delas terminar.',409);
-  const id=crypto.randomUUID(),at=Date.now();store.prepare('INSERT INTO bulk_exports(id,job,owner,created,updated,revision,filters) VALUES(?,?,?,?,?,?,?)').run(id,j.id,j.owner,at,at,j.revision,filters);res.status(202).json({id,state:'pending'});tickExports();
+  if(store.prepare("SELECT COUNT(*) n FROM bulk_exports WHERE owner=? AND state IN ('pending','running','awaiting_completion')").get(j.owner).n>=2)throw bad('Há duas planilhas na fila. Aguarde uma delas terminar.',409);
+  const id=crypto.randomUUID(),at=Date.now(),state=waitForComplete&&j.state!=='complete'?'awaiting_completion':'pending';store.prepare('INSERT INTO bulk_exports(id,job,owner,state,created,updated,revision,filters) VALUES(?,?,?,?,?,?,?,?)').run(id,j.id,j.owner,state,at,at,j.revision,filters);res.status(202).json({id,state});tickExports();
  }));
  app.get('/api/bulk/exports/:id',requirePremium,handle((req,res)=>{const item=store.prepare('SELECT id,job,state,created,updated,error,revision FROM bulk_exports WHERE id=? AND owner=?').get(req.params.id,req.user.sub);if(!item)throw bad('Exportação não encontrada.',404);res.json(item);}));
  app.get('/api/bulk/exports/:id/download',requirePremium,handle((req,res)=>{
@@ -57,6 +58,7 @@ export function registerBulkService(app,{filePath,outputDir,requirePremium,looku
   res.set('Content-Encoding','identity');res.download(file,'ThreatSumm4ry_Enriquecimento_'+new Date(item.created).toISOString().slice(0,10)+'.xlsx',{dotfiles:'allow'});
  }));
  function tickExports(){if(exportWorker||!started)return;
+  releaseCompletedBulkExports(store);
   store.prepare("UPDATE bulk_exports SET state='pending' WHERE state='running' AND updated<?").run(Date.now()-5*60000);
   const item=store.prepare("SELECT * FROM bulk_exports WHERE state='pending' ORDER BY created LIMIT 1").get();if(!item)return;
   store.prepare("UPDATE bulk_exports SET state='running',updated=? WHERE id=?").run(Date.now(),item.id);
