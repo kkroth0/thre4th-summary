@@ -54,7 +54,7 @@ export function registerBulkService(app,{filePath,outputDir,requirePremium,looku
  app.get('/api/bulk/exports/:id/download',requirePremium,handle((req,res)=>{
   const item=store.prepare('SELECT * FROM bulk_exports WHERE id=? AND owner=?').get(req.params.id,req.user.sub);if(!item||item.state!=='complete')throw bad('Planilha ainda não disponível.',404);
   const file=path.resolve(outputDir,item.id+'.xlsx');if(path.dirname(file)!==path.resolve(outputDir)||!fs.existsSync(file))throw bad('Planilha não encontrada.',404);
-  res.set('Content-Encoding','identity');res.download(file,'ThreatSumm4ry_Enriquecimento_'+new Date(item.created).toISOString().slice(0,10)+'.xlsx');
+  res.set('Content-Encoding','identity');res.download(file,'ThreatSumm4ry_Enriquecimento_'+new Date(item.created).toISOString().slice(0,10)+'.xlsx',{dotfiles:'allow'});
  }));
  function tickExports(){if(exportWorker||!started)return;
   store.prepare("UPDATE bulk_exports SET state='pending' WHERE state='running' AND updated<?").run(Date.now()-5*60000);
