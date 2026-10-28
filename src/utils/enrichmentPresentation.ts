@@ -72,8 +72,9 @@ export function addEnrichmentPresentation(wb: ExcelJS.Workbook, data: Enrichment
 }
 
 /** Retain data rows and literal text; compact headers and alternate bands aid filtering. */
-export function styleEnrichmentDetails(wb: ExcelJS.Workbook) {
+export function styleEnrichmentDetails(wb: ExcelJS.Workbook, analytical = false) {
   for (const ws of wb.worksheets) {
+    if (analytical && ['Indicadores', 'IPs', 'Domínios', 'Hashes', 'URLs', '_dados'].includes(ws.name)) continue;
     if (['Dashboard', 'Resumo executivo', 'Sumário', 'Resumo'].includes(ws.name)) continue;
     ws.views = [{ state: 'frozen', ySplit: 1, xSplit: 1, showGridLines: false, zoomScale: 85 }];
     ws.getRow(1).height = 34;

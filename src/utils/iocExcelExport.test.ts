@@ -33,6 +33,34 @@ test('empty Excel export has headers, a zero count and an explicit evidence scop
   for (const name of ['Indicadores', 'Fontes', 'Publicações', 'Evidências', 'Resumo']) assert.ok(bulk.getWorksheet(name));
 });
 
+test('bulk dashboard distinguishes incomplete rows and excludes public resolvers from attribution', () => {
+  const evidence = { provider: 'OTX', title: 'Context', link: '', published: '', collectedAt: '', confidence: null, reputation: null, entities: [{ kind: 'actor' as const, id: 'G1', name: 'Example actor', relation: 'mentioned-with' }] };
+  const wb = buildBulkExcelWorkbook([{ query: '8.8.8.8', state: 'partial', context: { errors: [], publications: [], evidence: [evidence, evidence] } }, { query: '9.9.9.9', state: 'queued' }], Excel);
+  assert.deepEqual(wb.worksheets.slice(0, 2).map(ws => ws.name), ['Dashboard', 'Resumo executivo']);
+  const dashboard = wb.getWorksheet('Dashboard')!;
+  assert.equal(dashboard.getCell('B5').value, 2);
+  assert.equal(dashboard.getCell('J5').value, 0, 'contextual mentions do not create attribution');
+  assert.equal(dashboard.getCell('V5').value, 2, 'partial plus queued');
+  assert.equal(dashboard.getCell('R5').value, 2, 'two exact public resolvers');
+  assert.equal(wb.getWorksheet('Relações')!.rowCount, 3, 'source relationships remain intact');
+  assert.match(String(wb.getWorksheet('Resumo executivo')!.getCell('B7').value), /2 apresentam cobertura incompleta/);
+});
+
+test('bulk Excel exposes PTR and curated FP review while preserving other provider findings', () => {
+  const wb = buildBulkExcelWorkbook([{ query: '8.8.8.8', state: 'partial', result: {
+    query: '8.8.8.8', overallScore: 80, threatLevel: 'malicious', detections: 1, totalVendors: 3,
+    vendorData: [{ name: 'VirusTotal', data: { Malicious: 12 } },
+      { name: 'DNS / Team Cymru', data: { 'Reverse Hostname': 'resolver.example' }, error: 'ASN unavailable' },
+      { name: 'abuse.ch Hunting', data: { 'FP Review': 'Correspondência contextual', 'FP Matches': [{ entry_value: '8.8.8.8:443', port: '443' }] } }],
+  } }], Excel);
+  const row = wb.getWorksheet('Indicadores')!.getRow(5);
+  assert.equal(row.getCell('rdns').value, 'resolver.example');
+  assert.equal(row.getCell('fpStatus').value, 'Correspondência contextual');
+  assert.equal(row.getCell('verdict').value, 'Malicioso');
+  assert.equal(row.getCell('score').value, 80);
+  assert.match(JSON.stringify(wb.getWorksheet('Detalhes por fonte')!.getSheetValues()), /443/);
+});
+
 test('news Excel retains unknown additive fields and sanitizes illegal XML text without executing formulas', () => {
   const wb = buildNewsExcelWorkbook({ ...payload(), dataset: 'news', rows: [{ title: 'Report\u0000 title', futureEvidence: { confidence: 0, title: '@external' }, hashes: ['a'.repeat(64)] }] }, Excel);
   const sheet = wb.getWorksheet('Publicações')!;
@@ -48,7 +76,7 @@ test('bulk Excel includes provider failures, raw responses, publications and ent
   const wb = buildBulkExcelWorkbook(rows, Excel);
   assert.equal(wb.getWorksheet('Fontes')!.getRow(3).getCell('state').value, 'Quota exceeded');
   assert.equal(wb.getWorksheet('Fontes')!.getRow(2).getCell('raw').value, '{"pulses":[{"name":"Example"}]}');
-  assert.equal(wb.getWorksheet('Indicadores')!.getRow(2).getCell('score').value, 0);
+  assert.equal(wb.getWorksheet('Indicadores')!.getRow(5).getCell('score').value, 0);
   assert.equal(wb.getWorksheet('Publicações')!.getRow(2).getCell('storyId').value, 'event');
   assert.ok(String(wb.getWorksheet('Evidências')!.getRow(2).getCell('entities').value).includes('mentioned-with'));
   assert.equal(wb.getWorksheet('Evidências')!.getRow(2).getCell('confidence').value, 0);
