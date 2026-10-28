@@ -21,8 +21,8 @@ export async function addBulkExcelCharts(buffer:Uint8Array,rows:BulkRow[],snapsh
       if(i!==4){
         const max=Math.max(1,...items.map(x=>x.count)),step=Math.max(1,Math.ceil(max/5)),upper=Math.ceil(max/step)*step;
         value=value.replace(/<c:legend>[\s\S]*?<\/c:legend>/,'').replace(/<c:gapWidth[^>]*\/>/,'<c:gapWidth val="65"/>');
-        if(!value.includes('<c:gapWidth'))value=value.replace('</c:barChart>','<c:gapWidth val="65"/></c:barChart>');
-        value=value.replace(/(<c:valAx>[\s\S]*?<c:scaling>)([\s\S]*?)(<\/c:scaling>)/,(_m,p,c,s)=>`${p}${c}<c:min val="0"/><c:max val="${upper}"/>${s}`)
+        if(!value.includes('<c:gapWidth'))value=value.replace(/(<c:barChart>[\s\S]*?)(<c:axId)/,'$1<c:gapWidth val="65"/>$2');
+        value=value.replace(/(<c:valAx>[\s\S]*?<c:scaling>)([\s\S]*?)(<\/c:scaling>)/,(_m,p,c,s)=>`${p}${c}<c:max val="${upper}"/><c:min val="0"/>${s}`)
           .replace('</c:valAx>',`<c:majorUnit val="${step}"/></c:valAx>`);
         if(i!==5)value=value.replace(/(<c:catAx>[\s\S]*?<c:orientation) val="minMax"/,'$1 val="maxMin"');
         if(!items.length)value=value.replace(/<c:delete val="0"\s*\/>/g,'<c:delete val="1"/>');

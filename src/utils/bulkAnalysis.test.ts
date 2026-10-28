@@ -48,5 +48,7 @@ test('analytical sheets preserve literal values, headers, source links and edita
  const bytes=await addBulkExcelCharts(new Uint8Array(await wb.xlsx.writeBuffer()),rows),zip=await JSZip.loadAsync(bytes);
  const paths=Object.keys(zip.files).filter(x=>/\/charts\/chart\d+\.xml$/.test(x));assert.equal(paths.length,8);
  const chart=await zip.file('xl/drawings/charts/chart1.xml')!.async('string');assert.match(chart,/'_dados'!\$A\$3:\$A\$3/);assert.match(chart,/<c:v>Actor A<\/c:v>/);assert.match(chart,/<c:v>2<\/c:v>/);assert.match(chart,/<c:majorUnit val="1"\/>/);
+ const bar=chart.match(/<c:barChart>[\s\S]*?<\/c:barChart>/)![0];assert.ok(bar.indexOf('<c:gapWidth')<bar.indexOf('<c:axId'),'OOXML bar spacing must precede axis identifiers');
+ const scale=chart.match(/<c:valAx>[\s\S]*?<c:scaling>([\s\S]*?)<\/c:scaling>/)![1];assert.ok(scale.indexOf('<c:max')<scale.indexOf('<c:min'),'OOXML scaling requires max before min');
  const restored=new Excel.Workbook();await restored.xlsx.load(bytes);assert.equal(restored.getWorksheet('Indicadores')!.getCell('C5').value,rows[0].query);assert.equal(restored.getWorksheet('Evidências')!.getRow(2).getCell(5).hyperlink,'https://lab.example/report');
 });
