@@ -77,7 +77,7 @@ export function createFeedCollector({ request, parse, resolve, onHealth = () => 
                     const response = resolved?.response || await request(feed.url, { headers });
                     if (response.status !== 304 && (response.status < 200 || response.status >= 300)) throw new Error('Feed HTTP ' + response.status);
                     if (response.status === 304 && !Array.isArray(previous?.items)) throw new Error('304 without a cached feed');
-                    const parsed = response.status === 304 ? [] : resolved?.items || parse(response.data, feed.source, feed.layer, { feedUrl: feed.url, now: at });
+                    const parsed = response.status === 304 ? [] : resolved?.items || await parse(response.data, feed.source, feed.layer, { feedUrl: feed.url, now: at });
                     const byLink = new Map(oldItems.map((item) => [item.link, item]));
                     for (const item of parsed) {
                         const link = canonicalArticleUrl(item.link, feed.url);

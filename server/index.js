@@ -1,3 +1,4 @@
+import { createFeedParser } from './feedParser.js';
 import { filterReportIocNoise } from './reportIocNoise.js';
 import { createCredentialPool, credentialId, decodeCredentials, parseCredentialInput, POOL_PROVIDERS } from './credentialPool.js';
 import express from 'express';
@@ -1488,8 +1489,9 @@ if ([EXTRACTION_VERSION, 'feed-v7'].includes(previousFeedSnapshot?.extractionVer
 const publicationRequest = createPublicationRequest();
 const publicationResolver = createPublicationResolver({ request: publicationRequest });
 const repositoryResolver = createRepositoryResolver({ request: publicationRequest });
+const isolatedFeedParser = createFeedParser();
 const feedCollector = createFeedCollector({
-    cache: rssCollectionCache, parse: parseFeed,
+    cache: rssCollectionCache, parse: process.env.NODE_ENV === 'test' ? parseFeed : isolatedFeedParser,
     resolve: (feed, previous, options) => feed.kind === 'github' ? repositoryResolver(feed, previous, options) : publicationResolver(feed, previous, options),
     onHealth: (url, health) => feedHealth.set(url, health),
     concurrency: Number(process.env.FEED_FETCH_CONCURRENCY) || (lowMemoryHost ? 2 : 6),

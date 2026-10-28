@@ -8,7 +8,9 @@ const prepared = (rows, field) => {
   const values = new Map();
   for (const row of rows) {
     if (!row?.[field] || values.has(row[field])) throw Error('News snapshot contains missing or duplicate identities');
-    const payload = json(row); values.set(row[field], { payload, hash: hash(payload) });
+    // Retain the existing document and its digest, not another serialized copy
+    // of every publication/story at once. Only changed documents need payloads.
+    const payload = json(row); values.set(row[field], { value: row, hash: hash(payload) });
   }
   return values;
 };
@@ -110,10 +112,9 @@ export function createNewsPersistence(db, { now = () => Date.now() } = {}) {
         const old = previous.get(id);
         // The full payload hash is verified below, including unchanged rows.
         // Retain only identities/hashes of the old corpus in memory.
-        if (old?.hash === row.hash) { row.payload = undefined; continue; }
+        if (old?.hash === row.hash) continue;
         if (old) revise.run(kind, id, old.hash, oldPayload.get(kind, id).payload, at(), 'updated');
-        put.run(kind, id, row.hash, row.payload, at()); changed++;
-        row.payload = undefined;
+        put.run(kind, id, row.hash, json(row.value), at()); changed++;
         if (kind === 'archive') changedPublications.push(publications.get(id));
       }
       for (const [id, old] of previous) if (!desired.has(id)) {
