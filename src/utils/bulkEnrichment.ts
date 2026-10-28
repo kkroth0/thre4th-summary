@@ -17,6 +17,16 @@ export interface BulkRow {
   contextLoading?: boolean;
 }
 
+/** A provisional or incomplete lookup must never look like a negative finding. */
+export function bulkVerdictLabel(row: BulkRow) {
+  const level = row.result?.threatLevel;
+  if (level === 'malicious') return 'Malicioso';
+  if (level === 'suspicious') return 'Suspeito';
+  if (['queued','running'].includes(row.state) || row.contextLoading || row.result?.vendorData.some(v => v.isLoading)) return 'Coleta em andamento';
+  if (['partial','error','stopped'].includes(row.state) || row.error || row.context?.errors.length || row.result?.vendorData.some(v => v.error)) return 'Consulta incompleta';
+  return level === 'safe' ? 'Sem sinais nas fontes consultadas' : 'Indeterminado';
+}
+
 export function prepareBulkInput(raw: string) {
   let text = refang(raw);
   const urls = extractIocsFromText(text).filter(value => detectAnalyzerQueryType(value) === 'url');

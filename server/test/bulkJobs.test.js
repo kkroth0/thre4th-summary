@@ -39,3 +39,6 @@ test('runner limits concurrency, checks context after provider persistence and s
  }finally{f.close();}
 });
 test('numeric account identifiers survive SQLite serialization',()=>{const f=fixture();try{const principal={sub:42,login:'numeric'},id=crypto.randomUUID();f.store.create(principal,['8.8.8.8'],['VirusTotal'],{},id);assert.equal(f.store.summary(42,id).total,1);assert.equal(f.store.create(principal,['8.8.8.8'],['VirusTotal'],{},id).id,id);}finally{f.close();}});
+test('completed snapshots are reusable only by their owner and a refresh request reaches the provider task',()=>{
+ const f=fixture();try{const j=f.store.create(owner,['8.8.8.8'],['VirusTotal'],{},undefined,true),task=f.store.claim();assert.equal(task.fresh,1);f.store.settle(task,{name:'VirusTotal',data:{Status:'Clean'},rawPayload:{data:{data:{attributes:{last_analysis_stats:{malicious:0}}}}}});assert.equal(f.store.savedProvider(other.sub,'VirusTotal','8.8.8.8'),null);assert.equal(f.store.savedProvider(owner.sub,'AbuseIPDB','8.8.8.8'),null);assert.equal(f.store.savedProvider(owner.sub,'VirusTotal','9.9.9.9'),null);assert.equal(f.store.savedProvider(owner.sub,'VirusTotal','8.8.8.8').vendor.rawPayload.data.data.attributes.last_analysis_stats.malicious,0);assert.equal(f.store.summary(owner.sub,j.id).refreshSources,true);}finally{f.close();}
+});

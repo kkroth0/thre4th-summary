@@ -19,12 +19,14 @@ export function createBulkStore({filePath,now=Date.now,eligibleSources,composeRo
  CREATE INDEX IF NOT EXISTS bulk_owner ON bulk_jobs(owner,created DESC);
  CREATE TABLE IF NOT EXISTS bulk_items(job TEXT NOT NULL,ordinal INTEGER NOT NULL,query TEXT NOT NULL,kind TEXT NOT NULL,state TEXT NOT NULL DEFAULT 'queued',context BLOB,context_error TEXT,completed INTEGER,version INTEGER NOT NULL DEFAULT 1,PRIMARY KEY(job,ordinal),UNIQUE(job,query));
  CREATE INDEX IF NOT EXISTS bulk_item_page ON bulk_items(job,state,ordinal);
+ CREATE INDEX IF NOT EXISTS bulk_indicator_lookup ON bulk_items(query,job,ordinal);
  CREATE TABLE IF NOT EXISTS bulk_tasks(job TEXT NOT NULL,ordinal INTEGER NOT NULL,provider TEXT NOT NULL,state TEXT NOT NULL DEFAULT 'pending',attempts INTEGER NOT NULL DEFAULT 0,next_at INTEGER NOT NULL DEFAULT 0,lease_until INTEGER NOT NULL DEFAULT 0,lease TEXT,value BLOB,error TEXT,http_status INTEGER,error_code TEXT,updated INTEGER NOT NULL,PRIMARY KEY(job,ordinal,provider));
  CREATE INDEX IF NOT EXISTS bulk_due ON bulk_tasks(state,next_at,lease_until);
  CREATE INDEX IF NOT EXISTS bulk_dispatch ON bulk_tasks(state,next_at,updated,job,ordinal,provider);
  CREATE TABLE IF NOT EXISTS bulk_blocks(owner TEXT NOT NULL,provider TEXT NOT NULL,until_at INTEGER NOT NULL,reason TEXT NOT NULL,PRIMARY KEY(owner,provider));
  CREATE TABLE IF NOT EXISTS bulk_exports(id TEXT PRIMARY KEY,job TEXT NOT NULL,owner TEXT NOT NULL,state TEXT NOT NULL DEFAULT 'pending',created INTEGER NOT NULL,updated INTEGER NOT NULL,file TEXT,error TEXT,revision INTEGER NOT NULL,filters TEXT NOT NULL DEFAULT '{}');
  CREATE INDEX IF NOT EXISTS bulk_export_owner ON bulk_exports(owner,job,created DESC);`);
+ if(!readOnly&&!db.pragma('table_info(bulk_jobs)').some(column=>column.name==='fresh'))db.exec('ALTER TABLE bulk_jobs ADD COLUMN fresh INTEGER NOT NULL DEFAULT 0');
  const statements=new Map(),nativePrepare=db.prepare.bind(db);
  const sql=text=>{let statement=statements.get(text);if(!statement){statement=nativePrepare(text);statements.set(text,statement);}return statement;};
  const getJob=id=>sql('SELECT * FROM bulk_jobs WHERE id=?').get(id);
@@ -37,7 +39,7 @@ export function createBulkStore({filePath,now=Date.now,eligibleSources,composeRo
   const sourceCounts=sql(`SELECT provider,SUM(state='done') completed,SUM(state='error') errors,SUM(state='blocked') blocked,SUM(state IN ('pending','waiting','running')) pending,COUNT(*) total FROM bulk_tasks WHERE job=? AND provider!=? GROUP BY provider`).all(j.id,BULK_CONTEXT);
   const waiting=sql(`SELECT MIN(MAX(t.next_at,COALESCE(b.until_at,0))) next FROM bulk_tasks t JOIN bulk_jobs j ON j.id=t.job LEFT JOIN bulk_blocks b ON b.owner=j.owner AND b.provider=t.provider WHERE t.job=? AND t.state IN ('pending','waiting')`).get(j.id).next;
   const active=sql("SELECT COUNT(*) n FROM bulk_tasks t JOIN bulk_jobs j ON j.id=t.job LEFT JOIN bulk_blocks b ON b.owner=j.owner AND b.provider=t.provider WHERE t.job=? AND (t.state='running' OR (t.state IN ('pending','waiting') AND t.next_at<=? AND COALESCE(b.until_at,0)<=?))").get(j.id,now(),now()).n;
-  return{id:j.id,state:j.state==='active'?(!active&&sourceCounts.some(s=>s.blocked)?'needs_attention':waiting>now()&&!active?'waiting':'running'):j.state,total:j.total,processed:(counts.complete||0)+(counts.partial||0)+(counts.error||0)+(counts.unsupported||0),completed:counts.complete||0,partial:counts.partial||0,failed:counts.error||0,pending:(counts.queued||0)+(counts.running||0),sources:JSON.parse(j.sources),sourceCounts,excluded:JSON.parse(j.excluded),createdAt:new Date(j.created).toISOString(),updatedAt:new Date(j.updated).toISOString(),revision:j.revision,retryAt:waiting>now()&&waiting<Number.MAX_SAFE_INTEGER?waiting:null,exports:sql('SELECT id,state,created,updated,error,revision FROM bulk_exports WHERE job=? AND owner=? ORDER BY created DESC LIMIT 5').all(j.id,j.owner)};
+  return{id:j.id,refreshSources:Boolean(j.fresh),state:j.state==='active'?(!active&&sourceCounts.some(s=>s.blocked)?'needs_attention':waiting>now()&&!active?'waiting':'running'):j.state,total:j.total,processed:(counts.complete||0)+(counts.partial||0)+(counts.error||0)+(counts.unsupported||0),completed:counts.complete||0,partial:counts.partial||0,failed:counts.error||0,pending:(counts.queued||0)+(counts.running||0),sources:JSON.parse(j.sources),sourceCounts,excluded:JSON.parse(j.excluded),createdAt:new Date(j.created).toISOString(),updatedAt:new Date(j.updated).toISOString(),revision:j.revision,retryAt:waiting>now()&&waiting<Number.MAX_SAFE_INTEGER?waiting:null,exports:sql('SELECT id,state,created,updated,error,revision FROM bulk_exports WHERE job=? AND owner=? ORDER BY created DESC LIMIT 5').all(j.id,j.owner)};
  }
  function row(j,item,compact=false){
   const tasks=sql('SELECT * FROM bulk_tasks WHERE job=? AND ordinal=? ORDER BY provider').all(j.id,item.ordinal);
@@ -56,13 +58,13 @@ export function createBulkStore({filePath,now=Date.now,eligibleSources,composeRo
   const pending=sql("SELECT COUNT(*) n FROM bulk_items WHERE job=? AND state IN ('queued','running')").get(job).n;
   if(!pending)sql("UPDATE bulk_jobs SET state=CASE WHEN EXISTS(SELECT 1 FROM bulk_items WHERE job=? AND state!='complete') THEN 'partial' ELSE 'complete' END WHERE id=? AND state='active'").run(job,job);
  }
- const create=db.transaction((principal,queries,sources,excluded={},requestId)=>{
-  const fingerprint=crypto.createHash('sha256').update(JSON.stringify([queries,sources])).digest('hex');
+ const create=db.transaction((principal,queries,sources,excluded={},requestId,fresh=false)=>{
+  const fingerprint=crypto.createHash('sha256').update(JSON.stringify([queries,sources,Boolean(fresh)])).digest('hex');
   if(requestId){if(!/^[0-9a-f-]{36}$/i.test(requestId))throw fail('Identificador de solicitação inválido.');const existing=getJob(requestId);if(existing){if(existing.owner!==String(principal.sub)||existing.fingerprint!==fingerprint)throw fail('Solicitação já utilizada.',409);return publicSummary(existing);}}
   if(sql("SELECT COUNT(*) n FROM bulk_jobs WHERE owner=? AND state IN ('active','paused')").get(String(principal.sub)).n>=2)throw fail('Já há dois lotes em andamento. Conclua ou encerre um deles antes de criar outro.',409);
   if(!Array.isArray(queries)||queries.length<1||queries.length>10000)throw fail('Use entre 1 e 10.000 indicadores únicos.');
   const id=requestId||crypto.randomUUID(),at=now();
-  sql('INSERT INTO bulk_jobs(id,owner,login,org_until,state,created,updated,total,sources,excluded,fingerprint) VALUES(?,?,?,?,?,?,?,?,?,?,?)').run(id,String(principal.sub),principal.login,principal.premiumViaOrg?principal.exp*1000:0,'active',at,at,queries.length,JSON.stringify(sources),JSON.stringify(excluded),fingerprint);
+  sql('INSERT INTO bulk_jobs(id,owner,login,org_until,state,created,updated,total,sources,excluded,fingerprint,fresh) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)').run(id,String(principal.sub),principal.login,principal.premiumViaOrg?principal.exp*1000:0,'active',at,at,queries.length,JSON.stringify(sources),JSON.stringify(excluded),fingerprint,fresh?1:0);
   const putItem=sql('INSERT INTO bulk_items(job,ordinal,query,kind) VALUES(?,?,?,?)'),putTask=sql('INSERT INTO bulk_tasks(job,ordinal,provider,state,updated) VALUES(?,?,?,?,?)');
   for(const [i,query]of queries.entries()){
    const eligible=eligibleSources(query,sources);putItem.run(id,i,query,detectQueryType(query));
@@ -81,7 +83,7 @@ export function createBulkStore({filePath,now=Date.now,eligibleSources,composeRo
  const claim=db.transaction((excludedProviders=[])=>{
   sql("UPDATE bulk_tasks SET state='waiting',lease=NULL,lease_until=0,next_at=? WHERE state='running' AND lease_until<=?").run(now(),now());
   const clause=excludedProviders.length?` AND t.provider NOT IN (${excludedProviders.map(()=>'?').join(',')})`:'';
-  const key=excludedProviders.join('|');let select=dispatchStatements.get(key);if(!select){select=sql(`SELECT t.*,j.owner,j.login,j.org_until,i.query FROM bulk_tasks t INDEXED BY bulk_dispatch JOIN bulk_jobs j ON j.id=t.job JOIN bulk_items i ON i.job=t.job AND i.ordinal=t.ordinal LEFT JOIN bulk_blocks b ON b.owner=j.owner AND b.provider=t.provider WHERE t.state=? AND j.state='active' AND t.next_at<=? AND COALESCE(b.until_at,0)<=? ${clause} ORDER BY t.next_at,t.updated,t.job,t.ordinal,t.provider LIMIT 1`);dispatchStatements.set(key,select);}
+  const key=excludedProviders.join('|');let select=dispatchStatements.get(key);if(!select){select=sql(`SELECT t.*,j.owner,j.login,j.org_until,j.fresh,i.query FROM bulk_tasks t INDEXED BY bulk_dispatch JOIN bulk_jobs j ON j.id=t.job JOIN bulk_items i ON i.job=t.job AND i.ordinal=t.ordinal LEFT JOIN bulk_blocks b ON b.owner=j.owner AND b.provider=t.provider WHERE t.state=? AND j.state='active' AND t.next_at<=? AND COALESCE(b.until_at,0)<=? ${clause} ORDER BY t.next_at,t.updated,t.job,t.ordinal,t.provider LIMIT 1`);dispatchStatements.set(key,select);}
   const t=select.get('waiting',now(),now(),...excludedProviders)||select.get('pending',now(),now(),...excludedProviders);
   if(!t)return null;const lease=crypto.randomUUID();
   sql("UPDATE bulk_tasks SET state='running',lease=?,lease_until=?,attempts=attempts+1,updated=? WHERE job=? AND ordinal=? AND provider=?").run(lease,now()+120000,now(),t.job,t.ordinal,t.provider);
@@ -113,6 +115,7 @@ export function createBulkStore({filePath,now=Date.now,eligibleSources,composeRo
     touch(id);
    })();return publicSummary(getJob(id));
   },
+  savedProvider(owner,provider,query){const hit=sql("SELECT t.value,t.updated FROM bulk_items i JOIN bulk_jobs j ON j.id=i.job JOIN bulk_tasks t ON t.job=i.job AND t.ordinal=i.ordinal WHERE i.query=? AND j.owner=? AND t.provider=? AND t.state='done' ORDER BY t.updated DESC LIMIT 1").get(query,String(owner),provider);return hit?{vendor:unpack(hit.value),updated:hit.updated}:null;},
   completeRow:(owner,id,ordinal)=>row(owned(owner,id),sql('SELECT * FROM bulk_items WHERE job=? AND ordinal=?').get(id,ordinal)),
   close:()=>db.close(),
  };

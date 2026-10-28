@@ -14,8 +14,10 @@ export function normalizeBulkVendor(query:string,name:string,body:any,status=200
   return{name,data:formatVendorData(name,body,query),link:getVendorLink(name,query),timeline:extractVendorTimestamps(name,body),rawPayload:body,quota:body?.quota};
 }
 export function composeBulkRow(query:string,sources:any[],context:any,state:string,completedAt?:string):BulkRow{
-  return {query,result:{...scoreThreatResults(query,sources.filter(v=>!v.isLoading)),vendorData:sources,totalVendors:sources.length},context,state:state as BulkRow['state'],completedAt};
+  return {query,result:{...scoreThreatResults(query,sources),vendorData:sources,totalVendors:sources.length},context,state:state as BulkRow['state'],completedAt};
 }
 
 export { valueText } from '../src/utils/iocExcelWorkbook';
 export { scrubXml, workbookMetadata } from '../src/utils/deckTemplate';
+
+export { THREAT_VERDICT_VERSION } from '../src/services/threatVerdict';

@@ -6,7 +6,7 @@ import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { setImmediate as yieldTurn } from 'node:timers/promises';
 import { createBulkStore,createBulkRunner } from './bulkJobs.js';
-import { prepareBulkInput,eligibleSources,composeBulkRow,BULK_SOURCES,analyzeBulkRow,ANALYTICAL_COLUMNS,valueText } from './bulkShared.generated.mjs';
+import { prepareBulkInput,eligibleSources,composeBulkRow,BULK_SOURCES,THREAT_VERDICT_VERSION,analyzeBulkRow,ANALYTICAL_COLUMNS,valueText } from './bulkShared.generated.mjs';
 
 const bad=(message,status=400)=>Object.assign(Error(message),{status});
 const validFilters=input=>({query:String(input?.query||'').slice(0,256),type:['ip','domain','url','hash'].includes(input?.type)?input.type:'all',state:['queued','running','complete','partial','error','unsupported'].includes(input?.state)?input.state:'all'});
@@ -23,11 +23,11 @@ export function registerBulkService(app,{filePath,outputDir,requirePremium,looku
   const parsed=prepareBulkInput(req.body.input),sources=[...new Set(Array.isArray(req.body.sources)?req.body.sources:[])].filter(s=>BULK_SOURCES.includes(s));
   if(!sources.length)throw bad('Selecione ao menos uma fonte.');
   if(!parsed.indicators.some(q=>eligibleSources(q,sources).length))throw bad('Nenhuma fonte selecionada é compatível com os indicadores.');
-  const job=store.create(req.user,parsed.indicators,sources,parsed.excluded,req.body.requestId);res.status(201).json(job);runner.wake();
+  const job=store.create(req.user,parsed.indicators,sources,parsed.excluded,req.body.requestId,req.body.fresh===true);res.status(201).json(job);runner.wake();
  }));
  app.get(routes+'/:id',requirePremium,handle((req,res)=>res.json(store.summary(req.user.sub,req.params.id))));
  app.get(routes+'/:id/rows',requirePremium,handle((req,res)=>{
-  const page=store.page(req.user.sub,req.params.id,{...validFilters(req.query),page:req.query.page,size:req.query.size}),tag='"'+crypto.createHash('sha256').update(JSON.stringify([page.total,page.page,page.size,page.revision,validFilters(req.query)])).digest('hex')+'"';
+  const page=store.page(req.user.sub,req.params.id,{...validFilters(req.query),page:req.query.page,size:req.query.size}),tag='"'+crypto.createHash('sha256').update(JSON.stringify([THREAT_VERDICT_VERSION,page.total,page.page,page.size,page.revision,validFilters(req.query)])).digest('hex')+'"';
   res.set('ETag',tag);if(req.get('If-None-Match')===tag)return res.status(304).end();res.json({total:page.total,page:page.page,size:page.size,rows:page.load()});
  }));
  app.get(routes+'/:id/rows/:ordinal',requirePremium,handle((req,res)=>{const j=store.owned(req.user.sub,req.params.id),n=Number(req.params.ordinal);if(!Number.isInteger(n)||n<0||n>=j.total)throw bad('Indicador não encontrado.',404);res.json(store.completeRow(req.user.sub,j.id,n));}));
@@ -45,7 +45,7 @@ export function registerBulkService(app,{filePath,outputDir,requirePremium,looku
   await pipeline(Readable.from(data(),{objectMode:false,highWaterMark:65536}),res);
  }));
  app.post(routes+'/:id/exports',requirePremium,handle((req,res)=>{
-  const j=store.owned(req.user.sub,req.params.id),filters=JSON.stringify(validFilters(req.body)),existing=store.prepare("SELECT id,state FROM bulk_exports WHERE job=? AND owner=? AND filters=? AND (state IN ('pending','running') OR (state='complete' AND revision=?)) ORDER BY created DESC LIMIT 1").get(j.id,j.owner,filters,j.revision);
+  const j=store.owned(req.user.sub,req.params.id),filters=JSON.stringify({...validFilters(req.body),verdictVersion:THREAT_VERDICT_VERSION}),existing=store.prepare("SELECT id,state FROM bulk_exports WHERE job=? AND owner=? AND filters=? AND (state IN ('pending','running') OR (state='complete' AND revision=?)) ORDER BY created DESC LIMIT 1").get(j.id,j.owner,filters,j.revision);
   if(existing)return res.status(202).json(existing);
   if(store.prepare("SELECT COUNT(*) n FROM bulk_exports WHERE owner=? AND state IN ('pending','running')").get(j.owner).n>=2)throw bad('Há duas planilhas em preparação. Aguarde uma delas terminar.',409);
   const id=crypto.randomUUID(),at=Date.now();store.prepare('INSERT INTO bulk_exports(id,job,owner,created,updated,revision,filters) VALUES(?,?,?,?,?,?,?)').run(id,j.id,j.owner,at,at,j.revision,filters);res.status(202).json({id,state:'pending'});tickExports();

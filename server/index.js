@@ -42,7 +42,7 @@ import { createVulnerabilityQueries, optimizeVulnerabilityCatalog, startAiPatchI
 import { createNewsEpssLookup } from './newsEpss.js';
 import { createNewsFeedResponse } from './newsFeedResponse.js';
 import { createIntelligenceReads, optimizeIntelligenceReads } from './intelligenceReads.js';
-import { createLookupCache } from './lookupCache.js';
+import { createLookupCache,canonicalLookupQuery } from './lookupCache.js';
 import { PUBLICATION_SOURCES, OT_PUBLICATION_SOURCES, createPublicationResolver } from './publicationSources.js';
 import { REPOSITORY_SOURCES, createRepositoryResolver } from './repositorySources.js';
 import { prepareFeedJobDocuments } from './feedJobDocuments.js';
@@ -627,7 +627,18 @@ function providerError(res, error) {
     if (status === 429 && retry) res.set('Retry-After', String(retry));
     return res.status(status).json({ error: message, ...(error.code === 'PROVIDER_AUTH_FAILED' ? { code: error.code } : {}), ...(status === 429 && error.retryAt ? { retryAt: error.retryAt } : {}) });
 }
-const lookupCache = createLookupCache();
+const archiveProviderNames={virustotal:'VirusTotal',abuseipdb:'AbuseIPDB',otx:'AlienVault OTX',threatfox:'ThreatFox',urlhaus:'URLhaus',malwarebazaar:'MalwareBazaar'};
+const lookupCache = createLookupCache({
+    ttlMs: Infinity,
+    filePath: process.env.NODE_ENV==='test'?undefined:process.env.LOOKUP_SNAPSHOTS_PATH||path.join(__dirname,'.lookup-snapshots.sqlite'),
+    readArchive: ({owner,provider,query}) => {
+        const name=archiveProviderNames[provider];if(!owner||!name)return null;
+        const previous=bulkService.store.savedProvider(owner,name,canonicalLookupQuery(provider,query));if(!previous?.vendor?.rawPayload)return null;
+        const raw=previous.vendor.rawPayload;
+        const negative=provider==='virustotal'&&raw.httpStatus===404;
+        return {collectedAt:previous.vendor.collectedAt||new Date(previous.updated).toISOString(),value:{data:negative?raw:['virustotal','abuseipdb','otx'].includes(provider)?raw.data:raw,headers:{},...(negative?{httpStatus:404}:{})}};
+    },
+});
 function abuseKeys(req) { return providerKeys(req, 'abuseipdb'); }
 function withAbuseKey(req, load, operation = 'check') {
     return withProviderKey(req, 'abuseipdb', async key => {
@@ -643,7 +654,7 @@ async function persistProviderEvidence(req,provider,query,data) {
 }
 async function cachedProvider(req, res, provider, query, credentials, load) {
     const session=req[BULK_PRINCIPAL]||verifySession(getCookie(req,'ts_session'));
-    const result = await lookupCache.get({ provider, query, owner: session?.sub || '', credentials, fresh: req.body?.fresh === true }, async () => {
+    const result = await lookupCache.get({ provider, query, owner: session?.sub || '', credentials, archiveQuery: String(req.body.query||'').trim(), fresh: req.body?.fresh === true }, async () => {
         const response = await load();
         // Keep only the JSON and quota headers, never axios sockets/config/keys.
         const quotaHeaders = {};
@@ -653,6 +664,7 @@ async function cachedProvider(req, res, provider, query, credentials, load) {
     res.set('Cache-Control', 'private, no-store');
     res.set('X-Lookup-Cache', result.state);
     res.set('X-Lookup-Collected-At', result.collectedAt);
+    if(result.value.httpStatus===404)throw Object.assign(Error('Resource not found'),{response:{status:404,data:result.value.data}});
     const persistenceKey=session?'lookup-evidence:'+crypto.createHash('sha256').update(JSON.stringify(['matches-v12',session.sub,provider,query,result.collectedAt])).digest('hex'):'';
     if (session && sessionHasPremium(session) && !iocIntelligence.state(persistenceKey)) {
         const name = ({ abuseipdb:'AbuseIPDB', 'abuseipdb-block':'AbuseIPDB', threatfox:'ThreatFox', otx:'OTX', malwarebazaar:'MalwareBazaar',virustotal:'VirusTotal',shodan:'Shodan',urlhaus:'URLhaus',phishtank:'PhishTank',ipgeo:'IP Geolocation' })[provider] || provider;

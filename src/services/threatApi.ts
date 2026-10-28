@@ -1,3 +1,5 @@
+import { scoreThreatResults } from './threatVerdict';
+export { scoreThreatResults } from './threatVerdict';
 import { enrichmentRequest, EnrichmentRequestError } from './enrichmentRequest';
 /// <reference types="vite/client" />
 import { ThreatIntelligenceResult, VendorData, TimelineEvent } from "@/types/threat-intelligence";
@@ -133,7 +135,7 @@ export const formatVendorData = (vendorName: string, data: any, query: string): 
 
             return {
                 "Detection Rate": `${vtAttrs.last_analysis_stats.malicious || 0}/${Object.keys(vtAttrs.last_analysis_results || {}).length}`,
-                "Status": vtAttrs.last_analysis_stats.malicious > 0 ? "Malicious" : "Clean",
+                "Status": vtAttrs.last_analysis_stats.malicious > 0 ? "Malicious" : vtAttrs.last_analysis_stats.suspicious > 0 ? "Suspicious" : "Clean",
                 "Malicious": vtAttrs.last_analysis_stats.malicious || 0,
                 "Suspicious": vtAttrs.last_analysis_stats.suspicious || 0,
                 "Undetected": vtAttrs.last_analysis_stats.undetected || 0,
@@ -595,12 +597,6 @@ export const fetchPhishStatsData = (query: string) => fetchFromBackend('phishsta
 export const fetchOpenPhishData = (query: string) => fetchFromBackend('openphish', query, "OpenPhish");
 
 // AV engines whose verdict alone is enough to mark an IOC malicious.
-const IMPORTANT_AV_VENDORS = [
-    'Microsoft', 'Kaspersky', 'Bitdefender', 'ESET-NOD32', 'Avira',
-    'Sophos', 'McAfee', 'Symantec', 'TrendMicro', 'F-Secure',
-    'Fortinet', 'Palo Alto Networks', 'CrowdStrike'
-];
-
 // Single source of truth mapping each vendor to its fetch call for a given query.
 const buildVendorMap = (query: string, options: LookupOptions = {}): Record<string, () => Promise<VendorData>> => ({
     "IP Geolocation": () => fetchFromBackend('ipgeo', query, 'IP Geolocation', options),
@@ -626,94 +622,6 @@ const resolveVendorsToQuery = (
 ): string[] =>
     resolveVendorsForQuery(query, selectedVendors || Object.keys(vendorMap))
         .filter(vendor => vendorMap[vendor]);
-
-// Aggregate per-vendor results into an overall verdict. VirusTotal and AbuseIPDB
-// carry extra weight (a strong signal from either forces "malicious"); every other
-// vendor contributes a simple malicious/clean vote based on its Status string.
-export const scoreThreatResults = (query: string, results: VendorData[]): ThreatIntelligenceResult => {
-    let isMalicious = false;
-    let maliciousCount = 0;
-    let totalChecked = 0;
-
-    const virusTotal = results.find(v => v.name === "VirusTotal");
-    if (virusTotal && !virusTotal.error && virusTotal.data) {
-        const vtMalicious = virusTotal.data["Malicious"] || 0;
-        const vtAllVendors = virusTotal.data["All Vendors"];
-
-        if (vtMalicious > 3) isMalicious = true;
-
-        if (Array.isArray(vtAllVendors)) {
-            const importantDetections = vtAllVendors.filter((v: any) =>
-                v.category === 'malicious' && IMPORTANT_AV_VENDORS.some(av => v.engine.includes(av))
-            );
-            if (importantDetections.length > 0) isMalicious = true;
-        }
-
-        if (vtMalicious > 0) maliciousCount++;
-        totalChecked++;
-    }
-
-    const abuse = results.find(v => v.name === "AbuseIPDB");
-    if (abuse && !abuse.error && abuse.data["Abuse Confidence Score"]) {
-        const abuseScore = parseInt(abuse.data["Abuse Confidence Score"] || "0");
-        if (abuseScore === 100) isMalicious = true;
-        if (abuseScore > 50) maliciousCount++;
-        totalChecked++;
-    }
-
-    results.forEach(vendor => {
-        if (["VirusTotal", "AbuseIPDB", "WHOIS"].includes(vendor.name)) return;
-        if (vendor.error || Object.keys(vendor.data).length === 0) return;
-
-        const status = vendor.data["Status"];
-        if (status && typeof status === "string") {
-            if (["PhishTank", "PhishStats", "OpenPhish"].includes(vendor.name) &&
-                !["Phishing", "Verified Phishing", "Found in Phishing Database", "Clean"].includes(status)) return;
-            totalChecked++;
-            if (status.toLowerCase().includes("malicious") ||
-                status.toLowerCase().includes("unsafe") ||
-                status.toLowerCase().includes("phishing")) {
-                maliciousCount++;
-            }
-        }
-    });
-
-    let overallScore = totalChecked > 0 ? Math.round((maliciousCount / totalChecked) * 100) : 0;
-    let threatLevel: "safe" | "suspicious" | "malicious" | "unknown" = "unknown";
-
-    if (isMalicious) {
-        threatLevel = "malicious";
-        overallScore = Math.max(overallScore, 75);
-    } else {
-        if (overallScore > 70) threatLevel = "malicious";
-        else if (overallScore > 30) threatLevel = "suspicious";
-        else if (totalChecked > 0) threatLevel = "safe";
-    }
-
-    // Additive verdict metadata — purely informational, does not alter the
-    // verdict above. Confidence = how strongly the reporting vendors agree with
-    // each other; disagreement = a non-trivial malicious/clean split (a minority
-    // report worth a second look). A strong trusted signal (isMalicious) floors
-    // confidence at 80 since a high-weight engine flagged it.
-    const cleanVotes = Math.max(0, totalChecked - maliciousCount);
-    const majority = Math.max(maliciousCount, cleanVotes);
-    let confidence = totalChecked > 0 ? Math.round((majority / totalChecked) * 100) : 0;
-    if (isMalicious) confidence = Math.max(confidence, 80);
-    const minority = Math.min(maliciousCount, cleanVotes);
-    const disagreement = maliciousCount > 0 && cleanVotes > 0 && minority / totalChecked >= 0.2;
-
-    return {
-        query,
-        overallScore,
-        threatLevel,
-        totalVendors: results.length,
-        detections: maliciousCount,
-        vendorData: results,
-        confidence,
-        disagreement,
-        reportingVendors: totalChecked,
-    };
-};
 
 export const fetchThreatData = async (query: string, selectedVendors?: string[]): Promise<ThreatIntelligenceResult> => {
     const vendorMap = buildVendorMap(query);

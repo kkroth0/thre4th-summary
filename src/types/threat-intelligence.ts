@@ -10,6 +10,8 @@ export interface TimelineEvent {
 
 export interface VendorData {
     rawDeferred?: boolean;
+    collectedAt?: string;
+    cacheState?: string;
     name: string;
     data: Record<string, any>;
     error?: string;
@@ -29,7 +31,10 @@ export interface VendorData {
     rawPayload?: unknown;
 }
 
+export interface VerdictSignal { source: string; reason: string; kind: 'detection' | 'abuse' | 'context' }
+
 export interface ThreatIntelligenceResult {
+    signals?: VerdictSignal[];
     query: string;
     overallScore: number;
     threatLevel: "safe" | "suspicious" | "malicious" | "unknown";

@@ -9,7 +9,7 @@ export function createBulkProviderBridge(app,limiter){
   async lookup(task){
    const handler=handlers.get(task.provider);if(!handler)throw Object.assign(Error('Fonte não disponível para o lote.'),{status:400});
    const principal={sub:task.owner,login:task.login,premiumViaOrg:task.org_until>Date.now(),exp:Math.floor(task.org_until/1000)},controller=new AbortController(),headers={};
-   const req={headers:{},body:{query:task.query},user:principal,[BULK_PRINCIPAL]:principal,signal:controller.signal};
+   const req={headers:{},body:{query:task.query,fresh:Boolean(task.fresh)},user:principal,[BULK_PRINCIPAL]:principal,signal:controller.signal};
    let status=200,body,settled=false;
    const res={set(name,value){if(typeof name==='object')Object.assign(headers,name);else headers[String(name).toLowerCase()]=value;return res;},status(value){status=value;return res;},json(value){body=value;settled=true;return res;},getHeader(name){return headers[String(name).toLowerCase()];}};
    let timeout;try{
@@ -25,7 +25,7 @@ export function createBulkProviderBridge(app,limiter){
      if(!retryAt&&retry)retryAt=/^\d+$/.test(String(retry))?Date.now()+Number(retry)*1000:Date.parse(retry);
      throw Object.assign(Error(auth?'A fonte recusou a credencial. Revise a conexão em Chaves de API.':status===429?'Fonte aguardando renovação da cota.':'Fonte temporariamente indisponível; nova tentativa agendada.'),{status,code:auth?'PROVIDER_AUTH_FAILED':body?.code,retryAt});
     }
-    return normalizeBulkVendor(task.query,task.provider,body,status);
+    return {...normalizeBulkVendor(task.query,task.provider,body,status),...(headers['x-lookup-collected-at']?{collectedAt:headers['x-lookup-collected-at'],cacheState:headers['x-lookup-cache']}:{})};
    }finally{clearTimeout(timeout);}
   },
  };
