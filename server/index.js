@@ -1,6 +1,7 @@
 import { createBulkProviderBridge, BULK_PRINCIPAL } from './bulkProviderBridge.js';
 import { registerBulkService } from './bulkService.js';
 import { platformProviderCredentials } from './providerCredentials.js';
+import { providerCredentialLimits } from './providerLimits.js';
 import { createFeedParser } from './feedParser.js';
 import { filterReportIocNoise } from './reportIocNoise.js';
 import { createCredentialPool, credentialId, decodeCredentials, parseCredentialInput, POOL_PROVIDERS } from './credentialPool.js';
@@ -619,7 +620,7 @@ function providerKeys(req, provider) {
 }
 function providerLimits(provider) {
     const prefix = PROVIDER_ENVS[provider]?.replace(/_API_KEY$/, '');
-    return { perMinute: Number(process.env[`${prefix}_REQUESTS_PER_MINUTE`]) || 0, perDay: Number(process.env[`${prefix}_REQUESTS_PER_DAY`]) || 0 };
+    return providerCredentialLimits(provider, prefix);
 }
 function withProviderKey(req, provider, request) { return credentialPool.run(provider, providerKeys(req, provider), request, providerLimits(provider)); }
 function providerError(res, error) {
