@@ -1,35 +1,25 @@
-// Read-only export progress. No indicator values, source payloads or credentials.
-import fs from 'node:fs';import path from 'node:path';import {pathToFileURL} from 'node:url';
-const root=path.resolve(process.argv[2]),login=String(process.argv[3]).toLowerCase();
-if(!/^[a-z0-9-]{1,39}$/.test(login))throw Error('Invalid account');
+// Inspect effective routing and test ThreatFox using the production HTTP client.
+// No IOC payloads, credentials, process environment or token fingerprints are logged.
+import fs from 'node:fs';import path from 'node:path';import crypto from 'node:crypto';import {pathToFileURL} from 'node:url';import {execFileSync} from 'node:child_process';
+const root=path.resolve(process.argv[2]),login=String(process.argv[3]).toLowerCase();if(!/^[a-z0-9-]{1,39}$/.test(login))throw Error('Invalid account');
 const users=JSON.parse(fs.readFileSync(path.join(root,'server/.users.json'),'utf8')),owner=Object.keys(users).find(id=>users[id].login?.toLowerCase()===login);if(!owner)throw Error('Account unavailable');
-const {parse}=await import(pathToFileURL(path.join(root,'server/node_modules/dotenv/lib/main.js'))),env=parse(fs.readFileSync(path.join(root,'.env')));
-const {default:Database}=await import(pathToFileURL(path.join(root,'server/node_modules/better-sqlite3/lib/index.js')));
-const db=new Database(env.BULK_JOBS_PATH||path.join(root,'server/.bulk-enrichment.sqlite'),{readonly:true,fileMustExist:true});db.pragma('query_only=ON');db.pragma('busy_timeout=1000');
-const item=db.prepare('SELECT id,job,file,state,created,updated,error,summary FROM bulk_exports WHERE owner=? ORDER BY created DESC LIMIT 1').get(owner);if(!item)throw Error('No export');
-const folder=env.BULK_EXPORTS_PATH||path.join(root,'server/.bulk-exports'),files=[];
-for(const name of fs.readdirSync(folder).filter(name=>name.startsWith(item.id+'.'))){const file=path.join(folder,name),stat=fs.statSync(file),value={part:name.slice(item.id.length+1),bytes:stat.size,updatedAt:stat.mtime.toISOString()};if(name.includes('.context.')){let cache;try{cache=new Database(file,{readonly:true,fileMustExist:true});cache.pragma('busy_timeout=100');value.localContexts=cache.prepare('SELECT COUNT(*) n FROM contexts').get().n;}catch{value.localContexts='busy';}finally{cache?.close();}}files.push(value);}
-const sources=db.prepare("SELECT provider,SUM(state='done') completed,SUM(state='error') errors,SUM(state='blocked') blocked,SUM(state IN ('pending','waiting','running')) pending,COUNT(*) total FROM bulk_tasks WHERE job=? GROUP BY provider").all(item.job);
-const sourceErrors=db.prepare("SELECT provider,http_status,error_code,COUNT(*) count FROM bulk_tasks WHERE job=? AND state IN ('blocked','error') GROUP BY provider,http_status,error_code").all(item.job);
-const checks={};
-const finalFile=path.join(folder,item.id+'.xlsx');
-console.log(JSON.stringify({readOnly:true,exportId:item.id,downloadPath:'/api/bulk/exports/'+item.id+'/download',state:item.state,summary:item.summary?JSON.parse(item.summary):null}));
-if(item.state==='complete'&&fs.existsSync(finalFile)&&process.argv[4]==='verify'){
- const {createRequire}=await import('node:module'),require=createRequire(path.join(root,'server/package.json')),unzipper=require('unzipper');
- const zip=await unzipper.Open.file(finalFile);checks.charts=zip.files.filter(f=>/(?:^|\/)charts\/chart\d+\.xml$/.test(f.path)).length;checks.sheets=[];
- const workbook=(await zip.files.find(f=>f.path==='xl/workbook.xml').buffer()).toString(),names=[...workbook.matchAll(/<sheet\b[^>]*\bname="([^"]+)"/g)].map(m=>m[1]);
- const sheets=zip.files.filter(f=>/^xl\/worksheets\/sheet\d+\.xml$/.test(f.path)).sort((a,b)=>Number(a.path.match(/sheet(\d+)/)[1])-Number(b.path.match(/sheet(\d+)/)[1]));
- for(const [i,f]of sheets.entries()){let rows=0,errors=0,carry='';for await(const chunk of f.stream()){const data=carry+chunk.toString();const end=data.lastIndexOf('>')+1,part=data.slice(0,end);rows+=(part.match(/<row\b/g)||[]).length;errors+=(part.match(/<c\b[^>]*\bt="e"/g)||[]).length;carry=data.slice(end);}checks.sheets.push({name:names[i],rows,formulaErrors:errors});}
+const {parse}=await import(pathToFileURL(path.join(root,'server/node_modules/dotenv/lib/main.js'))),env=parse(fs.readFileSync(path.join(root,'.env'))),envDifferences=[];
+try{const pid=execFileSync('systemctl',['show','bdppt-site','-p','MainPID','--value'],{encoding:'utf8',timeout:5000}).trim();if(/^\d+$/.test(pid)&&pid!=='0')for(const pair of fs.readFileSync(`/proc/${pid}/environ`,'utf8').split('\0')){const p=pair.indexOf('='),name=pair.slice(0,p);if(!/^(?:(?:VIRUSTOTAL|ALIENVAULT|ABUSE_CH|THREATFOX|URLHAUS|MALWAREBAZAAR)\d*_API_KEY|SECRETS_ENCRYPTION_KEY|HTTPS?_PROXY|https?_proxy|NO_PROXY|no_proxy)$/.test(name))continue;const value=pair.slice(p+1);if(env[name]!==undefined&&env[name]!==value)envDifferences.push(name);env[name]=value;}}catch{}
+const raw=String(env.SECRETS_ENCRYPTION_KEY||'').trim(),decoded=Buffer.from(raw,'base64'),enc=/^[0-9a-f]{64}$/i.test(raw)?Buffer.from(raw,'hex'):decoded.length===32?decoded:crypto.createHash('sha256').update(raw).digest();
+const {decodeCredentials,credentialId}=await import(pathToFileURL(path.join(root,'server/credentialPool.js'))),{personalProviderCredentials,platformProviderCredentials}=await import(pathToFileURL(path.join(root,'server/providerCredentials.js')));
+function personal(name){const encrypted=users[owner].apiKeysEnc?.[name];if(!encrypted)return [];const blob=Buffer.from(encrypted,'base64'),cipher=crypto.createDecipheriv('aes-256-gcm',enc,blob.subarray(0,12));cipher.setAuthTag(blob.subarray(12,28));return decodeCredentials(Buffer.concat([cipher.update(blob.subarray(28)),cipher.final()]).toString());}
+function configured(name){const out=String(env[name]||'').split(',').map(s=>s.trim()).filter(Boolean),match=name.match(/^(.*?)(_API_KEY)$/);if(match)for(let n=2;env[match[1]+n+match[2]]!==undefined;n++)out.push(...String(env[match[1]+n+match[2]]).split(',').map(s=>s.trim()).filter(Boolean));return [...new Set(out)];}
+const {default:Database}=await import(pathToFileURL(path.join(root,'server/node_modules/better-sqlite3/lib/index.js'))),db=new Database(env.IOC_INTELLIGENCE_PATH||path.join(root,'server/.ioc-intelligence.sqlite'),{readonly:true,fileMustExist:true});db.pragma('query_only=ON');
+const mapping={virustotal:'VIRUSTOTAL_API_KEY',otx:'ALIENVAULT_API_KEY',threatfox:'THREATFOX_API_KEY'},effective={};
+console.log(JSON.stringify({at:new Date().toISOString(),readOnly:true,environmentOverrides:envDifferences,proxyConfigured:!!(env.HTTPS_PROXY||env.HTTP_PROXY||env.https_proxy||env.http_proxy)}));
+for(const [provider,variable]of Object.entries(mapping)){
+ const own=personalProviderCredentials(provider,personal),platform=platformProviderCredentials(provider,variable,configured),keys=own.length?own:platform;effective[provider]=keys;
+ console.log(JSON.stringify({provider,personal:own.length,platform:platform.length,effective:keys.length,selected:own.length?'personal':'platform',platformOverlap:keys.filter(k=>platform.includes(k)).length,slots:keys.map((key,i)=>{const record=db.prepare('SELECT value FROM intelligence_state WHERE id=?').get('credential-pool:v1:'+provider+':'+credentialId(key)),state=record?JSON.parse(record.value):{};return{slot:i+1,day:state.day,used:state.used,lastStatus:state.lastStatus,blockedUntil:state.blockedUntil||null,invalidUntil:state.invalidUntil||null};})}));
 }
-
-const {createHash}=await import('node:crypto'),{gunzipSync}=await import('node:zlib'),{canonicalLookupQuery}=await import(pathToFileURL(path.join(root,'server/lookupCache.js')));
-const snapshots=new Database(env.LOOKUP_SNAPSHOTS_PATH||path.join(root,'server/.lookup-snapshots.sqlite'),{readonly:true,fileMustExist:true});snapshots.pragma('query_only=ON');
-const blocked=[];
-for(const task of db.prepare("SELECT t.provider,t.http_status,t.error_code,t.error,i.query FROM bulk_tasks t JOIN bulk_items i ON i.job=t.job AND i.ordinal=t.ordinal WHERE t.job=? AND t.state IN ('blocked','error')").all(item.job)){
- const provider={'AlienVault OTX':'otx',ThreatFox:'threatfox',URLhaus:'urlhaus',VirusTotal:'virustotal'}[task.provider],entry={provider:task.provider,httpStatus:task.http_status,errorCode:task.error_code,message:String(task.error||'').replace(/https?:\/\/\S+/g,'[reference]').slice(0,240)};
- if(provider){const key=createHash('sha256').update(JSON.stringify([provider,canonicalLookupQuery(provider,task.query),owner])).digest('hex'),row=snapshots.prepare('SELECT collected,value FROM lookup_snapshots WHERE cache_key=? ORDER BY id DESC LIMIT 1').get(key);
-  entry.hasSavedSnapshot=!!row;if(row){const value=JSON.parse(gunzipSync(row.value,{maxOutputLength:64*1024*1024}).toString());entry.snapshotAt=row.collected;entry.snapshotQueryStatus=/^[a-z_]+$/i.test(value.data?.query_status||'')?value.data.query_status:null;entry.snapshotHasPulseInfo=!!value.data?.pulse_info;}
- }blocked.push(entry);
+const {default:axios}=await import(pathToFileURL(path.join(root,'server/node_modules/axios/index.js')));
+for(const [slot,key]of effective.threatfox.entries()){
+ const record=db.prepare('SELECT value FROM intelligence_state WHERE id=?').get('credential-pool:v1:threatfox:'+credentialId(key)),state=record?JSON.parse(record.value):{};if(state.blockedUntil>Date.now()){console.log(JSON.stringify({provider:'threatfox',slot:slot+1,cooldownPreserved:true}));continue;}
+ try{const response=await axios.post('https://threatfox-api.abuse.ch/api/v1/',{query:'search_ioc',search_term:'116.179.37.176'},{headers:{'Content-Type':'application/json','Auth-Key':key},timeout:15000,family:4,maxContentLength:8000000,maxRedirects:0});console.log(JSON.stringify({provider:'threatfox',slot:slot+1,productionClient:true,httpStatus:response.status,queryStatus:/^[a-z_]+$/i.test(response.data?.query_status||'')?response.data.query_status:null}));break;}
+ catch(error){const status=error.response?.status||0;console.log(JSON.stringify({provider:'threatfox',slot:slot+1,productionClient:true,httpStatus:status,queryStatus:/^[a-z_]+$/i.test(error.response?.data?.query_status||'')?error.response.data.query_status:null}));if(![401,403].includes(status))break;}
 }
-snapshots.close();
-console.log(JSON.stringify({at:new Date().toISOString(),readOnly:true,state:item.state,created:new Date(item.created).toISOString(),updated:new Date(item.updated).toISOString(),error:item.error,summary:item.summary?JSON.parse(item.summary):null,sources,sourceErrors,blocked,files,checks},null,2));db.close();
+db.close();
