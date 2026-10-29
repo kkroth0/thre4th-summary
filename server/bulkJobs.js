@@ -118,16 +118,18 @@ export function createBulkStore({filePath,now=Date.now,eligibleSources,composeRo
  });
  const ensureSources=db.transaction((owner,id,sources)=>{
   const job=owned(owner,id),current=JSON.parse(job.sources),added=[...new Set(sources)].filter(source=>!current.includes(source));
-  if(!added.length||!['active','paused'].includes(job.state))return false;
-  const at=now();
-  for(const item of sql('SELECT ordinal,query FROM bulk_items WHERE job=? ORDER BY ordinal').all(id))for(const provider of eligibleSources(item.query,added)){
+  if(!['active','paused'].includes(job.state))return false;
+  const at=now(),desired=[...current,...added];let changed=false;
+  for(const item of sql('SELECT ordinal,query FROM bulk_items WHERE job=? ORDER BY ordinal').all(id))for(const provider of eligibleSources(item.query,desired)){
    const inserted=sql("INSERT OR IGNORE INTO bulk_tasks(job,ordinal,provider,state,updated) VALUES(?,?,?,'pending',?)").run(id,item.ordinal,provider,at);
    if(inserted.changes){
+    changed=true;
     sql("UPDATE bulk_items SET state='queued',completed=NULL,version=version+1 WHERE job=? AND ordinal=?").run(id,item.ordinal);
     sql("UPDATE bulk_tasks SET state='held',next_at=0,lease=NULL,lease_until=0 WHERE job=? AND ordinal=? AND provider=?").run(id,item.ordinal,BULK_CONTEXT);
    }
   }
-  sql('UPDATE bulk_jobs SET sources=? WHERE id=?').run(JSON.stringify([...current,...added]),id);touch(id);return true;
+  if(!added.length&&!changed)return false;
+  sql('UPDATE bulk_jobs SET sources=? WHERE id=?').run(JSON.stringify(desired),id);touch(id);return true;
  });
  return{db,prepare:sql,create,claim,settle,page,owned,row,items,ensureSources,
   summary:(owner,id)=>publicSummary(owned(owner,id)),list:owner=>sql('SELECT * FROM bulk_jobs WHERE owner=? ORDER BY created DESC LIMIT 20').all(owner).map(publicSummary),

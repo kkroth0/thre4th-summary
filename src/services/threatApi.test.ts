@@ -55,7 +55,7 @@ test("routes IPv6 only to providers backed by IPv6-capable endpoints", () => {
   ];
 
   assert.deepEqual(resolveVendorsForQuery("2606:4700:4700::1111", selected), [
-    "IP Geolocation", "VirusTotal", "AbuseIPDB", "Shodan", "ThreatFox",
+    "IP Geolocation", "VirusTotal", "AbuseIPDB", "AlienVault OTX", "Shodan", "ThreatFox",
   ]);
 });
 

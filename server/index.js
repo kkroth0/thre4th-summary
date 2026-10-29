@@ -63,6 +63,7 @@ import { createWeeklyRansomware } from './weeklyRansomware.js';
 import { createPublicationRequest, resolvePublicationHost } from './publicationHttp.js';
 import { actorPublications, buildActorActivity, buildActorEvidence } from './actorEvidence.js';
 import { otxThrottled, OTX_TIMEOUT_MS } from './otxGate.js';
+import { otxIndicatorUrl } from './otxLookup.js';
 import { findMentions, findDomainMentions } from './newsIocs.js';
 import { refsOfReport, relatedTo } from './attackIndex.js';
 import { isJobId, jobSummary, normalizeDeckRequestType, normalizeDeckSubtype, normalizeDeckTemplate, orphanDeckFiles, pruneJobsMap } from './feedJobs.js';
@@ -750,12 +751,7 @@ bulkProviderBridge.register('/api/alienvault', 'AlienVault OTX', async (req, res
     try {
         const queryType = detectQueryType(query);
         const sanitized = sanitizeQuery(query, queryType);
-        let endpoint = "";
-
-        if (queryType === "ip") endpoint = `https://otx.alienvault.com/api/v1/indicators/IPv4/${sanitized}/general`;
-        else if (queryType === "domain") endpoint = `https://otx.alienvault.com/api/v1/indicators/domain/${sanitized}/general`;
-        else if (queryType === "hash") endpoint = `https://otx.alienvault.com/api/v1/indicators/file/${sanitized}/general`;
-        else endpoint = `https://otx.alienvault.com/api/v1/indicators/url/${encodeURIComponent(sanitized)}/general`;
+        const endpoint = otxIndicatorUrl(queryType, sanitized);
 
         // A OTX morre por concorrência sem devolver 429: o gate segura o lote
         // em 4 chamadas em voo e o timeout impede que uma travada ocupe a vaga.

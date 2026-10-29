@@ -11,6 +11,18 @@ const context={publications:[],evidence:[],errors:[]};
 function fixture(){const dir=mkdtempSync(path.join(tmpdir(),'ts-bulk-'));let clock=1000;const file=path.join(dir,'jobs.sqlite');let store=createBulkStore({filePath:file,now:()=>clock,eligibleSources,composeRow:composeBulkRow});return{get store(){return store;},file,dir,advance(n){clock+=n;},reopen(){store.close();store=createBulkStore({filePath:file,now:()=>clock,eligibleSources,composeRow:composeBulkRow});},close(){store.close();assert.ok(path.resolve(dir).startsWith(path.resolve(tmpdir())+path.sep+'ts-bulk-'));rmSync(dir,{recursive:true,force:true});}};}
 function finish(store){let t,n=0;while((t=store.claim())){store.settle(t,t.provider===BULK_CONTEXT?context:{name:t.provider,data:{Status:'Clean'},rawPayload:{value:t.query}});if(++n>100000)throw Error('Unexpected loop');}return n;}
 
+test('new OTX IPv6 compatibility backfills only missing tasks and preserves existing answers and VT quota waits',()=>{
+ let supported=false;const ip='2606:4700:4700::1111';
+ const store=createBulkStore({filePath:':memory:',eligibleSources:(q,s)=>eligibleSources(q,s).filter(provider=>supported||q!==ip||provider!=='AlienVault OTX'),composeRow:composeBulkRow});
+ try{
+  const job=store.create(owner,['8.8.8.8',ip],['AlienVault OTX','AbuseIPDB','VirusTotal']);let task;
+  while((task=store.claim()))store.settle(task,task.provider==='VirusTotal'?null:{name:task.provider,data:{Status:'No data'},rawPayload:{preserved:true}},task.provider==='VirusTotal'?{status:429,retryAt:Date.now()+600000,message:'Quota'}:undefined);
+  const before=JSON.stringify(store.savedProvider(owner.sub,'AbuseIPDB',ip)),quota=store.prepare("SELECT until_at FROM bulk_blocks WHERE provider='VirusTotal'").get().until_at;
+  supported=true;assert.equal(store.ensureSources(owner.sub,job.id,[]),true);assert.equal(store.ensureSources(owner.sub,job.id,[]),false);finish(store);
+  assert.equal(store.summary(owner.sub,job.id).sourceCounts.find(s=>s.provider==='AlienVault OTX').completed,2);assert.equal(JSON.stringify(store.savedProvider(owner.sub,'AbuseIPDB',ip)),before);assert.equal(store.prepare("SELECT until_at FROM bulk_blocks WHERE provider='VirusTotal'").get().until_at,quota);
+ }finally{store.close();}
+});
+
 test('source progress and wait summaries read a covering index rather than source response blobs',()=>{
  const f=fixture();try{
   const job=f.store.create(owner,['8.8.8.1'],['AlienVault OTX']);

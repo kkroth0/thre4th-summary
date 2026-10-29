@@ -187,6 +187,7 @@ var IPV6_CAPABLE_VENDORS = /* @__PURE__ */ new Set([
   "IP Geolocation",
   "VirusTotal",
   "AbuseIPDB",
+  "AlienVault OTX",
   "Shodan",
   "ThreatFox"
 ]);

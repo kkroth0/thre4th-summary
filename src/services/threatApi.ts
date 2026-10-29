@@ -49,9 +49,9 @@ export const VENDOR_IOC_SUPPORT: Record<string, ('ip' | 'domain' | 'hash' | 'url
 export const IOC_SOURCE_COUNT = Object.keys(VENDOR_IOC_SUPPORT).length;
 
 // Conservative allowlist: these repository endpoints use generic IPv6-capable
-// indicator/host/IP paths. OTX is explicitly `/IPv4/`, so it receives no direct IPv6 queries.
+// indicator/host/IP paths. OTX selects its IPv4 or IPv6 endpoint explicitly.
 export const IPV6_CAPABLE_VENDORS = new Set([
-    "IP Geolocation", "VirusTotal", "AbuseIPDB", "Shodan", "ThreatFox",
+    "IP Geolocation", "VirusTotal", "AbuseIPDB", "AlienVault OTX", "Shodan", "ThreatFox",
 ]);
 
 export const resolveVendorsForQuery = (query: string, selectedVendors: string[]): string[] => {
