@@ -22,6 +22,8 @@ for(let i=0;i<samples;i++){
  await new Promise(resolve=>setTimeout(resolve,15000));
 }
 const final=counts.get(job,provider),summary={at:new Date().toISOString(),readOnly:true,source:provider,...final,byKind:kinds.all(job,provider),unavailableIPs:db.prepare("SELECT COUNT(*) count FROM bulk_items i WHERE i.job=? AND i.kind='ip' AND NOT EXISTS(SELECT 1 FROM bulk_tasks t WHERE t.job=i.job AND t.ordinal=i.ordinal AND t.provider=?)").get(job,provider).count,savedResponsesPreserved:final.completed>=snapshots[0].completed};
+summary.providerWait=db.prepare('SELECT reason,until_at FROM bulk_blocks WHERE owner=? AND provider=?').get(owner,provider)||null;
+summary.waitingTasks=db.prepare("SELECT state,http_status,error_code,MIN(next_at) retryAt,MAX(attempts) attempts,COUNT(*) count FROM bulk_tasks WHERE job=? AND provider=? AND state IN ('waiting','running','error','blocked') GROUP BY state,http_status,error_code").all(job,provider);
 summary.queryPlan=db.prepare("EXPLAIN QUERY PLAN SELECT COUNT(*),SUM(state='done') FROM bulk_tasks WHERE job=? AND provider=?").all(job,provider).map(v=>v.detail);
 if(final.completed===final.total&&!final.pending&&!final.errors&&!final.blocked){
  let responses=0,raw=0,dated=0,withPulses=0,pulses=0,invalid=0;
