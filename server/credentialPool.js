@@ -39,7 +39,9 @@ export function createCredentialPool({ now = Date.now, load = () => null, save =
       const at = now();
       return keys.map((key, index) => {
         const value = state(provider, key), until = availableAt(value, limits, at);
-        return { id: credentialId(key), label: `Chave ${index + 1}`, status: value.invalidUntil > at ? 'authentication_error' : until > at ? 'cooldown' : flights.has(stateKey(provider, key)) ? 'busy' : 'available', retryAt: until > at ? until : null, usedToday: value.day === new Date(at).toISOString().slice(0, 10) ? value.used || 0 : 0, lastStatus: value.lastStatus || null };
+        const day = new Date(at).toISOString().slice(0, 10);
+        const waitingReason = value.invalidUntil > at ? 'authentication' : value.blockedUntil > at ? 'provider' : limits.perDay > 0 && value.day === day && value.used >= limits.perDay ? 'local_daily_limit' : value.nextAt > at ? 'pacing' : flights.has(stateKey(provider, key)) ? 'in_flight' : null;
+        return { id: credentialId(key), label: `Chave ${index + 1}`, status: value.invalidUntil > at ? 'authentication_error' : until > at ? 'cooldown' : flights.has(stateKey(provider, key)) ? 'busy' : 'available', waitingReason, retryAt: until > at ? until : null, usedToday: value.day === day ? value.used || 0 : 0, lastStatus: value.lastStatus || null };
       });
     },
     async run(provider, keys, request, limits = {}) {
@@ -81,6 +83,7 @@ export function createCredentialPool({ now = Date.now, load = () => null, save =
             lastAuth = error;
             continue;
           }
+          put(provider, key, { ...state(provider, key), lastStatus: status || null });
           throw error;
         } finally { flights.delete(id); }
       }

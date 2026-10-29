@@ -9,6 +9,11 @@ import type { BulkRow } from './bulkEnrichment';
 import type { BulkEvidence } from '../services/bulkContext';
 const Excel=createRequire(`${process.cwd()}/package.json`)('exceljs') as typeof import('exceljs');
 const base=(query='185.220.101.5'):BulkRow=>({query,state:'complete',result:{query,overallScore:90,threatLevel:'malicious',totalVendors:2,detections:1,vendorData:[{name:'VirusTotal',data:{Malicious:12,'Detection Rate':'12/90'}},{name:'AlienVault OTX',data:{'Pulse Details':[{adversary:'Actor A',malwareFamilies:['Family A'],attackIds:['T1059.001'],tags:[]}]}}]},context:{errors:[],publications:[],evidence:[]}});
+
+test('an unsupported query is an explicit coverage exception, never a zero-match source finding',()=>{
+ const row=base();row.result!.vendorData.push({name:'ThreatFox',unsupported:true,data:{Status:'Consulta não aceita pela fonte'},rawPayload:{query_status:'illegal_search_term'}});
+ const a=analyzeBulkRow(row),summary=analyzeBulkRows([row]);assert.equal(a.record.tfMatches,null);assert.equal(a.record['status:ThreatFox'],'Consulta não aceita pela fonte');assert.match(String(a.record.notes),/ThreatFox.*não aceita/);assert.equal(summary.unsupported,1);assert.equal(summary.partial,0);assert.equal(summary.coverage.find(x=>x.name==='ThreatFox')!.count,0);
+});
 const evidence=(name:string,relation:string,technique:string):BulkEvidence=>({provider:'Axur',title:'Source report',link:'https://lab.example/report',published:'2026-10-27',collectedAt:'2026-10-27',confidence:90,reputation:null,entities:[{id:name,kind:'actor',name,relation}],...{payload:{relatedTTPs:[technique]}}});
 
 test('Axur response status, report links, contextual actors and structured MITRE codes reach the analytical export',()=>{

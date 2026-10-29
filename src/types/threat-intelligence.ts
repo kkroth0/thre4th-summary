@@ -9,6 +9,8 @@ export interface TimelineEvent {
 }
 
 export interface VendorData {
+    /** The provider explicitly rejected this query; it is not a negative finding. */
+    unsupported?: boolean;
     rawDeferred?: boolean;
     collectedAt?: string;
     cacheState?: string;

@@ -1,6 +1,6 @@
 import type { ThreatIntelligenceResult, VendorData, VerdictSignal } from '../types/threat-intelligence';
 
-export const THREAT_VERDICT_VERSION = '2026-10-28-signals-v3-axur';
+export const THREAT_VERDICT_VERSION = '2026-10-29-signals-v4-query-coverage';
 const IMPORTANT_AV_VENDORS = ['Microsoft','Kaspersky','Bitdefender','ESET-NOD32','Avira','Sophos','McAfee','Symantec','TrendMicro','F-Secure','Fortinet','Palo Alto Networks','CrowdStrike'];
 const numeric = (value: unknown): number | null => {
     if (value == null || value === '') return null;
@@ -13,7 +13,7 @@ export function scoreThreatResults(query: string, results: VendorData[]): Threat
     const signals: VerdictSignal[] = [];
     let positiveVotes = 0, cleanVotes = 0, strong = false;
     for (const vendor of results) {
-        if (vendor.error || vendor.isLoading || !vendor.data) continue;
+        if (vendor.error || vendor.isLoading || vendor.unsupported || !vendor.data) continue;
         const data = vendor.data, status = String(data.Status || '').toLowerCase();
         const signal = (reason: string, kind: VerdictSignal['kind'], confirmed = false) => {
             positiveVotes++; strong ||= confirmed; signals.push({ source: vendor.name, reason, kind });
@@ -55,7 +55,7 @@ export function scoreThreatResults(query: string, results: VendorData[]): Threat
     else if (positiveVotes > 0) { threatLevel = 'suspicious'; overallScore = Math.max(35, Math.min(69, Math.round(positiveVotes / checked * 100))); }
     else if (cleanVotes > 0 && !incomplete) threatLevel = 'safe';
     const minority = Math.min(positiveVotes, cleanVotes);
-    return { query, overallScore, threatLevel, totalVendors: results.length, detections: positiveVotes, vendorData: results,
+    return { query, overallScore, threatLevel, totalVendors: results.filter(v=>!v.unsupported).length, detections: positiveVotes, vendorData: results,
         signals, reportingVendors: checked, confidence: checked ? Math.max(strong ? 80 : 0, Math.round(Math.max(positiveVotes, cleanVotes) / checked * 100)) : 0,
         disagreement: positiveVotes > 0 && cleanVotes > 0 && minority / checked >= 0.2 };
 }

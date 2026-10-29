@@ -10,6 +10,11 @@
 
 const HOST_PORT = /^(.+):(\d{1,5})$/;
 
+export function acceptedThreatFoxResponse(response) {
+    if (response.data?.query_status === 'illegal_search_term') throw Object.assign(new Error('ThreatFox rejected this search term'), { code: 'PROVIDER_QUERY_UNSUPPORTED', response: { status: 422, data: response.data } });
+    return response;
+}
+
 const hostOf = (value) => {
     try {
         return new URL(value).hostname.toLowerCase().replace(/^\[|\]$/g, '');

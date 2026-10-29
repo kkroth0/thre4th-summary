@@ -266,6 +266,7 @@ export const formatVendorData = (vendorName: string, data: any, query: string): 
             return { "Status": "No samples found" };
 
         case "ThreatFox":
+            if (data.query_status === 'illegal_search_term') return { Status: 'Consulta não aceita pela fonte', 'Motivo informado': 'illegal_search_term', Cobertura: 'A ThreatFox recusou a consulta deste indicador. Isso não representa ausência de registros.' };
             if (data.query_status === "ok" && Array.isArray(data.data) && data.data.length > 0) {
                 const tf = data.data[0];
                 const malwares = Array.from(new Set(data.data.map((d: any) => d.malware_printable).filter(Boolean)));
@@ -555,6 +556,7 @@ const fetchFromBackend = async (endpoint: string, query: string, vendorName: str
         return {
             name: vendorName,
             data: formatVendorData(vendorName, data, query),
+            ...(vendorName === 'ThreatFox' && data.query_status === 'illegal_search_term' ? { unsupported: true } : {}),
             link: getVendorLink(vendorName, query),
             timeline: extractVendorTimestamps(vendorName, data),
             ...(options.includeRaw ? { rawPayload: data } : {}),
@@ -1437,7 +1439,7 @@ export const deleteScan = async (id: string): Promise<SavedScan[]> => {
 // BYOK genérico: quais providers têm chave configurada (booleans, nunca os valores).
 export type ApiKeysState = Record<string, boolean>;
 export interface CredentialPoolStatus {
-    keys: { id: string; label: string; status: string; retryAt: number | null; usedToday: number; lastStatus: number | null }[];
+    keys: { id: string; label: string; status: string; waitingReason?: 'authentication' | 'provider' | 'local_daily_limit' | 'pacing' | 'in_flight' | null; retryAt: number | null; usedToday: number; lastStatus: number | null }[];
     effectiveCount: number; personal: boolean; limits: { perMinute: number; perDay: number };
 }
 export async function fetchCredentialPools(): Promise<Record<string, CredentialPoolStatus>> {

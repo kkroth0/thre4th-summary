@@ -8,7 +8,7 @@ import { detectQueryType } from './iocValidation.js';
 const pack=value=>value==null?null:gzipSync(Buffer.from(JSON.stringify(value)),{level:3});
 const unpack=value=>value?JSON.parse(gunzipSync(value,{maxOutputLength:64*1024*1024}).toString()):null;
 const fail=(message,status=400)=>Object.assign(Error(message),{status});
-const terminal=new Set(['done','error','blocked']);
+const terminal=new Set(['done','unsupported','error','blocked']);
 export const BULK_CONTEXT='@context';
 
 /** Account-scoped operation ledger. No session cookies or API keys are stored here. */
@@ -37,14 +37,14 @@ export function createBulkStore({filePath,now=Date.now,eligibleSources,composeRo
  const items=(id,filters={})=>{const {where,params}=selection(id,filters);return sql('SELECT * FROM bulk_items WHERE '+where+' ORDER BY ordinal').iterate(...params);};
  function publicSummary(j){
   const counts=Object.fromEntries(sql('SELECT state,COUNT(*) n FROM bulk_items WHERE job=? GROUP BY state').all(j.id).map(r=>[r.state,r.n]));
-  const sourceCounts=sql(`SELECT provider,SUM(state='done') completed,SUM(state='error') errors,SUM(state='blocked') blocked,SUM(state IN ('pending','waiting','running')) pending,COUNT(*) total FROM bulk_tasks WHERE job=? AND provider!=? GROUP BY provider`).all(j.id,BULK_CONTEXT);
+  const sourceCounts=sql(`SELECT provider,SUM(state='done') completed,SUM(state='unsupported') unsupported,SUM(state='error') errors,SUM(state='blocked') blocked,SUM(state IN ('pending','waiting','running')) pending,COUNT(*) total FROM bulk_tasks WHERE job=? AND provider!=? GROUP BY provider`).all(j.id,BULK_CONTEXT);
   const waiting=sql(`SELECT MIN(MAX(t.next_at,COALESCE(b.until_at,0))) next FROM bulk_tasks t JOIN bulk_jobs j ON j.id=t.job LEFT JOIN bulk_blocks b ON b.owner=j.owner AND b.provider=t.provider WHERE t.job=? AND t.state IN ('pending','waiting')`).get(j.id).next;
   const active=sql("SELECT COUNT(*) n FROM bulk_tasks t JOIN bulk_jobs j ON j.id=t.job LEFT JOIN bulk_blocks b ON b.owner=j.owner AND b.provider=t.provider WHERE t.job=? AND (t.state='running' OR (t.state IN ('pending','waiting') AND t.next_at<=? AND COALESCE(b.until_at,0)<=?))").get(j.id,now(),now()).n;
   return{id:j.id,refreshSources:Boolean(j.fresh),state:j.state==='active'?(!active&&sourceCounts.some(s=>s.blocked)?'needs_attention':waiting>now()&&!active?'waiting':'running'):j.state,total:j.total,processed:(counts.complete||0)+(counts.partial||0)+(counts.error||0)+(counts.unsupported||0),completed:counts.complete||0,partial:counts.partial||0,failed:counts.error||0,pending:(counts.queued||0)+(counts.running||0),sources:JSON.parse(j.sources),sourceCounts,excluded:JSON.parse(j.excluded),createdAt:new Date(j.created).toISOString(),updatedAt:new Date(j.updated).toISOString(),revision:j.revision,retryAt:waiting>now()&&waiting<Number.MAX_SAFE_INTEGER?waiting:null,exports:sql('SELECT id,state,created,updated,error,revision,summary FROM bulk_exports WHERE job=? AND owner=? ORDER BY created DESC LIMIT 5').all(j.id,j.owner).map(item=>({...item,summary:item.summary?JSON.parse(item.summary):undefined}))};
  }
  function row(j,item,compact=false){
   const tasks=sql('SELECT * FROM bulk_tasks WHERE job=? AND ordinal=? ORDER BY provider').all(j.id,item.ordinal);
-  const data=tasks.filter(t=>t.provider!==BULK_CONTEXT).map(t=>t.state==='done'?unpack(t.value):({name:t.provider,data:{'Estado da fonte':t.state,...(t.next_at>now()?{'Próxima tentativa':new Date(t.next_at).toISOString()}:{})},...(t.error?{error:t.error,httpStatus:t.http_status,errorCode:t.error_code,retryAt:t.next_at||undefined}:{isLoading:true})}));
+  const data=tasks.filter(t=>t.provider!==BULK_CONTEXT).map(t=>['done','unsupported'].includes(t.state)?unpack(t.value):({name:t.provider,data:{'Estado da fonte':t.state,...(t.next_at>now()?{'Próxima tentativa':new Date(t.next_at).toISOString()}:{})},...(t.error?{error:t.error,httpStatus:t.http_status,errorCode:t.error_code,retryAt:t.next_at||undefined}:{isLoading:true})}));
   let context=unpack(item.context)||{publications:[],evidence:[],errors:item.context_error?[item.context_error]:[]};
   if(compact){for(const v of data){delete v.rawPayload;v.rawDeferred=true;}context={...context,evidence:context.evidence.map(({payload,reputation,...e})=>e)};}
   return {...composeRow(item.query,data,context,item.state,item.completed?new Date(item.completed).toISOString():undefined),contextLoading:!terminal.has(tasks.find(t=>t.provider===BULK_CONTEXT)?.state),serverOrdinal:item.ordinal,serverVersion:item.version};
@@ -53,11 +53,11 @@ export function createBulkStore({filePath,now=Date.now,eligibleSources,composeRo
   const ts=sql('SELECT provider,state FROM bulk_tasks WHERE job=? AND ordinal=?').all(job,ordinal),sources=ts.filter(t=>t.provider!==BULK_CONTEXT),ctx=ts.find(t=>t.provider===BULK_CONTEXT);
   const allSources=sources.every(t=>terminal.has(t.state));
   if(allSources&&ctx?.state==='held')sql("UPDATE bulk_tasks SET state='pending',next_at=0 WHERE job=? AND ordinal=? AND provider=?").run(job,ordinal,BULK_CONTEXT);
-  const finished=allSources&&terminal.has(ctx?.state),good=sources.filter(t=>t.state==='done').length;
-  const state=finished?(!sources.length?'unsupported':good===sources.length&&ctx.state==='done'?'complete':good?'partial':'error'):sources.some(t=>t.state!=='pending')?'running':'queued';
+  const finished=allSources&&terminal.has(ctx?.state),supported=sources.filter(t=>t.state!=='unsupported'),good=supported.filter(t=>t.state==='done').length;
+  const state=finished?(!supported.length?(ctx.state==='done'?'unsupported':'error'):good===supported.length&&ctx.state==='done'?'complete':good?'partial':'error'):sources.some(t=>t.state!=='pending')?'running':'queued';
   sql('UPDATE bulk_items SET state=?,completed=?,version=version+1 WHERE job=? AND ordinal=?').run(state,finished?now():null,job,ordinal);touch(job);
   const pending=sql("SELECT COUNT(*) n FROM bulk_items WHERE job=? AND state IN ('queued','running')").get(job).n;
-  if(!pending)sql("UPDATE bulk_jobs SET state=CASE WHEN EXISTS(SELECT 1 FROM bulk_items WHERE job=? AND state!='complete') THEN 'partial' ELSE 'complete' END WHERE id=? AND state='active'").run(job,job);
+  if(!pending)sql("UPDATE bulk_jobs SET state=CASE WHEN EXISTS(SELECT 1 FROM bulk_items WHERE job=? AND state NOT IN ('complete','unsupported')) THEN 'partial' ELSE 'complete' END WHERE id=? AND state='active'").run(job,job);
  }
  const create=db.transaction((principal,queries,sources,excluded={},requestId,fresh=false)=>{
   const fingerprint=crypto.createHash('sha256').update(JSON.stringify([queries,sources,Boolean(fresh)])).digest('hex');
@@ -93,7 +93,7 @@ export function createBulkStore({filePath,now=Date.now,eligibleSources,composeRo
  });
  const settle=db.transaction((t,value,error)=>{
   if(!sql("SELECT 1 FROM bulk_tasks WHERE job=? AND ordinal=? AND provider=? AND lease=? AND state='running'").get(t.job,t.ordinal,t.provider,t.lease))return;
-  let state='done',next=0,message=null,status=null,code=null;
+  let state=value?.unsupported?'unsupported':'done',next=0,message=null,status=null,code=null;
   if(error){status=Number(error.status||error.httpStatus||0);code=error.code||null;message=String(error.message||'Consulta temporariamente indisponível.').slice(0,350);
    const auth=code==='PROVIDER_AUTH_FAILED'||[401,403].includes(status),transient=[0,408,429,500,502,503,504].includes(status);
    state=auth?'blocked':status===429||transient&&t.attempts<5?'waiting':'error';next=state==='waiting'?Math.max(now()+1000,Number(error.retryAt)||now()+Math.min(15*60000,15000*2**Math.min(t.attempts-1,6))):0;
@@ -126,7 +126,7 @@ export function createBulkStore({filePath,now=Date.now,eligibleSources,composeRo
     else sql("UPDATE bulk_tasks SET state='pending',attempts=0,next_at=0 WHERE job=? AND state='blocked'").run(id);
     sql(`UPDATE bulk_tasks AS c SET state='held',value=NULL,attempts=0,next_at=0 WHERE c.job=? AND c.provider=? AND EXISTS(SELECT 1 FROM bulk_tasks t WHERE t.job=c.job AND t.ordinal=c.ordinal AND t.provider!=? AND t.state IN ('pending','waiting','running'))`).run(id,BULK_CONTEXT,BULK_CONTEXT);
     sql(`UPDATE bulk_items AS i SET state='queued',completed=NULL,version=version+1 WHERE i.job=? AND EXISTS(SELECT 1 FROM bulk_tasks t WHERE t.job=i.job AND t.ordinal=i.ordinal AND t.state IN ('pending','waiting','running','held'))`).run(id);
-    if(!sql("SELECT COUNT(*) n FROM bulk_items WHERE job=? AND state IN ('queued','running')").get(id).n)sql("UPDATE bulk_jobs SET state=CASE WHEN EXISTS(SELECT 1 FROM bulk_items WHERE job=? AND state!='complete') THEN 'partial' ELSE 'complete' END WHERE id=?").run(id,id);
+    if(!sql("SELECT COUNT(*) n FROM bulk_items WHERE job=? AND state IN ('queued','running')").get(id).n)sql("UPDATE bulk_jobs SET state=CASE WHEN EXISTS(SELECT 1 FROM bulk_items WHERE job=? AND state NOT IN ('complete','unsupported')) THEN 'partial' ELSE 'complete' END WHERE id=?").run(id,id);
     touch(id);
    })();return publicSummary(getJob(id));
   },

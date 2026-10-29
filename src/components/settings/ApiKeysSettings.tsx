@@ -1,6 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useState } from "react";
-import { CheckCircle2, ExternalLink, KeyRound, Loader2, ShieldCheck, Trash2 } from "lucide-react";
+import { ExternalLink, KeyRound, Loader2, ShieldCheck, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import {
   AlertDialog,
@@ -151,8 +151,8 @@ function KeyRow({ provider, configured, pool, onChanged }: { provider: Provider;
         <div className="flex items-center gap-2 text-sm font-medium">
           {provider.label}
           {configured ? (
-            <Badge variant="outline" className="h-5 gap-1 border-emerald-500/20 bg-emerald-500/5 text-xs">
-              <CheckCircle2 className="h-3 w-3 text-emerald-500" /> {pt ? "Conectada" : "Connected"}
+            <Badge variant="outline" className="h-5 gap-1 text-xs text-muted-foreground">
+              <KeyRound className="h-3 w-3" /> {pt ? "Configurada" : "Configured"}
             </Badge>
           ) : null}
         </div>

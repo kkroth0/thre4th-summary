@@ -11,6 +11,31 @@ function fixture() {
 const failure = (status, headers = {}) => Object.assign(new Error('upstream failure'), { response: { status, headers } });
 const keys = Array.from({ length: 20 }, (_, index) => 'test-credential-' + index);
 
+test('5614 simulated IOC calls rotate across twelve independent credentials without hidden shared daily depletion',async()=>{
+ const {router,deps,advance}=fixture(),twelve=keys.slice(0,12),used=new Map(twelve.map(k=>[k,0]));
+ const request=key=>{used.set(key,used.get(key)+1);return{status:200};},limits={perMinute:4,perDay:500};
+ const call=async pool=>{for(;;){try{await pool.run('virustotal',twelve,request,limits);return;}catch(e){assert.equal(e.response?.status,429);advance(e.retryAt-deps.now()+1);}}};
+ for(let i=0;i<5614;i++){await call(router);advance(2000);}
+ assert.deepEqual([...used.values()].sort((a,b)=>a-b),[467,467,468,468,468,468,468,468,468,468,468,468]);
+ const restored=createCredentialPool(deps);
+ for(let i=5614;i<6000;i++){await call(restored);advance(2000);}
+ assert.ok([...used.values()].every(n=>n===500));
+ await assert.rejects(restored.run('virustotal',twelve,()=>assert.fail('depleted key queried'),limits),e=>e.response.status===429);
+});
+
+test('query validation and gateway errors record the real HTTP status and never invalidate a credential',async()=>{
+ const {router}=fixture();
+ for(const status of [422,502]){await assert.rejects(router.run('vt',[keys[0]],()=>{throw failure(status);}));const key=router.describe('vt',[keys[0]])[0];assert.equal(key.lastStatus,status);assert.equal(key.status,'available');}
+});
+
+test('availability explains local pacing, local day caps and upstream waits separately',async()=>{
+ const {router,advance}=fixture(),limits={perMinute:4,perDay:2};
+ await router.run('vt',[keys[0]],()=>({status:200}),limits);assert.equal(router.describe('vt',[keys[0]],limits)[0].waitingReason,'pacing');
+ advance(15001);await router.run('vt',[keys[0]],()=>({status:200}),limits);assert.equal(router.describe('vt',[keys[0]],limits)[0].waitingReason,'local_daily_limit');
+ await assert.rejects(router.run('vt',[keys[1]],()=>{throw failure(429,{'retry-after':'3600'});},limits));const upstream=router.describe('vt',[keys[1]],limits)[0];assert.equal(upstream.waitingReason,'provider');assert.equal(upstream.lastStatus,429);
+ await assert.rejects(router.run('vt',[keys[2]],()=>{throw failure(403);},limits));assert.equal(router.describe('vt',[keys[2]],limits)[0].waitingReason,'authentication');
+});
+
 test('twenty keys receive fair traffic and metadata never contains a secret', async () => {
   const { router } = fixture(), used = [];
   for (let i = 0; i < 40; i++) await router.run('vt', keys, key => { used.push(key); return { status: 200 }; });

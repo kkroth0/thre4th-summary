@@ -10,6 +10,26 @@ const owner={sub:'one',login:'analyst'},other={sub:'two',login:'other'};
 const context={publications:[],evidence:[],errors:[]};
 function fixture(){const dir=mkdtempSync(path.join(tmpdir(),'ts-bulk-'));let clock=1000;const file=path.join(dir,'jobs.sqlite');let store=createBulkStore({filePath:file,now:()=>clock,eligibleSources,composeRow:composeBulkRow});return{get store(){return store;},file,dir,advance(n){clock+=n;},reopen(){store.close();store=createBulkStore({filePath:file,now:()=>clock,eligibleSources,composeRow:composeBulkRow});},close(){store.close();assert.ok(path.resolve(dir).startsWith(path.resolve(tmpdir())+path.sep+'ts-bulk-'));rmSync(dir,{recursive:true,force:true});}};}
 function finish(store){let t,n=0;while((t=store.claim())){store.settle(t,t.provider===BULK_CONTEXT?context:{name:t.provider,data:{Status:'Clean'},rawPayload:{value:t.query}});if(++n>100000)throw Error('Unexpected loop');}return n;}
+
+test('a source-rejected query is terminal, retained and never blocks other indicators or enters the negative cache',()=>{
+ const f=fixture();try{
+  const job=f.store.create(owner,['8.8.8.8','9.9.9.9'],['ThreatFox','VirusTotal']);let task;
+  while((task=f.store.claim()))f.store.settle(task,task.provider===BULK_CONTEXT?context:task.provider==='ThreatFox'&&task.ordinal===0?{name:'ThreatFox',unsupported:true,data:{Status:'Consulta não aceita pela fonte'},rawPayload:{query_status:'illegal_search_term'}}:{name:task.provider,data:{Status:'No data'}});
+  const summary=f.store.summary(owner.sub,job.id),source=summary.sourceCounts.find(s=>s.provider==='ThreatFox');
+  assert.equal(summary.state,'complete');assert.equal(summary.completed,2);assert.equal(source.completed,1);assert.equal(source.unsupported,1);assert.equal(source.errors+source.blocked+source.pending,0);
+  assert.equal(f.store.prepare('SELECT COUNT(*) n FROM bulk_blocks').get().n,0);
+  assert.equal(f.store.savedProvider(owner.sub,'ThreatFox','8.8.8.8'),null);
+  const row=f.store.completeRow(owner.sub,job.id,0);assert.equal(row.result.totalVendors,1);assert.equal(row.result.vendorData.find(v=>v.name==='ThreatFox').rawPayload.query_status,'illegal_search_term');
+ }finally{f.close();}
+});
+
+test('a source-rejected-only item terminates visibly but a failed correlation remains a real failure',()=>{
+ for(const failContext of [false,true]){const f=fixture();try{
+  const job=f.store.create(owner,['8.8.8.8'],['ThreatFox']);let task;
+  while((task=f.store.claim())){if(task.provider===BULK_CONTEXT)f.store.settle(task,failContext?null:context,failContext?{status:400,message:'Context failed'}:undefined);else f.store.settle(task,{name:task.provider,unsupported:true,data:{Status:'Consulta não aceita pela fonte'},rawPayload:{query_status:'illegal_search_term'}});}
+  assert.equal(f.store.completeRow(owner.sub,job.id,0).state,failContext?'error':'unsupported');assert.equal(f.store.summary(owner.sub,job.id).state,failContext?'partial':'complete');
+ }finally{f.close();}}
+});
 test('jobs are idempotent, account isolated and filtered/paginated before full payloads are read',()=>{
  const f=fixture();try{const id=crypto.randomUUID(),j=f.store.create(owner,['8.8.8.8','example.org','https://example.org/A'],['VirusTotal'],{},id);assert.equal(f.store.create(owner,['8.8.8.8','example.org','https://example.org/A'],['VirusTotal'],{},id).id,j.id);assert.throws(()=>f.store.summary(other.sub,j.id),e=>e.status===404);assert.throws(()=>f.store.action(other.sub,j.id,'pause',other),e=>e.status===404);assert.equal(f.store.list(other.sub).length,0);assert.equal(f.store.page(owner.sub,j.id,{type:'url'}).total,1);assert.equal(f.store.page(owner.sub,j.id,{size:1}).load().length,1);assert.equal(f.store.page(owner.sub,j.id,{query:'%'}).total,0);}finally{f.close();}
 });
@@ -27,6 +47,17 @@ test('pausing survives restart and resuming preserves the completed provider res
 });
 test('authentication needs attention and is never treated as a quota renewal',()=>{
  const f=fixture();try{const j=f.store.create(owner,['8.8.8.8','9.9.9.9'],['VirusTotal']);const t=f.store.claim();f.store.settle(t,null,{status:403,code:'PROVIDER_AUTH_FAILED',message:'Revise a conexão'});finish(f.store);assert.equal(f.store.summary(owner.sub,j.id).state,'needs_attention');assert.equal(f.store.claim(),null);f.store.action(owner.sub,j.id,'retry',owner);finish(f.store);assert.equal(f.store.summary(owner.sub,j.id).completed,2);}finally{f.close();}
+});
+test('retrying a rejected connection does not reset another providers quota or discard completed answers',()=>{
+ const f=fixture();try{
+  const job=f.store.create(owner,['8.8.8.8'],['VirusTotal','ThreatFox']);let task;
+  while((task=f.store.claim()))f.store.settle(task,null,task.provider==='VirusTotal'?{status:429,retryAt:61000,message:'Quota'}:{status:403,code:'PROVIDER_AUTH_FAILED',message:'Credential rejected'});
+  const quota=f.store.prepare("SELECT until_at FROM bulk_blocks WHERE owner=? AND provider='VirusTotal'").get(owner.sub).until_at;
+  f.store.action(owner.sub,job.id,'retry',owner);assert.equal(f.store.prepare("SELECT until_at FROM bulk_blocks WHERE owner=? AND provider='VirusTotal'").get(owner.sub).until_at,quota);
+  task=f.store.claim();assert.equal(task.provider,'ThreatFox');f.store.settle(task,{name:'ThreatFox',data:{Status:'No data'},rawPayload:{query_status:'no_result'}});
+  assert.equal(f.store.claim(),null);f.store.action(owner.sub,job.id,'retry',owner);assert.equal(f.store.summary(owner.sub,job.id).sourceCounts.find(s=>s.provider==='ThreatFox').completed,1);assert.equal(f.store.claim(),null);
+  f.advance(60001);task=f.store.claim();assert.equal(task.provider,'VirusTotal');f.store.settle(task,{name:'VirusTotal',data:{Status:'Clean'}});finish(f.store);assert.equal(f.store.summary(owner.sub,job.id).completed,1);
+ }finally{f.close();}
 });
 test('shared normalization preserves a source absence and independent malicious findings',()=>{
  const vt=normalizeBulkVendor('8.8.8.8','VirusTotal',{error:'Resource not found'},404);assert.equal(vt.data.Status,'No data');assert.equal(vt.rawPayload.httpStatus,404);const q=prepareBulkInput('8.8.8.8\n10.0.0.1\nexample.org');assert.equal(q.indicators.length,2);assert.equal(q.excluded.nonPublicIps,1);

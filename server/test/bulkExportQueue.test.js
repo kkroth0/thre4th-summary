@@ -4,6 +4,15 @@ import {createBulkStore,BULK_CONTEXT} from '../bulkJobs.js';
 import {releaseCompletedBulkExports} from '../bulkExportQueue.js';
 import {eligibleSources,composeBulkRow} from '../bulkShared.generated.mjs';
 
+test('terminal unsupported queries are included in the final workbook without waiting indefinitely',()=>{
+ const store=createBulkStore({filePath:':memory:',eligibleSources,composeRow:composeBulkRow}),owner={sub:'owner',login:'analyst'};
+ try{
+  const job=store.create(owner,['8.8.8.8'],['ThreatFox']);store.prepare("INSERT INTO bulk_exports(id,job,owner,state,created,updated,revision,filters) VALUES(?,?,?,'awaiting_completion',1,1,1,?)").run('full',job.id,owner.sub,JSON.stringify({waitForComplete:true}));
+  let task;while((task=store.claim()))store.settle(task,task.provider===BULK_CONTEXT?{errors:[],publications:[],evidence:[]}:{name:task.provider,unsupported:true,data:{Status:'Consulta não aceita pela fonte'},rawPayload:{query_status:'illegal_search_term'}});
+  assert.equal(store.summary(owner.sub,job.id).state,'complete');assert.equal(releaseCompletedBulkExports(store,40),1);
+ }finally{store.close();}
+});
+
 test('a requested full export stays queued through quota waits and partial results, then uses the final revision',()=>{
  const store=createBulkStore({filePath:':memory:',eligibleSources,composeRow:composeBulkRow}),owner={sub:'owner',login:'analyst'};
  try{

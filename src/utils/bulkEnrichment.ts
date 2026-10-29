@@ -22,6 +22,7 @@ export function bulkVerdictLabel(row: BulkRow) {
   const level = row.result?.threatLevel;
   if (level === 'malicious') return 'Malicioso';
   if (level === 'suspicious') return 'Suspeito';
+  if (row.state === 'unsupported') return 'Consulta não aceita pelas fontes';
   if (['queued','running'].includes(row.state) || row.contextLoading || row.result?.vendorData.some(v => v.isLoading)) return 'Coleta em andamento';
   if (['partial','error','stopped'].includes(row.state) || row.error || row.context?.errors.length || row.result?.vendorData.some(v => v.error)) return 'Consulta incompleta';
   return level === 'safe' ? 'Sem sinais nas fontes consultadas' : 'Indeterminado';
@@ -67,14 +68,15 @@ export async function runBulkQueue<T>(items: T[], lookup: (item: T) => Promise<v
 }
 
 export function bulkResultState(result: ThreatIntelligenceResult): BulkState {
-  if (!result.vendorData.length) return 'unsupported';
-  const errors = result.vendorData.filter(vendor => vendor.error).length;
-  return errors === result.vendorData.length ? 'error' : errors ? 'partial' : 'complete';
+  const supported = result.vendorData.filter(vendor => !vendor.unsupported);
+  if (!supported.length) return 'unsupported';
+  const errors = supported.filter(vendor => vendor.error).length;
+  return errors === supported.length ? 'error' : errors ? 'partial' : 'complete';
 }
 
 export function bulkField(row: BulkRow, keys: string[]) {
   for (const vendor of row.result?.vendorData || []) {
-    if (vendor.error || vendor.isLoading) continue;
+    if (vendor.error || vendor.isLoading || vendor.unsupported) continue;
     for (const key of keys) {
       const value = vendor.data[key];
       if ((typeof value === 'string' || typeof value === 'number') && !['', 'unknown', 'n/a'].includes(String(value).toLowerCase())) return { value: String(value), source: vendor.name };

@@ -20,7 +20,7 @@ export function createBulkProviderBridge(app,limiter){
     if(/invalid_auth|unknown_auth_key|unauthorized|invalid_api_key/i.test(queryStatus||'')){status=403;body={error:'A fonte recusou a credencial.',code:'PROVIDER_AUTH_FAILED'};}
     if(/rate_limit|too_many/i.test(queryStatus||'')){status=429;body={error:'A fonte atingiu o limite de consultas.'};}
     if(status>=400&&!(status===404&&task.provider==='VirusTotal')){
-     const auth=body?.code==='PROVIDER_AUTH_FAILED'||/API Key missing|authentication|configuration/i.test(body?.error||'');
+     const auth=body?.code==='PROVIDER_AUTH_FAILED'||status===401||status===403||typeof body?.error==='string'&&/^API Key missing$/i.test(body.error);
      const retry=headers['retry-after'];let retryAt=Number(body?.retryAt)||undefined;
      if(!retryAt&&retry)retryAt=/^\d+$/.test(String(retry))?Date.now()+Number(retry)*1000:Date.parse(retry);
      throw Object.assign(Error(auth?'A fonte recusou a credencial. Revise a conexão em Chaves de API.':status===429?'Fonte aguardando renovação da cota.':'Fonte temporariamente indisponível; nova tentativa agendada.'),{status,code:auth?'PROVIDER_AUTH_FAILED':body?.code,retryAt});

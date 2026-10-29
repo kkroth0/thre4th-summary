@@ -13,6 +13,8 @@ test('bridge distinguishes quota, rejected credentials and malformed successful 
  const quota=fixture(async(req,res)=>res.status(429).json({retryAt:retry,error:'limit'}));await assert.rejects(quota.bridge.lookup(task),e=>e.status===429&&e.retryAt===retry);
  const auth=fixture(async(req,res)=>res.json({query_status:'invalid_auth_key'}));await assert.rejects(auth.bridge.lookup(task),e=>e.status===403&&e.code==='PROVIDER_AUTH_FAILED');
  const unknown=fixture(async(req,res)=>res.json({query_status:'unknown_auth_key'}));await assert.rejects(unknown.bridge.lookup(task),e=>e.status===403&&e.code==='PROVIDER_AUTH_FAILED');
+ const gateway=fixture(async(req,res)=>res.status(502).json({error:'Upstream authentication or access configuration failed'}));await assert.rejects(gateway.bridge.lookup(task),e=>e.status===502&&e.code!=='PROVIDER_AUTH_FAILED');
+ const rejected=fixture(async(req,res)=>res.status(502).json({error:'Credential rejected',code:'PROVIDER_AUTH_FAILED'}));await assert.rejects(rejected.bridge.lookup(task),e=>e.code==='PROVIDER_AUTH_FAILED');
  const broken=fixture(async(req,res)=>res.json('<html>Bad Gateway</html>'));await assert.rejects(broken.bridge.lookup(task),e=>e.status===502);
  const wrapped=fixture(async(req,res)=>res.json({data:'<!doctype html><html>Bad Gateway</html>'}));await assert.rejects(wrapped.bridge.lookup(task),e=>e.status===502);
 });
@@ -20,4 +22,11 @@ test('ThreatFox no_result with a textual data field is a successful source absen
  const body={query_status:'no_result',data:'Your search did not yield any results'};
  const bridge=createBulkProviderBridge({post:()=>{}},()=>{});bridge.register('/threatfox','ThreatFox',async(req,res)=>res.json(body));
  const result=await bridge.lookup({...task,provider:'ThreatFox'});assert.equal(result.data.Status,'No data');assert.deepEqual(result.rawPayload,body);
+});
+
+test('a rejected ThreatFox query preserves its original evidence without becoming an absence or a credential error',async()=>{
+ const body={query_status:'illegal_search_term',data:'Rejected query'};
+ const bridge=createBulkProviderBridge({post:()=>{}},()=>{});bridge.register('/threatfox','ThreatFox',async(req,res)=>res.json(body));
+ const result=await bridge.lookup({...task,provider:'ThreatFox'});
+ assert.equal(result.unsupported,true);assert.equal(result.error,undefined);assert.equal(result.data.Status,'Consulta não aceita pela fonte');assert.deepEqual(result.rawPayload,body);
 });

@@ -5,6 +5,11 @@ import {bulkVerdictLabel} from '../utils/bulkEnrichment';
 import {analyzeBulkRow} from '../utils/bulkAnalysis';
 import type {VendorData} from '../types/threat-intelligence';
 const source=(name:string,data:Record<string,unknown>):VendorData=>({name,data});
+
+test('rejected source queries abstain from verdicts and retain their response for review',()=>{
+ const rejected:VendorData={name:'ThreatFox',unsupported:true,data:{Status:'Malicious'},rawPayload:{query_status:'illegal_search_term'}};
+ const result=scoreThreatResults('8.8.8.8',[rejected]);assert.equal(result.threatLevel,'unknown');assert.equal(result.totalVendors,0);assert.equal(result.detections,0);assert.equal(result.vendorData[0],rejected);
+});
 const absent=[source('ThreatFox',{Status:'No data'}),source('URLhaus',{Status:'No data'}),source('AlienVault OTX',{Status:'Clean','Pulse Count':'0 pulses'})];
 
 test('an exact Axur record is contextual evidence, while an absence abstains and never proves safety',()=>{

@@ -1,6 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { filterExactIocs, iocMatchesQuery } from '../threatfoxMatch.js';
+import { filterExactIocs, iocMatchesQuery, acceptedThreatFoxResponse } from '../threatfoxMatch.js';
+
+test('an unsupported search retains the original response and is not an authentication failure or a negative finding', () => {
+    const response = {status:200,data:{query_status:'illegal_search_term',data:'Rejected query'}};
+    assert.throws(()=>acceptedThreatFoxResponse(response),e=>e.code==='PROVIDER_QUERY_UNSUPPORTED'&&e.response.status===422&&e.response.data===response.data);
+    const absent={status:200,data:{query_status:'no_result'}};
+    assert.equal(acceptedThreatFoxResponse(absent),absent);
+});
 
 // O falso positivo que motiva o filtro inteiro.
 test('IP parecido não casa', () => {

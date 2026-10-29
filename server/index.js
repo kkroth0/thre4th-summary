@@ -2,6 +2,7 @@ import { createBulkProviderBridge, BULK_PRINCIPAL } from './bulkProviderBridge.j
 import { registerBulkService } from './bulkService.js';
 import { platformProviderCredentials, personalProviderCredentials } from './providerCredentials.js';
 import { providerCredentialLimits } from './providerLimits.js';
+import { safeUpstreamError } from './upstreamErrors.js';
 import { createFeedParser } from './feedParser.js';
 import { filterReportIocNoise } from './reportIocNoise.js';
 import { createCredentialPool, credentialId, decodeCredentials, parseCredentialInput, POOL_PROVIDERS } from './credentialPool.js';
@@ -29,7 +30,7 @@ import {
 } from './ctiIntel.js';
 import { actorTargeting } from './actorProfile.js';
 import { buildSoftwareIndex, buildActorNameIndex } from './actorSoftware.js';
-import { filterExactIocs } from './threatfoxMatch.js';
+import { filterExactIocs, acceptedThreatFoxResponse } from './threatfoxMatch.js';
 import { getShodanCreditStatus, runAttackSurfaceScan } from './attackSurface.js';
 import { shodanAxios } from './shodanGate.js';
 import { createMalwareCatalog } from './malwareCatalog.js';
@@ -506,22 +507,9 @@ const scanLimiter = rateLimit({
 
 // Error Sanitization Utility
 const sanitizeError = (error) => {
-    let status = error.response?.status || 500;
-    
-    // Map upstream 401/403 to 502 (Bad Gateway) to prevent frontend from treating it as session authentication failure
-    if (status === 401 || status === 403) {
-        status = 502;
-    }
-    
-    const safeMessages = {
-        400: 'Bad request',
-        502: 'Upstream authentication or access configuration failed',
-        404: 'Resource not found',
-        429: 'Rate limit exceeded on upstream provider',
-    };
-    const message = safeMessages[status] || 'Internal server error';
-    console.error(`[Error] Status: ${status}, Message: ${error.message}`);
-    return { status, message };
+    const safe = safeUpstreamError(error);
+    console.error(`[Error] Status: ${safe.status}, Code: ${safe.code || 'UPSTREAM_ERROR'}`);
+    return safe;
 };
 
 
@@ -620,10 +608,10 @@ function providerLimits(provider) {
 }
 function withProviderKey(req, provider, request) { return credentialPool.run(provider, providerKeys(req, provider), request, providerLimits(provider)); }
 function providerError(res, error) {
-    const { status, message } = sanitizeError(error);
+    const { status, message, code } = sanitizeError(error);
     const retry = error.response?.headers?.['retry-after'];
     if (status === 429 && retry) res.set('Retry-After', String(retry));
-    return res.status(status).json({ error: message, ...(error.code === 'PROVIDER_AUTH_FAILED' ? { code: error.code } : {}), ...(status === 429 && error.retryAt ? { retryAt: error.retryAt } : {}) });
+    return res.status(status).json({ error: message, ...(code ? { code } : {}), ...(status === 429 && error.retryAt ? { retryAt: error.retryAt } : {}) });
 }
 const archiveProviderNames={virustotal:'VirusTotal',abuseipdb:'AbuseIPDB',otx:'AlienVault OTX',threatfox:'ThreatFox',urlhaus:'URLhaus',malwarebazaar:'MalwareBazaar'};
 const lookupCache = createLookupCache({
@@ -893,11 +881,16 @@ bulkProviderBridge.register('/api/threatfox', 'ThreatFox', async (req, res) => {
             `https://threatfox-api.abuse.ch/api/v1/`,
             { query: "search_ioc", search_term: sanitized },
             { signal: req.signal, headers: { ...headers, 'Auth-Key': key }, timeout: 15000, family: 4, maxContentLength: 8_000_000, maxRedirects: 0 }
-        )));
+        ).then(acceptedThreatFoxResponse)));
         // A busca segue por curinga (é o que casa `ip:porta` e URL do host),
         // mas o que não é o indicador consultado não sai daqui.
         res.json(filterExactIocs(response.data, sanitized));
     } catch (error) {
+        if (error.code === 'PROVIDER_QUERY_UNSUPPORTED') {
+            res.set('Cache-Control', 'private, no-store');
+            res.set('X-Lookup-Collected-At', new Date().toISOString());
+            return res.json(error.response.data);
+        }
         providerError(res, error);
     }
 });
