@@ -1,4 +1,5 @@
-// Read-only progress and final snapshot integrity. No API calls or IOC values.
+// Read-only comparison of already saved responses. No vendor API requests,
+// no indicator values, source titles, private links or credentials in output.
 import fs from 'node:fs';
 import path from 'node:path';
 import {pathToFileURL} from 'node:url';
@@ -9,33 +10,37 @@ const users=JSON.parse(fs.readFileSync(path.join(root,'server/.users.json'),'utf
 if(!owner)throw Error('Account unavailable');
 const {parse}=await import(pathToFileURL(path.join(root,'server/node_modules/dotenv/lib/main.js'))),env=parse(fs.readFileSync(path.join(root,'.env')));
 const {default:Database}=await import(pathToFileURL(path.join(root,'server/node_modules/better-sqlite3/lib/index.js')));
-const db=new Database(env.BULK_JOBS_PATH||path.join(root,'server/.bulk-enrichment.sqlite'),{readonly:true,fileMustExist:true});db.pragma('query_only=ON');db.pragma('busy_timeout=1000');
-const job='59aa9475-3acd-4b38-9fc4-a2d9d91e29cb',provider='AlienVault OTX';
+const db=new Database(env.BULK_JOBS_PATH||path.join(root,'server/.bulk-enrichment.sqlite'),{readonly:true,fileMustExist:true});db.pragma('query_only=ON');db.pragma('busy_timeout=1000');db.pragma('cache_size=-4000');
+const job='59aa9475-3acd-4b38-9fc4-a2d9d91e29cb';
 if(!db.prepare('SELECT 1 FROM bulk_jobs WHERE id=? AND owner=?').get(job,owner))throw Error('Batch unavailable');
-const counts=db.prepare("SELECT COUNT(*) total,SUM(state='done') completed,SUM(state IN ('pending','waiting','running')) pending,SUM(state='error') errors,SUM(state='blocked') blocked,SUM(state='unsupported') unsupported,SUM(state='running') active FROM bulk_tasks WHERE job=? AND provider=?");
-const kinds=db.prepare("SELECT i.kind,t.state,COUNT(*) count FROM bulk_tasks t JOIN bulk_items i ON i.job=t.job AND i.ordinal=t.ordinal WHERE t.job=? AND t.provider=? GROUP BY i.kind,t.state");
-const snapshots=[];
-const samples=process.argv[4]==='checkpoint'?1:8;
-for(let i=0;i<samples;i++){
- const started=performance.now(),values=counts.get(job,provider),snapshot={at:new Date().toISOString(),readOnly:true,...values,progressQueryMs:Math.round(performance.now()-started)};snapshots.push(snapshot);console.log(JSON.stringify(snapshot));
- if(!snapshot.pending||i===samples-1)break;
- await new Promise(resolve=>setTimeout(resolve,15000));
-}
-const final=counts.get(job,provider),summary={at:new Date().toISOString(),readOnly:true,source:provider,...final,byKind:kinds.all(job,provider),unavailableIPs:db.prepare("SELECT COUNT(*) count FROM bulk_items i WHERE i.job=? AND i.kind='ip' AND NOT EXISTS(SELECT 1 FROM bulk_tasks t WHERE t.job=i.job AND t.ordinal=i.ordinal AND t.provider=?)").get(job,provider).count,savedResponsesPreserved:final.completed>=snapshots[0].completed};
-summary.providerWait=db.prepare('SELECT reason,until_at FROM bulk_blocks WHERE owner=? AND provider=?').get(owner,provider)||null;
-summary.waitingTasks=db.prepare("SELECT state,http_status,error_code,MIN(next_at) retryAt,MAX(attempts) attempts,COUNT(*) count FROM bulk_tasks WHERE job=? AND provider=? AND state IN ('waiting','running','error','blocked') GROUP BY state,http_status,error_code").all(job,provider);
-summary.queryPlan=db.prepare("EXPLAIN QUERY PLAN SELECT COUNT(*),SUM(state='done') FROM bulk_tasks WHERE job=? AND provider=?").all(job,provider).map(v=>v.detail);
-if(final.completed===final.total&&!final.pending&&!final.errors&&!final.blocked){
- let responses=0,raw=0,dated=0,withPulses=0,pulses=0,invalid=0,pulseDetailMismatch=0;
- for(const row of db.prepare("SELECT value FROM bulk_tasks WHERE job=? AND provider=? AND state='done'").iterate(job,provider)){
-  const v=JSON.parse(gunzipSync(row.value,{maxOutputLength:64*1024*1024}).toString());responses++;
-  if(v.rawPayload&&typeof v.rawPayload==='object')raw++;
-  if(v.collectedAt&&Number.isFinite(Date.parse(v.collectedAt)))dated++;
-  const n=parseInt(String(v.data?.['Pulse Count']||''),10);if(n>0){withPulses++;pulses+=n;}
-  let body=v.rawPayload;for(let level=0;level<3&&body&&!body.pulse_info&&body.data;level++)body=body.data;
-  const details=Array.isArray(v.data?.['Pulse Details'])?v.data['Pulse Details']:[];if(Array.isArray(body?.pulse_info?.pulses)&&details.length!==body.pulse_info.pulses.length)pulseDetailMismatch++;
-  if(v.name!==provider||v.error||v.isLoading||!v.data)invalid++;
+const unpack=bytes=>JSON.parse(gunzipSync(bytes,{maxOutputLength:64*1024*1024}).toString());
+const unwrap=(v,field)=>{let body=v.rawPayload;for(let i=0;i<3&&body&&!body[field]&&body.data;i++)body=body.data;return body;};
+const n=value=>Number.parseFloat(String(value??''));
+const pulseIds=new Set(),vtPulses=new Set(),vtReferences=new Set(),comparison={paired:0,otxPulsesAndVtMalicious:0,otxPulsesWithoutVtMalicious:0,vtMaliciousWithoutOtxPulses:0,neitherCriterion:0,missingComparableFields:0};
+let otxResponses=0,otxWithPulses=0,otxWithVtReference=0,otxWithAnalysisStats=0,otxWithAnalysisResults=0;
+for(const row of db.prepare("SELECT value FROM bulk_tasks WHERE job=? AND provider='AlienVault OTX' AND state='done'").iterate(job)){
+ const v=unpack(row.value),body=unwrap(v,'pulse_info');otxResponses++;
+ if(body?.last_analysis_stats)otxWithAnalysisStats++;
+ if(body?.last_analysis_results)otxWithAnalysisResults++;
+ if(n(v.data?.['Pulse Count'])>0)otxWithPulses++;
+ let refersToVt=false;
+ for(const pulse of body?.pulse_info?.pulses||[]){
+  if(pulse.id)pulseIds.add(pulse.id);
+  for(const ref of Array.isArray(pulse.references)?pulse.references:[]){
+   const candidate=typeof ref==='string'?ref:ref?.url;
+   if(typeof candidate!=='string')continue;
+   try{const url=new URL(candidate),host=url.hostname.toLowerCase();if(host==='virustotal.com'||host.endsWith('.virustotal.com')){refersToVt=true;vtReferences.add(url.href);if(pulse.id)vtPulses.add(pulse.id);}}catch{}
+  }
  }
- summary.integrity={responses,raw,dated,withPulses,pulseReferences:pulses,invalid,pulseDetailMismatch};
+ if(refersToVt)otxWithVtReference++;
 }
-console.log(JSON.stringify(summary));db.close();
+console.log(JSON.stringify({at:new Date().toISOString(),readOnly:true,noUpstreamCalls:true,otxResponses,otxWithPulses,uniquePulses:pulseIds.size,otxWithVtReference,uniquePulsesReferencingVt:vtPulses.size,uniqueVtReferenceLinks:vtReferences.size,otxWithAnalysisStats,otxWithAnalysisResults}));
+for(const row of db.prepare("SELECT v.value vt,o.value otx FROM bulk_tasks v JOIN bulk_tasks o ON o.job=v.job AND o.ordinal=v.ordinal AND o.provider='AlienVault OTX' AND o.state='done' WHERE v.job=? AND v.provider='VirusTotal' AND v.state='done'").iterate(job)){
+ const vt=unpack(row.vt),otx=unpack(row.otx),malicious=n(vt.data?.Malicious),pulses=n(otx.data?.['Pulse Count']);comparison.paired++;
+ if(!Number.isFinite(malicious)||!Number.isFinite(pulses)){comparison.missingComparableFields++;continue;}
+ if(pulses>0&&malicious>0)comparison.otxPulsesAndVtMalicious++;
+ else if(pulses>0)comparison.otxPulsesWithoutVtMalicious++;
+ else if(malicious>0)comparison.vtMaliciousWithoutOtxPulses++;
+ else comparison.neitherCriterion++;
+}
+console.log(JSON.stringify({at:new Date().toISOString(),readOnly:true,noUpstreamCalls:true,comparison,criteria:{otx:'At least one pulse in the saved response',virustotal:'At least one malicious analysis result in the saved response'},notAnAccuracyMeasure:true}));db.close();
