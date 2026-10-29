@@ -15,6 +15,7 @@ const checks={};
 const finalFile=path.join(folder,item.id+'.xlsx');
 console.log(JSON.stringify({readOnly:true,exportId:item.id,downloadPath:'/api/bulk/exports/'+item.id+'/download',state:item.state,summary:item.summary?JSON.parse(item.summary):null}));
 const recoveryStatus=path.join(folder,item.id+'.recovery-status.json');if(fs.existsSync(recoveryStatus))console.log(JSON.stringify({readOnly:true,recovery:JSON.parse(fs.readFileSync(recoveryStatus,'utf8'))}));
+const disk=fs.statfsSync(folder);console.log(JSON.stringify({readOnly:true,diskAvailableMiB:Math.floor(disk.bavail*disk.bsize/1048576),diskTotalMiB:Math.floor(disk.blocks*disk.bsize/1048576)}));
 if(item.state==='complete'&&fs.existsSync(finalFile)&&process.argv[4]==='verify'){
  const {createRequire}=await import('node:module'),require=createRequire(path.join(root,'server/package.json')),unzipper=require('unzipper');
  const zip=await unzipper.Open.file(finalFile);checks.charts=zip.files.filter(f=>/(?:^|\/)charts\/chart\d+\.xml$/.test(f.path)).length;checks.sheets=[];
