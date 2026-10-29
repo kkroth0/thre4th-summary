@@ -11,6 +11,15 @@ const context={publications:[],evidence:[],errors:[]};
 function fixture(){const dir=mkdtempSync(path.join(tmpdir(),'ts-bulk-'));let clock=1000;const file=path.join(dir,'jobs.sqlite');let store=createBulkStore({filePath:file,now:()=>clock,eligibleSources,composeRow:composeBulkRow});return{get store(){return store;},file,dir,advance(n){clock+=n;},reopen(){store.close();store=createBulkStore({filePath:file,now:()=>clock,eligibleSources,composeRow:composeBulkRow});},close(){store.close();assert.ok(path.resolve(dir).startsWith(path.resolve(tmpdir())+path.sep+'ts-bulk-'));rmSync(dir,{recursive:true,force:true});}};}
 function finish(store){let t,n=0;while((t=store.claim())){store.settle(t,t.provider===BULK_CONTEXT?context:{name:t.provider,data:{Status:'Clean'},rawPayload:{value:t.query}});if(++n>100000)throw Error('Unexpected loop');}return n;}
 
+test('source progress and wait summaries read a covering index rather than source response blobs',()=>{
+ const f=fixture();try{
+  const job=f.store.create(owner,['8.8.8.1'],['AlienVault OTX']);
+  for(const query of ["SELECT provider,SUM(state='done') completed,SUM(state='error') errors,COUNT(*) total FROM bulk_tasks WHERE job=? AND provider!=? GROUP BY provider","SELECT MIN(next_at) FROM bulk_tasks WHERE job=? AND provider!=? AND state IN ('pending','waiting')"]){
+   const plan=f.store.prepare('EXPLAIN QUERY PLAN '+query).all(job.id,BULK_CONTEXT).map(x=>x.detail).join(' ');assert.match(plan,/COVERING INDEX /);assert.doesNotMatch(plan,/USE TEMP B-TREE/);
+  }
+ }finally{f.close();}
+});
+
 test('an isolated OTX timeout retries its indicator while three consecutive failures open the source circuit',()=>{
  const f=fixture();try{
   const job=f.store.create(owner,['8.8.8.1','8.8.8.2','8.8.8.3','8.8.8.4'],['AlienVault OTX']);

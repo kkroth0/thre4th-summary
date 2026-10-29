@@ -23,6 +23,7 @@ export function createBulkStore({filePath,now=Date.now,eligibleSources,composeRo
  CREATE TABLE IF NOT EXISTS bulk_tasks(job TEXT NOT NULL,ordinal INTEGER NOT NULL,provider TEXT NOT NULL,state TEXT NOT NULL DEFAULT 'pending',attempts INTEGER NOT NULL DEFAULT 0,next_at INTEGER NOT NULL DEFAULT 0,lease_until INTEGER NOT NULL DEFAULT 0,lease TEXT,value BLOB,error TEXT,http_status INTEGER,error_code TEXT,updated INTEGER NOT NULL,PRIMARY KEY(job,ordinal,provider));
  CREATE INDEX IF NOT EXISTS bulk_due ON bulk_tasks(state,next_at,lease_until);
  CREATE INDEX IF NOT EXISTS bulk_dispatch ON bulk_tasks(state,next_at,updated,job,ordinal,provider);
+ CREATE INDEX IF NOT EXISTS bulk_source_progress ON bulk_tasks(job,provider,state,next_at);
  CREATE TABLE IF NOT EXISTS bulk_blocks(owner TEXT NOT NULL,provider TEXT NOT NULL,until_at INTEGER NOT NULL,reason TEXT NOT NULL,PRIMARY KEY(owner,provider));
  CREATE TABLE IF NOT EXISTS bulk_provider_health(owner TEXT NOT NULL,provider TEXT NOT NULL,failures INTEGER NOT NULL DEFAULT 0,PRIMARY KEY(owner,provider));
  CREATE TABLE IF NOT EXISTS bulk_exports(id TEXT PRIMARY KEY,job TEXT NOT NULL,owner TEXT NOT NULL,state TEXT NOT NULL DEFAULT 'pending',created INTEGER NOT NULL,updated INTEGER NOT NULL,file TEXT,error TEXT,revision INTEGER NOT NULL,filters TEXT NOT NULL DEFAULT '{}');
