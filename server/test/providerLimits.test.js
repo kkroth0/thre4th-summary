@@ -20,5 +20,5 @@ test('configured allowances override defaults; unknown plans have no invented ca
   assert.deepEqual(providerCredentialLimits('virustotal', 'VIRUSTOTAL', {VIRUSTOTAL_REQUESTS_PER_MINUTE: '60', VIRUSTOTAL_REQUESTS_PER_DAY: '10000'}), {perMinute: 60, perDay: 10000});
   assert.deepEqual(providerCredentialLimits('virustotal', 'VIRUSTOTAL', {VIRUSTOTAL_REQUESTS_PER_MINUTE: '0', VIRUSTOTAL_REQUESTS_PER_DAY: '0'}), {perMinute: 0, perDay: 0});
   assert.deepEqual(providerCredentialLimits('virustotal', 'VIRUSTOTAL', {VIRUSTOTAL_REQUESTS_PER_MINUTE: '-1', VIRUSTOTAL_REQUESTS_PER_DAY: 'invalid'}), {perMinute: 4, perDay: 500});
-  assert.deepEqual(providerCredentialLimits('otx', 'OTX', {}), {perMinute: 0, perDay: 0});
+  assert.deepEqual(providerCredentialLimits('otx', 'OTX', {}), {perMinute: 0, perDay: 0, maxConcurrent: 2});
 });

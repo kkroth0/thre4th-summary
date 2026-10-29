@@ -14,7 +14,7 @@ const validFilters=input=>({query:String(input?.query||'').slice(0,256),type:['i
 const csv=value=>{let s=valueText(value);if(/^[\s]*[=+@-]/.test(s))s="'"+s;return '"'+s.replace(/"/g,'""')+'"';};
 
 export function registerBulkService(app,{filePath,outputDir,requirePremium,lookup,readContext,canRun,concurrency=3,requiredSources=()=>[],intelligencePath}){
- const store=createBulkStore({filePath,eligibleSources,composeRow:composeBulkRow}),runner=createBulkRunner({store,lookup,readContext,canRun,concurrency,canSchedule:()=>!exportWorker,onError:()=>console.warn('Bulk scheduling deferred')});
+ const store=createBulkStore({filePath,eligibleSources,composeRow:composeBulkRow}),runner=createBulkRunner({store,lookup,readContext,canRun,concurrency,providerConcurrency:{'AlienVault OTX':2},canSchedule:()=>!exportWorker,onError:()=>console.warn('Bulk scheduling deferred')});
  let exportWorker=null,exportTimer,started=false;
  const handle=fn=>async(req,res)=>{res.set('Cache-Control','private, no-store');try{await fn(req,res);}catch(e){if(!res.headersSent)res.status(e.status||500).json({error:e.status?e.message:'Não foi possível concluir a operação do lote.'});}};
  const routes='/api/bulk/jobs';

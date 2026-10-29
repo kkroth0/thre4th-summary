@@ -11,5 +11,6 @@ export function providerCredentialLimits(provider, prefix, env = process.env) {
   return {
     perMinute: read('REQUESTS_PER_MINUTE', defaults.perMinute),
     perDay: read('REQUESTS_PER_DAY', defaults.perDay),
+    ...(provider === 'otx' ? { maxConcurrent: 2 } : {}),
   };
 }

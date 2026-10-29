@@ -11,6 +11,16 @@ function fixture() {
 const failure = (status, headers = {}) => Object.assign(new Error('upstream failure'), { response: { status, headers } });
 const keys = Array.from({ length: 20 }, (_, index) => 'test-credential-' + index);
 
+test('bounded OTX parallelism preserves reservations and the longest concurrent upstream wait',async()=>{
+ const {router,deps}=fixture(),key=keys[0],limits={maxConcurrent:2},release=[];
+ const first=router.run('otx',[key],()=>new Promise((resolve,reject)=>release.push({resolve,reject})),limits),second=router.run('otx',[key],()=>new Promise((resolve,reject)=>release.push({resolve,reject})),limits);
+ assert.equal(release.length,2);assert.equal(router.describe('otx',[key],limits)[0].status,'busy');
+ await assert.rejects(router.run('otx',[key],()=>assert.fail('parallel capacity exceeded'),limits));
+ const settled=Promise.allSettled([first,second]);release[0].reject(failure(429,{'retry-after':'600'}));release[1].reject(failure(429,{'retry-after':'60'}));await settled;
+ const state=router.describe('otx',[key],limits)[0];assert.equal(state.usedToday,2);assert.equal(state.retryAt,deps.now()+600000);
+ await assert.rejects(router.run('otx',[key],()=>assert.fail('upstream wait bypassed'),limits));
+});
+
 test('5614 simulated IOC calls rotate across twelve independent credentials without hidden shared daily depletion',async()=>{
  const {router,deps,advance}=fixture(),twelve=keys.slice(0,12),used=new Map(twelve.map(k=>[k,0]));
  const request=key=>{used.set(key,used.get(key)+1);return{status:200};},limits={perMinute:4,perDay:500};

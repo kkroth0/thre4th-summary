@@ -24,6 +24,7 @@ export function createBulkStore({filePath,now=Date.now,eligibleSources,composeRo
  CREATE INDEX IF NOT EXISTS bulk_due ON bulk_tasks(state,next_at,lease_until);
  CREATE INDEX IF NOT EXISTS bulk_dispatch ON bulk_tasks(state,next_at,updated,job,ordinal,provider);
  CREATE TABLE IF NOT EXISTS bulk_blocks(owner TEXT NOT NULL,provider TEXT NOT NULL,until_at INTEGER NOT NULL,reason TEXT NOT NULL,PRIMARY KEY(owner,provider));
+ CREATE TABLE IF NOT EXISTS bulk_provider_health(owner TEXT NOT NULL,provider TEXT NOT NULL,failures INTEGER NOT NULL DEFAULT 0,PRIMARY KEY(owner,provider));
  CREATE TABLE IF NOT EXISTS bulk_exports(id TEXT PRIMARY KEY,job TEXT NOT NULL,owner TEXT NOT NULL,state TEXT NOT NULL DEFAULT 'pending',created INTEGER NOT NULL,updated INTEGER NOT NULL,file TEXT,error TEXT,revision INTEGER NOT NULL,filters TEXT NOT NULL DEFAULT '{}');
  CREATE INDEX IF NOT EXISTS bulk_export_owner ON bulk_exports(owner,job,created DESC);`);
  if(!readOnly&&!db.pragma('table_info(bulk_jobs)').some(column=>column.name==='fresh'))db.exec('ALTER TABLE bulk_jobs ADD COLUMN fresh INTEGER NOT NULL DEFAULT 0');
@@ -97,8 +98,19 @@ export function createBulkStore({filePath,now=Date.now,eligibleSources,composeRo
   if(error){status=Number(error.status||error.httpStatus||0);code=error.code||null;message=String(error.message||'Consulta temporariamente indisponível.').slice(0,350);
    const auth=code==='PROVIDER_AUTH_FAILED'||[401,403].includes(status),transient=[0,408,429,500,502,503,504].includes(status);
    state=auth?'blocked':status===429||transient&&t.attempts<5?'waiting':'error';next=state==='waiting'?Math.max(now()+1000,Number(error.retryAt)||now()+Math.min(15*60000,15000*2**Math.min(t.attempts-1,6))):0;
-   if(status===429||auth||state==='waiting'&&transient&&t.provider!==BULK_CONTEXT)sql('INSERT OR REPLACE INTO bulk_blocks VALUES(?,?,?,?)').run(t.owner,t.provider,auth?Number.MAX_SAFE_INTEGER:next,auth?'authentication':status===429?'quota':'temporary');
+   let systemic=true;
+   if(t.provider==='AlienVault OTX'&&transient&&status!==429){
+    sql('INSERT INTO bulk_provider_health(owner,provider,failures) VALUES(?,?,1) ON CONFLICT(owner,provider) DO UPDATE SET failures=failures+1').run(t.owner,t.provider);
+    systemic=sql('SELECT failures FROM bulk_provider_health WHERE owner=? AND provider=?').get(t.owner,t.provider).failures>=3;
+   }
+   if(status===429||auth||state==='waiting'&&transient&&systemic&&t.provider!==BULK_CONTEXT){
+    let until=auth?Number.MAX_SAFE_INTEGER:next,reason=auth?'authentication':status===429?'quota':'temporary';
+    const previous=sql('SELECT until_at,reason FROM bulk_blocks WHERE owner=? AND provider=?').get(t.owner,t.provider);
+    if(previous?.until_at>until){until=previous.until_at;reason=previous.reason;}
+    sql('INSERT OR REPLACE INTO bulk_blocks VALUES(?,?,?,?)').run(t.owner,t.provider,until,reason);
+   }
   }
+  else if(t.provider==='AlienVault OTX')sql('INSERT INTO bulk_provider_health(owner,provider,failures) VALUES(?,?,0) ON CONFLICT(owner,provider) DO UPDATE SET failures=0').run(t.owner,t.provider);
   sql('UPDATE bulk_tasks SET state=?,next_at=?,lease=NULL,lease_until=0,value=?,error=?,http_status=?,error_code=?,updated=? WHERE job=? AND ordinal=? AND provider=?').run(state,next,error?null:pack(value),message,status,code,now(),t.job,t.ordinal,t.provider);
   if(t.provider===BULK_CONTEXT)sql('UPDATE bulk_items SET context=?,context_error=? WHERE job=? AND ordinal=?').run(error?null:pack(value),error?message:null,t.job,t.ordinal);
   refreshItem(t.job,t.ordinal);
@@ -137,12 +149,12 @@ export function createBulkStore({filePath,now=Date.now,eligibleSources,composeRo
 }
 
 /** Bounded scheduling continues independently of browsers and observes provider cooldowns. */
-export function createBulkRunner({store,lookup,readContext,canRun,concurrency=3,onError=()=>{},canSchedule=()=>true}){
+export function createBulkRunner({store,lookup,readContext,canRun,concurrency=3,providerConcurrency={},onError=()=>{},canSchedule=()=>true}){
  let stopped=true,timer;const active=new Map();let served=[];
  async function run(t){try{
    if(!canRun({sub:t.owner,login:t.login,premiumViaOrg:t.org_until>Date.now(),exp:Math.floor(t.org_until/1000)}))throw Object.assign(Error('Acesso ao lote precisa ser renovado.'),{status:403,code:'PROVIDER_AUTH_FAILED'});
    const value=t.provider===BULK_CONTEXT?await readContext(t):await lookup(t);store.settle(t,value);
   }catch(e){store.settle(t,null,e);}finally{active.delete(t.lease);if(!stopped)queueMicrotask(tick);}}
- function tick(){if(stopped||!canSchedule())return;try{while(active.size<concurrency){const busy=[...active.values()].map(t=>t.provider);let task=store.claim([...busy,...served]);if(!task){served=[];task=store.claim(busy);}if(!task)break;served.push(task.provider);active.set(task.lease,task);void run(task);}}catch(e){onError(e);}}
+ function tick(){if(stopped||!canSchedule())return;try{while(active.size<concurrency){const counts=new Map();for(const t of active.values())counts.set(t.provider,(counts.get(t.provider)||0)+1);const busy=[...counts].filter(([provider,count])=>count>=Math.min(concurrency,Math.max(1,Number(providerConcurrency[provider])||1))).map(([provider])=>provider);let task=store.claim([...busy,...served]);if(!task){served=[];task=store.claim(busy);}if(!task)break;served.push(task.provider);active.set(task.lease,task);void run(task);}}catch(e){onError(e);}}
  return{start(){if(!stopped)return;stopped=false;timer=setInterval(tick,1000);timer.unref();tick();},wake:tick,async stop(){stopped=true;clearInterval(timer);while(active.size)await new Promise(r=>setTimeout(r,20));},active:()=>active.size};
 }

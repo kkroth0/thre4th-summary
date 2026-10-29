@@ -11,6 +11,31 @@ const context={publications:[],evidence:[],errors:[]};
 function fixture(){const dir=mkdtempSync(path.join(tmpdir(),'ts-bulk-'));let clock=1000;const file=path.join(dir,'jobs.sqlite');let store=createBulkStore({filePath:file,now:()=>clock,eligibleSources,composeRow:composeBulkRow});return{get store(){return store;},file,dir,advance(n){clock+=n;},reopen(){store.close();store=createBulkStore({filePath:file,now:()=>clock,eligibleSources,composeRow:composeBulkRow});},close(){store.close();assert.ok(path.resolve(dir).startsWith(path.resolve(tmpdir())+path.sep+'ts-bulk-'));rmSync(dir,{recursive:true,force:true});}};}
 function finish(store){let t,n=0;while((t=store.claim())){store.settle(t,t.provider===BULK_CONTEXT?context:{name:t.provider,data:{Status:'Clean'},rawPayload:{value:t.query}});if(++n>100000)throw Error('Unexpected loop');}return n;}
 
+test('an isolated OTX timeout retries its indicator while three consecutive failures open the source circuit',()=>{
+ const f=fixture();try{
+  const job=f.store.create(owner,['8.8.8.1','8.8.8.2','8.8.8.3','8.8.8.4'],['AlienVault OTX']);
+  for(let i=0;i<3;i++){const task=f.store.claim();assert.equal(task.ordinal,i);f.store.settle(task,null,{status:504,message:'Timeout'});assert.equal(f.store.prepare('SELECT COUNT(*) n FROM bulk_blocks').get().n,i===2?1:0);}
+  assert.equal(f.store.claim(),null);f.advance(15001);const retry=f.store.claim();assert.equal(retry.ordinal,0);f.store.settle(retry,{name:retry.provider,data:{Status:'No data'}});assert.equal(f.store.prepare('SELECT failures FROM bulk_provider_health').get().failures,0);finish(f.store);assert.equal(f.store.summary(owner.sub,job.id).completed,4);
+ }finally{f.close();}
+});
+
+test('an in-flight OTX timeout cannot shorten an upstream quota wait',()=>{
+ const f=fixture();try{
+  f.store.create(owner,['8.8.8.1','8.8.8.2','8.8.8.3','8.8.8.4'],['AlienVault OTX']);
+  for(let i=0;i<2;i++)f.store.settle(f.store.claim(),null,{status:504,message:'Timeout'});
+  const quota=f.store.claim(),timeout=f.store.claim();f.store.settle(quota,null,{status:429,retryAt:601000,message:'Quota'});f.store.settle(timeout,null,{status:504,message:'Timeout'});
+  const wait=f.store.prepare('SELECT * FROM bulk_blocks').get();assert.equal(wait.reason,'quota');assert.equal(wait.until_at,601000);assert.equal(f.store.claim(),null);
+ }finally{f.close();}
+});
+
+test('configured OTX parallelism uses two slots without duplicate tasks or changing other providers defaults',async()=>{
+ const f=fixture(),active=new Map(),peak=new Map(),seen=new Set();try{
+  const job=f.store.create(owner,['8.8.8.1','8.8.8.2','8.8.8.3','8.8.8.4'],['AlienVault OTX','ThreatFox']);
+  const runner=createBulkRunner({store:f.store,concurrency:3,providerConcurrency:{'AlienVault OTX':2},canRun:()=>true,lookup:async task=>{const key=task.provider+':'+task.ordinal;assert.ok(!seen.has(key));seen.add(key);const n=(active.get(task.provider)||0)+1;active.set(task.provider,n);peak.set(task.provider,Math.max(peak.get(task.provider)||0,n));await new Promise(r=>setTimeout(r,5));active.set(task.provider,(active.get(task.provider)||1)-1);return{name:task.provider,data:{Status:'No data'}};},readContext:async()=>context});
+  runner.start();try{const deadline=Date.now()+3000;while(f.store.summary(owner.sub,job.id).completed<4&&Date.now()<deadline)await new Promise(r=>setTimeout(r,10));assert.equal(f.store.summary(owner.sub,job.id).completed,4);assert.equal(peak.get('AlienVault OTX'),2);assert.equal(peak.get('ThreatFox'),1);}finally{await runner.stop();}
+ }finally{f.close();}
+});
+
 test('a source-rejected query is terminal, retained and never blocks other indicators or enters the negative cache',()=>{
  const f=fixture();try{
   const job=f.store.create(owner,['8.8.8.8','9.9.9.9'],['ThreatFox','VirusTotal']);let task;

@@ -22,7 +22,8 @@ export function parseCredentialInput(value) {
 }
 
 export function createCredentialPool({ now = Date.now, load = () => null, save = () => {} } = {}) {
-  const flights = new Set(), cursors = new Map();
+  const flights = new Map(), cursors = new Map();
+  const capacity = limits => Math.min(8, Math.max(1, Math.floor(Number(limits.maxConcurrent) || 1)));
   const stateKey = (provider, key) => `credential-pool:v1:${provider}:${credentialId(key)}`;
   const state = (provider, key) => load(stateKey(provider, key)) || {};
   const put = (provider, key, value) => save(stateKey(provider, key), value);
@@ -40,8 +41,9 @@ export function createCredentialPool({ now = Date.now, load = () => null, save =
       return keys.map((key, index) => {
         const value = state(provider, key), until = availableAt(value, limits, at);
         const day = new Date(at).toISOString().slice(0, 10);
-        const waitingReason = value.invalidUntil > at ? 'authentication' : value.blockedUntil > at ? 'provider' : limits.perDay > 0 && value.day === day && value.used >= limits.perDay ? 'local_daily_limit' : value.nextAt > at ? 'pacing' : flights.has(stateKey(provider, key)) ? 'in_flight' : null;
-        return { id: credentialId(key), label: `Chave ${index + 1}`, status: value.invalidUntil > at ? 'authentication_error' : until > at ? 'cooldown' : flights.has(stateKey(provider, key)) ? 'busy' : 'available', waitingReason, retryAt: until > at ? until : null, usedToday: value.day === day ? value.used || 0 : 0, lastStatus: value.lastStatus || null };
+        const full = (flights.get(stateKey(provider, key)) || 0) >= capacity(limits);
+        const waitingReason = value.invalidUntil > at ? 'authentication' : value.blockedUntil > at ? 'provider' : limits.perDay > 0 && value.day === day && value.used >= limits.perDay ? 'local_daily_limit' : value.nextAt > at ? 'pacing' : full ? 'in_flight' : null;
+        return { id: credentialId(key), label: `Chave ${index + 1}`, status: value.invalidUntil > at ? 'authentication_error' : until > at ? 'cooldown' : full ? 'busy' : 'available', waitingReason, retryAt: until > at ? until : null, usedToday: value.day === day ? value.used || 0 : 0, lastStatus: value.lastStatus || null };
       });
     },
     async run(provider, keys, request, limits = {}) {
@@ -55,8 +57,8 @@ export function createCredentialPool({ now = Date.now, load = () => null, save =
         const index = (start + offset) % keys.length, key = keys[index], id = stateKey(provider, key);
         const at = now(), previous = state(provider, key), until = availableAt(previous, limits, at);
         if (previous.invalidUntil > at) { lastAuth = true; continue; }
-        if (until > at || flights.has(id)) { next = Math.min(next, until > at ? until : at + 1000); continue; }
-        flights.add(id);
+        if (until > at || (flights.get(id) || 0) >= capacity(limits)) { next = Math.min(next, until > at ? until : at + 1000); continue; }
+        flights.set(id, (flights.get(id) || 0) + 1);
         cursors.set(provider, (index + 1) % keys.length);
         const day = new Date(at).toISOString().slice(0, 10);
         put(provider, key, { ...previous, day, used: (previous.day === day ? previous.used || 0 : 0) + 1, nextAt: limits.perMinute > 0 ? at + 60000 / limits.perMinute : 0 });
@@ -71,7 +73,7 @@ export function createCredentialPool({ now = Date.now, load = () => null, save =
         } catch (error) {
           const status = error.response?.status;
           if (status === 429) {
-            const headers = error.response?.headers || {}, until = retryAt(headers, now());
+            const headers = error.response?.headers || {}, until = Math.max(state(provider, key).blockedUntil || 0, retryAt(headers, now()));
             put(provider, key, { ...state(provider, key), blockedUntil: until, lastStatus: 429 });
             const scope = headers.get?.('x-ratelimit-scope') ?? headers['x-ratelimit-scope'];
             if (['ip', 'global', 'service'].includes(String(scope).toLowerCase())) { save(`credential-pool:shared:${provider}`, until); throw waiting(until); }
@@ -85,7 +87,7 @@ export function createCredentialPool({ now = Date.now, load = () => null, save =
           }
           put(provider, key, { ...state(provider, key), lastStatus: status || null });
           throw error;
-        } finally { flights.delete(id); }
+        } finally { const count = (flights.get(id) || 1) - 1; if (count) flights.set(id, count); else flights.delete(id); }
       }
       if (Number.isFinite(next)) throw waiting(next);
       if (lastAuth) throw Object.assign(new Error('As credenciais foram recusadas pelo provedor.'), { code: 'PROVIDER_AUTH_FAILED', response: { status: 502 } });
