@@ -18,13 +18,11 @@ for(const [provider,variable]of Object.entries(mapping)){
 }
 
 const bulk=new Database(env.BULK_JOBS_PATH||path.join(root,'server/.bulk-enrichment.sqlite'),{readonly:true,fileMustExist:true});bulk.pragma('query_only=ON');
-const task=bulk.prepare("SELECT i.query,t.error_code FROM bulk_tasks t JOIN bulk_items i ON i.job=t.job AND i.ordinal=t.ordinal JOIN bulk_jobs j ON j.id=t.job WHERE j.owner=? AND t.job=? AND t.provider='ThreatFox' AND t.state='blocked' LIMIT 1").get(owner,'59aa9475-3acd-4b38-9fc4-a2d9d91e29cb');bulk.close();
-if(!task){console.log(JSON.stringify({provider:'ThreatFox',blocked:false}));db.close();process.exit(0);}
-if(!env.SESSION_SECRET)throw Error('Session configuration unavailable');
-const payload=Buffer.from(JSON.stringify({sub:owner,login,exp:Math.floor(Date.now()/1000)+180})).toString('base64url'),signature=crypto.createHmac('sha256',env.SESSION_SECRET).update(payload).digest('base64url');
-try{
- const response=await fetch('http://127.0.0.1:3001/api/threatfox',{method:'POST',headers:{Cookie:`ts_session=${payload}.${signature}`,Origin:'https://threatsumm4ry.app','Content-Type':'application/json'},body:JSON.stringify({query:task.query,fresh:true}),signal:AbortSignal.timeout(65000)});
- let body;try{body=await response.json();}catch{}
- console.log(JSON.stringify({provider:'ThreatFox',throughApplication:true,existingQueuedIndicator:true,httpStatus:response.status,errorCode:/^[A-Za-z0-9_]+$/.test(body?.code||'')?body.code:null,queryStatus:/^[a-z_]+$/i.test(body?.query_status||'')?body.query_status:null,cache:response.headers.get('x-lookup-cache'),message:typeof body?.error==='string'?body.error.slice(0,120):null}));
-}catch{console.log(JSON.stringify({provider:'ThreatFox',throughApplication:true,state:'request_unavailable'}));}
+const target=bulk.prepare("SELECT i.query FROM bulk_tasks t JOIN bulk_items i ON i.job=t.job AND i.ordinal=t.ordinal JOIN bulk_jobs j ON j.id=t.job WHERE j.owner=? AND t.job=? AND t.provider='ThreatFox' AND t.state='blocked' LIMIT 1").get(owner,'59aa9475-3acd-4b38-9fc4-a2d9d91e29cb');bulk.close();
+if(!target){console.log(JSON.stringify({provider:'ThreatFox',blocked:false}));db.close();process.exit(0);}
+const {isIP}=await import('node:net'),{default:axios}=await import(pathToFileURL(path.join(root,'server/node_modules/axios/index.js')));
+const available=effective.threatfox.map((key,i)=>{const row=db.prepare('SELECT value FROM intelligence_state WHERE id=?').get('credential-pool:v1:threatfox:'+credentialId(key)),state=row?JSON.parse(row.value):{};return{key,slot:i+1,state};}).find(value=>value.state.lastStatus===200&&Math.max(value.state.blockedUntil||0,value.state.invalidUntil||0)<=Date.now());
+if(!available)throw Error('No known-valid credential available; preserve waiting');
+try{const response=await axios.post('https://threatfox-api.abuse.ch/api/v1/',{query:'search_ioc',search_term:target.query},{headers:{'Content-Type':'application/json','Auth-Key':available.key},timeout:20000,family:4,maxContentLength:8000000,maxRedirects:0});console.log(JSON.stringify({provider:'ThreatFox',existingQueuedIndicator:true,ipVersion:isIP(target.query),slot:available.slot,httpStatus:response.status,queryStatus:/^[a-z_]+$/i.test(response.data?.query_status||'')?response.data.query_status:null}));}
+catch(error){console.log(JSON.stringify({provider:'ThreatFox',existingQueuedIndicator:true,ipVersion:isIP(target.query),slot:available.slot,httpStatus:error.response?.status||0,queryStatus:/^[a-z_]+$/i.test(error.response?.data?.query_status||'')?error.response.data.query_status:null}));}
 db.close();
