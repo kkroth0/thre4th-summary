@@ -1,25 +1,31 @@
-// Inspect effective routing and test ThreatFox using the production HTTP client.
-// No IOC payloads, credentials, process environment or token fingerprints are logged.
-import fs from 'node:fs';import path from 'node:path';import crypto from 'node:crypto';import {pathToFileURL} from 'node:url';import {execFileSync} from 'node:child_process';
-const root=path.resolve(process.argv[2]),login=String(process.argv[3]).toLowerCase();if(!/^[a-z0-9-]{1,39}$/.test(login))throw Error('Invalid account');
-const users=JSON.parse(fs.readFileSync(path.join(root,'server/.users.json'),'utf8')),owner=Object.keys(users).find(id=>users[id].login?.toLowerCase()===login);if(!owner)throw Error('Account unavailable');
-const {parse}=await import(pathToFileURL(path.join(root,'server/node_modules/dotenv/lib/main.js'))),env=parse(fs.readFileSync(path.join(root,'.env'))),envDifferences=[];
-try{const pid=execFileSync('systemctl',['show','bdppt-site','-p','MainPID','--value'],{encoding:'utf8',timeout:5000}).trim();if(/^\d+$/.test(pid)&&pid!=='0')for(const pair of fs.readFileSync(`/proc/${pid}/environ`,'utf8').split('\0')){const p=pair.indexOf('='),name=pair.slice(0,p);if(!/^(?:(?:VIRUSTOTAL|ALIENVAULT|ABUSE_CH|THREATFOX|URLHAUS|MALWAREBAZAAR)\d*_API_KEY|SECRETS_ENCRYPTION_KEY|HTTPS?_PROXY|https?_proxy|NO_PROXY|no_proxy)$/.test(name))continue;const value=pair.slice(p+1);if(env[name]!==undefined&&env[name]!==value)envDifferences.push(name);env[name]=value;}}catch{}
-const raw=String(env.SECRETS_ENCRYPTION_KEY||'').trim(),decoded=Buffer.from(raw,'base64'),enc=/^[0-9a-f]{64}$/i.test(raw)?Buffer.from(raw,'hex'):decoded.length===32?decoded:crypto.createHash('sha256').update(raw).digest();
-const {decodeCredentials,credentialId}=await import(pathToFileURL(path.join(root,'server/credentialPool.js'))),{personalProviderCredentials,platformProviderCredentials}=await import(pathToFileURL(path.join(root,'server/providerCredentials.js')));
-function personal(name){const encrypted=users[owner].apiKeysEnc?.[name];if(!encrypted)return [];const blob=Buffer.from(encrypted,'base64'),cipher=crypto.createDecipheriv('aes-256-gcm',enc,blob.subarray(0,12));cipher.setAuthTag(blob.subarray(12,28));return decodeCredentials(Buffer.concat([cipher.update(blob.subarray(28)),cipher.final()]).toString());}
-function configured(name){const out=String(env[name]||'').split(',').map(s=>s.trim()).filter(Boolean),match=name.match(/^(.*?)(_API_KEY)$/);if(match)for(let n=2;env[match[1]+n+match[2]]!==undefined;n++)out.push(...String(env[match[1]+n+match[2]]).split(',').map(s=>s.trim()).filter(Boolean));return [...new Set(out)];}
-const {default:Database}=await import(pathToFileURL(path.join(root,'server/node_modules/better-sqlite3/lib/index.js'))),db=new Database(env.IOC_INTELLIGENCE_PATH||path.join(root,'server/.ioc-intelligence.sqlite'),{readonly:true,fileMustExist:true});db.pragma('query_only=ON');
-const mapping={virustotal:'VIRUSTOTAL_API_KEY',otx:'ALIENVAULT_API_KEY',threatfox:'THREATFOX_API_KEY'},effective={};
-console.log(JSON.stringify({at:new Date().toISOString(),readOnly:true,environmentOverrides:envDifferences,proxyConfigured:!!(env.HTTPS_PROXY||env.HTTP_PROXY||env.https_proxy||env.http_proxy)}));
-for(const [provider,variable]of Object.entries(mapping)){
- const own=personalProviderCredentials(provider,personal),platform=platformProviderCredentials(provider,variable,configured),keys=own.length?own:platform;effective[provider]=keys;
- console.log(JSON.stringify({provider,personal:own.length,platform:platform.length,effective:keys.length,selected:own.length?'personal':'platform',platformOverlap:keys.filter(k=>platform.includes(k)).length,slots:keys.map((key,i)=>{const record=db.prepare('SELECT value FROM intelligence_state WHERE id=?').get('credential-pool:v1:'+provider+':'+credentialId(key)),state=record?JSON.parse(record.value):{};return{slot:i+1,day:state.day,used:state.used,lastStatus:state.lastStatus,blockedUntil:state.blockedUntil||null,invalidUntil:state.invalidUntil||null};})}));
-}
-const {default:axios}=await import(pathToFileURL(path.join(root,'server/node_modules/axios/index.js')));
-for(const [slot,key]of effective.threatfox.entries()){
- const record=db.prepare('SELECT value FROM intelligence_state WHERE id=?').get('credential-pool:v1:threatfox:'+credentialId(key)),state=record?JSON.parse(record.value):{};if(state.blockedUntil>Date.now()){console.log(JSON.stringify({provider:'threatfox',slot:slot+1,cooldownPreserved:true}));continue;}
- try{const response=await axios.post('https://threatfox-api.abuse.ch/api/v1/',{query:'search_ioc',search_term:'116.179.37.176'},{headers:{'Content-Type':'application/json','Auth-Key':key},timeout:15000,family:4,maxContentLength:8000000,maxRedirects:0});console.log(JSON.stringify({provider:'threatfox',slot:slot+1,productionClient:true,httpStatus:response.status,queryStatus:/^[a-z_]+$/i.test(response.data?.query_status||'')?response.data.query_status:null}));break;}
- catch(error){const status=error.response?.status||0;console.log(JSON.stringify({provider:'threatfox',slot:slot+1,productionClient:true,httpStatus:status,queryStatus:/^[a-z_]+$/i.test(error.response?.data?.query_status||'')?error.response.data.query_status:null}));if(![401,403].includes(status))break;}
-}
-db.close();
+// Read-only diagnostic: never print credentials, token fingerprints or raw responses.
+import fs from 'node:fs';
+import path from 'node:path';
+import crypto from 'node:crypto';
+import { pathToFileURL } from 'node:url';
+const root=path.resolve(process.argv[2]),login=String(process.argv[3]).toLowerCase();
+if(!/^[a-z0-9-]{1,39}$/.test(login))throw Error('Invalid account');
+const users=JSON.parse(fs.readFileSync(path.join(root,'server/.users.json'),'utf8')),owner=Object.keys(users).find(id=>users[id].login?.toLowerCase()===login);
+if(!owner)throw Error('Account unavailable');
+const {parse}=await import(pathToFileURL(path.join(root,'server/node_modules/dotenv/lib/main.js')));
+const env=parse(fs.readFileSync(path.join(root,'.env'))),raw=(env.SECRETS_ENCRYPTION_KEY||'').trim();
+if(!raw)throw Error('Configuration unavailable');
+const decoded=Buffer.from(raw,'base64'),enc=/^[0-9a-f]{64}$/i.test(raw)?Buffer.from(raw,'hex'):decoded.length===32?decoded:crypto.createHash('sha256').update(raw).digest();
+const blob=Buffer.from(users[owner].apiKeysEnc?.virustotal||'','base64');
+const decipher=crypto.createDecipheriv('aes-256-gcm',enc,blob.subarray(0,12));decipher.setAuthTag(blob.subarray(12,28));
+const plain=Buffer.concat([decipher.update(blob.subarray(28)),decipher.final()]).toString();
+let keys;try{const data=JSON.parse(plain);keys=data.version===1?data.keys:[plain];}catch{keys=[plain];}
+const {default:Database}=await import(pathToFileURL(path.join(root,'server/node_modules/better-sqlite3/lib/index.js')));
+const {providerCredentialLimits}=await import(pathToFileURL(path.join(root,'server/providerLimits.js')));
+const db=new Database(path.join(root,'server/.ioc-intelligence.sqlite'),{readonly:true,fileMustExist:true});db.pragma('query_only=ON');db.pragma('busy_timeout=1000');
+const get=id=>{const row=db.prepare('SELECT value FROM intelligence_state WHERE id=?').get(id);return row?JSON.parse(row.value):null;};
+console.log(JSON.stringify({at:new Date().toISOString(),readOnly:true,keyCount:keys.length,configuredLimits:providerCredentialLimits('virustotal','VIRUSTOTAL',env),sharedGate:get('credential-pool:shared:virustotal')}));
+
+const key=keys[0],output={readOnly:true,endpoint:'user_api_usage',keyNumber:1,range:['2026-10-28','2026-10-29']};
+try{
+ const response=await fetch('https://www.virustotal.com/api/v3/users/'+encodeURIComponent(key)+'/api_usage?start_date=20261028&end_date=20261029',{headers:{Accept:'application/json','x-apikey':key},signal:AbortSignal.timeout(10000),redirect:'error'});
+ const body=await response.json();output.httpStatus=response.status;output.retryAfter=response.headers.get('retry-after');
+ if(response.ok){const data=body.data||body;output.daily=Object.fromEntries(Object.entries(data.daily||{}).map(([day,values])=>[day,Object.fromEntries(Object.entries(values).filter(([endpoint,count])=>/^\/api\/v3\/[A-Za-z0-9_()/.-]+$/.test(endpoint)&&typeof count==='number'))]));output.total=Object.fromEntries(Object.entries(data.total||{}).filter(([endpoint,count])=>/^\/api\/v3\/[A-Za-z0-9_()/.-]+$/.test(endpoint)&&typeof count==='number'));}
+ else{output.errorCode=/^[A-Za-z0-9_]+$/.test(body.error?.code||'')?body.error.code:'upstream_error';let message=String(body.error?.message||'');for(const secret of keys)message=message.replaceAll(secret,'[credential]');output.message=message.replace(/[a-f0-9]{24,}/gi,'[id]').slice(0,180);}
+}catch{output.state='probe_unavailable';}
+console.log(JSON.stringify(output));db.close();
