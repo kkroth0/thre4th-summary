@@ -26,14 +26,16 @@ summary.providerWait=db.prepare('SELECT reason,until_at FROM bulk_blocks WHERE o
 summary.waitingTasks=db.prepare("SELECT state,http_status,error_code,MIN(next_at) retryAt,MAX(attempts) attempts,COUNT(*) count FROM bulk_tasks WHERE job=? AND provider=? AND state IN ('waiting','running','error','blocked') GROUP BY state,http_status,error_code").all(job,provider);
 summary.queryPlan=db.prepare("EXPLAIN QUERY PLAN SELECT COUNT(*),SUM(state='done') FROM bulk_tasks WHERE job=? AND provider=?").all(job,provider).map(v=>v.detail);
 if(final.completed===final.total&&!final.pending&&!final.errors&&!final.blocked){
- let responses=0,raw=0,dated=0,withPulses=0,pulses=0,invalid=0;
+ let responses=0,raw=0,dated=0,withPulses=0,pulses=0,invalid=0,pulseDetailMismatch=0;
  for(const row of db.prepare("SELECT value FROM bulk_tasks WHERE job=? AND provider=? AND state='done'").iterate(job,provider)){
   const v=JSON.parse(gunzipSync(row.value,{maxOutputLength:64*1024*1024}).toString());responses++;
   if(v.rawPayload&&typeof v.rawPayload==='object')raw++;
   if(v.collectedAt&&Number.isFinite(Date.parse(v.collectedAt)))dated++;
   const n=parseInt(String(v.data?.['Pulse Count']||''),10);if(n>0){withPulses++;pulses+=n;}
+  let body=v.rawPayload;for(let level=0;level<3&&body&&!body.pulse_info&&body.data;level++)body=body.data;
+  const details=Array.isArray(v.data?.['Pulse Details'])?v.data['Pulse Details']:[];if(Array.isArray(body?.pulse_info?.pulses)&&details.length!==body.pulse_info.pulses.length)pulseDetailMismatch++;
   if(v.name!==provider||v.error||v.isLoading||!v.data)invalid++;
  }
- summary.integrity={responses,raw,dated,withPulses,pulseReferences:pulses,invalid};
+ summary.integrity={responses,raw,dated,withPulses,pulseReferences:pulses,invalid,pulseDetailMismatch};
 }
 console.log(JSON.stringify(summary));db.close();
