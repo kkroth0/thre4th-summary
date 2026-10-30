@@ -18,8 +18,8 @@ export async function prepareBulkChartZip(buffer:Uint8Array,rows:BulkRow[],snaps
       value=value.replace(/<xdr:twoCellAnchor>[\s\S]*?<\/xdr:twoCellAnchor>/g,(anchor)=>{
         const index=Number(anchor.match(/<xdr:cNvPr id="(\d+)"/)?.[1]);
         if(!selectedCharts.includes(index))return '';
-        const row=9+Math.floor(position++/2)*22;
-        let n=0;return anchor.replace(/<xdr:row>\d+<\/xdr:row>/g,()=>`<xdr:row>${n++===0?row:row+19}</xdr:row>`);
+        const slot=position++,row=9+Math.floor(slot/2)*22,column=slot%2===0?1:13;
+        let n=0,c=0;return anchor.replace(/<xdr:row>\d+<\/xdr:row>/g,()=>`<xdr:row>${n++===0?row:row+19}</xdr:row>`).replace(/<xdr:col>\d+<\/xdr:col>/g,()=>`<xdr:col>${c++===0?column:column+11}</xdr:col>`);
       });
     }
     if(name==='xl/drawings/_rels/drawing1.xml.rels')value=value.replace(/<Relationship\b[^>]*\/>/g,(relation)=>selectedCharts.includes(Number(relation.match(/chart(\d+)\.xml/)?.[1]))?relation:'');

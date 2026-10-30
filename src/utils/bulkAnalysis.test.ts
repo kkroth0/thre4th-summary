@@ -72,6 +72,7 @@ test('unified Excel keeps editable charts and publication references without dia
  assert.equal(sheet.getRow(2).getCell('techniques').value,'T1566; T1059.001');
  const bytes=await addBulkExcelCharts(new Uint8Array(await wb.xlsx.writeBuffer()),rows),zip=await JSZip.loadAsync(bytes);
  const paths=Object.keys(zip.files).filter(x=>/\/charts\/chart\d+\.xml$/.test(x));assert.equal(paths.length,4);assert.equal(zip.file('xl/drawings/charts/chart5.xml'),null);assert.equal(zip.file('xl/drawings/charts/chart8.xml'),null);
+ const drawing=await zip.file('xl/drawings/drawing1.xml')!.async('string');const anchors=[...drawing.matchAll(/<xdr:from>([\s\S]*?)<\/xdr:from>/g)].map(item=>[Number(item[1].match(/<xdr:col>(\d+)/)![1]),Number(item[1].match(/<xdr:row>(\d+)/)![1])]);assert.deepEqual(anchors,[[1,9],[13,9],[1,31],[13,31]]);
  const chart=await zip.file('xl/drawings/charts/chart1.xml')!.async('string');assert.match(chart,/Atores relacionados nas publicações/);assert.match(chart,/<c:v>Actor A<\/c:v>/);assert.match(chart,/<c:v>2<\/c:v>/);
  const restored=new Excel.Workbook();await restored.xlsx.load(bytes);assert.equal(restored.getWorksheet('Indicadores')!.getCell('A2').value,rows[0].query);assert.equal(restored.getWorksheet('Publicações')!.getCell('H2').hyperlink,'https://lab.example/report');
 });
