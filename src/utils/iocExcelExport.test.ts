@@ -36,14 +36,14 @@ test('empty Excel export has headers, a zero count and an explicit evidence scop
 test('bulk dashboard distinguishes incomplete rows and excludes public resolvers from attribution', () => {
   const evidence = { provider: 'OTX', title: 'Context', link: '', published: '', collectedAt: '', confidence: null, reputation: null, entities: [{ kind: 'actor' as const, id: 'G1', name: 'Example actor', relation: 'mentioned-with' }] };
   const wb = buildBulkExcelWorkbook([{ query: '8.8.8.8', state: 'partial', context: { errors: [], publications: [], evidence: [evidence, evidence] } }, { query: '9.9.9.9', state: 'queued' }], Excel);
-  assert.deepEqual(wb.worksheets.slice(0, 2).map(ws => ws.name), ['Dashboard', 'Resumo executivo']);
+  assert.deepEqual(wb.worksheets.slice(0, 2).map(ws => ws.name), ['Dashboard', 'Indicadores']);
   const dashboard = wb.getWorksheet('Dashboard')!;
   assert.equal(dashboard.getCell('B5').value, 2);
   assert.equal(dashboard.getCell('J5').value, 0, 'contextual mentions do not create attribution');
   assert.equal(dashboard.getCell('V5').value, 2, 'partial plus queued');
   assert.equal(dashboard.getCell('R5').value, 2, 'two exact public resolvers');
   assert.equal(wb.getWorksheet('Relações')!.rowCount, 3, 'source relationships remain intact');
-  assert.match(String(wb.getWorksheet('Resumo executivo')!.getCell('B7').value), /2 apresentam cobertura incompleta/);
+  assert.equal(wb.getWorksheet('Resumo executivo'),undefined);assert.match(String(dashboard.getCell('B16').value), /2 indicadores com cobertura incompleta/);
 });
 
 test('bulk Excel exposes PTR and curated FP review while preserving other provider findings', () => {
