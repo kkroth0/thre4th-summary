@@ -9,6 +9,7 @@ import { once } from 'node:events';
 import { setImmediate as yieldTurn } from 'node:timers/promises';
 import { createBulkStore } from './bulkJobs.js';
 import { createBulkLocalSnapshot } from './bulkLocalSnapshot.js';
+import { createBulkRawTable } from './bulkRawTable.js';
 import { eligibleSources,composeBulkRow,analyzeBulkRow,aggregateBulkAnalyses,PRIORITIES,addBulkDashboard,ANALYTICAL_COLUMNS,ANALYTICAL_GROUPS,BULK_COLORS as C,valueText,scrubXml,workbookMetadata,prepareBulkChartZip } from './bulkShared.generated.mjs';
 
 const {filePath,exportId,jobId,owner,outputDir,intelligencePath}=workerData;
@@ -32,7 +33,7 @@ async function analytical(wb,name,entries,job){
   row.commit();if(n%100===0){parentPort.postMessage({progress:n});await yieldTurn();}
  }ws.autoFilter={from:{row:4,column:1},to:{row:Math.max(4,n),column:ANALYTICAL_COLUMNS.length}};ws.commit();
 }
-function rawTable(wb,name,columns){let ws,count=0,part=0;const start=()=>{ws=wb.addWorksheet(name+(part?' '+(part+1):''),{views:[{state:'frozen',xSplit:1,ySplit:1,showGridLines:false}],properties:{tabColor:{argb:C.teal}}});header(ws,columns).commit();count=1;part++;};start();return{async add(record){if(count>=1048576){ws.autoFilter={from:{row:1,column:1},to:{row:count,column:columns.length}};ws.commit();start();}const row=ws.addRow(await valuesFor(columns.map(c=>record[c[0]]),ws.name,++count,columns.map(c=>c[0])));row.height=38;row.font={name:'Arial',size:10,color:{argb:C.ink}};row.alignment={vertical:'top',wrapText:true};if(count%2===0)row.fill={type:'pattern',pattern:'solid',fgColor:{argb:C.pale}};for(const [key]of columns){const c=row.getCell(key);if(['link','reference','url'].includes(key)&&typeof c.value==='string'&&/^https?:\/\/[^\s]+$/.test(c.value)){c.value={text:c.value,hyperlink:c.value};c.font={name:'Arial',size:10,color:{argb:'FF0563C1'},underline:true};}}row.commit();if(count%100===0){parentPort.postMessage({progress:count});await yieldTurn();}},finish(){ws.autoFilter={from:{row:1,column:1},to:{row:count,column:columns.length}};ws.commit();}};}
+function rawTable(wb,name,columns){return createBulkRawTable(wb,name,columns,{header,valuesFor,colors:C,progress:async count=>{parentPort.postMessage({progress:count});await yieldTurn();}});}
 try{
  await fsp.mkdir(outputDir,{recursive:true});store.db.exec('BEGIN');const job=store.owned(owner,jobId),exportRow=store.prepare('SELECT * FROM bulk_exports WHERE id=? AND owner=? AND job=?').get(exportId,owner,jobId);if(!exportRow)throw Error('Exportação não encontrada.');const filters=JSON.parse(exportRow.filters||'{}'),lean=[];
  if(filters.waitForComplete&&(job.state!=='complete'||store.prepare("SELECT COUNT(*) n FROM bulk_items WHERE job=? AND state NOT IN ('complete','unsupported')").get(jobId).n))throw Error('O Excel completo aguarda a conclusão de todas as consultas.');
