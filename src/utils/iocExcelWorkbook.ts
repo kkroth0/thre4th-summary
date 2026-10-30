@@ -8,6 +8,7 @@ import { styleEnrichmentDetails } from './enrichmentPresentation';
 import { analyzeBulkRows, type BulkAnalysis } from './bulkAnalysis';
 import { addBulkDashboard } from './bulkDashboard';
 import { ANALYTICAL_COLUMNS, styleAnalyticalSheet } from './bulkAnalyticalSheets';
+import {bulkEntityRelation} from './bulkEntityResolution';
 
 type RecordRow = Record<string, unknown>;
 type Column = [string, string, number];
@@ -121,8 +122,8 @@ export function buildBulkExcelWorkbook(rows: BulkRow[], ExcelLib: ExcelFactory, 
   table('Publicações', [['indicator', 'Indicador', 70], ...common], rows.flatMap(row => (row.context?.publications || []).map(publication => ({ ...publication, indicator: row.query, url: publication.link, date: publication.pubDate }))));
   table('Evidências', [['indicator', 'Indicador', 70], ['provider', 'Provedor', 24], ['source', 'Fonte', 24], ['title', 'Título', 65], ['link', 'Referência', 65], ['published', 'Publicação (ISO)', 28], ['collectedAt', 'Coleta (ISO)', 28], ['confidence', 'Confiança', 14], ['reputation', 'Reputação (JSON)', 70], ['entities', 'Entidades e relações (JSON)', 90]], rows.flatMap(row => (row.context?.evidence || []).map(evidence => ({ ...evidence, indicator: row.query }))));
   table('Resumo', [['key', 'Campo', 40], ['value', 'Valor', 90]], [{ key: 'Indicadores exportados', value: rows.length }, { key: 'Gerado em (ISO)', value: new Date().toISOString() }, { key: 'Escopo', value: 'Todas as linhas do filtro atual, incluindo parciais e falhas. Exportar não faz novas consultas às fontes.' }]);
-  const relations = rows.flatMap(row => (row.context?.evidence || []).flatMap(evidence => evidence.entities.map(entity => ({ indicator: row.query, kind: entity.kind, name: entity.name, relation: entity.relation, confidence: evidence.confidence, source: evidence.provider, title: evidence.title, link: evidence.link, date: evidence.published }))));
-  table('Relações', [['indicator', 'Indicador', 46], ['kind', 'Tipo de entidade', 20], ['name', 'Entidade', 32], ['relation', 'Relação informada pela base', 30], ['confidence', 'Confiança na fonte', 20], ['source', 'Fonte', 22], ['title', 'Publicação / evidência', 65], ['link', 'Referência', 65], ['date', 'Data', 26]], relations);
+  const relations = rows.flatMap(row => (row.context?.evidence || []).flatMap(evidence => evidence.entities.map(entity => ({...bulkEntityRelation(row,entity),indicator:row.query,confidence:evidence.confidence,source:evidence.provider,title:evidence.title,link:evidence.link,date:evidence.published}))));
+  table('Relações', [['indicator', 'Indicador', 46], ['kind', 'Tipo normalizado', 36], ['name', 'Entidade normalizada', 38], ['relation', 'Relação informada pela base', 30], ['confidence', 'Confiança na fonte', 20], ['source', 'Fonte', 22], ['title', 'Publicação / evidência', 65], ['link', 'Referência', 65], ['date', 'Data', 26],['sourceKind','Tipo original da fonte',24],['sourceName','Nome original da fonte',38],['catalogId','ID no catálogo',28],['identityStatus','Validação da identidade',46]], relations);
   table('Técnicas ATT&CK', [['id', 'Técnica citada', 22], ['count', 'IOCs únicos nas evidências', 26], ['actors', 'Atores declarados na mesma evidência', 55], ['reference', 'Referência MITRE ATT&CK', 65], ['scope', 'Escopo da leitura', 65]], analysis.techniques.map(t => ({
     id: t.name, count: t.count,
     actors: [...new Set(analysis.analyses.flatMap(a => a.pairs.filter(p => p.technique === t.name).map(p => p.actor)))].join('; '),

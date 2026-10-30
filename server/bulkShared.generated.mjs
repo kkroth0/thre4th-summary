@@ -685,8 +685,8 @@ function prepareBulkInput(raw) {
 function bulkField(row, keys) {
   for (const vendor of row.result?.vendorData || []) {
     if (vendor.error || vendor.isLoading || vendor.unsupported) continue;
-    for (const key2 of keys) {
-      const value2 = vendor.data[key2];
+    for (const key3 of keys) {
+      const value2 = vendor.data[key3];
       if ((typeof value2 === "string" || typeof value2 === "number") && !["", "unknown", "n/a"].includes(String(value2).toLowerCase())) return { value: String(value2), source: vendor.name };
     }
   }
@@ -720,11 +720,35 @@ var workbookMetadata = (wb, report, date, keywords) => {
   wb.language = "pt-BR";
 };
 
+// src/utils/bulkEntityResolution.ts
+var key = (kind, label, id = "") => JSON.stringify([kind, label.normalize("NFKC").toLowerCase().replace(/\s+/g, " ").trim(), id]);
+function bulkEntityLookup(context) {
+  const exact = /* @__PURE__ */ new Map(), named = /* @__PURE__ */ new Map();
+  for (const resolution of context?.entityResolutions || []) {
+    exact.set(key(resolution.sourceKind, resolution.sourceLabel, resolution.sourceId || ""), resolution);
+    const nameKey = key(resolution.sourceKind, resolution.sourceLabel), rows = named.get(nameKey) || [];
+    rows.push(resolution);
+    named.set(nameKey, rows);
+  }
+  return (sourceKind, label, sourceId = "") => {
+    const match = exact.get(key(sourceKind, label, sourceId));
+    if (match) return match;
+    const candidates = named.get(key(sourceKind, label)) || [];
+    if (candidates.length && new Set(candidates.map((row) => JSON.stringify([row.kind, row.id, row.name]))).size === 1) return candidates[0];
+    return { sourceKind, sourceLabel: label, sourceId, kind: sourceKind === "malware" ? "software" : sourceKind === "cve" ? "cve" : "unclassified", name: label, id: sourceKind === "cve" ? label : "", verification: sourceKind === "malware" ? "source-reported" : sourceKind === "cve" ? "identifier" : "unresolved", catalogSource: "" };
+  };
+}
+function bulkEntityRelation(row, entity) {
+  const identity = bulkEntityLookup(row.context)(entity.kind, entity.name, entity.id);
+  const kind = identity.kind === "actor" ? "Ator do cat\xE1logo" : identity.kind === "software" ? identity.verification === "catalog" ? "Malware/ferramenta do cat\xE1logo" : "Malware/ferramenta informado" : identity.kind === "cve" ? "CVE" : identity.kind === "ambiguous" ? "Nome amb\xEDguo" : "R\xF3tulo sem valida\xE7\xE3o";
+  return { ...entity, kind, name: identity.name, sourceKind: entity.kind, sourceName: entity.name, catalogId: identity.id, identityStatus: identity.verification === "catalog" ? "Correspond\xEAncia no cat\xE1logo" : identity.verification === "source-reported" ? "Informado pela fonte; fora do cat\xE1logo" : identity.verification === "identifier" ? "Identificador" : "Sem correspond\xEAncia un\xEDvoca no cat\xE1logo" };
+}
+
 // src/utils/bulkAnalysis.ts
 var PUBLIC_RESOLVERS = /* @__PURE__ */ new Set(["8.8.8.8", "8.8.4.4", "1.1.1.1", "1.0.0.1", "9.9.9.9", "149.112.112.112", "208.67.222.222", "208.67.220.220", "94.140.14.14", "94.140.15.15"]);
-var key = (s) => s.normalize("NFKC").toLocaleLowerCase("en-US").replace(/\s+/g, " ").trim();
+var key2 = (s) => s.normalize("NFKC").toLocaleLowerCase("en-US").replace(/\s+/g, " ").trim();
 var names = (value2) => Array.isArray(value2) ? value2.flatMap(names) : typeof value2 === "string" && !/^(unknown|none|n\/a|—)$/i.test(value2.trim()) ? [value2.trim()] : [];
-var distinct = (values) => [...new Map(values.filter(Boolean).map((value2) => scrubXml(value2)).map((value2) => [key(value2), value2])).values()];
+var distinct = (values) => [...new Map(values.filter(Boolean).map((value2) => scrubXml(value2)).map((value2) => [key2(value2), value2])).values()];
 var join = (values) => distinct(values).join("; ");
 var list = (value2) => Array.isArray(value2) ? value2 : [];
 var num = (value2) => value2 == null || value2 === "" || !Number.isFinite(Number(String(value2).replace(/%$/, ""))) ? null : Number(String(value2).replace(/%$/, ""));
@@ -755,17 +779,35 @@ function analyzeBulkRow(row) {
   const eicar = type === "hash" && query === "44d88612fea8a8f36de82e1278abb02f";
   const excluded = publicResolver || reserved || eicar;
   const fpRecords = list(hunt["FP Matches"]);
-  const fp = fpRecords.some((m) => m.matchRelation === "exact" || m.entry_value && key(m.entry_value) === key(row.query));
+  const fp = fpRecords.some((m) => m.matchRelation === "exact" || m.entry_value && key2(m.entry_value) === key2(row.query));
   const declared = [], contextual = [], families = [], techniques = [], tactics = [], pairs = [];
+  const identity = bulkEntityLookup(row.context), catalogActors = [], actorIds = [], mentionedIds = [], unclassified = [], softwareMentions = [];
+  const knownSoftware = new Map((row.context?.entityResolutions || []).filter((r) => r.kind === "software" && r.verification === "catalog").map((r) => [key2(r.name), r]));
+  const actorName = (name, id = "", declaredBySource = false) => {
+    const resolved = identity("actor", name, id);
+    if (resolved.kind === "actor") {
+      if (declaredBySource) {
+        catalogActors.push(resolved.name);
+        actorIds.push(resolved.id);
+      } else mentionedIds.push(resolved.id);
+      return resolved.name;
+    }
+    if (resolved.kind === "software") {
+      if (declaredBySource) families.push(resolved.name);
+      else softwareMentions.push(resolved.name);
+    } else unclassified.push(name);
+    return "";
+  };
   const cves = [], reportTitles = [], reportLinks = [], reportDates = [];
   const ax = evidence.filter((e) => e.provider === "Axur");
   for (const e of evidence) {
     const entities = e.entities || [];
-    contextual.push(...entities.filter((x) => x.kind === "actor").map((x) => x.name));
+    contextual.push(...entities.filter((x) => x.kind === "actor").map((x) => actorName(x.name, x.id)).filter(Boolean));
     cves.push(...entities.filter((x) => x.kind === "cve").map((x) => x.name));
     const attributed = entities.filter((x) => x.relation === "attributed-by-source");
     if (!excluded && !(fp && ["ThreatFox", "URLhaus", "MalwareBazaar"].includes(e.provider))) {
       declared.push(...attributed.filter((x) => x.kind === "actor").map((x) => x.name));
+      for (const actor of attributed.filter((x) => x.kind === "actor")) actorName(actor.name, actor.id, true);
       families.push(...attributed.filter((x) => x.kind === "malware").map((x) => x.name));
     }
     const payload = e.payload || {};
@@ -773,7 +815,10 @@ function analyzeBulkRow(row) {
     const ids = techs([...names(payload.relatedTTPs), ...patterns.map((t) => t?.code || t?.id || t?.name || "")]);
     tactics.push(...patterns.flatMap((t) => String(t?.code || t?.id || t || "").match(/\bTA\d{4}\b/g) || []));
     techniques.push(...ids);
-    if (!excluded) for (const actor of attributed.filter((x) => x.kind === "actor")) for (const technique of ids) pairs.push({ actor: actor.name, technique });
+    if (!excluded) for (const actor of attributed.filter((x) => x.kind === "actor")) {
+      const resolved = identity("actor", actor.name, actor.id);
+      if (resolved.kind === "actor") for (const technique of ids) pairs.push({ actor: resolved.name, technique });
+    }
     if (e.provider === "Axur") {
       reportTitles.push(e.title);
       if (e.link) reportLinks.push(e.link);
@@ -787,15 +832,28 @@ function analyzeBulkRow(row) {
     tactics.push(...names(p.attackIds).flatMap((s) => s.match(/\bTA\d{4}\b/g) || []));
     if (!excluded && p.adversary) {
       declared.push(...names(p.adversary));
-      for (const technique of ids) for (const actor of names(p.adversary)) pairs.push({ actor, technique });
+      for (const label of names(p.adversary)) {
+        const actor = actorName(label, "", true);
+        if (actor) for (const technique of ids) pairs.push({ actor, technique });
+      }
     }
     if (!excluded) families.push(...names(p.malwareFamilies));
   }
   if (!excluded && !fp) families.push(...names(tf["All Malware"]), ...names(tf.Malware), ...names(mb.Malware), ...names(mb.Signature), ...names(uh["All Malware"]));
   const declaredLabels = distinct(declared), familyLabels = distinct(families.flatMap((s) => s.split(/,\s*/)));
-  const declaredActors = excluded ? [] : declaredLabels.filter(actorLabel);
-  const normalizedFamilies = excluded ? [] : familyLabels.filter(familyLabel);
-  contextual.push(...declaredLabels.filter((s) => !actorLabel(s)));
+  const declaredActors = excluded ? [] : distinct(catalogActors);
+  const softwareIds = [], sourceSoftware = [];
+  const normalizedFamilies = excluded ? [] : distinct(familyLabels.filter(familyLabel).flatMap((label) => {
+    const resolved = knownSoftware.get(key2(label)) || identity("malware", label);
+    if (resolved.kind !== "software") {
+      unclassified.push(label);
+      return [];
+    }
+    if (resolved.id) softwareIds.push(resolved.id);
+    else sourceSoftware.push(resolved.name);
+    return [resolved.name];
+  }));
+  unclassified.push(...declaredLabels.filter((s) => !actorLabel(s)));
   for (const technique of distinct(techniques)) tactics.push(...bulkAttackTactics_default.techniques[technique] || []);
   const directPositive = row.result?.threatLevel === "malicious" || !fp && (/malicious|malware|phishing/i.test(String(tf.Status || "")) || Number(uh["URL Count"] || 0) > 0 || /malware payload found/i.test(String(uh.Status || "")) || /sample found|malicious/i.test(String(mb.Status || ""))) || Number(vt.Malicious || 0) > 0;
   const abuseHigh = (num(ab["Abuse Confidence Score"]) || 0) >= 75;
@@ -815,8 +873,15 @@ function analyzeBulkRow(row) {
     actors: join(declaredActors),
     families: join(normalizedFamilies),
     mentions: join(contextual),
-    basis: excluded ? "Exclu\xEDdo dos rankings" : declaredActors.length ? "Declara\xE7\xE3o expl\xEDcita da fonte" : "Somente contexto ou reputa\xE7\xE3o",
-    notes: notes.join(" "),
+    basis: excluded ? "Exclu\xEDdo dos rankings" : declaredActors.length ? "Ator do cat\xE1logo declarado pela fonte" : contextual.length ? "Men\xE7\xE3o a ator do cat\xE1logo" : unclassified.length ? "R\xF3tulo da fonte sem valida\xE7\xE3o" : "Somente contexto ou reputa\xE7\xE3o",
+    notes: [...notes, ...unclassified.length ? ["R\xF3tulos sem correspond\xEAncia un\xEDvoca no cat\xE1logo foram separados dos atores."] : []].join(" "),
+    actorIds: join(actorIds),
+    mentionedActorIds: join(mentionedIds),
+    softwareIds: join(softwareIds),
+    sourceSoftware: join(sourceSoftware),
+    softwareMentions: join(softwareMentions),
+    unclassifiedEntities: join(unclassified),
+    identityBasis: row.context?.entityResolutionVersion ? "Cat\xE1logos de atores e de malware/software; equival\xEAncia de nomes n\xE3o confirma autoria." : "Cat\xE1logo n\xE3o conferido neste recorte; r\xF3tulos de advers\xE1rio n\xE3o entram como atores.",
     axLocalStatus: row.context?.localSnapshot ? row.context.localSnapshot.axurEvidence ? `${row.context.localSnapshot.axurEvidence} ${row.context.localSnapshot.axurEvidence === 1 ? "evid\xEAncia" : "evid\xEAncias"} na base importada` : row.context.localSnapshot.axurImportStatus === "complete" ? "Sem registro na base importada" : "Sem registro na parcela importada" : "N\xE3o conferida neste recorte",
     axImportAt: row.context?.localSnapshot?.axurImportAt || null,
     localReadAt: row.context?.localSnapshot?.asOf || null,
@@ -885,12 +950,12 @@ function analyzeBulkRow(row) {
     const v = vendor(name);
     record["status:" + name] = !v ? "N\xE3o consultada" : v.isLoading ? "Consultando" : v.unsupported ? "Consulta n\xE3o aceita pela fonte" : v.error ? "Indispon\xEDvel" : name === "Axur" && String(v.data.Origem || "").startsWith("Base Axur importada") ? "Base importada" : "Respondida";
   }
-  return { row, record, excluded, fp, priority, actors: declaredActors, families: normalizedFamilies, techniques: distinct(techniques), pairs: excluded ? [] : pairs.map((p) => ({ ...p, actor: scrubXml(p.actor) })).filter((p) => declaredActors.some((a) => key(a) === key(p.actor))), mentions: distinct(contextual), asn: as === "\u2014" ? "" : as };
+  return { row, record, excluded, fp, priority, actors: declaredActors, families: normalizedFamilies, techniques: distinct(techniques), pairs: excluded ? [] : pairs.map((p) => ({ ...p, actor: scrubXml(p.actor) })).filter((p) => declaredActors.some((a) => key2(a) === key2(p.actor))), mentions: distinct(contextual), asn: as === "\u2014" ? "" : as };
 }
 function counts(rows) {
   const groups = /* @__PURE__ */ new Map();
   for (const row of rows) {
-    const id = key(row.name);
+    const id = key2(row.name);
     if (!id) continue;
     if (!groups.has(id)) groups.set(id, { name: row.name, values: /* @__PURE__ */ new Set() });
     groups.get(id).values.add(row.indicator);
@@ -913,6 +978,8 @@ function aggregateBulkAnalyses(analyses) {
     partial: analyses.filter((a) => !["complete", "unsupported"].includes(a.row.state) || a.row.result?.vendorData.some((v) => v.error || v.isLoading) || a.row.contextLoading || !!a.row.context?.errors.length).length,
     attributed: eligible.filter((a) => a.actors.length).length,
     actors: entries((a) => a.actors),
+    catalogActors: entries((a) => distinct([...a.actors, ...a.mentions])),
+    catalogMentioned: eligible.filter((a) => a.actors.length || a.mentions.length).length,
     families: entries((a) => a.families),
     techniques: entries((a) => a.techniques),
     tactics: entries((a) => String(a.record.tactics || "").split("; ").filter(Boolean)),
@@ -957,7 +1024,7 @@ var amount = (n, one, many) => `${n.toLocaleString("pt-BR")} ${n === 1 ? one : m
 function addBulkDashboard(wb, a, date) {
   const dashboard = page(wb, "Dashboard", "An\xE1lise de indicadores", date);
   const investigate = a.analyses.filter((x) => x.priority === "Investigar").length;
-  const metrics = [[a.total, "INDICADORES \xDANICOS"], [investigate, "PARA INVESTIGA\xC7\xC3O"], [a.attributed, "COM ATOR DECLARADO"], [a.families.length, "FAM\xCDLIAS DE MALWARE"], [a.excluded, "P\xDABLICOS / TESTES"], [a.partial, "COBERTURA INCOMPLETA"]];
+  const metrics = [[a.total, "INDICADORES \xDANICOS"], [investigate, "PARA INVESTIGA\xC7\xC3O"], [a.attributed, "ATOR DO CAT\xC1LOGO DECLARADO"], [a.families.length, "MALWARES / FERRAMENTAS"], [a.excluded, "P\xDABLICOS / TESTES"], [a.partial, "COBERTURA INCOMPLETA"]];
   metrics.forEach(([n, label], i) => {
     const x = 2 + i * 4;
     text(dashboard, 5, x, x + 2, n, false, 28).alignment = { horizontal: "center", vertical: "middle" };
@@ -968,7 +1035,7 @@ function addBulkDashboard(wb, a, date) {
   text(dashboard, 9, 2, 24, "LEITURA DO LOTE", true, 11);
   const statements = [
     `${amount(investigate, "indicador exige", "indicadores exigem")} investiga\xE7\xE3o por detec\xE7\xF5es ou registros diretos nas fontes. O veredito original permanece no detalhamento.`,
-    `${amount(a.attributed, "indicador tem", "indicadores t\xEAm")} ator explicitamente declarado por uma fonte. Men\xE7\xF5es em relat\xF3rios ficam separadas e n\xE3o aumentam esse ranking.`,
+    `${amount(a.catalogMentioned, "indicador cita", "indicadores citam")} ${amount(a.catalogActors.length, "ator do cat\xE1logo", "atores do cat\xE1logo")}. Em ${a.attributed}, a fonte declara o ator explicitamente. R\xF3tulos sem valida\xE7\xE3o ficam separados; men\xE7\xE3o ou declara\xE7\xE3o n\xE3o confirma autoria.`,
     `${amount(a.excluded, "indicador p\xFAblico ou de teste foi retirado", "indicadores p\xFAblicos ou de teste foram retirados")} dos rankings de atores, malware, TTPs e ASN. As evid\xEAncias foram mantidas.`,
     `${amount(a.evidence, "evid\xEAncia dispon\xEDvel", "evid\xEAncias dispon\xEDveis")} no hist\xF3rico; ${amount(a.partial, "indicador com", "indicadores com")} cobertura incompleta. ${amount(a.unsupported, "consulta n\xE3o foi aceita pela fonte", "consultas n\xE3o foram aceitas pelas fontes")}, discriminadas nas abas de indicadores e fontes. Recusa ou falha n\xE3o representa aus\xEAncia de registros.`
   ];
@@ -976,7 +1043,7 @@ function addBulkDashboard(wb, a, date) {
     text(dashboard, 10 + i * 2, 2, 24, s);
     dashboard.getRow(10 + i * 2).height = i === 3 ? 46 : 31;
   });
-  const captions = ["Somente declara\xE7\xF5es expl\xEDcitas; n\xE3o confirma autoria.", "R\xF3tulos das fontes, sem inferir o operador.", "Cita\xE7\xF5es de intelig\xEAncia; n\xE3o s\xE3o telemetria do ambiente.", "Derivadas das t\xE9cnicas citadas e do cat\xE1logo ATT&CK local.", "Triagem calculada; separada do score original.", "Todos os indicadores \xFAnicos exportados.", "Hospedagem na mesma rede n\xE3o comprova rela\xE7\xE3o entre atores.", "IOCs com resposta conclu\xEDda, inclusive sem achados."];
+  const captions = ["Atores do cat\xE1logo declarados pela fonte; n\xE3o confirma autoria.", "Malwares e ferramentas citados, sem inferir o operador.", "Cita\xE7\xF5es de intelig\xEAncia; n\xE3o s\xE3o telemetria do ambiente.", "Derivadas das t\xE9cnicas citadas e do cat\xE1logo ATT&CK local.", "Triagem calculada; separada do score original.", "Todos os indicadores \xFAnicos exportados.", "Hospedagem na mesma rede n\xE3o comprova rela\xE7\xE3o entre atores.", "IOCs com resposta conclu\xEDda, inclusive sem achados."];
   const chartData = bulkChartData(a);
   captions.forEach((caption, i) => {
     const row = 18 + Math.floor(i / 2) * 20, from = i % 2 === 0 ? 2 : 14, to = i % 2 === 0 ? 12 : 24;
@@ -991,7 +1058,7 @@ function addBulkDashboard(wb, a, date) {
     text(dashboard, 102, 2, 24, "Nenhum par ator\u2013t\xE9cnica com declara\xE7\xE3o expl\xEDcita na mesma evid\xEAncia. As men\xE7\xF5es de contexto est\xE3o na aba Rela\xE7\xF5es.");
     dashboard.getRow(102).height = 40;
   } else {
-    text(dashboard, 102, 2, 7, "Ator declarado", true, 10);
+    text(dashboard, 102, 2, 7, "Ator do cat\xE1logo", true, 10);
     techniques.forEach((t, j) => text(dashboard, 102, 8 + j, 8 + j, t.name, true, 8));
     dashboard.getRow(102).height = 32;
     actors.forEach((actor, i) => {
@@ -1015,7 +1082,7 @@ function addBulkDashboard(wb, a, date) {
   const sections = [
     ["Escopo e cobertura", `O lote cont\xE9m ${amount(a.total, "indicador \xFAnico", "indicadores \xFAnicos")}. ${amount(completed, "tem", "t\xEAm")} processamento conclu\xEDdo e ${amount(a.partial, "apresenta", "apresentam")} cobertura incompleta. ${amount(a.unsupported, "consulta n\xE3o foi aceita pela fonte", "consultas n\xE3o foram aceitas pelas fontes")}; essas recusas est\xE3o identificadas e n\xE3o equivalem a achados negativos. ${amount(a.evidence, "evid\xEAncia do hist\xF3rico foi preservada", "evid\xEAncias do hist\xF3rico foram preservadas")}, com data e refer\xEAncia quando fornecidas pela origem.`],
     ["O que merece aten\xE7\xE3o", investigate ? `${amount(investigate, "indicador re\xFAne", "indicadores re\xFAnem")} detec\xE7\xF5es no VirusTotal ou registros diretos de malware em fontes consultadas. Esta prioridade organiza a revis\xE3o; n\xE3o \xE9 confirma\xE7\xE3o de comprometimento. ${a.analyses.filter((x) => x.priority === "Aten\xE7\xE3o").length} outros indicadores receberam aten\xE7\xE3o por reputa\xE7\xE3o ou relatos de abuso.` : "Nenhum indicador eleg\xEDvel recebeu prioridade de investiga\xE7\xE3o pelos crit\xE9rios desta exporta\xE7\xE3o. A leitura considera apenas as fontes respondidas; aus\xEAncia de detec\xE7\xE3o n\xE3o comprova que um IOC seja benigno."],
-    ["Atores, fam\xEDlias e t\xE9cnicas", `${amount(a.attributed, "indicador tem", "indicadores t\xEAm")} ator declarado pela fonte e ${amount(a.families.length, "fam\xEDlia de malware foi identificada", "fam\xEDlias de malware foram identificadas")}. Entidades apenas citadas em publica\xE7\xF5es aparecem em campos pr\xF3prios e na aba Rela\xE7\xF5es. T\xE9cnicas ATT&CK refletem cita\xE7\xF5es de intelig\xEAncia, sem afirmar execu\xE7\xE3o no ambiente analisado.`],
+    ["Atores, malwares e ferramentas", `${amount(a.catalogMentioned, "indicador cita", "indicadores citam")} ${amount(a.catalogActors.length, "ator do cat\xE1logo", "atores do cat\xE1logo")}; ${a.attributed} t\xEAm declara\xE7\xE3o expl\xEDcita da fonte. H\xE1 ${a.families.length} nomes de malware ou ferramentas. IDs do cat\xE1logo, nomes originais e r\xF3tulos sem valida\xE7\xE3o ficam separados. Cita\xE7\xE3o e declara\xE7\xE3o n\xE3o confirmam autoria ou execu\xE7\xE3o no ambiente.`],
     ["Sinais que exigem contexto", `${amount(a.excluded, "indicador p\xFAblico ou de teste foi exclu\xEDdo", "indicadores p\xFAblicos ou de teste foram exclu\xEDdos")} dos rankings de amea\xE7a. ${amount(a.analyses.filter((x) => x.fp).length, "IOC teve", "IOCs tiveram")} correspond\xEAncia exata na revis\xE3o de falsos positivos da abuse.ch. Essa revis\xE3o n\xE3o apaga achados de fontes independentes.`],
     ["Uso operacional", "Antes de bloquear qualquer IP, dom\xEDnio, URL ou hash, confira a refer\xEAncia, o per\xEDodo observado e o poss\xEDvel impacto em ativos e servi\xE7os leg\xEDtimos. Infraestrutura compartilhada, resolvedores p\xFAblicos e indicadores de teste exigem contexto. N\xE3o h\xE1 recomenda\xE7\xE3o de bloqueio autom\xE1tico de User-Agents."]
   ];
@@ -1058,9 +1125,9 @@ function addBulkDashboard(wb, a, date) {
 // src/utils/bulkAnalyticalSheets.ts
 var status = (source) => ["status:" + source, "Consulta", 19];
 var ANALYTICAL_GROUPS = [
-  { title: "IDENTIFICA\xC7\xC3O E TRIAGEM", columns: [["rank", "#", 6], ["priority", "Prioridade", 23], ["indicator", "Indicador", 46], ["type", "Tipo", 13], ["verdict", "Veredito das fontes", 22], ["score", "Score original", 14], ["state", "Processamento", 18], ["actors", "Atores declarados pela fonte", 30], ["families", "Fam\xEDlias de malware", 30], ["basis", "Base da rela\xE7\xE3o", 30], ["notes", "Leitura e ressalvas", 65]] },
-  { title: "AXUR / INTELIG\xCANCIA CORRELACIONADA", columns: [["status:Axur", "Consulta Axur (base / API)", 25], ["axLocalStatus", "Consulta \xE0 base importada", 36], ["axImportAt", "\xDAltima varredura Axur (ISO)", 28], ["localReadAt", "Cruzamento local (ISO)", 28], ["axReports", "Relat\xF3rios que citam o IOC", 60], ["axLinks", "Refer\xEAncias dos relat\xF3rios", 65], ["axActors", "Atores citados no relat\xF3rio", 38], ["axMalware", "Malware citado no relat\xF3rio", 38], ["axCves", "CVEs citadas", 30], ["axDates", "Datas das publica\xE7\xF5es (ISO)", 30]] },
-  { title: "CONTEXTO E COMPORTAMENTO CITADO", columns: [["mentions", "Atores mencionados no contexto", 38], ["techniques", "T\xE9cnicas ATT&CK citadas", 38], ["tactics", "T\xE1ticas mapeadas", 38], ["publications", "Publica\xE7\xF5es relacionadas", 18], ["evidence", "Evid\xEAncias do hist\xF3rico", 18]] },
+  { title: "IDENTIFICA\xC7\xC3O E TRIAGEM", columns: [["rank", "#", 6], ["priority", "Prioridade", 23], ["indicator", "Indicador", 46], ["type", "Tipo", 13], ["verdict", "Veredito das fontes", 22], ["score", "Score original", 14], ["state", "Processamento", 18], ["actors", "Atores do cat\xE1logo declarados pela fonte", 36], ["families", "Malwares e ferramentas informados", 36], ["basis", "Base da rela\xE7\xE3o", 34], ["notes", "Leitura e ressalvas", 65]] },
+  { title: "AXUR / INTELIG\xCANCIA CORRELACIONADA", columns: [["status:Axur", "Consulta Axur (base / API)", 25], ["axLocalStatus", "Consulta \xE0 base importada", 36], ["axImportAt", "\xDAltima varredura Axur (ISO)", 28], ["localReadAt", "Cruzamento local (ISO)", 28], ["axReports", "Relat\xF3rios que citam o IOC", 60], ["axLinks", "Refer\xEAncias dos relat\xF3rios", 65], ["axActors", "Advers\xE1rios no relat\xF3rio (texto da fonte)", 42], ["axMalware", "Malwares/ferramentas no relat\xF3rio (fonte)", 42], ["axCves", "CVEs citadas", 30], ["axDates", "Datas das publica\xE7\xF5es (ISO)", 30]] },
+  { title: "CONTEXTO E COMPORTAMENTO CITADO", columns: [["mentions", "Atores do cat\xE1logo mencionados no contexto", 40], ["techniques", "T\xE9cnicas ATT&CK citadas", 38], ["tactics", "T\xE1ticas mapeadas", 38], ["publications", "Publica\xE7\xF5es relacionadas", 18], ["evidence", "Evid\xEAncias do hist\xF3rico", 18]] },
   { title: "VIRUSTOTAL", columns: [status("VirusTotal"), ["vtStatus", "Resultado", 26], ["vtDetections", "Detec\xE7\xF5es", 16], ["vtMalicious", "Motores maliciosos", 18], ["vtReputation", "Reputa\xE7\xE3o", 16], ["vtNames", "Classifica\xE7\xE3o de amea\xE7a", 36], ["vtTags", "Tags", 38]] },
   { title: "ABUSEIPDB", columns: [status("AbuseIPDB"), ["abScore", "Confian\xE7a de abuso (%)", 22], ["abReports", "Relatos", 14], ["abReporters", "Relatores distintos", 18], ["abLast", "\xDAltimo relato (ISO)", 28], ["abUsage", "Uso da rede", 26], ["abWhitelisted", "Whitelist da fonte", 20]] },
   { title: "ALIENVAULT OTX", columns: [status("AlienVault OTX"), ["otxStatus", "Resultado", 26], ["otxPulses", "Pulses", 14], ["otxActors", "Advers\xE1rios informados (texto da fonte)", 38], ["otxFamilies", "Malware informado nos pulses", 36], ["otxTags", "Tags", 38]] },
@@ -1069,7 +1136,8 @@ var ANALYTICAL_GROUPS = [
   { title: "MALWAREBAZAAR", columns: [status("MalwareBazaar"), ["mbStatus", "Resultado", 24], ["mbFile", "Nome do arquivo", 40], ["mbType", "Tipo de arquivo", 18], ["mbSignature", "Assinatura", 30], ["mbTags", "Tags", 38], ["mbFirst", "Primeira observa\xE7\xE3o", 27]] },
   { title: "REVIS\xC3O DE FALSO POSITIVO", columns: [status("abuse.ch Hunting"), ["fpStatus", "Revis\xE3o abuse.ch", 60], ["fpScope", "Escopo da correspond\xEAncia", 26]] },
   { title: "INFRAESTRUTURA E REGISTRO", columns: [["country", "Pa\xEDs informado", 17], ["asn", "ASN", 22], ["organization", "Organiza\xE7\xE3o da rede", 42], ["isp", "ISP", 36], ["prefix", "Prefixo da rede", 24], ["rdns", "Nome reverso (rDNS)", 42], status("DNS / Team Cymru"), ["registrar", "Registrador", 32], ["created", "Cria\xE7\xE3o do dom\xEDnio", 28], status("WHOIS")] },
-  { title: "COBERTURA E RASTREABILIDADE", columns: [["completedAt", "Conclus\xE3o (ISO)", 29], ["sources", "Fontes consultadas", 48], ["failedSources", "Fontes indispon\xEDveis", 42], ["sourceErrors", "Erros e pend\xEAncias", 70]] }
+  { title: "COBERTURA E RASTREABILIDADE", columns: [["completedAt", "Conclus\xE3o (ISO)", 29], ["sources", "Fontes consultadas", 48], ["failedSources", "Fontes indispon\xEDveis", 42], ["sourceErrors", "Erros e pend\xEAncias", 70]] },
+  { title: "VALIDA\xC7\xC3O DAS ENTIDADES", columns: [["actorIds", "IDs dos atores declarados no cat\xE1logo", 34], ["mentionedActorIds", "IDs dos atores mencionados no cat\xE1logo", 34], ["softwareIds", "IDs dos malwares/ferramentas no cat\xE1logo", 36], ["sourceSoftware", "Malwares/ferramentas sem valida\xE7\xE3o no cat\xE1logo", 45], ["softwareMentions", "Malwares/ferramentas citados no contexto", 45], ["unclassifiedEntities", "R\xF3tulos sem classifica\xE7\xE3o confirmada", 60], ["identityBasis", "Crit\xE9rio de identifica\xE7\xE3o", 65]] }
 ];
 var ANALYTICAL_COLUMNS = ANALYTICAL_GROUPS.flatMap((g) => g.columns);
 
@@ -1102,6 +1170,14 @@ async function prepareBulkChartZip(buffer, rows, snapshot) {
     const number = name.match(/\/charts\/chart(\d+)\.xml$/)?.[1];
     if (number) {
       const i = Number(number) - 1, items = data[i], start = 3 + i * 14, end = start + Math.max(1, items.length) - 1;
+      if (i === 0 || i === 1) {
+        let changed = false;
+        value2 = value2.replace(/<c:title>[\s\S]*?<\/c:title>/, (title) => title.replace(/<a:t>[\s\S]*?<\/a:t>/, () => {
+          changed = true;
+          return `<a:t>${i === 0 ? "Atores do cat\xE1logo declarados" : "Malwares e ferramentas informados"}</a:t>`;
+        }));
+        if (!changed) throw Error("T\xEDtulo do gr\xE1fico de entidades n\xE3o encontrado.");
+      }
       value2 = value2.replace(/<c:cat>[\s\S]*?<\/c:cat>/, `<c:cat><c:strRef><c:f>'_dados'!$A$${start}:$A$${end}</c:f><c:strCache><c:ptCount val="${items.length}"/>${items.map((x, j) => `<c:pt idx="${j}"><c:v>${xml(x.name)}</c:v></c:pt>`).join("")}</c:strCache></c:strRef></c:cat>`).replace(/<c:val>[\s\S]*?<\/c:val>/, `<c:val><c:numRef><c:f>'_dados'!$B$${start}:$B$${end}</c:f><c:numCache><c:formatCode>0</c:formatCode><c:ptCount val="${items.length}"/>${items.map((x, j) => `<c:pt idx="${j}"><c:v>${x.count}</c:v></c:pt>`).join("")}</c:numCache></c:numRef></c:val>`);
       if (i !== 4 && i !== 5) value2 = value2.replace(/<c:barDir[^>]*\/>/, '<c:barDir val="bar"/>').replace(/(<c:catAx>[\s\S]*?<c:axPos) val="b"/, '$1 val="l"').replace(/(<c:valAx>[\s\S]*?<c:axPos) val="l"/, '$1 val="b"');
       if (i !== 4) {
@@ -1161,6 +1237,7 @@ export {
   addBulkExcelCharts,
   aggregateBulkAnalyses,
   analyzeBulkRow,
+  bulkEntityRelation,
   composeBulkRow,
   eligibleSources,
   normalizeBulkVendor,

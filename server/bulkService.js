@@ -7,6 +7,7 @@ import { pipeline } from 'node:stream/promises';
 import { setImmediate as yieldTurn } from 'node:timers/promises';
 import { createBulkStore,createBulkRunner } from './bulkJobs.js';
 import { releaseCompletedBulkExports } from './bulkExportQueue.js';
+import {loadBulkEntityResolver,BULK_ENTITY_VERSION} from './bulkEntityIdentity.js';
 import { prepareBulkInput,eligibleSources,composeBulkRow,BULK_SOURCES,THREAT_VERDICT_VERSION,analyzeBulkRow,ANALYTICAL_COLUMNS,valueText } from './bulkShared.generated.mjs';
 
 const bad=(message,status=400)=>Object.assign(Error(message),{status});
@@ -28,10 +29,10 @@ export function registerBulkService(app,{filePath,outputDir,requirePremium,looku
  }));
  app.get(routes+'/:id',requirePremium,handle((req,res)=>res.json(store.summary(req.user.sub,req.params.id))));
  app.get(routes+'/:id/rows',requirePremium,handle((req,res)=>{
-  const page=store.page(req.user.sub,req.params.id,{...validFilters(req.query),page:req.query.page,size:req.query.size}),tag='"'+crypto.createHash('sha256').update(JSON.stringify([THREAT_VERDICT_VERSION,page.total,page.page,page.size,page.revision,validFilters(req.query)])).digest('hex')+'"';
-  res.set('ETag',tag);if(req.get('If-None-Match')===tag)return res.status(304).end();res.json({total:page.total,page:page.page,size:page.size,rows:page.load()});
+  const page=store.page(req.user.sub,req.params.id,{...validFilters(req.query),page:req.query.page,size:req.query.size}),tag='"'+crypto.createHash('sha256').update(JSON.stringify([THREAT_VERDICT_VERSION,BULK_ENTITY_VERSION,page.total,page.page,page.size,page.revision,validFilters(req.query)])).digest('hex')+'"';
+  res.set('ETag',tag);if(req.get('If-None-Match')===tag)return res.status(304).end();const entities=loadBulkEntityResolver();res.json({total:page.total,page:page.page,size:page.size,rows:page.load().map(row=>entities.normalizeRow(row))});
  }));
- app.get(routes+'/:id/rows/:ordinal',requirePremium,handle((req,res)=>{const j=store.owned(req.user.sub,req.params.id),n=Number(req.params.ordinal);if(!Number.isInteger(n)||n<0||n>=j.total)throw bad('Indicador não encontrado.',404);res.json(store.completeRow(req.user.sub,j.id,n));}));
+ app.get(routes+'/:id/rows/:ordinal',requirePremium,handle((req,res)=>{const j=store.owned(req.user.sub,req.params.id),n=Number(req.params.ordinal);if(!Number.isInteger(n)||n<0||n>=j.total)throw bad('Indicador não encontrado.',404);res.json(loadBulkEntityResolver().normalizeRow(store.completeRow(req.user.sub,j.id,n)));}));
  app.post(routes+'/:id/action',requirePremium,handle((req,res)=>{res.json(store.action(req.user.sub,req.params.id,req.body.action,req.user));runner.wake();}));
  app.get(routes+'/:id/download',requirePremium,handle(async(req,res)=>{
   const j=store.owned(req.user.sub,req.params.id),format=String(req.query.format||'json');if(!['json','csv','txt'].includes(format))throw bad('Formato inválido.');

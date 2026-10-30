@@ -4,6 +4,7 @@ import type { VendorData } from '../types/threat-intelligence';
 import { detectAnalyzerQueryType } from './iocExtract';
 import attack from './bulkAttackTactics.json';
 import { scrubXml } from './deckTemplate';
+import { bulkEntityLookup } from './bulkEntityResolution';
 
 export type Count = { name: string; count: number };
 export type AnalysisRecord = Record<string, string | number | null>;
@@ -49,14 +50,18 @@ export function analyzeBulkRow(row: BulkRow): IocAnalysis {
   const fpRecords=list(hunt['FP Matches']);
   const fp=fpRecords.some((m:any)=>m.matchRelation==='exact'||(m.entry_value&&key(m.entry_value)===key(row.query)));
   const declared:string[]=[],contextual:string[]=[],families:string[]=[],techniques:string[]=[],tactics:string[]=[],pairs:{actor:string;technique:string}[]=[];
+  const identity=bulkEntityLookup(row.context),catalogActors:string[]=[],actorIds:string[]=[],mentionedIds:string[]=[],unclassified:string[]=[],softwareMentions:string[]=[];
+  const knownSoftware=new Map((row.context?.entityResolutions||[]).filter(r=>r.kind==='software'&&r.verification==='catalog').map(r=>[key(r.name),r]));
+  const actorName=(name:string,id='',declaredBySource=false)=>{const resolved=identity('actor',name,id);if(resolved.kind==='actor'){if(declaredBySource){catalogActors.push(resolved.name);actorIds.push(resolved.id);}else mentionedIds.push(resolved.id);return resolved.name;}if(resolved.kind==='software'){if(declaredBySource)families.push(resolved.name);else softwareMentions.push(resolved.name);}else unclassified.push(name);return '';};
   const cves:string[]=[],reportTitles:string[]=[],reportLinks:string[]=[],reportDates:string[]=[];
   const ax=evidence.filter(e=>e.provider==='Axur');
   for(const e of evidence){
-    const entities=e.entities||[];contextual.push(...entities.filter(x=>x.kind==='actor').map(x=>x.name));
+    const entities=e.entities||[];contextual.push(...entities.filter(x=>x.kind==='actor').map(x=>actorName(x.name,x.id)).filter(Boolean));
     cves.push(...entities.filter(x=>x.kind==='cve').map(x=>x.name));
     const attributed=entities.filter(x=>x.relation==='attributed-by-source');
     if(!excluded&&!(fp&&['ThreatFox','URLhaus','MalwareBazaar'].includes(e.provider))){
       declared.push(...attributed.filter(x=>x.kind==='actor').map(x=>x.name));
+      for(const actor of attributed.filter(x=>x.kind==='actor'))actorName(actor.name,actor.id,true);
       families.push(...attributed.filter(x=>x.kind==='malware').map(x=>x.name));
     }
     const payload:any=(e as any).payload||{};
@@ -64,22 +69,23 @@ export function analyzeBulkRow(row: BulkRow): IocAnalysis {
     const ids=techs([...names(payload.relatedTTPs),...patterns.map((t:any)=>t?.code||t?.id||t?.name||'')]);
     tactics.push(...patterns.flatMap((t:any)=>String(t?.code||t?.id||t||'').match(/\bTA\d{4}\b/g)||[]));
     techniques.push(...ids);
-    if(!excluded)for(const actor of attributed.filter(x=>x.kind==='actor'))for(const technique of ids)pairs.push({actor:actor.name,technique});
+    if(!excluded)for(const actor of attributed.filter(x=>x.kind==='actor')){const resolved=identity('actor',actor.name,actor.id);if(resolved.kind==='actor')for(const technique of ids)pairs.push({actor:resolved.name,technique});}
     if(e.provider==='Axur'){reportTitles.push(e.title);if(e.link)reportLinks.push(e.link);if(e.published)reportDates.push(e.published);}
   }
   const pulses=list(otx['Pulse Details']);
   for(const p of pulses){
     const ids=techs(p.attackIds);techniques.push(...ids);
     tactics.push(...names(p.attackIds).flatMap(s=>s.match(/\bTA\d{4}\b/g)||[]));
-    if(!excluded&&p.adversary){declared.push(...names(p.adversary));for(const technique of ids)for(const actor of names(p.adversary))pairs.push({actor,technique});}
+    if(!excluded&&p.adversary){declared.push(...names(p.adversary));for(const label of names(p.adversary)){const actor=actorName(label,'',true);if(actor)for(const technique of ids)pairs.push({actor,technique});}}
     if(!excluded)families.push(...names(p.malwareFamilies));
   }
   if(!excluded&&!fp)families.push(...names(tf['All Malware']),...names(tf.Malware),...names(mb.Malware),...names(mb.Signature),...names(uh['All Malware']));
   // Vendor summary strings often repeat the full list; prefer exact array labels.
   const declaredLabels=distinct(declared),familyLabels=distinct(families.flatMap(s=>s.split(/,\s*/)));
-  const declaredActors=excluded?[]:declaredLabels.filter(actorLabel);
-  const normalizedFamilies=excluded?[]:familyLabels.filter(familyLabel);
-  contextual.push(...declaredLabels.filter(s=>!actorLabel(s)));
+  const declaredActors=excluded?[]:distinct(catalogActors);
+  const softwareIds:string[]=[],sourceSoftware:string[]=[];
+  const normalizedFamilies=excluded?[]:distinct(familyLabels.filter(familyLabel).flatMap(label=>{const resolved=knownSoftware.get(key(label))||identity('malware',label);if(resolved.kind!=='software'){unclassified.push(label);return [];}if(resolved.id)softwareIds.push(resolved.id);else sourceSoftware.push(resolved.name);return [resolved.name];}));
+  unclassified.push(...declaredLabels.filter(s=>!actorLabel(s)));
   for(const technique of distinct(techniques))tactics.push(...((attack.techniques as Record<string,string[]>)[technique]||[]));
   const directPositive=row.result?.threatLevel==='malicious'||(!fp&&(/malicious|malware|phishing/i.test(String(tf.Status||''))||Number(uh['URL Count']||0)>0||/malware payload found/i.test(String(uh.Status||''))||/sample found|malicious/i.test(String(mb.Status||''))))||Number(vt.Malicious||0)>0;
   const abuseHigh=(num(ab['Abuse Confidence Score'])||0)>=75;
@@ -90,7 +96,8 @@ export function analyzeBulkRow(row: BulkRow): IocAnalysis {
   const sources=vendors.map(v=>v.name),as=bulkField(row,['ASN','AS']).value;
   const record:AnalysisRecord={rank:null,priority,indicator:row.query,type:({ip:'IP',domain:'Domínio',hash:'Hash',url:'URL',unknown:'Outro'})[type],score:row.result?.overallScore??null,
     verdict:bulkVerdictLabel(row),state:({complete:'Concluído',partial:'Parcial',error:'Falha',running:'Consultando',queued:'Na fila',stopped:'Interrompido',unsupported:'Sem fonte compatível'})[row.state],
-    actors:join(declaredActors),families:join(normalizedFamilies),mentions:join(contextual),basis:excluded?'Excluído dos rankings':declaredActors.length?'Declaração explícita da fonte':'Somente contexto ou reputação',notes:notes.join(' '),
+    actors:join(declaredActors),families:join(normalizedFamilies),mentions:join(contextual),basis:excluded?'Excluído dos rankings':declaredActors.length?'Ator do catálogo declarado pela fonte':contextual.length?'Menção a ator do catálogo':unclassified.length?'Rótulo da fonte sem validação':'Somente contexto ou reputação',notes:[...notes,...(unclassified.length?['Rótulos sem correspondência unívoca no catálogo foram separados dos atores.']:[])].join(' '),
+    actorIds:join(actorIds),mentionedActorIds:join(mentionedIds),softwareIds:join(softwareIds),sourceSoftware:join(sourceSoftware),softwareMentions:join(softwareMentions),unclassifiedEntities:join(unclassified),identityBasis:row.context?.entityResolutionVersion?'Catálogos de atores e de malware/software; equivalência de nomes não confirma autoria.':'Catálogo não conferido neste recorte; rótulos de adversário não entram como atores.',
     axLocalStatus:row.context?.localSnapshot?(row.context.localSnapshot.axurEvidence?`${row.context.localSnapshot.axurEvidence} ${row.context.localSnapshot.axurEvidence===1?'evidência':'evidências'} na base importada`:row.context.localSnapshot.axurImportStatus==='complete'?'Sem registro na base importada':'Sem registro na parcela importada'):'Não conferida neste recorte',axImportAt:row.context?.localSnapshot?.axurImportAt||null,localReadAt:row.context?.localSnapshot?.asOf||null,
     axReports:join(reportTitles),axLinks:join(reportLinks),axActors:join(ax.flatMap(e=>e.entities.filter(x=>x.kind==='actor').map(x=>x.name))),axMalware:join(ax.flatMap(e=>e.entities.filter(x=>x.kind==='malware').map(x=>x.name))),axCves:join(ax.flatMap(e=>e.entities.filter(x=>x.kind==='cve').map(x=>x.name))),axDates:join(reportDates),
     techniques:join(techniques),tactics:join(tactics.map(t=>`${t} ${TACTICS[t]||''}`)),publications:row.context?.publications.length??0,evidence:evidence.length,completedAt:row.completedAt||null,
@@ -122,7 +129,7 @@ export function aggregateBulkAnalyses(analyses:IocAnalysis[]){
   const eligible=analyses.filter(a=>!a.excluded),entries=(f:(a:IocAnalysis)=>string[])=>counts(eligible.flatMap(a=>f(a).map(name=>({name,indicator:a.row.query}))));
   const sourceNames=distinct(analyses.flatMap(a=>a.row.result?.vendorData.map(v=>v.name)||[]));
   return {analyses,total:analyses.length,excluded:analyses.filter(a=>a.excluded).length,unsupported:analyses.reduce((n,a)=>n+(a.row.result?.vendorData.filter(v=>v.unsupported).length||0),0),partial:analyses.filter(a=>!['complete','unsupported'].includes(a.row.state)||a.row.result?.vendorData.some(v=>v.error||v.isLoading)||a.row.contextLoading||!!a.row.context?.errors.length).length,
-    attributed:eligible.filter(a=>a.actors.length).length,actors:entries(a=>a.actors),families:entries(a=>a.families),techniques:entries(a=>a.techniques),tactics:entries(a=>String(a.record.tactics||'').split('; ').filter(Boolean)),
+    attributed:eligible.filter(a=>a.actors.length).length,actors:entries(a=>a.actors),catalogActors:entries(a=>distinct([...a.actors,...a.mentions])),catalogMentioned:eligible.filter(a=>a.actors.length||a.mentions.length).length,families:entries(a=>a.families),techniques:entries(a=>a.techniques),tactics:entries(a=>String(a.record.tactics||'').split('; ').filter(Boolean)),
     priorities:PRIORITIES.map(name=>({name,count:analyses.filter(a=>a.priority===name).length})),types:counts(analyses.map(a=>({name:String(a.record.type),indicator:a.row.query}))),asns:entries(a=>a.asn?[a.asn]:[]),
     coverage:sourceNames.map(name=>({name,count:analyses.filter(a=>a.row.result?.vendorData.some(v=>v.name===name&&!v.error&&!v.isLoading&&!v.unsupported)).length})),
     evidence:analyses.reduce((sum,a)=>sum+(a.row.context?.evidence.length||0),0)};

@@ -10,13 +10,15 @@ import { setImmediate as yieldTurn } from 'node:timers/promises';
 import { createBulkStore } from './bulkJobs.js';
 import { createBulkLocalSnapshot } from './bulkLocalSnapshot.js';
 import { createBulkRawTable } from './bulkRawTable.js';
-import { eligibleSources,composeBulkRow,analyzeBulkRow,aggregateBulkAnalyses,PRIORITIES,addBulkDashboard,ANALYTICAL_COLUMNS,ANALYTICAL_GROUPS,BULK_COLORS as C,valueText,scrubXml,workbookMetadata,prepareBulkChartZip } from './bulkShared.generated.mjs';
+import {loadBulkEntityResolver} from './bulkEntityIdentity.js';
+import { eligibleSources,composeBulkRow,analyzeBulkRow,aggregateBulkAnalyses,PRIORITIES,addBulkDashboard,ANALYTICAL_COLUMNS,ANALYTICAL_GROUPS,BULK_COLORS as C,valueText,scrubXml,workbookMetadata,prepareBulkChartZip,bulkEntityRelation } from './bulkShared.generated.mjs';
 
 const {filePath,exportId,jobId,owner,outputDir,intelligencePath}=workerData;
 const store=createBulkStore({filePath,readOnly:true,eligibleSources,composeRow:composeBulkRow});
 const tmp=path.join(outputDir,exportId+'.tmp.xlsx'),final=path.join(outputDir,exportId+'.xlsx'),spool=path.join(outputDir,exportId+'.parts');
 let spoolStream,sequence=0,localSnapshot;
-const exportRowFor=(job,item)=>localSnapshot.enrich(store.row(job,item));
+const entities=loadBulkEntityResolver();
+const exportRowFor=(job,item)=>entities.normalizeRow(localSnapshot.enrich(store.row(job,item)));
 async function writeParts(text,sheet,row,field){const reference=`EXT-${++sequence}`;for(let start=0,part=1;start<text.length;part++){let end=Math.min(text.length,start+30000);if(end<text.length&&/[\uD800-\uDBFF]/.test(text[end-1]))end--;const line=JSON.stringify([reference,sheet,row,field,part,text.slice(start,end)])+'\n';if(!spoolStream.write(line))await once(spoolStream,'drain');start=end;}return `${reference} — conteúdo completo em Dados extensos`;}
 async function valuesFor(values,sheet,row,keys){const out=[];for(let i=0;i<values.length;i++){const value=values[i];if(value==null||value===''){out.push(undefined);continue;}if(typeof value==='number'||typeof value==='boolean'){out.push(value);continue;}const text=scrubXml(valueText(value));out.push(text.length<=32767?text:await writeParts(text,sheet,row,keys[i]));}return out;}
 function header(ws,columns,row=1){ws.columns=columns.map(([key,header,width])=>({key,width}));const h=ws.getRow(row);h.values=columns.map(x=>x[1]);h.height=42;h.font={name:'Arial',size:10,bold:true,color:{argb:C.white}};h.fill={type:'pattern',pattern:'solid',fgColor:{argb:C.ink}};h.alignment={vertical:'middle',wrapText:true};return h;}
@@ -51,8 +53,8 @@ try{
  await eachRow(async row=>{for(const p of row.context.publications)await table.add({...p,indicator:row.query,original:p});});table.finish();
  table=rawTable(wb,'Evidências',[['indicator','Indicador',48],['provider','Provedor',25],['source','Fonte',25],['title','Título',65],['link','Referência',65],['published','Publicação (ISO)',28],['collectedAt','Coleta (ISO)',28],['confidence','Confiança da fonte',20],['reputation','Reputação (JSON)',60],['entities','Entidades e relações (JSON)',90],['payload','Payload (JSON)',100],['original','Registro completo (JSON)',100]]);
  await eachRow(async row=>{for(const e of row.context.evidence)await table.add({...e,indicator:row.query,original:e});});table.finish();
- table=rawTable(wb,'Relações',[['indicator','Indicador',48],['kind','Tipo de entidade',20],['name','Entidade',36],['relation','Relação informada',32],['confidence','Confiança da fonte',20],['source','Fonte',24],['title','Publicação / evidência',65],['link','Referência',65],['published','Data (ISO)',28]]);
- await eachRow(async row=>{for(const e of row.context.evidence)for(const entity of e.entities||[])await table.add({...entity,indicator:row.query,confidence:e.confidence,source:e.provider,title:e.title,link:e.link,published:e.published});});table.finish();
+ table=rawTable(wb,'Relações',[['indicator','Indicador',48],['kind','Tipo normalizado',36],['name','Entidade normalizada',38],['relation','Relação informada',32],['confidence','Confiança da fonte',20],['source','Fonte',24],['title','Publicação / evidência',65],['link','Referência',65],['published','Data (ISO)',28],['sourceKind','Tipo original da fonte',24],['sourceName','Nome original da fonte',38],['catalogId','ID no catálogo',28],['identityStatus','Validação da identidade',46]]);
+ await eachRow(async row=>{for(const e of row.context.evidence)for(const entity of e.entities||[])await table.add({...bulkEntityRelation(row,entity),indicator:row.query,confidence:e.confidence,source:e.provider,title:e.title,link:e.link,published:e.published});});table.finish();
  table=rawTable(wb,'Técnicas ATT&CK',[['id','Técnica citada',22],['count','IOCs únicos nas evidências',25],['actors','Atores declarados na mesma evidência',55],['reference','Referência MITRE ATT&CK',65],['scope','Escopo da leitura',65]]);
  for(const t of analysis.techniques)await table.add({id:t.name,count:t.count,actors:[...new Set(lean.flatMap(a=>a.pairs.filter(p=>p.technique===t.name).map(p=>p.actor)))].join('; '),reference:`https://attack.mitre.org/techniques/${t.name.replace('.','/')}/`,scope:'Citação de inteligência; não comprova execução no ambiente analisado.'});table.finish();
  table=rawTable(wb,'Detalhes por fonte',[['indicator','Indicador',48],['source','Fonte',25],['field','Campo',35],['value','Resultado',100]]);

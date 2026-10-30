@@ -14,6 +14,7 @@ export async function prepareBulkChartZip(buffer:Uint8Array,rows:BulkRow[],snaps
     const number=name.match(/\/charts\/chart(\d+)\.xml$/)?.[1];
     if(number){
       const i=Number(number)-1,items=data[i],start=3+i*14,end=start+Math.max(1,items.length)-1;
+      if(i===0||i===1){let changed=false;value=value.replace(/<c:title>[\s\S]*?<\/c:title>/,title=>title.replace(/<a:t>[\s\S]*?<\/a:t>/,()=>{changed=true;return `<a:t>${i===0?'Atores do catálogo declarados':'Malwares e ferramentas informados'}</a:t>`;}));if(!changed)throw Error('Título do gráfico de entidades não encontrado.');}
       value=value.replace(/<c:cat>[\s\S]*?<\/c:cat>/,`<c:cat><c:strRef><c:f>'_dados'!$A$${start}:$A$${end}</c:f><c:strCache><c:ptCount val="${items.length}"/>${items.map((x,j)=>`<c:pt idx="${j}"><c:v>${xml(x.name)}</c:v></c:pt>`).join('')}</c:strCache></c:strRef></c:cat>`)
         .replace(/<c:val>[\s\S]*?<\/c:val>/,`<c:val><c:numRef><c:f>'_dados'!$B$${start}:$B$${end}</c:f><c:numCache><c:formatCode>0</c:formatCode><c:ptCount val="${items.length}"/>${items.map((x,j)=>`<c:pt idx="${j}"><c:v>${x.count}</c:v></c:pt>`).join('')}</c:numCache></c:numRef></c:val>`);
       // Horizontal rankings leave room for long actor/family names. Types stay vertical.

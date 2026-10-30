@@ -10,6 +10,8 @@ export interface BulkContext {
   publications: NewsMention[];
   evidence: BulkEvidence[];
   errors: string[];
+  entityResolutionVersion?: string;
+  entityResolutions?: {sourceKind:string;sourceLabel:string;sourceId?:string;kind:'actor'|'software'|'unclassified'|'ambiguous'|'cve';name:string;id:string;verification:string;catalogSource:string}[];
   localSnapshot?: { asOf: string; axurImportStatus: string; axurImportAt: string | null; axurRecordsTraversed: number; axurEvidence: number };
 }
 

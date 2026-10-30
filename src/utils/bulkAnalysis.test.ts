@@ -8,7 +8,13 @@ import { addBulkExcelCharts } from './bulkExcelCharts';
 import type { BulkRow } from './bulkEnrichment';
 import type { BulkEvidence } from '../services/bulkContext';
 const Excel=createRequire(`${process.cwd()}/package.json`)('exceljs') as typeof import('exceljs');
-const base=(query='185.220.101.5'):BulkRow=>({query,state:'complete',result:{query,overallScore:90,threatLevel:'malicious',totalVendors:2,detections:1,vendorData:[{name:'VirusTotal',data:{Malicious:12,'Detection Rate':'12/90'}},{name:'AlienVault OTX',data:{'Pulse Details':[{adversary:'Actor A',malwareFamilies:['Family A'],attackIds:['T1059.001'],tags:[]}]}}]},context:{errors:[],publications:[],evidence:[]}});
+const fixtureIdentities=['Actor A','Actor B','Context Actor','APT28'].map((name,i)=>({sourceKind:'actor',sourceLabel:name,kind:'actor' as const,name,id:'G900'+i,verification:'catalog',catalogSource:'test-fixture'}));
+const base=(query='185.220.101.5'):BulkRow=>({query,state:'complete',result:{query,overallScore:90,threatLevel:'malicious',totalVendors:2,detections:1,vendorData:[{name:'VirusTotal',data:{Malicious:12,'Detection Rate':'12/90'}},{name:'AlienVault OTX',data:{'Pulse Details':[{adversary:'Actor A',malwareFamilies:['Family A'],attackIds:['T1059.001'],tags:[]}]}}]},context:{errors:[],publications:[],evidence:[],entityResolutionVersion:'test-fixture',entityResolutions:fixtureIdentities}});
+
+test('without a catalog resolution an adversary string remains unverified and out of actor charts',()=>{
+ const row=base();delete row.context!.entityResolutions;delete row.context!.entityResolutionVersion;
+ const a=analyzeBulkRow(row);assert.deepEqual(a.actors,[]);assert.deepEqual(a.pairs,[]);assert.equal(a.record.unclassifiedEntities,'Actor A');assert.match(String(a.record.identityBasis),/Catálogo não conferido/);
+});
 
 test('an unsupported query is an explicit coverage exception, never a zero-match source finding',()=>{
  const row=base();row.result!.vendorData.push({name:'ThreatFox',unsupported:true,data:{Status:'Consulta não aceita pela fonte'},rawPayload:{query_status:'illegal_search_term'}});
