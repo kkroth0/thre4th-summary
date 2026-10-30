@@ -1077,38 +1077,6 @@ function addBulkDashboard(wb, a, date) {
   dashboard.getRow(117).height = 42;
   text(dashboard, 120, 2, 24, "Antes de bloquear IPs, dom\xEDnios, URLs ou hashes, valide a evid\xEAncia, a rec\xEAncia e o impacto em ativos e servi\xE7os leg\xEDtimos. User-Agents gen\xE9ricos n\xE3o sustentam bloqueio isoladamente.", false, 10);
   dashboard.getRow(120).height = 40;
-  const executive = page(wb, "Resumo executivo", "S\xEDntese do enriquecimento", date, 57);
-  const completed = a.total - a.partial;
-  const sections = [
-    ["Escopo e cobertura", `O lote cont\xE9m ${amount(a.total, "indicador \xFAnico", "indicadores \xFAnicos")}. ${amount(completed, "tem", "t\xEAm")} processamento conclu\xEDdo e ${amount(a.partial, "apresenta", "apresentam")} cobertura incompleta. ${amount(a.unsupported, "consulta n\xE3o foi aceita pela fonte", "consultas n\xE3o foram aceitas pelas fontes")}; essas recusas est\xE3o identificadas e n\xE3o equivalem a achados negativos. ${amount(a.evidence, "evid\xEAncia do hist\xF3rico foi preservada", "evid\xEAncias do hist\xF3rico foram preservadas")}, com data e refer\xEAncia quando fornecidas pela origem.`],
-    ["O que merece aten\xE7\xE3o", investigate ? `${amount(investigate, "indicador re\xFAne", "indicadores re\xFAnem")} detec\xE7\xF5es no VirusTotal ou registros diretos de malware em fontes consultadas. Esta prioridade organiza a revis\xE3o; n\xE3o \xE9 confirma\xE7\xE3o de comprometimento. ${a.analyses.filter((x) => x.priority === "Aten\xE7\xE3o").length} outros indicadores receberam aten\xE7\xE3o por reputa\xE7\xE3o ou relatos de abuso.` : "Nenhum indicador eleg\xEDvel recebeu prioridade de investiga\xE7\xE3o pelos crit\xE9rios desta exporta\xE7\xE3o. A leitura considera apenas as fontes respondidas; aus\xEAncia de detec\xE7\xE3o n\xE3o comprova que um IOC seja benigno."],
-    ["Atores, malwares e ferramentas", `${amount(a.catalogMentioned, "indicador cita", "indicadores citam")} ${amount(a.catalogActors.length, "ator do cat\xE1logo", "atores do cat\xE1logo")}; ${a.attributed} t\xEAm declara\xE7\xE3o expl\xEDcita da fonte. H\xE1 ${a.families.length} nomes de malware ou ferramentas. IDs do cat\xE1logo, nomes originais e r\xF3tulos sem valida\xE7\xE3o ficam separados. Entidades apenas citadas permanecem no contexto. Cita\xE7\xE3o e declara\xE7\xE3o n\xE3o confirmam autoria ou execu\xE7\xE3o no ambiente.`],
-    ["Sinais que exigem contexto", `${amount(a.excluded, "indicador p\xFAblico ou de teste foi exclu\xEDdo", "indicadores p\xFAblicos ou de teste foram exclu\xEDdos")} dos rankings de amea\xE7a. ${amount(a.analyses.filter((x) => x.fp).length, "IOC teve", "IOCs tiveram")} correspond\xEAncia exata na revis\xE3o de falsos positivos da abuse.ch. Essa revis\xE3o n\xE3o apaga achados de fontes independentes.`],
-    ["Uso operacional", "Antes de bloquear qualquer IP, dom\xEDnio, URL ou hash, confira a refer\xEAncia, o per\xEDodo observado e o poss\xEDvel impacto em ativos e servi\xE7os leg\xEDtimos. Infraestrutura compartilhada, resolvedores p\xFAblicos e indicadores de teste exigem contexto. N\xE3o h\xE1 recomenda\xE7\xE3o de bloqueio autom\xE1tico de User-Agents."]
-  ];
-  sections.forEach(([title, body], i) => {
-    const row = 6 + i * 6;
-    text(executive, row, 2, 24, title, true, 12);
-    text(executive, row + 1, 2, 24, body, false, 11);
-    executive.getRow(row + 1).height = i === 0 ? 82 : 64;
-  });
-  text(executive, 37, 2, 24, "INDICADORES PRIORIZADOS  /  AT\xC9 10 CASOS", true, 11);
-  const top = a.analyses.filter((x) => ["Investigar", "Aten\xE7\xE3o", "Revisar"].includes(x.priority)).slice(0, 10);
-  if (!top.length) {
-    text(executive, 39, 2, 24, "Sem casos eleg\xEDveis para prioriza\xE7\xE3o neste lote. Indicadores p\xFAblicos e testes permanecem no detalhamento.");
-    executive.getRow(39).height = 38;
-  }
-  top.forEach((x, i) => {
-    const row = 39 + i;
-    text(executive, row, 2, 8, x.row.query, false, 10);
-    text(executive, row, 9, 12, x.priority, false, 10);
-    text(executive, row, 13, 24, `${x.record.verdict} \xB7 ${x.record.actors || x.record.families || x.record.notes || "Revisar fontes e refer\xEAncias."}`, false, 10);
-    executive.getRow(row).height = 38;
-  });
-  text(executive, 52, 2, 24, "Como navegar", true, 11);
-  text(executive, 53, 2, 24, "Indicadores e abas por tipo: leitura por fonte. Publica\xE7\xF5es, Evid\xEAncias e Rela\xE7\xF5es: rastreabilidade. Fontes, Detalhes por fonte e Dados extensos: respostas originais, incluindo campos adicionais e conte\xFAdo completo.", false, 10);
-  executive.getRow(53).height = 42;
-  text(executive, 56, 2, 24, `Mapeamento t\xE1tico: cat\xE1logo ATT&CK local de ${bulkAttackTactics_default.generatedAt.slice(0, 10)}. Fonte: ${bulkAttackTactics_default.source}`, false, 9);
   const helper = wb.addWorksheet("_dados");
   helper.state = "hidden";
   chartData.forEach((items, i) => {

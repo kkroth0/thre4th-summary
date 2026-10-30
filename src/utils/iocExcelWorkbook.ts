@@ -103,7 +103,7 @@ export function buildBulkExcelWorkbook(rows: BulkRow[], ExcelLib: ExcelFactory, 
   rows = analysis.analyses.map(a => a.row);
   const generatedAt = new Date().toISOString();
   const wb = new ExcelLib.Workbook();
-  wb.addWorksheet('Dashboard'); wb.addWorksheet('Resumo executivo');
+  wb.addWorksheet('Dashboard');
   workbookMetadata(wb, 'Enriquecimento em lote', new Date().toISOString(), 'IOC, enriquecimento, fontes, evidências');
   const table = tables(wb, true);
   styleAnalyticalSheet(table('Indicadores', ANALYTICAL_COLUMNS, analysis.analyses.map(a => a.record), 3));
