@@ -1098,11 +1098,11 @@ async function prepareBulkChartZip(buffer, rows, snapshot) {
     if (name === "xl/drawings/_rels/drawing1.xml.rels") value2 = value2.replace(/<Relationship\b[^>]*\/>/g, (relation) => selectedCharts.includes(Number(relation.match(/chart(\d+)\.xml/)?.[1])) ? relation : "");
     if (number) {
       const i = Number(number) - 1, items = data[i], start = 3 + i * 14, end = start + Math.max(1, items.length) - 1;
-      if (i === 0 || i === 1) {
+      if (i === 0 || i === 1 || i === 2) {
         let changed = false;
         value2 = value2.replace(/<c:title>[\s\S]*?<\/c:title>/, (title) => title.replace(/<a:t>[\s\S]*?<\/a:t>/, () => {
           changed = true;
-          return `<a:t>${i === 0 ? "Atores relacionados nas publica\xE7\xF5es" : "Malwares e ferramentas relacionados"}</a:t>`;
+          return `<a:t>${i === 0 ? "Atores relacionados nas publica\xE7\xF5es" : i === 1 ? "Malwares e ferramentas relacionados" : "T\xE9cnicas ATT&amp;CK relacionadas"}</a:t>`;
         }));
         if (!changed) throw Error("T\xEDtulo do gr\xE1fico de entidades n\xE3o encontrado.");
       }
@@ -1157,6 +1157,8 @@ function reference(value2) {
   }
 }
 var split = (value2) => labels(value2).flatMap((item) => item.split(";").map((s) => s.trim()).filter(Boolean));
+var softwareNameAllowed = (name) => !/^(?:(?:ssh|smtp|ftp|rdp|http|dns|sip)[ -]*)?(?:brute[ -]?force|automated scanners?(?:\s*&\s*botnets?)?|scanners?|scanning|botnets?|malware|trojan|rat|loader|downloader|ransomware|infostealer|phishing|generic|unknown)$/i.test(name.trim());
+var infrastructureValue = (value2) => value2 == null || /^(?:—|-|none|unknown|n\/?a|asnone)$/i.test(String(value2).trim()) ? null : value2;
 var UNIFIED_INDICATOR_COLUMNS = [
   ["indicator", "Indicador", 43],
   ["type", "Tipo", 13],
@@ -1225,6 +1227,7 @@ function projectUnifiedBulkRow(row, analysis = analyzeBulkRow(row)) {
     current.techniques = unique([...current.techniques, ...ids]);
     for (const entity of entities) {
       const identity = resolve(entity.kind, entity.name, entity.id || "");
+      if (identity.kind === "software" && !softwareNameAllowed(identity.name)) continue;
       if (identity.kind === "actor" && identity.verification === "catalog" && !analysis.excluded) current.actors.push(identity.name);
       else if (identity.kind === "software" && !analysis.excluded) current.malware.push(identity.name);
       else if (identity.kind !== "cve") continue;
@@ -1254,14 +1257,15 @@ function projectUnifiedBulkRow(row, analysis = analyzeBulkRow(row)) {
   }
   const mentions = [...documents.values()];
   const actors = analysis.excluded ? [] : unique([...analysis.actors, ...analysis.mentions, ...mentions.flatMap((item) => item.actors)]);
-  const software = analysis.excluded ? [] : unique([...analysis.families, ...split(analysis.record.softwareMentions), ...mentions.flatMap((item) => item.malware)]);
+  const software = analysis.excluded ? [] : unique([...analysis.families, ...split(analysis.record.softwareMentions), ...mentions.flatMap((item) => item.malware)]).filter(softwareNameAllowed);
   const known = row.context?.entityResolutions || [];
   const actorIds = unique(known.filter((entity) => entity.kind === "actor" && entity.verification === "catalog" && actors.includes(entity.name)).map((entity) => entity.id));
   const softwareIds = unique(known.filter((entity) => entity.kind === "software" && entity.verification === "catalog" && software.includes(entity.name)).map((entity) => entity.id));
   const stamps = dates(mentions.map((item) => item.date));
   const context = [mentions.length ? `Citado em ${mentions.length.toLocaleString("pt-BR")} ${mentions.length === 1 ? "publica\xE7\xE3o ou registro de feed" : "publica\xE7\xF5es e registros de feeds"}.` : "Sem men\xE7\xF5es identificadas no hist\xF3rico dispon\xEDvel.", actors.length ? `${actors.length.toLocaleString("pt-BR")} ${actors.length === 1 ? "ator relacionado" : "atores relacionados"} nas publica\xE7\xF5es.` : "", software.length ? `${software.length.toLocaleString("pt-BR")} ${software.length === 1 ? "malware ou ferramenta relacionado" : "malwares e ferramentas relacionados"}.` : ""].filter(Boolean).join(" ");
   const verdict = analysis.excluded ? analysis.priority : ["Malicioso", "Suspeito"].includes(String(analysis.record.verdict)) ? String(analysis.record.verdict) : "Sem evid\xEAncia suficiente";
-  const record = { indicator: row.query, type: analysis.record.type, verdict, context, actors: joined(actors), actorIds: joined(actorIds), malware: joined(software), softwareIds: joined(softwareIds), techniques: joined(analysis.techniques), mentions: mentions.length, firstMention: stamps[0] || null, lastMention: stamps.at(-1) || null, abuseReports: analysis.record.abReports, country: analysis.record.country, asn: analysis.record.asn, organization: analysis.record.organization, prefix: analysis.record.prefix, rdns: analysis.record.rdns, registrar: analysis.record.registrar, created: analysis.record.created };
+  const asn = String(analysis.record.asn || "").match(/\bAS(\d+)\b/i)?.[1];
+  const record = { indicator: row.query, type: analysis.record.type, verdict, context, actors: joined(actors), actorIds: joined(actorIds), malware: joined(software), softwareIds: joined(softwareIds), techniques: joined(analysis.techniques), mentions: mentions.length, firstMention: stamps[0] || null, lastMention: stamps.at(-1) || null, abuseReports: analysis.record.abReports, country: infrastructureValue(analysis.record.country), asn: asn ? "AS" + asn : null, organization: infrastructureValue(analysis.record.organization), prefix: infrastructureValue(analysis.record.prefix), rdns: infrastructureValue(analysis.record.rdns), registrar: infrastructureValue(analysis.record.registrar), created: infrastructureValue(analysis.record.created) };
   return { record, mentions, analysis };
 }
 function createUnifiedBulkRegistry() {
@@ -1272,7 +1276,7 @@ function createUnifiedBulkRegistry() {
     add(projection) {
       const { record, analysis } = projection, records = [], relations = [];
       const actors = split(record.actors), families = split(record.malware);
-      analyses.push({ ...analysis, actors, families, record: { type: record.type, tactics: analysis.record.tactics, publications: projection.mentions.length }, row: { query: analysis.row.query, state: analysis.row.state, contextLoading: analysis.row.contextLoading, context: { evidence: [], publications: [], errors: analysis.row.context?.errors || [] }, result: analysis.row.result ? { query: analysis.row.query, threatLevel: analysis.row.result.threatLevel, vendorData: analysis.row.result.vendorData.map((item) => ({ name: item.name, error: item.error, isLoading: item.isLoading, unsupported: item.unsupported, data: {} })) } : void 0 } });
+      analyses.push({ ...analysis, actors, families, asn: record.asn ? String(record.asn) : "", record: { type: record.type, tactics: analysis.record.tactics, publications: projection.mentions.length }, row: { query: analysis.row.query, state: analysis.row.state, contextLoading: analysis.row.contextLoading, context: { evidence: [], publications: [], errors: analysis.row.context?.errors || [] }, result: analysis.row.result ? { query: analysis.row.query, threatLevel: analysis.row.result.threatLevel, vendorData: analysis.row.result.vendorData.map((item) => ({ name: item.name, error: item.error, isLoading: item.isLoading, unsupported: item.unsupported, data: {} })) } : void 0 } });
       for (const mention of projection.mentions) {
         let publication = documents.get(mention.link);
         if (!publication) {

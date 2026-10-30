@@ -20,6 +20,8 @@ function reference(value: unknown) {
   } catch { return ''; }
 }
 const split = (value: unknown) => labels(value).flatMap(item => item.split(';').map(s => s.trim()).filter(Boolean));
+const softwareNameAllowed = (name:string) => !/^(?:(?:ssh|smtp|ftp|rdp|http|dns|sip)[ -]*)?(?:brute[ -]?force|automated scanners?(?:\s*&\s*botnets?)?|scanners?|scanning|botnets?|malware|trojan|rat|loader|downloader|ransomware|infostealer|phishing|generic|unknown)$/i.test(name.trim());
+const infrastructureValue = (value:unknown) => value == null || /^(?:—|-|none|unknown|n\/?a|asnone)$/i.test(String(value).trim()) ? null : value as string | number;
 
 export const UNIFIED_INDICATOR_COLUMNS: UnifiedColumn[] = [
   ['indicator','Indicador',43],['type','Tipo',13],['verdict','Classificação',22],['context','Contexto da análise',70],
@@ -57,6 +59,7 @@ export function projectUnifiedBulkRow(row: BulkRow, analysis = analyzeBulkRow(ro
     current.techniques = unique([...current.techniques,...ids]);
     for (const entity of entities) {
       const identity = resolve(entity.kind, entity.name, entity.id || '');
+      if (identity.kind === 'software' && !softwareNameAllowed(identity.name)) continue;
       if (identity.kind === 'actor' && identity.verification === 'catalog' && !analysis.excluded) current.actors.push(identity.name);
       else if (identity.kind === 'software' && !analysis.excluded) current.malware.push(identity.name);
       else if (identity.kind !== 'cve') continue;
@@ -86,14 +89,15 @@ export function projectUnifiedBulkRow(row: BulkRow, analysis = analyzeBulkRow(ro
   }
   const mentions = [...documents.values()];
   const actors = analysis.excluded ? [] : unique([...analysis.actors,...analysis.mentions,...mentions.flatMap(item => item.actors)]);
-  const software = analysis.excluded ? [] : unique([...analysis.families,...split(analysis.record.softwareMentions),...mentions.flatMap(item => item.malware)]);
+  const software = analysis.excluded ? [] : unique([...analysis.families,...split(analysis.record.softwareMentions),...mentions.flatMap(item => item.malware)]).filter(softwareNameAllowed);
   const known = row.context?.entityResolutions || [];
   const actorIds = unique(known.filter(entity => entity.kind === 'actor' && entity.verification === 'catalog' && actors.includes(entity.name)).map(entity => entity.id));
   const softwareIds = unique(known.filter(entity => entity.kind === 'software' && entity.verification === 'catalog' && software.includes(entity.name)).map(entity => entity.id));
   const stamps = dates(mentions.map(item => item.date));
   const context = [mentions.length ? `Citado em ${mentions.length.toLocaleString('pt-BR')} ${mentions.length === 1 ? 'publicação ou registro de feed' : 'publicações e registros de feeds'}.` : 'Sem menções identificadas no histórico disponível.',actors.length ? `${actors.length.toLocaleString('pt-BR')} ${actors.length === 1 ? 'ator relacionado' : 'atores relacionados'} nas publicações.` : '',software.length ? `${software.length.toLocaleString('pt-BR')} ${software.length === 1 ? 'malware ou ferramenta relacionado' : 'malwares e ferramentas relacionados'}.` : ''].filter(Boolean).join(' ');
   const verdict = analysis.excluded ? analysis.priority : ['Malicioso','Suspeito'].includes(String(analysis.record.verdict)) ? String(analysis.record.verdict) : 'Sem evidência suficiente';
-  const record: UnifiedRecord = {indicator:row.query,type:analysis.record.type,verdict,context,actors:joined(actors),actorIds:joined(actorIds),malware:joined(software),softwareIds:joined(softwareIds),techniques:joined(analysis.techniques),mentions:mentions.length,firstMention:stamps[0] || null,lastMention:stamps.at(-1) || null,abuseReports:analysis.record.abReports,country:analysis.record.country,asn:analysis.record.asn,organization:analysis.record.organization,prefix:analysis.record.prefix,rdns:analysis.record.rdns,registrar:analysis.record.registrar,created:analysis.record.created};
+  const asn = String(analysis.record.asn || '').match(/\bAS(\d+)\b/i)?.[1];
+  const record: UnifiedRecord = {indicator:row.query,type:analysis.record.type,verdict,context,actors:joined(actors),actorIds:joined(actorIds),malware:joined(software),softwareIds:joined(softwareIds),techniques:joined(analysis.techniques),mentions:mentions.length,firstMention:stamps[0] || null,lastMention:stamps.at(-1) || null,abuseReports:analysis.record.abReports,country:infrastructureValue(analysis.record.country),asn:asn?'AS'+asn:null,organization:infrastructureValue(analysis.record.organization),prefix:infrastructureValue(analysis.record.prefix),rdns:infrastructureValue(analysis.record.rdns),registrar:infrastructureValue(analysis.record.registrar),created:infrastructureValue(analysis.record.created)};
   return {record,mentions,analysis};
 }
 
@@ -105,7 +109,7 @@ export function createUnifiedBulkRegistry() {
     add(projection: UnifiedProjection) {
       const {record,analysis} = projection, records:UnifiedRecord[] = [], relations:UnifiedRecord[] = [];
       const actors = split(record.actors), families = split(record.malware);
-      analyses.push({...analysis,actors,families,record:{type:record.type,tactics:analysis.record.tactics,publications:projection.mentions.length},row:{query:analysis.row.query,state:analysis.row.state,contextLoading:analysis.row.contextLoading,context:{evidence:[],publications:[],errors:analysis.row.context?.errors||[]},result:analysis.row.result ? {query:analysis.row.query,threatLevel:analysis.row.result.threatLevel,vendorData:analysis.row.result.vendorData.map(item=>({name:item.name,error:item.error,isLoading:item.isLoading,unsupported:item.unsupported,data:{}}))} : undefined} as BulkRow});
+      analyses.push({...analysis,actors,families,asn:record.asn?String(record.asn):'',record:{type:record.type,tactics:analysis.record.tactics,publications:projection.mentions.length},row:{query:analysis.row.query,state:analysis.row.state,contextLoading:analysis.row.contextLoading,context:{evidence:[],publications:[],errors:analysis.row.context?.errors||[]},result:analysis.row.result ? {query:analysis.row.query,threatLevel:analysis.row.result.threatLevel,vendorData:analysis.row.result.vendorData.map(item=>({name:item.name,error:item.error,isLoading:item.isLoading,unsupported:item.unsupported,data:{}}))} : undefined} as BulkRow});
       for (const mention of projection.mentions) {
         let publication = documents.get(mention.link);
         if (!publication) { publication = {id:`PUB-${String(documents.size + 1).padStart(5,'0')}`,title:mention.title,date:mention.date,link:mention.link,actors:new Set(),malware:new Set(),techniques:new Set(),indicators:new Set()}; documents.set(mention.link,publication); }

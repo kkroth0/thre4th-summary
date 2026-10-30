@@ -28,3 +28,8 @@ test('reputation lookups and failed providers never create fictitious publicatio
  const input=fixture();input.result!.threatLevel='safe';input.result!.vendorData=[];input.context!.evidence=[{...input.context!.evidence[0],provider:'VirusTotal',link:'https://www.virustotal.com/gui/ip-address/93.184.216.34'}];
  const projection=projectUnifiedBulkRow(input);assert.equal(projection.record.mentions,0);assert.equal(projection.record.verdict,'Sem evidência suficiente');
 });
+test('generic attack categories are not malware families and absent ASN values never enter network rankings',()=>{
+ const input=fixture();input.context!.entityResolutions!.push({sourceKind:'malware',sourceLabel:'SSH Brute-Force',sourceId:'',kind:'software',id:'',name:'SSH Brute-Force',verification:'source-reported',catalogSource:''});
+ input.context!.evidence[0].entities.push({kind:'malware',name:'SSH Brute-Force',id:'',relation:'mentioned-by-source'});input.result!.vendorData.push({name:'DNS / Team Cymru',data:{ASN:'ASNone'}});
+ const projection=projectUnifiedBulkRow(input);assert.ok(!String(projection.record.malware).includes('Brute-Force'));assert.equal(projection.record.asn,null);const registry=createUnifiedBulkRegistry();registry.add(projection);assert.deepEqual(registry.finish().analysis.asns,[]);
+});
