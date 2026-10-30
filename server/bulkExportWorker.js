@@ -1,71 +1,23 @@
-import { parentPort,workerData } from 'node:worker_threads';
-import ExcelJS from 'exceljs';
-import fs from 'node:fs';
+import {parentPort,workerData} from 'node:worker_threads';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
-import readline from 'node:readline';
-import { pipeline } from 'node:stream/promises';
-import { once } from 'node:events';
-import { setImmediate as yieldTurn } from 'node:timers/promises';
-import { createBulkStore } from './bulkJobs.js';
-import { createBulkLocalSnapshot } from './bulkLocalSnapshot.js';
-import { createBulkRawTable } from './bulkRawTable.js';
+import {createBulkStore} from './bulkJobs.js';
+import {createBulkLocalSnapshot} from './bulkLocalSnapshot.js';
 import {loadBulkEntityResolver} from './bulkEntityIdentity.js';
-import { eligibleSources,composeBulkRow,analyzeBulkRow,aggregateBulkAnalyses,PRIORITIES,addBulkDashboard,ANALYTICAL_COLUMNS,ANALYTICAL_GROUPS,BULK_COLORS as C,valueText,scrubXml,workbookMetadata,prepareBulkChartZip,bulkEntityRelation } from './bulkShared.generated.mjs';
-
+import {writeUnifiedBulkWorkbook} from './bulkUnifiedWorkbook.js';
+import {eligibleSources,composeBulkRow} from './bulkShared.generated.mjs';
 const {filePath,exportId,jobId,owner,outputDir,intelligencePath}=workerData;
 const store=createBulkStore({filePath,readOnly:true,eligibleSources,composeRow:composeBulkRow});
-const tmp=path.join(outputDir,exportId+'.tmp.xlsx'),final=path.join(outputDir,exportId+'.xlsx'),spool=path.join(outputDir,exportId+'.parts');
-let spoolStream,sequence=0,localSnapshot;
-const entities=loadBulkEntityResolver();
-const exportRowFor=(job,item)=>entities.normalizeRow(localSnapshot.enrich(store.row(job,item)));
-async function writeParts(text,sheet,row,field){const reference=`EXT-${++sequence}`;for(let start=0,part=1;start<text.length;part++){let end=Math.min(text.length,start+30000);if(end<text.length&&/[\uD800-\uDBFF]/.test(text[end-1]))end--;const line=JSON.stringify([reference,sheet,row,field,part,text.slice(start,end)])+'\n';if(!spoolStream.write(line))await once(spoolStream,'drain');start=end;}return `${reference} — conteúdo completo em Dados extensos`;}
-async function valuesFor(values,sheet,row,keys){const out=[];for(let i=0;i<values.length;i++){const value=values[i];if(value==null||value===''){out.push(undefined);continue;}if(typeof value==='number'||typeof value==='boolean'){out.push(value);continue;}const text=scrubXml(valueText(value));out.push(text.length<=32767?text:await writeParts(text,sheet,row,keys[i]));}return out;}
-function header(ws,columns,row=1){ws.columns=columns.map(([key,header,width])=>({key,width}));const h=ws.getRow(row);h.values=columns.map(x=>x[1]);h.height=42;h.font={name:'Arial',size:10,bold:true,color:{argb:C.white}};h.fill={type:'pattern',pattern:'solid',fgColor:{argb:C.ink}};h.alignment={vertical:'middle',wrapText:true};return h;}
-async function analytical(wb,name,entries,job){
- const ws=wb.addWorksheet(name,{views:[{state:'frozen',xSplit:4,ySplit:4,showGridLines:false,zoomScale:80}],properties:{tabColor:{argb:C.teal}},pageSetup:{orientation:'landscape',fitToPage:true,fitToWidth:1,fitToHeight:0,printTitlesRow:'1:4'}});
- ws.columns=ANALYTICAL_COLUMNS.map(([key,,width])=>({key,width}));
- ws.mergeCells('A1:K1');ws.getCell('A1').value=`ThreatSumm4ry / ${name}`;ws.getRow(1).height=34;ws.getCell('A1').font={name:'Arial',size:17,bold:true,color:{argb:C.white}};ws.getCell('A1').fill={type:'pattern',pattern:'solid',fgColor:{argb:C.ink}};ws.getRow(1).commit();
- ws.mergeCells('A2:K2');ws.getCell('A2').value='Atribuição declarada e contexto são campos distintos. Campos vazios não equivalem a resultado negativo. Respostas completas em Fontes e Dados extensos.';ws.getRow(2).height=38;ws.getCell('A2').font={name:'Arial',size:10,color:{argb:C.muted}};ws.getCell('A2').alignment={vertical:'middle',wrapText:true};ws.getRow(2).commit();
- let col=1;for(const [i,g]of ANALYTICAL_GROUPS.entries()){const end=col+g.columns.length-1;ws.mergeCells(3,col,3,end);const cell=ws.getCell(3,col);cell.value=g.title;cell.font={name:'Arial',size:10,bold:true,color:{argb:i%2?C.white:C.ink}};cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:i%2?C.ink:C.yellow}};cell.alignment={vertical:'middle',indent:1};col=end+1;}ws.getRow(3).height=28;ws.getRow(3).commit();header(ws,ANALYTICAL_COLUMNS,4).commit();
- let n=4;for(const item of entries){const source=store.prepare('SELECT * FROM bulk_items WHERE job=? AND ordinal=?').get(job.id,item.ordinal),a=analyzeBulkRow(exportRowFor(job,source));a.record.rank=++n-4;
-  const row=ws.addRow(await valuesFor(ANALYTICAL_COLUMNS.map(c=>a.record[c[0]]),name,n,ANALYTICAL_COLUMNS.map(c=>c[0])));row.height=58;row.font={name:'Arial',size:10,color:{argb:C.ink}};row.alignment={vertical:'top',wrapText:true};row.fill={type:'pattern',pattern:'solid',fgColor:{argb:n%2?C.pale:C.white}};
-  const priority=row.getCell('priority');priority.font={name:'Arial',size:10,bold:true,color:{argb:C.ink}};priority.fill={type:'pattern',pattern:'solid',fgColor:{argb:a.priority==='Investigar'?'FFFFDDDD':a.priority==='Atenção'?'FFFFEDBC':a.priority==='Revisar'?'FFFFF6D9':'FFE7F0F4'}};
-  for(const key of ['axLinks','tfReference']){const c=row.getCell(key);if(typeof c.value==='string'&&/^https?:\/\/[^\s;]+$/.test(c.value)){c.value={text:c.value,hyperlink:c.value};c.font={name:'Arial',size:10,color:{argb:'FF0563C1'},underline:true};}}
-  row.commit();if(n%100===0){parentPort.postMessage({progress:n});await yieldTurn();}
- }ws.autoFilter={from:{row:4,column:1},to:{row:Math.max(4,n),column:ANALYTICAL_COLUMNS.length}};ws.commit();
-}
-function rawTable(wb,name,columns){return createBulkRawTable(wb,name,columns,{header,valuesFor,colors:C,progress:async count=>{parentPort.postMessage({progress:count});await yieldTurn();}});}
+let localSnapshot;
 try{
- await fsp.mkdir(outputDir,{recursive:true});store.db.exec('BEGIN');const job=store.owned(owner,jobId),exportRow=store.prepare('SELECT * FROM bulk_exports WHERE id=? AND owner=? AND job=?').get(exportId,owner,jobId);if(!exportRow)throw Error('Exportação não encontrada.');const filters=JSON.parse(exportRow.filters||'{}'),lean=[];
+ await fsp.mkdir(outputDir,{recursive:true});store.db.exec('BEGIN');
+ const job=store.owned(owner,jobId),item=store.prepare('SELECT * FROM bulk_exports WHERE id=? AND owner=? AND job=?').get(exportId,owner,jobId);
+ if(!item)throw Error('Exportação não encontrada.');const filters=JSON.parse(item.filters||'{}');
  if(filters.waitForComplete&&(job.state!=='complete'||store.prepare("SELECT COUNT(*) n FROM bulk_items WHERE job=? AND state NOT IN ('complete','unsupported')").get(jobId).n))throw Error('O Excel completo aguarda a conclusão de todas as consultas.');
- localSnapshot=createBulkLocalSnapshot({filePath:intelligencePath,spoolPath:path.join(outputDir,exportId+'.context'),owner});
- for(const item of store.items(jobId,filters)){const row=exportRowFor(job,item),a=analyzeBulkRow(row);lean.push({...a,ordinal:item.ordinal,record:{score:a.record.score,verdict:a.record.verdict,actors:a.record.actors,families:a.record.families,notes:a.record.notes,tactics:a.record.tactics,type:a.record.type},row:{query:row.query,state:row.state,contextLoading:row.contextLoading,context:{errors:row.context.errors,publications:[],evidence:Array(row.context.evidence.length).fill(null)},result:{query:row.query,overallScore:row.result.overallScore,threatLevel:row.result.threatLevel,detections:row.result.detections,totalVendors:row.result.totalVendors,vendorData:row.result.vendorData.map(v=>({name:v.name,data:{},error:v.error,isLoading:v.isLoading,unsupported:v.unsupported}))}}});}
- lean.sort((a,b)=>PRIORITIES.indexOf(a.priority)-PRIORITIES.indexOf(b.priority)||Number(b.record.score)-Number(a.record.score)||a.row.query.localeCompare(b.row.query));const analysis=aggregateBulkAnalyses(lean);
- const wb=new ExcelJS.stream.xlsx.WorkbookWriter({filename:tmp,useStyles:true,useSharedStrings:false,zip:{zlib:{level:3}}});workbookMetadata(wb,'Enriquecimento em lote',new Date().toISOString(),'IOC, fontes, evidências');wb.addWorksheet('Dashboard',{views:[{showGridLines:false,zoomScale:85}],properties:{tabColor:{argb:C.yellow}}});addBulkDashboard(wb,analysis,new Date().toISOString());
- for(const name of ['Dashboard','_dados']){const ws=wb.getWorksheet(name);if(localSnapshot.metadata&&name!=='_dados'){ws.getCell('B3').value=String(ws.getCell('B3').value)+'\nCruzamento com as bases locais incluído. A cobertura das APIs pendentes está identificada nas abas analíticas.';ws.getRow(3).height=40;}ws.eachRow(row=>row.commit());ws.commit();}
- spoolStream=fs.createWriteStream(spool);await analytical(wb,'Indicadores',lean,job);
- for(const [name,type]of [['IPs','IP'],['Domínios','Domínio'],['Hashes','Hash'],['URLs','URL']]){const subset=lean.filter(a=>a.record.type===type);if(subset.length)await analytical(wb,name,subset,job);}
- const eachRow=async fn=>{for(const a of lean){const item=store.prepare('SELECT * FROM bulk_items WHERE job=? AND ordinal=?').get(jobId,a.ordinal);await fn(exportRowFor(job,item));}};
- let table=rawTable(wb,'Fontes',[['indicator','Indicador',48],['source','Fonte',25],['state','Estado da fonte',35],['reference','Referência',65],['data','Dados normalizados (JSON)',90],['raw','Resposta completa (JSON)',100],['timeline','Timeline (JSON)',70],['quota','Cota observada (JSON)',40],['metadata','Metadados da consulta (JSON)',70]]);
- await eachRow(async row=>{for(const v of row.result.vendorData)await table.add({indicator:row.query,source:v.name,state:v.unsupported?'unsupported':v.error|| (v.isLoading?'pending':'ok'),reference:v.link,data:v.data,raw:v.rawPayload,timeline:v.timeline||[],quota:v.quota,metadata:Object.fromEntries(Object.entries(v).filter(([key])=>!['data','rawPayload'].includes(key)))});});table.finish();
- table=rawTable(wb,'Publicações',[['indicator','Indicador',48],['title','Publicação',65],['source','Fonte',25],['link','Referência',65],['pubDate','Publicação (ISO)',28],['storyId','ID do evento',30],['actors','Atores citados',40],['categories','Categorias',35],['original','Registro completo (JSON)',100]]);
- await eachRow(async row=>{for(const p of row.context.publications)await table.add({...p,indicator:row.query,original:p});});table.finish();
- table=rawTable(wb,'Evidências',[['indicator','Indicador',48],['provider','Provedor',25],['source','Fonte',25],['title','Título',65],['link','Referência',65],['published','Publicação (ISO)',28],['collectedAt','Coleta (ISO)',28],['confidence','Confiança da fonte',20],['reputation','Reputação (JSON)',60],['entities','Entidades e relações (JSON)',90],['payload','Payload (JSON)',100],['original','Registro completo (JSON)',100]]);
- await eachRow(async row=>{for(const e of row.context.evidence)await table.add({...e,indicator:row.query,original:e});});table.finish();
- table=rawTable(wb,'Relações',[['indicator','Indicador',48],['kind','Tipo normalizado',36],['name','Entidade normalizada',38],['relation','Relação informada',32],['confidence','Confiança da fonte',20],['source','Fonte',24],['title','Publicação / evidência',65],['link','Referência',65],['published','Data (ISO)',28],['sourceKind','Tipo original da fonte',24],['sourceName','Nome original da fonte',38],['catalogId','ID no catálogo',28],['identityStatus','Validação da identidade',46]]);
- await eachRow(async row=>{for(const e of row.context.evidence)for(const entity of e.entities||[])await table.add({...bulkEntityRelation(row,entity),indicator:row.query,confidence:e.confidence,source:e.provider,title:e.title,link:e.link,published:e.published});});table.finish();
- table=rawTable(wb,'Técnicas ATT&CK',[['id','Técnica citada',22],['count','IOCs únicos nas evidências',25],['actors','Atores declarados na mesma evidência',55],['reference','Referência MITRE ATT&CK',65],['scope','Escopo da leitura',65]]);
- for(const t of analysis.techniques)await table.add({id:t.name,count:t.count,actors:[...new Set(lean.flatMap(a=>a.pairs.filter(p=>p.technique===t.name).map(p=>p.actor)))].join('; '),reference:`https://attack.mitre.org/techniques/${t.name.replace('.','/')}/`,scope:'Citação de inteligência; não comprova execução no ambiente analisado.'});table.finish();
- table=rawTable(wb,'Detalhes por fonte',[['indicator','Indicador',48],['source','Fonte',25],['field','Campo',35],['value','Resultado',100]]);
- await eachRow(async row=>{for(const v of row.result.vendorData)for(const [field,value]of Object.entries(v.data||{}))await table.add({indicator:row.query,source:v.name,field,value});});table.finish();
- table=rawTable(wb,'Consulta original',[['indicator','Indicador',48],['state','Estado da consulta',25],['completedAt','Conclusão (ISO)',28],['result','Metadados do resultado (JSON)',90],['errors','Falhas de contexto',70]]);
- await eachRow(async row=>{const {vendorData,...meta}=row.result;await table.add({indicator:row.query,state:row.state,completedAt:row.completedAt,result:{...meta,providers:vendorData.map(v=>v.name),responses:'Fontes / Resposta completa (JSON)'},errors:row.context.errors});});table.finish();
- table=rawTable(wb,'Resumo',[['key','Campo',40],['value','Valor',100]]);for(const [key,value]of [['Lote',jobId],['Indicadores exportados',lean.length],['Gerado em (ISO)',new Date().toISOString()],['Cruzamento com as bases locais',localSnapshot.stats?.()||'Contexto previamente salvo no lote'],['Escopo','Recorte dos resultados disponíveis. As APIs pendentes permanecem identificadas. As bases locais de IOCs, Axur e publicações são consultadas por correspondência exata quando disponíveis. Cada resposta original está na aba Fontes; textos extensos têm partes ordenadas em Dados extensos. Exportar não consulta APIs externas.']])await table.add({key,value});table.finish();
- await new Promise((resolve,reject)=>{spoolStream.once('error',reject);spoolStream.end(resolve);});
- if(sequence){table=rawTable(wb,'Dados extensos',[['id','Referência',18],['sheet','Aba',25],['row','Linha',12],['field','Campo',35],['part','Parte',12],['text','Conteúdo',100]]);const lines=readline.createInterface({input:fs.createReadStream(spool),crlfDelay:Infinity});for await(const line of lines){const v=JSON.parse(line);await table.add({id:v[0],sheet:v[1],row:v[2],field:v[3],part:v[4],text:v[5]});}table.finish();}
- await wb.commit();store.db.exec('COMMIT');store.close();localSnapshot.close();
- const bytes=await fsp.readFile(tmp),zip=await prepareBulkChartZip(new Uint8Array(bytes.buffer,bytes.byteOffset,bytes.byteLength),[],analysis);await pipeline(zip.generateNodeStream({type:'nodebuffer',streamFiles:false,compression:'DEFLATE'}),fs.createWriteStream(final));
- const local=localSnapshot.stats?.(),summary={total:lean.length,localChecked:local?.checked||0,axurMatches:local?.axurMatches||0,axurImportAt:local?.axurImportAt||null,evidence:analysis.evidence,partial:analysis.partial,unsupported:analysis.unsupported,charts:Object.keys(zip.files).filter(name=>/(?:^|\/)charts\/chart\d+\.xml$/.test(name)).length,bytes:(await fsp.stat(final)).size,generatedAt:local?.asOf||new Date().toISOString()};
- await fsp.unlink(tmp);await fsp.unlink(spool);parentPort.postMessage({done:true,file:final,total:lean.length,revision:job.revision,summary});
-}catch(error){try{store.close();}catch{}try{localSnapshot?.close();}catch{}try{spoolStream?.destroy();await fsp.unlink(tmp);}catch{}try{await fsp.unlink(spool);}catch{}parentPort.postMessage({error:error?.message||'Falha ao gerar a planilha.'});}
+ localSnapshot=createBulkLocalSnapshot({filePath:intelligencePath,spoolPath:path.join(outputDir,exportId+'.context'),owner});const entities=loadBulkEntityResolver();
+ async function* rows(){for(const item of store.items(jobId,filters))yield entities.normalizeRow(localSnapshot.enrich(store.row(job,item)));}
+ const result=await writeUnifiedBulkWorkbook({rows:rows(),outputPath:path.join(outputDir,exportId+'.xlsx'),progress:progress=>parentPort.postMessage({progress})});
+ const local=localSnapshot.stats?.();store.db.exec('COMMIT');store.close();localSnapshot.close();
+ result.summary={...result.summary,localChecked:local?.checked||0,axurMatches:local?.axurMatches||0,axurImportAt:local?.axurImportAt||null,generatedAt:local?.asOf||result.summary.generatedAt};
+ parentPort.postMessage({done:true,...result,revision:job.revision});
+}catch(error){try{store.close();}catch{}try{localSnapshot?.close();}catch{}parentPort.postMessage({error:error?.message||'Falha ao gerar a planilha.'});}

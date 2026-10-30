@@ -6,7 +6,7 @@ const isLink = (key, value) => linkKeys.has(key) && typeof value === 'string' &&
 
 /** Stream complete records into bounded worksheets; overflow references use the final sheet and row. */
 export function createBulkRawTable(wb, name, columns, {
-  header, valuesFor, colors, progress = async () => {},
+  header, valuesFor, colors, progress = async () => {}, cellFormat = () => {},
   hyperlinkLimit = BULK_WORKSHEET_HYPERLINK_LIMIT,
   rowLimit = EXCEL_WORKSHEET_ROW_LIMIT,
 } = {}) {
@@ -38,6 +38,7 @@ export function createBulkRawTable(wb, name, columns, {
       if (count % 2 === 0) row.fill = {type: 'pattern', pattern: 'solid', fgColor: {argb: colors.pale}};
       for (const [key] of columns) {
         const cell = row.getCell(key);
+        cellFormat(cell,key);
         if (isLink(key, cell.value)) {
           cell.value = {text: cell.value, hyperlink: cell.value};
           cell.font = {name: 'Arial', size: 10, color: {argb: 'FF0563C1'}, underline: true};

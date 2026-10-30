@@ -65,15 +65,13 @@ test('aggregated OTX adversary text and generic AV/file labels remain in source 
  const a=analyzeBulkRow(row);assert.deepEqual(a.actors,['APT28']);assert.deepEqual(a.families,['HEADLACE']);assert.deepEqual(a.pairs,[{actor:'APT28',technique:'T1059.001'}]);
  assert.match(String(a.record.otxActors),/Core Werewolf/);assert.match(String(a.record.otxFamilies),/Generic Trojan/);assert.match(String(a.record.notes),/fora do ranking/);
 });
-test('analytical sheets preserve literal values, headers, source links and editable chart bindings',async()=>{
+test('unified Excel keeps editable charts and publication references without diagnostics',async()=>{
  const rows=[base(),base('185.220.101.6')];rows[0].context!.evidence=[evidence('Context Actor','mentioned-with','T1566')];
  const wb=buildBulkExcelWorkbook(rows,Excel),sheet=wb.getWorksheet('Indicadores')!;
- assert.equal(sheet.getRow(5).getCell('indicator').value,rows[0].query);assert.equal(sheet.views[0].state,'frozen');assert.equal((sheet.views[0] as any).xSplit,4);assert.equal((sheet.autoFilter as any).from.row,4);assert.equal(wb.getWorksheet('_dados')!.state,'hidden');
- assert.equal(sheet.getRow(5).getCell('vtMalicious').value,12);assert.equal(sheet.getRow(5).getCell('techniques').value,'T1566; T1059.001');assert.equal(sheet.getRow(5).getCell('axLinks').hyperlink,'https://lab.example/report');
+ assert.equal(sheet.getRow(2).getCell('indicator').value,rows[0].query);assert.equal(sheet.views[0].state,'frozen');assert.equal((sheet.autoFilter as any).from.row,1);assert.equal(wb.getWorksheet('_dados')!.state,'hidden');
+ assert.equal(sheet.getRow(2).getCell('techniques').value,'T1566; T1059.001');
  const bytes=await addBulkExcelCharts(new Uint8Array(await wb.xlsx.writeBuffer()),rows),zip=await JSZip.loadAsync(bytes);
- const paths=Object.keys(zip.files).filter(x=>/\/charts\/chart\d+\.xml$/.test(x));assert.equal(paths.length,8);
- const chart=await zip.file('xl/drawings/charts/chart1.xml')!.async('string');assert.match(chart,/'_dados'!\$A\$3:\$A\$3/);assert.match(chart,/<c:v>Actor A<\/c:v>/);assert.match(chart,/<c:v>2<\/c:v>/);assert.match(chart,/<c:majorUnit val="1"\/>/);
- const bar=chart.match(/<c:barChart>[\s\S]*?<\/c:barChart>/)![0];assert.ok(bar.indexOf('<c:gapWidth')<bar.indexOf('<c:axId'),'OOXML bar spacing must precede axis identifiers');
- const scale=chart.match(/<c:valAx>[\s\S]*?<c:scaling>([\s\S]*?)<\/c:scaling>/)![1];assert.ok(scale.indexOf('<c:max')<scale.indexOf('<c:min'),'OOXML scaling requires max before min');
- const restored=new Excel.Workbook();await restored.xlsx.load(bytes);assert.equal(restored.getWorksheet('Indicadores')!.getCell('C5').value,rows[0].query);assert.equal(restored.getWorksheet('Evidências')!.getRow(2).getCell(5).hyperlink,'https://lab.example/report');
+ const paths=Object.keys(zip.files).filter(x=>/\/charts\/chart\d+\.xml$/.test(x));assert.equal(paths.length,4);assert.equal(zip.file('xl/drawings/charts/chart5.xml'),null);assert.equal(zip.file('xl/drawings/charts/chart8.xml'),null);
+ const chart=await zip.file('xl/drawings/charts/chart1.xml')!.async('string');assert.match(chart,/Atores relacionados nas publicações/);assert.match(chart,/<c:v>Actor A<\/c:v>/);assert.match(chart,/<c:v>2<\/c:v>/);
+ const restored=new Excel.Workbook();await restored.xlsx.load(bytes);assert.equal(restored.getWorksheet('Indicadores')!.getCell('A2').value,rows[0].query);assert.equal(restored.getWorksheet('Publicações')!.getCell('H2').hyperlink,'https://lab.example/report');
 });

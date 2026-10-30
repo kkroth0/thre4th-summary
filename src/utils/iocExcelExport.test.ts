@@ -25,40 +25,16 @@ test('IOC Excel preserves each source evidence, full hash identity, dates, entit
   assert.ok(JSON.stringify(restored.getWorksheet('Resumo')!.getSheetValues()).includes(payload().range.to));
 });
 
-test('empty Excel export has headers, a zero count and an explicit evidence scope', () => {
-  const wb = buildNewsExcelWorkbook({ ...payload(), rows: [] }, Excel);
-  assert.equal(wb.getWorksheet('IOCs')!.rowCount, 1);
-  assert.ok(JSON.stringify(wb.getWorksheet('Resumo')!.getSheetValues()).includes('Registros exportados'));
-  const bulk = buildBulkExcelWorkbook([], Excel);
-  for (const name of ['Indicadores', 'Fontes', 'Publicações', 'Evidências', 'Resumo']) assert.ok(bulk.getWorksheet(name));
+test('empty bulk export keeps the unified analytical tabs and omits diagnostics and summaries',()=>{
+ const wb=buildBulkExcelWorkbook([],Excel);
+ for(const name of ['Dashboard','Indicadores','Publicações','Menções','Relações','Técnicas ATT&CK'])assert.ok(wb.getWorksheet(name));
+ for(const name of ['Resumo','Resumo executivo','Dados extensos','Fontes','Evidências','Consulta original','Detalhes por fonte'])assert.equal(wb.getWorksheet(name),undefined);
+ assert.equal(wb.getWorksheet('Dashboard')!.getCell('B5').value,0);
 });
-
-test('bulk dashboard distinguishes incomplete rows and excludes public resolvers from attribution', () => {
-  const evidence = { provider: 'OTX', title: 'Context', link: '', published: '', collectedAt: '', confidence: null, reputation: null, entities: [{ kind: 'actor' as const, id: 'G1', name: 'Example actor', relation: 'mentioned-with' }] };
-  const wb = buildBulkExcelWorkbook([{ query: '8.8.8.8', state: 'partial', context: { errors: [], publications: [], evidence: [evidence, evidence] } }, { query: '9.9.9.9', state: 'queued' }], Excel);
-  assert.deepEqual(wb.worksheets.slice(0, 2).map(ws => ws.name), ['Dashboard', 'Indicadores']);
-  const dashboard = wb.getWorksheet('Dashboard')!;
-  assert.equal(dashboard.getCell('B5').value, 2);
-  assert.equal(dashboard.getCell('J5').value, 0, 'contextual mentions do not create attribution');
-  assert.equal(dashboard.getCell('V5').value, 2, 'partial plus queued');
-  assert.equal(dashboard.getCell('R5').value, 2, 'two exact public resolvers');
-  assert.equal(wb.getWorksheet('Relações')!.rowCount, 3, 'source relationships remain intact');
-  assert.equal(wb.getWorksheet('Resumo executivo'),undefined);assert.match(String(dashboard.getCell('B16').value), /2 indicadores com cobertura incompleta/);
-});
-
-test('bulk Excel exposes PTR and curated FP review while preserving other provider findings', () => {
-  const wb = buildBulkExcelWorkbook([{ query: '8.8.8.8', state: 'partial', result: {
-    query: '8.8.8.8', overallScore: 80, threatLevel: 'malicious', detections: 1, totalVendors: 3,
-    vendorData: [{ name: 'VirusTotal', data: { Malicious: 12 } },
-      { name: 'DNS / Team Cymru', data: { 'Reverse Hostname': 'resolver.example' }, error: 'ASN unavailable' },
-      { name: 'abuse.ch Hunting', data: { 'FP Review': 'Correspondência contextual', 'FP Matches': [{ entry_value: '8.8.8.8:443', port: '443' }] } }],
-  } }], Excel);
-  const row = wb.getWorksheet('Indicadores')!.getRow(5);
-  assert.equal(row.getCell('rdns').value, 'resolver.example');
-  assert.equal(row.getCell('fpStatus').value, 'Correspondência contextual');
-  assert.equal(row.getCell('verdict').value, 'Malicioso');
-  assert.equal(row.getCell('score').value, 80);
-  assert.match(JSON.stringify(wb.getWorksheet('Detalhes por fonte')!.getSheetValues()), /443/);
+test('unified bulk columns retain infrastructure and the observed classification without processing messages',()=>{
+ const wb=buildBulkExcelWorkbook([{query:'93.184.216.34',state:'partial',result:{query:'93.184.216.34',overallScore:80,threatLevel:'malicious',detections:1,totalVendors:2,vendorData:[{name:'VirusTotal',data:{Malicious:12}},{name:'DNS / Team Cymru',data:{'Reverse Hostname':'resolver.example'},error:'ASN unavailable'}]}}],Excel);
+ const row=wb.getWorksheet('Indicadores')!.getRow(2);assert.equal(row.getCell('rdns').value,'resolver.example');assert.equal(row.getCell('verdict').value,'Malicioso');
+ const text=JSON.stringify(wb.getWorksheet('Indicadores')!.getSheetValues());for(const message of ['VirusTotal','Consulta incompleta','ASN unavailable','JSON'])assert.ok(!text.includes(message));
 });
 
 test('news Excel retains unknown additive fields and sanitizes illegal XML text without executing formulas', () => {
@@ -68,30 +44,11 @@ test('news Excel retains unknown additive fields and sanitizes illegal XML text 
   assert.equal(sheet.getRow(2).getCell('futureEvidence').value, '{"confidence":0,"title":"@external"}');
 });
 
-test('bulk Excel includes provider failures, raw responses, publications and entity relationships', async () => {
-  const rows: BulkRow[] = [{ query: '9.9.9.10', state: 'partial', result: { query: '9.9.9.10', overallScore: 0, threatLevel: 'unknown', totalVendors: 2, detections: 0,
-    vendorData: [{ name: 'OTX', data: { 'Pulse count': 4 }, rawPayload: { pulses: [{ name: 'Example' }] }, quota: { remaining: 0 }, link: 'https://otx.example/pulse' }, { name: 'VirusTotal', data: {}, error: 'Quota exceeded' }] },
-    context: { errors: ['Base unavailable'], publications: [{ storyId: 'event', title: 'Report', source: 'Lab', link: 'https://lab.example/a', pubDate: '2026-10-15T13:15:10Z', actors: ['Actor'], categories: [] }],
-      evidence: [{ provider: 'OTX', title: 'Pulse', link: 'https://otx.example/pulse', published: '2026-10-15T13:00:00Z', collectedAt: '2026-10-15T14:00:00Z', confidence: 0, reputation: null, entities: [{ kind: 'actor', id: 'G1', name: 'Actor', relation: 'mentioned-with' }] }] } }];
-  const wb = buildBulkExcelWorkbook(rows, Excel);
-  assert.equal(wb.getWorksheet('Fontes')!.getRow(3).getCell('state').value, 'Quota exceeded');
-  assert.equal(wb.getWorksheet('Fontes')!.getRow(2).getCell('raw').value, '{"pulses":[{"name":"Example"}]}');
-  assert.equal(wb.getWorksheet('Indicadores')!.getRow(5).getCell('score').value, 0);
-  assert.equal(wb.getWorksheet('Publicações')!.getRow(2).getCell('storyId').value, 'event');
-  assert.ok(String(wb.getWorksheet('Evidências')!.getRow(2).getCell('entities').value).includes('mentioned-with'));
-  assert.equal(wb.getWorksheet('Evidências')!.getRow(2).getCell('confidence').value, 0);
-  const restored = new Excel.Workbook(); await restored.xlsx.load(await wb.xlsx.writeBuffer());
-  assert.equal(restored.getWorksheet('Fontes')!.getCell('C3').value, 'Quota exceeded');
-});
-
-test('large provider JSON survives Excel roundtrip as ordered chunks without truncation or split Unicode pairs', async () => {
-  const raw = { evidence: 'x'.repeat(29985) + '🚀'.repeat(24000), final: 'last evidence retained' };
-  const rows: BulkRow[] = [{ query: '9.9.9.10', state: 'complete', result: { query: '9.9.9.10', overallScore: 0, threatLevel: 'unknown', detections: 0, totalVendors: 1, vendorData: [{ name: 'OTX', data: {}, rawPayload: raw }] } }];
-  const wb = buildBulkExcelWorkbook(rows, Excel), reference = String(wb.getWorksheet('Fontes')!.getRow(2).getCell('raw').value).split(' — ')[0];
-  const restored = new Excel.Workbook(); await restored.xlsx.load(await wb.xlsx.writeBuffer());
-  const parts: string[] = [];
-  restored.getWorksheet('Dados extensos')!.eachRow((row, index) => { if (index > 1 && row.getCell(1).value === reference) { const text = String(row.getCell(6).value); assert.ok(text.length <= 30000); parts.push(text); } });
-  assert.deepEqual(JSON.parse(parts.join('')), raw);
+test('large provider payloads are not embedded and input history is unchanged',async()=>{
+ const raw={evidence:'x'.repeat(500000),final:'saved upstream'};
+ const rows:BulkRow[]=[{query:'93.184.216.34',state:'complete',result:{query:'93.184.216.34',overallScore:0,threatLevel:'unknown',detections:0,totalVendors:1,vendorData:[{name:'OTX',data:{},rawPayload:raw}]}}];
+ const wb=buildBulkExcelWorkbook(rows,Excel);const buffer=await wb.xlsx.writeBuffer();assert.ok(buffer.byteLength<50000);assert.equal(rows[0].result!.vendorData[0].rawPayload,raw);
+ const restored=new Excel.Workbook();await restored.xlsx.load(buffer);assert.equal(restored.getWorksheet('Dados extensos'),undefined);assert.equal(restored.getWorksheet('Resumo'),undefined);assert.equal(restored.getWorksheet('Indicadores')!.getCell('A2').value,rows[0].query);
 });
 
 test('invalid news export payload is rejected instead of producing a misleading empty workbook', () => {

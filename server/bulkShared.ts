@@ -9,6 +9,7 @@ export { ANALYTICAL_COLUMNS, ANALYTICAL_GROUPS } from '../src/utils/bulkAnalytic
 export { addBulkExcelCharts, prepareBulkChartZip } from '../src/utils/bulkExcelCharts';
 export { BULK_COLORS } from '../src/utils/bulkDashboard';
 export { bulkEntityRelation } from '../src/utils/bulkEntityResolution';
+export { BULK_REPORT_VERSION, createUnifiedBulkRegistry, projectUnifiedBulkRow, UNIFIED_INDICATOR_COLUMNS, UNIFIED_PUBLICATION_COLUMNS, UNIFIED_MENTION_COLUMNS, UNIFIED_RELATION_COLUMNS, UNIFIED_TECHNIQUE_COLUMNS } from '../src/utils/bulkUnifiedReport';
 export const BULK_SOURCES=['VirusTotal','AbuseIPDB','AlienVault OTX','ThreatFox','URLhaus','MalwareBazaar','Axur'];
 export const eligibleSources=(query:string,sources:string[])=>[...resolveVendorsForQuery(query,sources).filter(x=>BULK_SOURCES.includes(x)),...(sources.includes('Axur')&&['ip','domain','url','hash'].includes(detectAnalyzerQueryType(query))?['Axur']:[])];
 export function normalizeBulkVendor(query:string,name:string,body:any,status=200){

@@ -5,16 +5,27 @@ import { bulkChartData } from './bulkDashboard';
 import type { BulkRow } from './bulkEnrichment';
 
 const xml=(s:string)=>s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&apos;');
-const priorityColors:Record<string,string>={'Investigar':'BF4444','Atenção':'E3A328','Revisar':'E7CD73','Sem sinal nas fontes':'138A8A','Infraestrutura pública':'6589AD','Teste':'98A5B5','Pendente':'D6DBE3'};
+const selectedCharts=[1,2,3,7];
 /** Native editable charts authored with Artifact Tool, bound to the snapshot's helper cells. */
 export async function prepareBulkChartZip(buffer:Uint8Array,rows:BulkRow[],snapshot?:BulkAnalysis){
   const zip=await JSZip.loadAsync(buffer),data=bulkChartData(snapshot||analyzeBulkRows(rows));
   for(const [name,source]of Object.entries(parts)){
     if(name==='contentTypes')continue;let value=source;
     const number=name.match(/\/charts\/chart(\d+)\.xml$/)?.[1];
+    if(number&&!selectedCharts.includes(Number(number)))continue;
+    if(name==='xl/drawings/drawing1.xml'){
+      let position=0;
+      value=value.replace(/<xdr:twoCellAnchor>[\s\S]*?<\/xdr:twoCellAnchor>/g,(anchor)=>{
+        const index=Number(anchor.match(/<xdr:cNvPr id="(\d+)"/)?.[1]);
+        if(!selectedCharts.includes(index))return '';
+        const row=9+Math.floor(position++/2)*22;
+        let n=0;return anchor.replace(/<xdr:row>\d+<\/xdr:row>/g,()=>`<xdr:row>${n++===0?row:row+19}</xdr:row>`);
+      });
+    }
+    if(name==='xl/drawings/_rels/drawing1.xml.rels')value=value.replace(/<Relationship\b[^>]*\/>/g,(relation)=>selectedCharts.includes(Number(relation.match(/chart(\d+)\.xml/)?.[1]))?relation:'');
     if(number){
       const i=Number(number)-1,items=data[i],start=3+i*14,end=start+Math.max(1,items.length)-1;
-      if(i===0||i===1){let changed=false;value=value.replace(/<c:title>[\s\S]*?<\/c:title>/,title=>title.replace(/<a:t>[\s\S]*?<\/a:t>/,()=>{changed=true;return `<a:t>${i===0?'Atores do catálogo declarados':'Malwares e ferramentas informados'}</a:t>`;}));if(!changed)throw Error('Título do gráfico de entidades não encontrado.');}
+      if(i===0||i===1){let changed=false;value=value.replace(/<c:title>[\s\S]*?<\/c:title>/,title=>title.replace(/<a:t>[\s\S]*?<\/a:t>/,()=>{changed=true;return `<a:t>${i===0?'Atores relacionados nas publicações':'Malwares e ferramentas relacionados'}</a:t>`;}));if(!changed)throw Error('Título do gráfico de entidades não encontrado.');}
       value=value.replace(/<c:cat>[\s\S]*?<\/c:cat>/,`<c:cat><c:strRef><c:f>'_dados'!$A$${start}:$A$${end}</c:f><c:strCache><c:ptCount val="${items.length}"/>${items.map((x,j)=>`<c:pt idx="${j}"><c:v>${xml(x.name)}</c:v></c:pt>`).join('')}</c:strCache></c:strRef></c:cat>`)
         .replace(/<c:val>[\s\S]*?<\/c:val>/,`<c:val><c:numRef><c:f>'_dados'!$B$${start}:$B$${end}</c:f><c:numCache><c:formatCode>0</c:formatCode><c:ptCount val="${items.length}"/>${items.map((x,j)=>`<c:pt idx="${j}"><c:v>${x.count}</c:v></c:pt>`).join('')}</c:numCache></c:numRef></c:val>`);
       // Horizontal rankings leave room for long actor/family names. Types stay vertical.
@@ -28,16 +39,13 @@ export async function prepareBulkChartZip(buffer:Uint8Array,rows:BulkRow[],snaps
         if(i!==5)value=value.replace(/(<c:catAx>[\s\S]*?<c:orientation) val="minMax"/,'$1 val="maxMin"');
         if(!items.length)value=value.replace(/<c:delete val="0"\s*\/>/g,'<c:delete val="1"/>');
         value=value.replace(/E5C900/g,['087F8C','F1BC32','527AA3','8570A4','','087F8C','527AA3','F1BC32'][i]);
-      }else{
-        const colors=items.map((x,j)=>`<c:dPt><c:idx val="${j}"/><c:spPr><a:solidFill xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:srgbClr val="${priorityColors[x.name]||'6589AD'}"/></a:solidFill></c:spPr></c:dPt>`).join('');
-        value=value.replace('<c:cat>',colors+'<c:cat>');
       }
       value=value.replace(/<c:plotVisOnly[^>]*\/>/,'<c:plotVisOnly val="0"/>');
     }
     if(zip.file(name))throw Error('Conflito ao incluir gráficos do enriquecimento.');zip.file(name,value);
   }
   const types=await zip.file('[Content_Types].xml')!.async('string');
-  const overrides=parts.contentTypes.match(/<Override\b[^>]*\/>/g)?.filter(s=>/PartName="\/xl\/drawings\//.test(s))||[];
+  const overrides=parts.contentTypes.match(/<Override\b[^>]*\/>/g)?.filter(s=>/PartName="\/xl\/drawings\//.test(s)&&(!/chart\d+\.xml/.test(s)||selectedCharts.includes(Number(s.match(/chart(\d+)\.xml/)?.[1]))))||[];
   zip.file('[Content_Types].xml',types.replace('</Types>',overrides.join('')+'</Types>'));
   let sheet=await zip.file('xl/worksheets/sheet1.xml')!.async('string');
   if(!sheet.includes('xmlns:r='))sheet=sheet.replace('<worksheet ','<worksheet xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" ');

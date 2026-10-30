@@ -1,6 +1,6 @@
 import type ExcelJS from 'exceljs';
 import { SHEET_TAB, scrubXml, styleHeaderRow, workbookMetadata } from './deckTemplate';
-import { bulkField, type BulkRow } from './bulkEnrichment';
+import type { BulkRow } from './bulkEnrichment';
 import { detectAnalyzerQueryType } from './iocExtract';
 import { addOtPatchClientSheets } from './otPatchClientWorkbook';
 import type { OtReportContext } from './otPatchIntelligence';
@@ -8,11 +8,13 @@ import { styleEnrichmentDetails } from './enrichmentPresentation';
 import { analyzeBulkRows, type BulkAnalysis } from './bulkAnalysis';
 import { addBulkDashboard } from './bulkDashboard';
 import { ANALYTICAL_COLUMNS, styleAnalyticalSheet } from './bulkAnalyticalSheets';
-import {bulkEntityRelation} from './bulkEntityResolution';
+import { createUnifiedBulkRegistry, projectUnifiedBulkRow, UNIFIED_INDICATOR_COLUMNS, UNIFIED_PUBLICATION_COLUMNS, UNIFIED_MENTION_COLUMNS, UNIFIED_RELATION_COLUMNS, UNIFIED_TECHNIQUE_COLUMNS } from './bulkUnifiedReport';
 
 type RecordRow = Record<string, unknown>;
 type Column = [string, string, number];
 type ExcelFactory = { Workbook: new () => ExcelJS.Workbook };
+const bulkSnapshots = new WeakMap<ExcelJS.Workbook,BulkAnalysis>();
+export const bulkWorkbookSnapshot = (workbook:ExcelJS.Workbook) => bulkSnapshots.get(workbook);
 export interface NewsExcelPayload { dataset: string; range: { from: string; to: string }; rows: RecordRow[]; generatedAt?: string; report?: OtReportContext }
 export const valueText = (value: unknown): string => value == null ? '' : typeof value === 'object'
   // JSON Unicode escapes preserve astral characters through ExcelJS's UTF-8
@@ -99,38 +101,30 @@ export function buildNewsExcelWorkbook(payload: NewsExcelPayload, ExcelLib: Exce
 
 export function buildBulkExcelWorkbook(rows: BulkRow[], ExcelLib: ExcelFactory, snapshot?: BulkAnalysis) {
   if (!Array.isArray(rows)) throw Error('Lote de exportação inválido.');
-  const analysis = snapshot || analyzeBulkRows(rows);
-  rows = analysis.analyses.map(a => a.row);
-  const generatedAt = new Date().toISOString();
-  const wb = new ExcelLib.Workbook();
+  const registry = createUnifiedBulkRegistry();
+  const projections = (snapshot?.analyses || analyzeBulkRows(rows).analyses).map(analysis => registry.add(projectUnifiedBulkRow(analysis.row, analysis)));
+  const report = registry.finish(), wb = new ExcelLib.Workbook();
   wb.addWorksheet('Dashboard');
-  workbookMetadata(wb, 'Enriquecimento em lote', new Date().toISOString(), 'IOC, enriquecimento, fontes, evidências');
+  workbookMetadata(wb, 'Análise unificada de IOCs', new Date().toISOString(), 'Indicadores, atores, malware e publicações');
+  addBulkDashboard(wb, report.analysis, new Date().toISOString(), report);
   const table = tables(wb, true);
-  styleAnalyticalSheet(table('Indicadores', ANALYTICAL_COLUMNS, analysis.analyses.map(a => a.record), 3));
-  for (const [name, type] of [['IPs', 'IP'], ['Domínios', 'Domínio'], ['Hashes', 'Hash'], ['URLs', 'URL']]) {
-    const subset = analysis.analyses.filter(a => a.record.type === type);
-    if (subset.length) styleAnalyticalSheet(table(name, ANALYTICAL_COLUMNS, subset.map(a => a.record), 3));
-  }
-  table('Consulta original', [['indicator', 'Indicador', 70], ['type', 'Tipo', 14], ['state', 'Estado da consulta', 20], ['verdict', 'Veredito', 20], ['score', 'Score', 12], ['detections', 'Detecções', 14], ['country', 'País', 14], ['asn', 'ASN', 20], ['organization', 'Organização', 35], ['completedAt', 'Concluído em (ISO)', 28], ['sources', 'Fontes', 50], ['error', 'Erro', 55], ['contextErrors', 'Falhas de contexto', 70], ['reverseDns', 'Nome reverso (rDNS)', 48], ['falsePositiveReview', 'Revisão de falso positivo (abuse.ch)', 65], ['result', 'Resultado completo (JSON)', 90]], rows.map(row => ({
-    indicator: row.query, type: ({ ip: 'IP', domain: 'Domínio', url: 'URL', hash: 'Hash', unknown: 'Não reconhecido' })[detectAnalyzerQueryType(row.query)], state: ({ queued: 'Na fila', running: 'Consultando', complete: 'Concluído', partial: 'Parcial', error: 'Falha', unsupported: 'Sem fonte compatível', stopped: 'Interrompido' })[row.state], verdict: ({ malicious: 'Malicioso', suspicious: 'Suspeito', safe: 'Sem sinal nas fontes', unknown: 'Indeterminado' })[row.result?.threatLevel || 'unknown'], score: row.result?.overallScore ?? '', detections: row.result?.detections ?? '',
-    country: bulkField(row, ['Country']).value, asn: bulkField(row, ['ASN', 'AS']).value, organization: bulkField(row, ['Organization', 'ISP']).value,
-    reverseDns: row.result?.vendorData.find(v => v.name === 'DNS / Team Cymru')?.data['Reverse Hostname'] || '', falsePositiveReview: bulkField(row, ['FP Review']).value, completedAt: row.completedAt, sources: row.result?.vendorData.map(vendor => vendor.name) || [], error: row.error, contextErrors: row.context?.errors || [], result: row.result || null,
-  })));
-  table('Fontes', [['indicator', 'Indicador', 70], ['source', 'Fonte', 24], ['state', 'Estado da fonte', 40], ['reference', 'Referência', 65], ['data', 'Dados normalizados (JSON)', 90], ['raw', 'Resposta completa (JSON)', 90], ['timeline', 'Timeline (JSON)', 90], ['quota', 'Cota observada (JSON)', 55]], rows.flatMap(row => (row.result?.vendorData || []).map(vendor => ({
-    indicator: row.query, source: vendor.name, state: vendor.error || (vendor.isLoading ? 'pending' : 'ok'), reference: vendor.link, data: vendor.data, raw: vendor.rawPayload ?? null, timeline: vendor.timeline || [], quota: vendor.quota || null,
-  }))));
-  table('Publicações', [['indicator', 'Indicador', 70], ...common], rows.flatMap(row => (row.context?.publications || []).map(publication => ({ ...publication, indicator: row.query, url: publication.link, date: publication.pubDate }))));
-  table('Evidências', [['indicator', 'Indicador', 70], ['provider', 'Provedor', 24], ['source', 'Fonte', 24], ['title', 'Título', 65], ['link', 'Referência', 65], ['published', 'Publicação (ISO)', 28], ['collectedAt', 'Coleta (ISO)', 28], ['confidence', 'Confiança', 14], ['reputation', 'Reputação (JSON)', 70], ['entities', 'Entidades e relações (JSON)', 90]], rows.flatMap(row => (row.context?.evidence || []).map(evidence => ({ ...evidence, indicator: row.query }))));
-  table('Resumo', [['key', 'Campo', 40], ['value', 'Valor', 90]], [{ key: 'Indicadores exportados', value: rows.length }, { key: 'Gerado em (ISO)', value: new Date().toISOString() }, { key: 'Escopo', value: 'Todas as linhas do filtro atual, incluindo parciais e falhas. Exportar não faz novas consultas às fontes.' }]);
-  const relations = rows.flatMap(row => (row.context?.evidence || []).flatMap(evidence => evidence.entities.map(entity => ({...bulkEntityRelation(row,entity),indicator:row.query,confidence:evidence.confidence,source:evidence.provider,title:evidence.title,link:evidence.link,date:evidence.published}))));
-  table('Relações', [['indicator', 'Indicador', 46], ['kind', 'Tipo normalizado', 36], ['name', 'Entidade normalizada', 38], ['relation', 'Relação informada pela base', 30], ['confidence', 'Confiança na fonte', 20], ['source', 'Fonte', 22], ['title', 'Publicação / evidência', 65], ['link', 'Referência', 65], ['date', 'Data', 26],['sourceKind','Tipo original da fonte',24],['sourceName','Nome original da fonte',38],['catalogId','ID no catálogo',28],['identityStatus','Validação da identidade',46]], relations);
-  table('Técnicas ATT&CK', [['id', 'Técnica citada', 22], ['count', 'IOCs únicos nas evidências', 26], ['actors', 'Atores declarados na mesma evidência', 55], ['reference', 'Referência MITRE ATT&CK', 65], ['scope', 'Escopo da leitura', 65]], analysis.techniques.map(t => ({
-    id: t.name, count: t.count,
-    actors: [...new Set(analysis.analyses.flatMap(a => a.pairs.filter(p => p.technique === t.name).map(p => p.actor)))].join('; '),
-    reference: `https://attack.mitre.org/techniques/${t.name.replace('.', '/')}/`, scope: 'Citação de inteligência; não comprova execução no ambiente analisado.',
-  })));
-  table('Detalhes por fonte', [['indicator', 'Indicador', 46], ['source', 'Fonte', 22], ['field', 'Campo', 34], ['value', 'Resultado', 100]], rows.flatMap(row => (row.result?.vendorData || []).flatMap(vendor => Object.entries(vendor.data || {}).map(([field, value]) => ({ indicator: row.query, source: vendor.name, field, value })))));
-  addBulkDashboard(wb, analysis, generatedAt);
-  styleEnrichmentDetails(wb, true);
+  const add = (name:string, columns:Column[], entries:RecordRow[]) => {
+    const ws = table(name,columns,entries);
+    ws.views = [{state:'frozen',xSplit:1,ySplit:1,showGridLines:false,zoomScale:85}];
+    ws.properties.tabColor = {argb:'FF087F8C'};
+    ws.eachRow((row,n) => {
+      row.height=n===1?42:42;
+      row.font={name:'Arial',size:10,bold:n===1,color:{argb:n===1?'FFFFFFFF':'FF202936'}};
+      row.alignment={vertical:'top',wrapText:true};
+      if(n===1||n%2===0)row.fill={type:'pattern',pattern:'solid',fgColor:{argb:n===1?'FF202936':'FFF2F5F9'}};
+      if(n>1)for(const [key] of columns){const cell=row.getCell(key);if(key==='link'&&typeof cell.value==='string'&&/^https?:\/\//.test(cell.value)){cell.value={text:cell.value,hyperlink:cell.value};cell.font={name:'Arial',size:10,color:{argb:'FF0563C1'},underline:true};}else if(['date','firstMention','lastMention','created'].includes(key)&&typeof cell.value==='string'&&Number.isFinite(Date.parse(cell.value))){cell.value=new Date(Date.parse(cell.value)-3*3600000);cell.numFmt='dd/mm/yyyy hh:mm';}}
+    });
+  };
+  add('Indicadores',UNIFIED_INDICATOR_COLUMNS,projections.map(item=>item.record));
+  add('Publicações',UNIFIED_PUBLICATION_COLUMNS,report.publications);
+  add('Menções',UNIFIED_MENTION_COLUMNS,projections.flatMap(item=>item.mentions));
+  add('Relações',UNIFIED_RELATION_COLUMNS,projections.flatMap(item=>item.relations));
+  add('Técnicas ATT&CK',UNIFIED_TECHNIQUE_COLUMNS,report.techniques);
+  bulkSnapshots.set(wb,report.analysis);
   return wb;
 }

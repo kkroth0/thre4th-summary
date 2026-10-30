@@ -1,23 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createRequire } from 'node:module';
-import { buildBulkExcelWorkbook } from './iocExcelWorkbook';
-import type { BulkRow } from './bulkEnrichment';
-const Excel = createRequire(`${process.cwd()}/package.json`)('exceljs') as typeof import('exceljs');
-test('presentation keeps contextual mentions distinct from attribution with deduplicated dashboard counts',async()=>{
- const evidence = {provider:'Axur',title:'Report',link:'https://cti.axur.com/insight/test',published:'2026-10-27T12:00:00Z',collectedAt:'2026-10-27T12:10:00Z',confidence:90,reputation:null,
- entities:[{kind:'actor' as const,id:'actor-a',name:'Actor A',relation:'mentioned-with'}]};
- const row:BulkRow={query:'8.8.8.8',state:'partial',context:{publications:[],evidence:[evidence,{...evidence,title:'Second report'}],errors:[]},result:{query:'8.8.8.8',overallScore:0,threatLevel:'safe',totalVendors:2,detections:0,vendorData:[{name:'VirusTotal',data:{Status:'Clean'}},{name:'OTX',data:{},error:'Unavailable'}]}};
- const wb=buildBulkExcelWorkbook([row],Excel);
- assert.deepEqual(wb.worksheets.slice(0,2).map(s=>s.name),['Dashboard','Indicadores']);
- assert.equal(wb.getWorksheet('Dashboard')!.getCell('V5').value,1);
- assert.equal(wb.getWorksheet('Dashboard')!.getCell('J5').value,0);
- const relation=wb.getWorksheet('Relações')!;
- assert.equal(relation.getRow(2).getCell('relation').value,'mentioned-with');
- assert.equal(relation.getRow(2).getCell('link').hyperlink,evidence.link);
- assert.equal(wb.getWorksheet('Resumo executivo'),undefined);assert.ok(JSON.stringify(wb.getWorksheet('Dashboard')!.getSheetValues()).includes('não confirma autoria'));
- const restored=new Excel.Workbook();await restored.xlsx.load(await wb.xlsx.writeBuffer());
- assert.equal(restored.getWorksheet('Relações')!.getCell('H2').hyperlink,evidence.link);
- assert.equal(restored.getWorksheet('Indicadores')!.getCell('G5').value,'Parcial');
- assert.ok(restored.getWorksheet('Indicadores')!.autoFilter);
+import {createRequire} from 'node:module';
+import {buildBulkExcelWorkbook} from './iocExcelWorkbook';
+import type {BulkRow} from './bulkEnrichment';
+const Excel=createRequire(`${process.cwd()}/package.json`)('exceljs') as typeof import('exceljs');
+test('unified presentation keeps publication links and catalog identities while omitting all operational diagnostics',async()=>{
+ const row:BulkRow={query:'93.184.216.34',state:'partial',context:{publications:[],errors:[],entityResolutionVersion:'qa',entityResolutions:[{sourceKind:'actor',sourceLabel:'Actor alias',sourceId:'G0040',kind:'actor',name:'Patchwork',id:'G0040',verification:'catalog',catalogSource:'attack'}],evidence:[{provider:'Axur',title:'Research report',link:'https://cti.axur.com/insight/test',published:'2026-10-27T12:00:00Z',collectedAt:'2026-10-27T12:10:00Z',confidence:90,reputation:null,entities:[{kind:'actor',id:'G0040',name:'Actor alias',relation:'mentioned-by-source'}]}]},result:{query:'93.184.216.34',overallScore:0,threatLevel:'safe',totalVendors:1,detections:0,vendorData:[{name:'VirusTotal',data:{},error:'Unavailable'}]}};
+ const wb=buildBulkExcelWorkbook([row],Excel);assert.equal(wb.getWorksheet('Indicadores')!.getRow(2).getCell('actors').value,'Patchwork');assert.equal(wb.getWorksheet('Relações')!.getRow(2).getCell('association').value,'Menção em publicação');
+ const restored=new Excel.Workbook();await restored.xlsx.load(await wb.xlsx.writeBuffer());assert.equal(restored.getWorksheet('Publicações')!.getCell('H2').hyperlink,'https://cti.axur.com/insight/test');
+ const text=JSON.stringify(restored.worksheets.flatMap(sheet=>sheet.getSheetValues()));for(const label of ['COBERTURA INCOMPLETA','CRITÉRIOS DE LEITURA','LEITURA DO LOTE','Unavailable','Consulta incompleta','Resumo executivo'])assert.ok(!text.includes(label));
+ assert.equal(restored.getWorksheet('Indicadores')!.getCell('C2').value,'Sem evidência suficiente');
 });
