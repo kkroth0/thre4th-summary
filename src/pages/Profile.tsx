@@ -12,6 +12,7 @@ import { PageLayout } from "@/components/PageLayout";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { fetchApiKeys } from "@/services/threatApi";
+import { pendingCentralCti } from "@/lib/centralCti";
 import { toast } from "sonner";
 
 const Profile = () => {
@@ -24,6 +25,10 @@ const Profile = () => {
   // Feedback do retorno do OAuth (?auth=ok) — o callback de sucesso cai aqui.
   useEffect(() => {
     const p = new URLSearchParams(window.location.search).get("auth");
+    if (p === "ok" && new URLSearchParams(pendingCentralCti()).get('resume') === '1') {
+      window.location.replace('/central-cti');
+      return;
+    }
     if (p === "ok") toast.success(pt ? "Login efetuado" : "Signed in");
     else if (p === "erro") toast.error(pt ? "Falha no login" : "Sign-in failed");
     if (p) window.history.replaceState({}, "", window.location.pathname);

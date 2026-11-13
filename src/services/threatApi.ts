@@ -888,7 +888,7 @@ export const generateBoletim = async (
 // Baixa um anexo pronto. Nem o .pptx nem o .pdf são montados no browser: os dois
 // saem do template SRR preenchido na VPS — o PDF é o próprio deck convertido —,
 // que é o único lugar com os templates e o conversor.
-export const downloadBoletimDeck = async (job: BoletimJob, kind: 'pptx' | 'pdf'): Promise<void> => {
+export const fetchBoletimDeck = async (job: BoletimJob, kind: 'pptx' | 'pdf'): Promise<Blob> => {
     const r = await fetch(`/api/feed/job/deck?id=${encodeURIComponent(job.id)}&kind=${kind}`);
     if (!r.ok) {
         if (r.status === 404) {
@@ -898,7 +898,11 @@ export const downloadBoletimDeck = async (job: BoletimJob, kind: 'pptx' | 'pdf')
         const reason = await r.json().catch(() => null);
         throw new Error(reason?.error || `Falha ao baixar o ${kind.toUpperCase()}: ${r.status}`);
     }
-    const url = URL.createObjectURL(await r.blob());
+    return r.blob();
+};
+
+export const downloadBoletimDeck = async (job: BoletimJob, kind: 'pptx' | 'pdf'): Promise<void> => {
+    const url = URL.createObjectURL(await fetchBoletimDeck(job, kind));
     const a = document.createElement('a');
     a.href = url;
     a.download = job.deck?.[kind] || `${job.id}.${kind}`;
