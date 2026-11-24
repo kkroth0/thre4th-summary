@@ -101,23 +101,6 @@ export const PUBLIC_SEO_ROUTES: SeoRoute[] = [
     },
   },
   {
-    path: "/threat-map",
-    priority: "0.7",
-    changefreq: "daily",
-    metadata: {
-      pt: {
-        title: "Vitimas de Ransomware | ThreatSumm4ry",
-        description:
-          "Vitimas reivindicadas por grupos de ransomware, com grupo, pais, setor, data e a evidencia de cada reivindicacao.",
-      },
-      en: {
-        title: "Ransomware Victims | ThreatSumm4ry",
-        description:
-          "Victims claimed by ransomware crews, with group, country, sector, date and the evidence behind each claim.",
-      },
-    },
-  },
-  {
     path: "/patch-tuesday",
     priority: "0.7",
     changefreq: "monthly",

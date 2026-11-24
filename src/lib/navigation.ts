@@ -1,6 +1,6 @@
 const WORKSPACE_ROUTES = [
   '/dashboard', '/bulk', '/malware', '/newsletter', '/knowledge', '/relatorios', '/analyzer', '/atores', '/cves',
-  '/patch-tuesday', '/sap-patch', '/ot-patch-day', '/ai-patch-day', '/threat-map', '/vendors',
+  '/patch-tuesday', '/sap-patch', '/ot-patch-day', '/ai-patch-day', '/vendors',
   '/settings', '/profile', '/admin',
 ];
 export const isRouteActive = (path: string, pathname: string) => {

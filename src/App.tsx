@@ -27,7 +27,6 @@ const PatchTuesday = lazy(() => import("./pages/PatchTuesday"));
 const SapPatch = lazy(() => import("./pages/SapPatch"));
 const OtPatchDay = lazy(() => import("./pages/OtPatchDay"));
 const Admin = lazy(() => import("./pages/Admin"));
-const ThreatMap = lazy(() => import("./pages/ThreatMap"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
 const queryClient = new QueryClient();
@@ -61,8 +60,6 @@ const App = () => (
                 <Route path="/sap-patch" element={<SapPatch />} />
                 <Route path="/ot-patch-day" element={<OtPatchDay />} />
                 <Route path="/ai-patch-day" element={<OtPatchDay domain="ai" />} />
-                <Route path="/latam-threats" element={<Navigate to="/threat-map" replace />} />
-                <Route path="/threat-map" element={<ThreatMap />} />
 
                 {/* Tool Routes */}
                 <Route path="/vendors" element={<VendorDirectory />} />

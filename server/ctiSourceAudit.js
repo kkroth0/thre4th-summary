@@ -19,16 +19,17 @@ db.close();
 let cti = { status: 'not_initialized' };
 try {
   const snapshot = read('.cti-fyi.json');
-  const { mergeCtiActors, ctiPublications } = await import(pathToFileURL(path.join(root, 'server/ctiFyi.js')));
+  const { mergeCtiActors, ctiPublications, attachRansomwareActors } = await import(pathToFileURL(path.join(root, 'server/ctiFyi.js')));
   const actors = mergeCtiActors(read('data/actors.json').actors, snapshot.groups);
   const publications = ctiPublications(snapshot.posts, actors);
-  const response = await fetch('http://127.0.0.1:3001/api/intel/threat-map?days=30', { signal: AbortSignal.timeout(20000) });
-  if (!response.ok) throw Error('Map HTTP ' + response.status);
-  const map = await response.json();
+  const response = await fetch('http://127.0.0.1:3001/api/intel/cti-fyi/status', { signal: AbortSignal.timeout(20000) });
+  if (!response.ok) throw Error('CTI.fyi status HTTP ' + response.status);
+  const collector = await response.json();
+  const victims = attachRansomwareActors(snapshot.posts, actors);
   cti = { status: snapshot.error ? 'stale' : 'ready', collectedAt: snapshot.lastSuccessfulAt, savedClaims: snapshot.posts.length, groups: snapshot.groups.length,
     linkedActorPublications: publications.length, victimDomainsMisclassifiedAsIocs: publications.flatMap(row => row.iocs.domains).length,
-    mapSource: map.source, mapVictims: map.victims.length, ctiMapVictims: map.victims.filter(row => row.sources?.includes('CTI.fyi')).length,
-    actorPivots: map.victims.filter(row => row.actorId).length, partial: !!snapshot.cursor || !!snapshot.updatedCursor };
+    collectorState: collector.state, collectorPosts: collector.posts, sourceVictims: victims.length,
+    actorPivots: victims.filter(row => row.actorId).length, partial: !!snapshot.cursor || !!snapshot.updatedCursor };
 } catch (error) { cti = { status: 'error', code: error.code || error.name }; }
 console.log(JSON.stringify({ checkedAt: new Date().toISOString(), readOnly: true, firmware, cti }, null, 2));
-if (!target || !events.length || firmware.archivedHasFalseIp || firmware.eventSourceHasFalseIp || active || miraiLinks || cti.status === 'error' || !cti.ctiMapVictims || cti.victimDomainsMisclassifiedAsIocs) process.exitCode = 1;
+if (!target || !events.length || firmware.archivedHasFalseIp || firmware.eventSourceHasFalseIp || active || miraiLinks || cti.status === 'error' || !cti.sourceVictims || cti.victimDomainsMisclassifiedAsIocs) process.exitCode = 1;

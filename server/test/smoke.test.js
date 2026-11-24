@@ -523,6 +523,7 @@ test('durable bulk accepts a large input, isolates accounts, pages compact rows 
 
 test('retired hunting, phishing and exposure APIs are unavailable even to premium accounts', async () => {
     const endpoints = [
+        ['GET', '/api/intel/threat-map'], ['GET', '/api/intel/sectors'],
         ['GET', '/api/hunting/overview'], ['POST', '/api/hunting/feedback'],
         ['GET', '/api/phishing/reports'], ['GET', '/api/phishing/evolution'],
         ['GET', '/api/phishing/evolution/weeks/2026-10-04'],

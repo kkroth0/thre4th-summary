@@ -33,7 +33,7 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
   const catalog = [homeItem, ...navGroups.flatMap(group => group.items)];
   const sections = [
     { label: pt ? 'Plataforma' : 'Platform', paths: ['/dashboard', '/analyzer', '/bulk', '/knowledge', '/relatorios'] },
-    { label: pt ? 'Inteligência de ameaças' : 'Threat intelligence', paths: ['/newsletter', '/atores', '/malware', '/cves', '/threat-map'] },
+    { label: pt ? 'Inteligência de ameaças' : 'Threat intelligence', paths: ['/newsletter', '/atores', '/malware', '/cves'] },
     { label: pt ? 'Correções' : 'Patches', paths: ['/patch-tuesday', '/sap-patch', '/ot-patch-day', '/ai-patch-day'] },
   ];
   const toggle = () => setCollapsed(value => {

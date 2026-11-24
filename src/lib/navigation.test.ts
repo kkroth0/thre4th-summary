@@ -15,7 +15,7 @@ test('the workspace includes internal tools and account routes while public entr
 
 
 test('retired feature routes are absent from the workspace', () => {
-  for (const path of ['/hunting', '/phishing-analyzer', '/domain-monitoring', '/attack-surface', '/exposure-watchlist']) {
+  for (const path of ['/threat-map', '/latam-threats', '/hunting', '/phishing-analyzer', '/domain-monitoring', '/attack-surface', '/exposure-watchlist']) {
     assert.equal(isWorkspaceRoute(path), false, path);
   }
 });

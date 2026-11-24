@@ -1,5 +1,5 @@
 import type React from "react";
-import { Activity, Layers, Bug, Rss, Bookmark, FileSearch, Users, MapPinned, Shield, CalendarCheck, ShieldCheck, Search } from "lucide-react";
+import { Activity, Layers, Bug, Rss, Bookmark, FileSearch, Users, Shield, CalendarCheck, ShieldCheck, Search } from "lucide-react";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { actorPageCopy } from "@/pages/actorsView";
 
@@ -55,12 +55,6 @@ export function useNavCatalog() {
           label: actorPageCopy(language).title,
           description: pt ? "Como agem, quem visam e por quais nomes aparecem." : "How they operate, who they target, what names they use.",
           icon: Users,
-        },
-        {
-          path: "/threat-map",
-          label: tr({ pt: "Vítimas de Ransomware", en: "Ransomware Victims", es: "Víctimas de Ransomware", fr: "Victimes de rançongiciels" }),
-          description: pt ? "Vítimas de ransomware por país." : "Ransomware victims by country.",
-          icon: MapPinned,
         },
       ],
     },

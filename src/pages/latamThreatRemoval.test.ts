@@ -4,11 +4,11 @@ import test from "node:test";
 
 const read = (path: string) => readFile(path, "utf8");
 
-test("legacy LATAM route redirects to the global threat map without loading a page chunk", async () => {
+test("legacy LATAM and threat-map routes are retired without loading page chunks", async () => {
   const app = await read("src/App.tsx");
 
   assert.doesNotMatch(app, /LatamThreats/);
-  assert.match(app, /<Route path="\/latam-threats" element=\{<Navigate to="\/threat-map" replace \/>\} \/>/);
+  assert.doesNotMatch(app, /\/(?:latam-threats|threat-map)/);
 });
 
 test("public navigation, home cards, SEO, and sitemap no longer advertise LATAM Threats", async () => {
