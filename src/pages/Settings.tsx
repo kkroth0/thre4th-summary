@@ -1,4 +1,4 @@
-import { ArrowLeft, Bot, Building2, ChevronRight, KeyRound, Loader2, Monitor, Rss, ShieldCheck, Target, UserRound } from "lucide-react";
+import { ArrowLeft, Bot, Building2, ChevronRight, KeyRound, Loader2, Monitor, Rss, ShieldCheck, UserRound } from "lucide-react";
 import { Link, Navigate, useSearchParams } from "react-router-dom";
 import { AdminSettings } from "@/components/settings/AdminSettings";
 import { ApiKeysSettings } from "@/components/settings/ApiKeysSettings";
@@ -6,14 +6,13 @@ import { AssistantSettings } from "@/components/settings/AssistantSettings";
 import { MonitoringSettings } from "@/components/settings/MonitoringSettings";
 import { PreferencesSettings } from "@/components/settings/PreferencesSettings";
 import { OrgProfileEditor } from "@/components/settings/OrgProfileEditor";
-import { MonitoredAssetsSettings } from "@/components/settings/MonitoredAssetsSettings";
 import { PageLayout } from "@/components/PageLayout";
 import { useNavCatalog } from "@/components/useNavCatalog";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { cn } from "@/lib/utils";
 
-type SettingsSection = "general" | "monitoring" | "organization" | "assets" | "api-keys" | "assistant" | "admin";
+type SettingsSection = "general" | "monitoring" | "organization" | "api-keys" | "assistant" | "admin";
 type SettingsGroup = { label: string; items: { id: SettingsSection; icon: typeof Rss; label: string; description: string }[] };
 
 export default function Settings() {
@@ -40,7 +39,6 @@ export default function Settings() {
     { label: pt ? "Monitoramento" : "Monitoring", items: [
       { id: "monitoring" as const, icon: Rss, label: pt ? "Notícias" : "News", description: pt ? "Escolha os fornecedores do feed e consulte as fontes de notícias." : "Choose feed vendors and browse news sources." },
       { id: "organization" as const, icon: Building2, label: pt ? "Organização" : "Organization", description: pt ? "Defina os setores, regiões, tecnologias e marcas dos seus perfis." : "Define the sectors, regions, technologies and brands in your profiles." },
-      { id: "assets" as const, icon: Target, label: pt ? "Ativos monitorados" : "Monitored assets", description: pt ? "Acompanhe os domínios e IPs da sua watchlist de exposição." : "Track the domains and IPs in your exposure watchlist." },
     ] },
     { label: pt ? "Sua conta" : "Your account", items: [
       { id: "api-keys" as const, icon: KeyRound, label: tr({ pt: "Chaves de API", en: "API keys", es: "Claves de API", fr: "Clés API" }), description: pt ? "Conecte suas chaves pessoais aos serviços de inteligência." : "Connect your personal keys to intelligence services." },
@@ -93,7 +91,6 @@ export default function Settings() {
             {section === "general" && <PreferencesSettings />}
             {section === "monitoring" && <MonitoringSettings />}
             {section === "organization" && <OrgProfileEditor />}
-            {section === "assets" && <MonitoredAssetsSettings />}
             {section === "api-keys" && <ApiKeysSettings />}
             {section === "assistant" && <AssistantSettings />}
             {section === "admin" && auth.isAdmin && <AdminSettings />}

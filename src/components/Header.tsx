@@ -52,7 +52,7 @@ export function Header({ actions, logoAddon, onLogoClick, showBackButton = false
   const current = [homeItem, ...navGroups.flatMap((g) => g.items)].find((i) => isRouteActive(i.path, pathname));
   // Autenticado, a entrada principal é o feed de inteligência.
   const homePath = auth.authenticated ? homeItem.path : "/";
-  const pageLabel = current?.label || (pathname === '/settings' ? (pt ? 'Configurações' : 'Settings') : pathname === '/profile' ? (pt ? 'Conta' : 'Account') : pathname === '/admin' ? (pt ? 'Administração' : 'Administration') : pathname === '/exposure-watchlist' ? (pt ? 'Monitoramento de exposição' : 'Exposure monitoring') : (pt ? 'Inteligência de ameaças' : 'Threat intelligence'));
+  const pageLabel = current?.label || (pathname === '/settings' ? (pt ? 'Configurações' : 'Settings') : pathname === '/profile' ? (pt ? 'Conta' : 'Account') : pathname === '/admin' ? (pt ? 'Administração' : 'Administration') : (pt ? 'Inteligência de ameaças' : 'Threat intelligence'));
   const breadcrumbs: WorkspaceBreadcrumbItem[] = pathname === '/dashboard'
     ? [{ label: 'Dashboard' }]
     : [{ label: 'Dashboard', to: '/dashboard' }, { label: pageLabel, to: breadcrumbItems.length ? pathname : undefined }, ...breadcrumbItems];

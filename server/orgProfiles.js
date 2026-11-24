@@ -11,7 +11,7 @@ import { TARGET_REGION_LABELS } from './actorProfile.js';
 // As marcas do perfil são os termos que a vigilância de phishing procura no
 // urlscan, então quem valida é o módulo que faz a busca — validar em dois
 // lugares é ter duas regras discordando daqui a três meses.
-import { normalizeBrands } from './phishingWatch.js';
+import { normalizeBrands } from './brandTerms.js';
 
 export const ORG_LIMITS = {
     profilesPerUser: 10,

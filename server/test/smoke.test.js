@@ -20,7 +20,6 @@ const NEWS_ARCHIVE_PATH = path.join(tmpdir(), `threatsumm4ry-smoke-archive-${POR
 const NEWS_STORIES_PATH = path.join(tmpdir(), `threatsumm4ry-smoke-stories-${PORT}.json`);
 const FEED_JOBS_PATH = path.join(tmpdir(), `threatsumm4ry-smoke-jobs-${PORT}.json`);
 const ORG_PROFILES_PATH = path.join(tmpdir(), `threatsumm4ry-smoke-profiles-${PORT}.json`);
-const PHISH_WATCH_PATH = path.join(tmpdir(), `threatsumm4ry-smoke-watch-${PORT}.json`);
 const SECRETS_ENCRYPTION_KEY = 'smoke-only-encryption-secret';
 const SESSION_SECRET = 'test-secret';
 const BULK_JOBS_PATH = path.join(tmpdir(), `threatsumm4ry-smoke-bulk-${PORT}.sqlite`);
@@ -108,24 +107,8 @@ test('domain investigation and actor archive endpoints enforce premium access an
     assert.equal(activity.status, 200); assert.equal(activity.headers.get('Cache-Control'), 'private, no-store');
 });
 
-test('hunting requires authorization, validates inputs and isolates persistent feedback', async () => {
-    assert.equal((await fetch(BASE + '/api/hunting/overview')).status, 401);
-    assert.equal((await fetch(BASE + '/api/hunting/overview?period=bad', { headers: AUTH_HEADERS })).status, 400);
-    const response = await fetch(BASE + '/api/hunting/overview?period=month', { headers: AUTH_HEADERS });
-    assert.equal(response.status, 200); assert.equal(response.headers.get('cache-control'), 'private, no-store');
-    const body = await response.json(); assert.ok(body.library.queries > 1000); assert.equal(body.aiStatus, 'disabled');
-    const input = { queryId: 'exposure-CVE-2026-12345', vote: 'yes' };
-    const post = (headers, value) => fetch(BASE + '/api/hunting/feedback', { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify(value) });
-    assert.equal((await post({}, input)).status, 401);
-    assert.equal((await post(AUTH_HEADERS, { ...input, vote: 'bad' })).status, 400);
-    assert.equal((await post({ ...AUTH_HEADERS, Origin: 'https://untrusted.example' }, input)).status, 403);
-    assert.equal((await post(AUTH_HEADERS, input)).status, 200);
-    assert.equal((await fetch(BASE + '/api/hunting/overview?period=month', { headers: AUTH_HEADERS })).status, 200);
-});
-
 before(async () => {
     writeFileSync(NEWS_STORIES_PATH, '[]');
-    writeFileSync(PHISH_WATCH_PATH, JSON.stringify({ hits: [{ id: 'owned:example.net', profileId: 'owned', ownerId: 'smoke-user', apexDomain: 'example.net', domain: 'example.net', status: 'new', score: 20, reasons: ['brand-glued'], firstSeen: '2026-10-08T12:00:00Z', lastSeen: new Date().toISOString() }], runs: {} }));
     writeFileSync(FEED_JOBS_PATH, JSON.stringify({
         'smoke-multi-source': { id: 'smoke-multi-source', url: 'https://example.com/a', urls: ['https://example.com/a', 'https://example.com/b'], status: 'pending', createdAt: new Date().toISOString() },
         'smoke-review-ready': { id: 'smoke-review-ready', ownerSub: 'smoke-user', url: 'https://example.com/a', urls: ['https://example.com/a'], type: 'campaign', template: 'premium', status: 'done',
@@ -145,7 +128,7 @@ before(async () => {
             ...process.env,
             PORT: String(PORT), NODE_ENV: 'test', SESSION_SECRET, BULK_JOBS_PATH,
             GITHUB_ALLOWED_LOGINS: 'tester', PREMIUM_OPEN_PATH, NEWS_MONITORING_PATH,
-            USERS_STORE_PATH, NEWS_ARCHIVE_PATH, NEWS_STORIES_PATH, ORG_PROFILES_PATH, PHISH_WATCH_PATH, SECRETS_ENCRYPTION_KEY, URLSCAN_API_KEY: '',
+            USERS_STORE_PATH, NEWS_ARCHIVE_PATH, NEWS_STORIES_PATH, ORG_PROFILES_PATH, SECRETS_ENCRYPTION_KEY, URLSCAN_API_KEY: '',
             FEED_JOBS_PATH, FEED_AGENT_SECRET: 'smoke-worker-secret', FEED_DECKS_DIR: path.join(tmpdir(), `threatsumm4ry-smoke-decks-${PORT}`),
         },
         stdio: ['ignore','ignore','pipe'],
@@ -163,43 +146,13 @@ after(async () => {
     rmSync(`${NEWS_MONITORING_PATH}.tmp`, { force: true });
     rmSync(USERS_STORE_PATH, { force: true });
     rmSync(`${USERS_STORE_PATH}.tmp`, { force: true });
-    for (const target of [NEWS_ARCHIVE_PATH, NEWS_STORIES_PATH, ORG_PROFILES_PATH, FEED_JOBS_PATH, PHISH_WATCH_PATH]) { rmSync(target, { force: true }); rmSync(`${target}.tmp`, { force: true }); }
+    for (const target of [NEWS_ARCHIVE_PATH, NEWS_STORIES_PATH, ORG_PROFILES_PATH, FEED_JOBS_PATH]) { rmSync(target, { force: true }); rmSync(`${target}.tmp`, { force: true }); }
 });
 
-test('weekly evidence and private watch context enforce access, preserve candidate roles and separate inconclusive verdicts', async () => {
-    for (const endpoint of ['/api/phishing/evolution', '/api/phishing-watch/intelligence', '/api/phishing-watch/hits/owned%3Aexample.net/context']) assert.equal((await fetch(BASE + endpoint)).status, 401);
-    const weekly = await fetch(BASE + '/api/phishing/evolution', { headers: AUTH_HEADERS });
-    assert.equal(weekly.status, 200); assert.equal(weekly.headers.get('cache-control'), 'private, no-store');
-    const overview = await weekly.json(); assert.equal(overview.weeks.length, 10);
-    const weekUrl = BASE + '/api/phishing/evolution/weeks/' + overview.target;
-    assert.equal((await fetch(weekUrl)).status, 401);
-    const weekResponse = await fetch(weekUrl, { headers: AUTH_HEADERS }); assert.equal(weekResponse.status, 200);
-    assert.equal(weekResponse.headers.get('cache-control'), 'private, no-store');
-    const weekEvidence = await weekResponse.json(); assert.equal(weekEvidence.week, overview.target); assert.equal(weekEvidence.members.length, weekEvidence.publications);
-    assert.equal((await fetch(BASE + '/api/phishing-watch/intelligence?profileId=private', { headers: AUTH_HEADERS })).status, 404);
-    const context = await fetch(BASE + '/api/phishing-watch/hits/owned%3Aexample.net/context', { headers: AUTH_HEADERS }).then(res => res.json());
-    assert.equal(context.candidate.role, 'candidate'); assert.ok(context.publications.some(row => row.link === 'https://example.com/a'));
-    const response = await fetch(BASE + '/api/phishing-watch/hits/owned%3Aexample.net/verdict', { method: 'POST', headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' }, body: JSON.stringify({ verdict: 'inconclusive', reason: 'duplicate' }) });
-    assert.equal(response.status, 200);
-    const summary = await fetch(BASE + '/api/phishing-watch/intelligence?profileId=owned', { headers: AUTH_HEADERS }).then(res => res.json());
-    assert.equal(summary.precision, null); assert.equal(summary.unresolved, 1);
-});
-
-test('SQLite storage and news-based monitoring suggestions enforce access and explicit account-owned acceptance', async () => {
-    for (const route of ['/api/intelligence/storage','/api/intelligence/entities?kind=actor','/api/phishing-watch/suggestions?profileId=owned']) assert.equal((await fetch(BASE+route)).status,401);
-    assert.equal((await fetch(BASE+'/api/phishing-watch/suggestions?profileId=private',{headers:AUTH_HEADERS})).status,404);
-    const storage=await fetch(BASE+'/api/intelligence/storage',{headers:AUTH_HEADERS}).then(res=>res.json());
-    assert.equal(storage.mode,'sqlite'); assert.equal(storage.latest.equal,true); assert.equal(storage.latest.archive.source,2); assert.equal(storage.backup.ok,true);
-    const response=await fetch(BASE+'/api/phishing-watch/suggestions?profileId=owned',{headers:AUTH_HEADERS});
-    assert.equal(response.headers.get('cache-control'),'private, no-store');
-    const data=await response.json(); const suggestion=data.suggestions.find(row=>row.term==='adobe'); assert.ok(suggestion);
-    const review=(headers,decision)=>fetch(BASE+`/api/phishing-watch/suggestions/${suggestion.id}/review`,{method:'POST',headers:{...headers,'Content-Type':'application/json'},body:JSON.stringify({profileId:'owned',decision})});
-    assert.equal((await review(OUTSIDER_HEADERS,'accepted')).status,403);
-    assert.equal((await review(AUTH_HEADERS,'accepted')).status,200);
-    const profiles=await fetch(BASE+'/api/org/profiles',{headers:AUTH_HEADERS}).then(res=>res.json());
-    assert.ok(profiles.profiles.find(row=>row.id==='owned').brands.includes('adobe'));
-    assert.equal((await fetch(BASE+'/api/phishing-watch/suggestions?profileId=owned',{headers:AUTH_HEADERS}).then(res=>res.json())).suggestions.length,0);
-    assert.equal((await fetch(BASE+'/api/org/profiles/owned',{method:'PATCH',headers:{...AUTH_HEADERS,'Content-Type':'application/json'},body:JSON.stringify({brands:[]})})).status,200);
+test('SQLite storage and entities enforce access and preserve the archive', async () => {
+    for (const route of ['/api/intelligence/storage', '/api/intelligence/entities?kind=actor']) assert.equal((await fetch(BASE + route)).status, 401);
+    const storage = await fetch(BASE + '/api/intelligence/storage', { headers: AUTH_HEADERS }).then(res => res.json());
+    assert.equal(storage.mode, 'sqlite'); assert.equal(storage.latest.equal, true); assert.equal(storage.latest.archive.source, 2); assert.equal(storage.backup.ok, true);
 });
 
 test('the worker receives all selected sources and requires its dedicated secret', async () => {
@@ -275,23 +228,6 @@ test('archive export enforces authentication, applies monitoring and includes fi
     const empty = await fetch(BASE + route, { headers: AUTH_HEADERS }).then(res => res.json());
     assert.equal(empty.count, 0);
     await fetch(`${BASE}/api/news/monitoring`, { method: 'PUT', headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: 'all', vendorIds: [] }) });
-});
-
-test('phishing report API enforces owner isolation, strict dates and includes the last day', async () => {
-    assert.equal((await fetch(`${BASE}/api/phishing/reports`)).status, 401);
-    const response = await fetch(`${BASE}/api/phishing/reports?from=2026-08-01&to=2026-10-08`, { headers: AUTH_HEADERS });
-    assert.equal(response.status, 200);
-    assert.match(response.headers.get('cache-control'), /private.*no-store/);
-    const data = await response.json();
-    assert.equal(data.reports.length, 1);
-    assert.equal(data.summary.publications, 1);
-    assert.deepEqual(data.facets.profiles, [{ id: 'owned', name: 'Own profile' }]);
-    assert.ok(!JSON.stringify(data).includes('Private profile'));
-    assert.equal((await fetch(`${BASE}/api/phishing/reports?profileId=private`, { headers: AUTH_HEADERS })).status, 404);
-    assert.equal((await fetch(`${BASE}/api/phishing/reports?from=2026-02-30`, { headers: AUTH_HEADERS })).status, 400);
-    const own = await fetch(`${BASE}/api/phishing/reports?profileId=owned&region=Brazil`, { headers: AUTH_HEADERS }).then(res => res.json());
-    assert.equal(own.reports.length, 1);
-    assert.deepEqual(own.reports[0].profileMatches[0].reasons, ['Setor: Financial']);
 });
 
 test('GET /api/vendors/status returns vendor map', async () => {
@@ -384,47 +320,6 @@ test('monitoramento exige sessão, aceita usuário comum e isola preferências p
     assert.equal(invalid.status, 400);
 });
 
-test('urlscan BYOK é cifrado, isolado por conta e ativa a busca sem chave da plataforma', async () => {
-    const key = 'urlscan-smoke-personal-key';
-    const route = `${BASE}/api/user/keys/urlscan`;
-    const write = (headers, value) => fetch(route, {
-        method: 'PUT', headers: { ...headers, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ key: value, ownerId: 'outsider' }),
-    });
-    assert.equal((await write({}, key)).status, 401);
-    assert.equal((await write(AUTH_HEADERS, 'short')).status, 400);
-    const watchStatus = () => fetch(`${BASE}/api/phishing-watch/hits`, { headers: AUTH_HEADERS }).then(r => r.json());
-    assert.equal((await watchStatus()).configured, false);
-
-    const saved = await write(AUTH_HEADERS, key);
-    assert.equal(saved.status, 200);
-    assert.deepEqual(await saved.json(), { provider: 'urlscan', hasKey: true });
-    const own = await fetch(`${BASE}/api/user/keys`, { headers: AUTH_HEADERS }).then(r => r.json());
-    assert.deepEqual(own.keys, { shodan: false, urlscan: true, abuse_ch: false, otx:false, abuseipdb:false, axur:false, virustotal:false, threatfox:false, urlhaus:false, malwarebazaar:false });
-    assert.ok(!JSON.stringify(own).includes(key));
-    const other = await fetch(`${BASE}/api/user/keys`, { headers: OUTSIDER_HEADERS }).then(r => r.json());
-    assert.equal(other.keys.urlscan, false);
-
-    const disk = readFileSync(USERS_STORE_PATH, 'utf8');
-    assert.ok(!disk.includes(key), 'segredo não pode ficar em texto aberto');
-    const blob = Buffer.from(JSON.parse(disk)['smoke-user'].apiKeysEnc.urlscan, 'base64');
-    const decipher = crypto.createDecipheriv('aes-256-gcm', crypto.createHash('sha256').update(SECRETS_ENCRYPTION_KEY).digest(), blob.subarray(0, 12));
-    decipher.setAuthTag(blob.subarray(12, 28));
-    assert.equal(Buffer.concat([decipher.update(blob.subarray(28)), decipher.final()]).toString(), key);
-    assert.equal((await watchStatus()).configured, true);
-    // Perfil inexistente chega à autorização do perfil, sem chamar o fornecedor.
-    const run = await fetch(`${BASE}/api/phishing-watch/run`, {
-        method: 'POST', headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ profileId: 'missing-byok-profile' }),
-    });
-    assert.equal(run.status, 404);
-    assert.equal((await fetch(route, { method: 'DELETE', headers: OUTSIDER_HEADERS })).status, 200);
-    assert.equal((await watchStatus()).configured, true, 'outra conta não remove nossa chave');
-    assert.equal((await fetch(route, { method: 'DELETE', headers: AUTH_HEADERS })).status, 200);
-    assert.equal((await watchStatus()).configured, false);
-    assert.equal(JSON.parse(readFileSync(USERS_STORE_PATH, 'utf8'))['smoke-user'].apiKeysEnc.urlscan, undefined);
-});
-
 test('Axur BYOK and progress are encrypted, account-scoped and never expose credentials', async () => {
     const key = 'axur-smoke-personal-key';
     const route = `${BASE}/api/user/keys/axur`;
@@ -514,13 +409,6 @@ test('report generation rejects too many sources instead of silently dropping in
 test('legacy groq-key endpoint is gone', async () => {
     const r = await fetch(`${BASE}/api/user/groq-key`, { method: 'PUT' });
     assert.equal(r.status, 404);
-});
-
-test('exposure watchlist requires authentication', async () => {
-    const r = await fetch(`${BASE}/api/exposure-watchlist/assets`);
-    assert.equal(r.status, 401);
-    const body = await r.json();
-    assert.equal(body.needAuth, true);
 });
 
 test('knowledge routes exist and require authentication', async () => {
@@ -630,4 +518,37 @@ test('durable bulk accepts a large input, isolates accounts, pages compact rows 
  const full=await(await fetch(BASE+'/api/bulk/jobs/'+job.id+'/rows/0',{headers:AUTH_HEADERS})).json();assert.equal(full.serverOrdinal,0);assert.ok(full.contextLoading);
  const dump=await fetch(BASE+'/api/bulk/jobs/'+job.id+'/download?format=json&type=ip',{headers:AUTH_HEADERS});assert.equal(dump.status,200);assert.match(dump.headers.get('content-disposition'),/attachment/);const json=await dump.json();assert.equal(json.rows.length,1200);assert.equal(json.count,1200);
  const action=kind=>fetch(BASE+'/api/bulk/jobs/'+job.id+'/action',{method:'POST',headers:{...AUTH_HEADERS,'Content-Type':'application/json'},body:JSON.stringify({action:kind})});assert.equal((await(await action('pause')).json()).state,'paused');assert.equal((await(await fetch(BASE+'/api/bulk/jobs/'+job.id,{headers:AUTH_HEADERS})).json()).state,'paused');assert.equal((await(await action('cancel')).json()).state,'canceled');
+});
+
+
+test('retired hunting, phishing and exposure APIs are unavailable even to premium accounts', async () => {
+    const endpoints = [
+        ['GET', '/api/hunting/overview'], ['POST', '/api/hunting/feedback'],
+        ['GET', '/api/phishing/reports'], ['GET', '/api/phishing/evolution'],
+        ['GET', '/api/phishing/evolution/weeks/2026-10-04'],
+        ['GET', '/api/phishing-watch/hits'], ['POST', '/api/phishing-watch/run'],
+        ['GET', '/api/phishing-watch/intelligence'], ['GET', '/api/phishing-watch/suggestions'],
+        ['POST', '/api/phishing-watch/suggestions/id/review'],
+        ['GET', '/api/phishing-watch/hits/id/context'], ['POST', '/api/phishing-watch/hits/id/verdict'],
+        ['POST', '/api/phishing-watch/hits/id/status'], ['GET', '/api/phishing-watch/tickets'],
+        ['GET', '/api/phishing-watch/tickets/id'], ['POST', '/api/phishing-watch/tickets/id/status'],
+        ['POST', '/api/attack-surface'], ['GET', '/api/attack-surface/credits'],
+        ['GET', '/api/exposure-watchlist/assets'], ['POST', '/api/exposure-watchlist/assets'],
+        ['PATCH', '/api/exposure-watchlist/assets/id'], ['DELETE', '/api/exposure-watchlist/assets/id'],
+        ['POST', '/api/exposure-watchlist/assets/id/run'], ['GET', '/api/exposure-watchlist/assets/id/snapshots'],
+        ['GET', '/api/exposure-watchlist/changes'], ['GET', '/api/org/asset-suggestions'],
+    ];
+    for (const [method, endpoint] of endpoints) {
+        const response = await fetch(BASE + endpoint, { method, headers: AUTH_HEADERS });
+        assert.equal(response.status, 404, `${method} ${endpoint}`);
+    }
+});
+
+test('CIDR enrichment retains its dedicated Shodan route and rejects other query modes', async () => {
+    for (const input of [{ target: '8.8.8.8' }, { target: 'org:Example', mode: 'advanced' }, {}]) {
+        const response = await fetch(BASE + '/api/enrichment/cidr/shodan', {
+            method: 'POST', headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' }, body: JSON.stringify(input),
+        });
+        assert.equal(response.status, 400);
+    }
 });

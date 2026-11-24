@@ -8,10 +8,9 @@ import { Footer } from "@/components/Footer";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useAuth } from "@/contexts/AuthContext";
 
-type Feature = "threat-brief" | "advisory-feed" | "exposure-watchlist" | "knowledge" | "hunting";
+type Feature = "threat-brief" | "advisory-feed" | "knowledge";
 
 const COPY: Record<Feature, { pt: [string, string]; en: [string, string] }> = {
-  hunting: { pt: ['Threat Hunting', 'Hipóteses e consultas KQL orientadas pela inteligência da sua base.'], en: ['Threat Hunting', 'Hunting hypotheses and KQL grounded in your intelligence.'] },
   "threat-brief": {
     pt: ["Relatórios", "Produza resumos a partir das suas fontes."],
     en: ["Reports", "Produce summaries from your sources."],
@@ -19,10 +18,6 @@ const COPY: Record<Feature, { pt: [string, string]; en: [string, string] }> = {
   "advisory-feed": {
     pt: ["Feed de inteligência", "Notícias, advisories e pesquisas de segurança."],
     en: ["Intelligence feed", "Security news, advisories and research."],
-  },
-  "exposure-watchlist": {
-    pt: ["Superfície de Ataque", "Ativos expostos na internet."],
-    en: ["Attack Surface", "Assets exposed to the internet."],
   },
   knowledge: {
     pt: ["Publicações salvas", "Publicações salvas para sua pesquisa CTI."],

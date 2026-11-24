@@ -70,8 +70,6 @@ test("publishes the approved static sitemap", async () => {
     "/threat-map",
     "/patch-tuesday",
     "/vendors",
-    "/attack-surface",
-    "/phishing-analyzer",
   ];
 
   assert.match(sitemap, /<urlset xmlns="http:\/\/www\.sitemaps\.org\/schemas\/sitemap\/0\.9">/);

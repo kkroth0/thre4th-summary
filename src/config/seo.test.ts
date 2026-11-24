@@ -19,8 +19,6 @@ const expectedRoutes = [
   "/ai-patch-day",
   "/sap-patch",
   "/vendors",
-  "/attack-surface",
-  "/phishing-analyzer",
 ];
 
 test("defines the canonical production site URL", () => {
@@ -42,15 +40,15 @@ test("builds stable absolute canonical URLs", () => {
 });
 
 test("returns localized metadata and falls back to English for unsupported app languages", () => {
-  const pt = getSeoMetadata("/phishing-analyzer", "pt");
-  const en = getSeoMetadata("/phishing-analyzer", "en");
-  const fallback = getSeoMetadata("/phishing-analyzer", "fr");
+  const pt = getSeoMetadata("/analyzer", "pt");
+  const en = getSeoMetadata("/analyzer", "en");
+  const fallback = getSeoMetadata("/analyzer", "fr");
 
   assert.match(pt.title, /ThreatSumm4ry/);
-  assert.match(pt.description, /phishing/i);
-  assert.match(en.description, /phishing/i);
+  assert.ok(pt.description.length > 0);
+  assert.ok(en.description.length > 0);
   assert.equal(fallback.title, en.title);
-  assert.equal(pt.canonicalUrl, "https://threatsumm4ry.app/phishing-analyzer");
+  assert.equal(pt.canonicalUrl, "https://threatsumm4ry.app/analyzer");
 });
 
 test("falls back to homepage metadata for unknown routes", () => {

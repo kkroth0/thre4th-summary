@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Building2, Download, Loader2, Plus, Trash2 } from "lucide-react";
+import { Building2, Loader2, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import {
   AlertDialog,
@@ -22,7 +22,6 @@ import { useOrgProfile } from "@/hooks/useOrgProfile";
 import {
   createOrgProfile,
   deleteOrgProfile,
-  fetchOrgAssetSuggestions,
   fetchOrgVocab,
   updateOrgProfile,
   type OrgProfile,
@@ -97,25 +96,6 @@ export function OrgProfileEditor() {
       await reload();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Falha ao remover");
-    }
-  };
-
-  const importFromWatchlist = async () => {
-    if (!draft) return;
-    try {
-      const suggestions = await fetchOrgAssetSuggestions();
-      if (suggestions.length === 0) {
-        toast.info(pt ? "Nenhum produto detectado no watchlist ainda" : "No products detected in the watchlist yet");
-        return;
-      }
-      const existing = new Set((draft.assets ?? []).map((asset) => asset.product.toLowerCase()));
-      const added = suggestions
-        .filter((suggestion) => !existing.has(suggestion.product.toLowerCase()))
-        .map((suggestion) => ({ vendor: "", product: suggestion.product }));
-      setDraft({ ...draft, assets: [...(draft.assets ?? []), ...added] });
-      toast.success(pt ? `${added.length} ativo(s) sugerido(s)` : `${added.length} asset(s) suggested`);
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Falha ao importar");
     }
   };
 
@@ -221,7 +201,6 @@ export function OrgProfileEditor() {
                 />
                 {/* Botões só-ícone: sem aria-label um leitor de tela não anuncia o que fazem. */}
                 <Button variant="outline" size="sm" onClick={addAsset} aria-label={pt ? "Adicionar ativo" : "Add asset"}><Plus /></Button>
-                <Button variant="outline" size="sm" onClick={importFromWatchlist} title={pt ? "Importar do Watchlist" : "Import from Watchlist"} aria-label={pt ? "Importar do Watchlist" : "Import from Watchlist"}><Download /></Button>
               </div>
               <div className="flex flex-wrap gap-1.5 pt-1">
                 {(draft.assets ?? []).map((asset, index) => (
@@ -243,8 +222,8 @@ export function OrgProfileEditor() {
               <Label htmlFor="org-brand">{pt ? "Marcas e domínios" : "Brands and domains"}</Label>
               <p className="text-xs text-muted-foreground">
                 {pt
-                  ? "O que a vigilância de phishing procura em domínios recém-criados. Pode digitar o domínio inteiro — vale o nome, não o final. Não precisa ser a marca: termo de isca comum (\"login\", \"seguranca\") também vigia domínio novo sem depender do nome exato."
-                  : "What the phishing watch looks for in freshly registered domains. Paste the whole domain if you like — only the name counts. Doesn't have to be the brand itself: a common lure term (\"login\", \"security\") also watches new domains without depending on the exact name."}
+                  ? "Marcas e domínios usados para contextualizar as notícias da organização."
+                  : "Brands and domains used to contextualize organization news."}
               </p>
               <div className="flex gap-2">
                 <Input

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { detectIOCType, fetchThreatData, fetchThreatDataProgressive, fetchAttackSurfaceCredits, formatVendorData, resolveVendorsForQuery } from "./threatApi";
+import { detectIOCType, fetchThreatData, fetchThreatDataProgressive, formatVendorData, resolveVendorsForQuery } from "./threatApi";
 import { refang } from "@/utils/defang";
 import { isSupportedAnalyzerQuery } from "@/utils/iocExtract";
 
@@ -70,17 +70,6 @@ test("OpenPhish exposes a capital-S Status the aggregator can count", () => {
   assert.equal(formatVendorData("OpenPhish", { listed: true, status: "Listed as phishing" }, "http://x").Status, "Phishing");
   assert.equal(formatVendorData("OpenPhish", { listed: false, status: "x" }, "http://x").Status, "Clean");
 
-});
-
-test("loads Shodan credits without exposing account data", async () => {
-  const originalFetch = globalThis.fetch;
-  globalThis.fetch = async () => new Response(JSON.stringify({ plan: "member", queryCredits: 99 }));
-
-  try {
-    assert.deepEqual(await fetchAttackSurfaceCredits(), { plan: "member", queryCredits: 99 });
-  } finally {
-    globalThis.fetch = originalFetch;
-  }
 });
 
 test('missing PhishStats results and unverified PhishTank reports do not become malicious or clean votes', async () => {

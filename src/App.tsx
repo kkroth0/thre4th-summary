@@ -3,7 +3,6 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-const DomainMonitoring = lazy(() => import('./pages/DomainMonitoring'));
 import { LanguageProvider } from "./contexts/LanguageContext";
 import { AuthProvider } from "./contexts/AuthContext";
 import { PremiumRoute } from "./components/PremiumRoute";
@@ -17,15 +16,11 @@ const Login = lazy(() => import("./pages/Login"));
 const Profile = lazy(() => import("./pages/Profile"));
 const Settings = lazy(() => import("./pages/Settings"));
 const VendorDirectory = lazy(() => import("./pages/VendorDirectory"));
-const AttackSurface = lazy(() => import("./pages/AttackSurface"));
-const ExposureWatchlist = lazy(() => import("./pages/ExposureWatchlist"));
 const Newsletter = lazy(() => import("./pages/Newsletter"));
 const IntelligenceOverview = lazy(() => import("./pages/IntelligenceOverview"));
-const HuntingDashboard = lazy(() => import("./pages/HuntingDashboard"));
 const MalwareCatalog = lazy(() => import("./pages/MalwareCatalog"));
 const CveDashboard = lazy(() => import("./pages/CveDashboard"));
 const Actors = lazy(() => import("./pages/Actors"));
-const PhishingAnalyzer = lazy(() => import("./pages/PhishingAnalyzer"));
 const DailyBulletin = lazy(() => import("./pages/ReportsPage"));
 const Knowledge = lazy(() => import("./pages/Knowledge"));
 const PatchTuesday = lazy(() => import("./pages/PatchTuesday"));
@@ -58,7 +53,6 @@ const App = () => (
                 <Route path="/analyzer" element={<Index />} />
                 <Route path="/bulk" element={<BulkEnrichment />} />
                 <Route path="/dashboard" element={<PremiumRoute feature="advisory-feed"><IntelligenceOverview /></PremiumRoute>} />
-                <Route path="/hunting" element={<PremiumRoute feature="hunting"><HuntingDashboard /></PremiumRoute>} />
                 <Route path="/malware" element={<MalwareCatalog />} />
                 <Route path="/cves" element={<CveDashboard />} />
                 <Route path="/atores" element={<Actors />} />
@@ -72,10 +66,6 @@ const App = () => (
 
                 {/* Tool Routes */}
                 <Route path="/vendors" element={<VendorDirectory />} />
-                <Route path="/attack-surface" element={<AttackSurface />} />
-                <Route path="/exposure-watchlist" element={<ExposureWatchlist />} />
-                <Route path="/phishing-analyzer" element={<PhishingAnalyzer />} />
-                <Route path="/domain-monitoring" element={<DomainMonitoring />} />
 
                 {/* Premium Routes (require premium allow-list) */}
                 <Route path="/knowledge" element={<PremiumRoute feature="knowledge"><Knowledge /></PremiumRoute>} />

@@ -1294,115 +1294,6 @@ export interface AttackSurfaceResponse {
     warnings: string[];
 }
 
-export const fetchAttackSurface = async (input: AttackSurfaceInput): Promise<AttackSurfaceResponse> => {
-    const response = await fetch('/api/attack-surface', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(input),
-    });
-    if (!response.ok) {
-        const text = await response.text();
-        throw new Error(`Attack Surface API error: ${response.status} ${response.statusText} - ${text}`);
-    }
-    return response.json();
-};
-
-export const fetchAttackSurfaceCredits = async (): Promise<ShodanCreditStatus> => {
-    const response = await fetch('/api/attack-surface/credits');
-    if (!response.ok) throw new Error('Unable to load Shodan credits');
-    return response.json();
-};
-
-export type ExposureAssetType = 'domain' | 'ip' | 'cidr' | 'asn' | 'shodan_query';
-export type ExposureStatus = 'never_run' | 'running' | 'success' | 'error' | 'config_error';
-export type ExposureChangeSeverity = 'critical' | 'high' | 'medium' | 'low' | 'info';
-export type ExposureChangeType = 'baseline_created' | 'service_added' | 'service_removed' | 'cve_added'
-    | 'cve_removed' | 'risk_increased' | 'risk_decreased' | 'banner_changed' | 'validation_changed';
-
-export interface ExposureSnapshotSummary {
-    totalAssets: number;
-    totalServices: number;
-    criticalHighFindings: number;
-    activelyConfirmedOpen: number;
-    byRisk: Record<AttackSurfaceRisk, number>;
-    highestRisk: AttackSurfaceRisk | null;
-}
-
-export interface ExposureAsset {
-    id: string; ownerId: string; ownerLogin: string; label: string; type: ExposureAssetType; value: string;
-    limit: number; activeValidation: boolean; scheduleEnabled: boolean; createdAt: string; updatedAt: string;
-    lastRunAt: string | null; lastStatus: ExposureStatus; lastError: string | null; lastSnapshotId: string | null;
-    lastRisk: AttackSurfaceRisk | null; lastSummary: ExposureSnapshotSummary | null;
-}
-
-export interface ExposureChange {
-    id: string; assetId: string; snapshotId: string; detectedAt: string; severity: ExposureChangeSeverity;
-    type: ExposureChangeType; title: string; description: string; ip: string | null; port: number | null;
-    transport: 'tcp' | 'udp' | null; previous: unknown; current: unknown;
-}
-
-export interface ExposureSnapshot {
-    id: string; assetId: string; ownerId: string; startedAt: string; completedAt: string | null;
-    status: 'success' | 'error' | 'config_error'; error: string | null; input: AttackSurfaceInput;
-    summary: ExposureSnapshotSummary; findings: AttackSurfaceFinding[]; changes: ExposureChange[]; warnings: string[];
-}
-
-export interface ExposureAssetInput {
-    label: string; type: ExposureAssetType; value: string; limit: number;
-    activeValidation: boolean; scheduleEnabled: boolean;
-}
-
-const exposureError = async (response: Response): Promise<never> => {
-    const body = await response.json().catch(() => ({}));
-    throw new Error((body as { error?: string }).error || `Attack Surface Monitor API error: ${response.status}`);
-};
-
-export const fetchExposureAssets = async (): Promise<ExposureAsset[]> => {
-    const response = await fetch('/api/exposure-watchlist/assets');
-    if (!response.ok) return exposureError(response);
-    return (await response.json()).assets;
-};
-
-export const createExposureAsset = async (input: ExposureAssetInput): Promise<ExposureAsset> => {
-    const response = await fetch('/api/exposure-watchlist/assets', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input),
-    });
-    if (!response.ok) return exposureError(response);
-    return (await response.json()).asset;
-};
-
-export const updateExposureAsset = async (id: string, input: ExposureAssetInput): Promise<ExposureAsset> => {
-    const response = await fetch(`/api/exposure-watchlist/assets/${encodeURIComponent(id)}`, {
-        method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input),
-    });
-    if (!response.ok) return exposureError(response);
-    return (await response.json()).asset;
-};
-
-export const deleteExposureAsset = async (id: string): Promise<void> => {
-    const response = await fetch(`/api/exposure-watchlist/assets/${encodeURIComponent(id)}`, { method: 'DELETE' });
-    if (!response.ok) return exposureError(response);
-};
-
-export const runExposureAsset = async (id: string): Promise<{ asset: ExposureAsset; snapshot: ExposureSnapshot }> => {
-    const response = await fetch(`/api/exposure-watchlist/assets/${encodeURIComponent(id)}/run`, { method: 'POST' });
-    if (!response.ok) return exposureError(response);
-    return response.json();
-};
-
-export const fetchExposureSnapshots = async (id: string): Promise<ExposureSnapshot[]> => {
-    const response = await fetch(`/api/exposure-watchlist/assets/${encodeURIComponent(id)}/snapshots`);
-    if (!response.ok) return exposureError(response);
-    return (await response.json()).snapshots;
-};
-
-export const fetchExposureChanges = async (limit = 100): Promise<ExposureChange[]> => {
-    const response = await fetch(`/api/exposure-watchlist/changes?limit=${encodeURIComponent(String(limit))}`);
-    if (!response.ok) return exposureError(response);
-    return (await response.json()).changes;
-};
-
-// ─── Scans salvos (histórico do IOC search, por usuário) ───────────────────
 export interface SavedScan {
     id: string; query: string; queryType: string;
     threatLevel: string; score: number; detections: number; totalVendors: number; at: string;
@@ -1572,8 +1463,7 @@ export interface OrgProfile {
     sectors: string[];
     regions: string[];
     assets: OrgAsset[];
-    // Marcas e domínios da organização. São os termos que a vigilância de
-    // phishing procura no urlscan; perfil sem marca não é vigiado.
+    // Marcas e domínios usados no contexto das notícias da organização.
     brands: string[];
     ot: { present: boolean; vendors: string[]; protocols: string[] };
     actors: string[];
@@ -1582,7 +1472,6 @@ export interface OrgProfile {
 }
 
 export interface OrgVocab { sectors: string[]; regions: string[]; }
-export interface OrgAssetSuggestion { vendor: string; product: string; versions: string[]; seenOn: string[]; }
 
 const orgError = async (response: Response): Promise<never> => {
     const body = await response.json().catch(() => ({}));
@@ -1642,162 +1531,6 @@ export const deleteOrgProfile = (id: string): Promise<{ ok: boolean }> =>
 export const fetchOrgThreatModel = (id: string): Promise<OrgThreatModel> =>
     orgJson(`/api/org/profiles/${encodeURIComponent(id)}/threat-model`);
 
-export const fetchOrgAssetSuggestions = async (): Promise<OrgAssetSuggestion[]> =>
-    (await orgJson<{ suggestions: OrgAssetSuggestion[] }>('/api/org/asset-suggestions')).suggestions;
-
-// ─── Vigilância de marca (urlscan) ─────────────────────────────────────────
-export type PhishHitStatus = 'new' | 'confirmed' | 'dismissed';
-export type PhishVerdict = 'malicious' | 'legitimate' | 'inconclusive' | 'unknown';
-
-export interface PhishHit {
-    id: string;
-    profileId: string;
-    apexDomain: string;
-    domain: string;
-    url: string;
-    term: string | null;
-    apexAgeDays: number | null;
-    title: string;
-    country: string;
-    asn: string;
-    ip: string;
-    source: string;
-    scanUrl: string;
-    screenshot: string;
-    firstSeen: string;
-    lastSeen: string;
-    score: number;
-    reasons: string[];
-    status: PhishHitStatus;
-    verdict?: PhishVerdict;
-    verdictReason?: string;
-}
-
-export interface PhishRun {
-    lastRunAt?: string;
-    lastStatus?: 'success' | 'error';
-    lastError?: string | null;
-    lastFound?: number;
-}
-
-export interface PhishHitsResponse {
-    configured: boolean;
-    hits: PhishHit[];
-    run: PhishRun | null;
-    intervalMs: number;
-}
-
-export const fetchPhishHits = (profileId: string, status?: PhishHitStatus): Promise<PhishHitsResponse> => {
-    const params = new URLSearchParams({ profileId });
-    if (status) params.set('status', status);
-    return orgJson(`/api/phishing-watch/hits?${params}`);
-};
-
-export const setPhishHitStatus = (id: string, status: PhishHitStatus): Promise<{ hit: PhishHit }> =>
-    orgJson(`/api/phishing-watch/hits/${encodeURIComponent(id)}/status`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status }),
-    });
-
-export const reviewPhishHit = (id: string, verdict: Exclude<PhishVerdict, 'unknown'>, reason: string): Promise<{ hit: PhishHit }> =>
-    orgJson(`/api/phishing-watch/hits/${encodeURIComponent(id)}/verdict`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ verdict, reason }) });
-export interface PhishWatchMetrics {
-    total: number; malicious: number; legitimate: number; unresolved: number; precision: number | null;
-    byReason: { reason: string; total: number; malicious: number; legitimate: number; precision: number | null }[];
-}
-export interface PhishCandidateContext {
-    candidate: PhishHit;
-    publications: { link: string; title: string; source: string; pubDate: string; actors: string[] }[];
-    observations: { value: string; basis: string; total: number; evidence: { provider: string; title: string; link: string; published: string }[] }[];
-    related: { id: string; domain: string; basis: string }[]; basis: string;
-}
-export const fetchPhishWatchMetrics = (profileId: string): Promise<PhishWatchMetrics> => orgJson(`/api/phishing-watch/intelligence?${new URLSearchParams({ profileId })}`);
-export const fetchPhishCandidateContext = (id: string): Promise<PhishCandidateContext> => orgJson(`/api/phishing-watch/hits/${encodeURIComponent(id)}/context`);
-export interface WatchTermSuggestion {
-    id: string; term: string; brand: string; events: number; sources: number; reasons: string[];
-    publications: { link: string; title: string; pubDate: string; techniques: string[]; campaign: string; patterns: { hostname: string; path: string }[] }[];
-}
-export const fetchWatchSuggestions = (profileId: string): Promise<{ suggestions: WatchTermSuggestion[] }> => orgJson(`/api/phishing-watch/suggestions?${new URLSearchParams({ profileId })}`);
-export const reviewWatchSuggestion = (profileId: string, id: string, decision: 'accepted' | 'dismissed'): Promise<{ id: string; term: string; status: string }> => orgJson(`/api/phishing-watch/suggestions/${encodeURIComponent(id)}/review`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ profileId, decision }) });
-export interface PhishingEvolution {
-    weeks: { week: string; end: string; closed: boolean; hasArchiveHistory: boolean; publications: number; events: number; sources: number; historicalMemberships?: number; bodyCoverage: { known: number; available: number; unknown: number } }[];
-    target: string | null; baselineWeeks: number; baselineReady: boolean; updatedAt: string | null;
-    signals: { kind: string; label: string; count: number; sources: number; baseline: number | null; delta: number | null; percent: number | null; newInArchive: boolean }[];
-    health: { observedSince: string | null; cycles24h: number; failed24h: number; latest: { at: string; status: string; elapsedMs: number; sourceCount: number } | null;
-        sources: { source: string; fresh: number; unchanged: number; stale: number; failed: number; lastSuccess: string | null }[] };
-}
-export const fetchPhishingEvolution = (): Promise<PhishingEvolution> => orgJson('/api/phishing/evolution');
-export interface PhishingWeekEvidence {
-    week: string; end: string; closed: boolean; publications: number; events: number; sources: number;
-    rules: { phishing: string; phishingKits?: string; extraction: string };
-    members: { link: string; event: string; source: string; contentHash: string | null; phishingVersion: string; extractionVersion: string | null; articleTextAvailable: boolean | null }[];
-}
-export const fetchPhishingWeekEvidence = (week: string): Promise<PhishingWeekEvidence> => {
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(week)) return Promise.reject(new Error('Invalid week'));
-    return orgJson(`/api/phishing/evolution/weeks/${week}`);
-};
-
-export type TicketStatus = 'open' | 'analysis' | 'takedown' | 'down' | 'closed';
-
-export interface TicketEvent { at: string; kind: string; by: string; note: string; }
-
-export interface TakedownTarget { kind: 'hosting' | 'registrar' | 'channel'; email?: string; url?: string; label?: string; name?: string; }
-
-export interface PhishTicket {
-    id: string;
-    profileId: string;
-    apexDomain: string;
-    domain: string;
-    url: string;
-    term: string | null;
-    title: string;
-    score: number;
-    reasons: string[];
-    scanUrl: string;
-    screenshot: string;
-    firstSeen: string;
-    status: TicketStatus;
-    openedAt: string;
-    openedBy: 'auto' | 'manual';
-    updatedAt: string;
-    reopenedAt?: string;
-    evidence: {
-        ip: string | null; asn: string | null; country: string | null; capturedAt: string;
-        registration: { registrar?: string | null; registeredAt?: string | null; nameservers?: string[]; abuse?: string[] } | null;
-        hosting: { network?: string | null; holder?: string | null; abuse?: string[] } | null;
-    } | null;
-    targets: TakedownTarget[];
-    dns: { checkedAt: string | null; aliveAt: string | null; deadAt: string | null };
-    events: TicketEvent[];
-}
-
-export interface TicketDigest {
-    date: string;
-    opened: PhishTicket[];
-    reopened: PhishTicket[];
-    dropped: PhishTicket[];
-    aging: PhishTicket[];
-    byStatus: Record<string, number>;
-    openCount: number;
-}
-
-export const fetchPhishTickets = (profileId: string, status?: string): Promise<{ tickets: PhishTicket[]; digest: TicketDigest }> => {
-    const params = new URLSearchParams({ profileId });
-    if (status) params.set('status', status);
-    return orgJson(`/api/phishing-watch/tickets?${params}`);
-};
-
-export const fetchPhishTicket = (id: string): Promise<{ ticket: PhishTicket; takedown: { pt: string; en: string } }> =>
-    orgJson(`/api/phishing-watch/tickets/${encodeURIComponent(id)}`);
-
-export const setPhishTicketStatus = (id: string, status: TicketStatus, note = ''): Promise<{ ticket: PhishTicket }> =>
-    orgJson(`/api/phishing-watch/tickets/${encodeURIComponent(id)}/status`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status, note }),
-    });
-
-export const runPhishWatch = (profileId: string): Promise<{ found: number; scanned: number; hits: PhishHit[]; run: PhishRun }> =>
-    orgJson('/api/phishing-watch/run', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ profileId }),
-    });
 
 /** Cota restante por base (faixa abaixo da barra de busca). Exige sessão. */
 export interface QuotaWindow {
@@ -1897,54 +1630,8 @@ export interface NewsArchiveRow {
     archivedAt: string;
 }
 
-export interface PhishingEvidence {
-    kind: string; label: string; field: 'title' | 'summary' | 'body'; term: string; snippet: string;
-}
-export interface PhishingTtp {
-    id: string; name: string; tactics: string[]; basis: 'reported' | 'inferred'; reason: string;
-}
-export interface PhishingReport extends NewsArchiveRow {
-    id: string; description: string; groupId: string;
-    groupBasis: 'named-campaign' | 'correlated-story' | 'publication'; campaignName: string;
-    primaryTechnique: string | null; vectors: string[]; sectors: string[]; regions: string[];
-    brands: string[]; actorNames: string[]; software: string[]; nationState: 'reported' | 'unknown';
-    ttps: PhishingTtp[]; evidence: PhishingEvidence[]; sourceType: string;
-    profileMatches: { profileId: string; profileName: string; reasons: string[] }[];
-}
-export interface PhishingCampaign {
-    id: string; name: string; basis: PhishingReport['groupBasis']; firstPublished: string;
-    lastPublished: string; reportCount: number; description: string; techniques: string[];
-    vectors: string[]; brands: string[]; sectors: string[]; regions: string[]; actors: string[];
-    software: string[]; ttpIds: string[]; sources: string[]; links: string[]; reportIds: string[];
-}
-export interface PhishingFilters {
-    search?: string; technique?: string; sector?: string; region?: string; brand?: string;
-    profileId?: string; nationState?: string;
-}
-export interface PhishingDataset {
-    reports: PhishingReport[]; campaigns: PhishingCampaign[]; total: number; truncated: boolean;
-    range: { from?: string; to?: string }; filters: PhishingFilters;
-    facets: { techniques: string[]; sectors: string[]; regions: string[]; brands: string[]; profiles: { id: string; name: string }[] };
-    summary: {
-        publications: number; groups: number; correlatedGroups: number; withTechnique: number;
-        nationState: number; brazil: number; distinctTtps: number;
-        months: { label: string; count: number }[]; techniques: { label: string; count: number }[];
-        sectors: { label: string; count: number }[]; regions: { label: string; count: number }[];
-        sources: { label: string; count: number }[];
-    };
-    ttps: { id: string; name: string; tactics: string[]; reports: number; groups: number; reported: number; inferred: number }[];
-}
-export const fetchPhishingReports = async (params: PhishingFilters & { from?: string; to?: string; limit?: number } = {}): Promise<PhishingDataset> => {
-    const query = new URLSearchParams();
-    for (const [key, value] of Object.entries(params)) if (value) query.set(key, String(value));
-    const response = await fetch(`/api/phishing/reports?${query}`);
-    if (!response.ok) throw new Error(`Phishing reports API error: ${response.status}`);
-    return response.json();
-};
-
 // Arquivo permanente do feed (nunca podado, ao contrário do /api/newsletter
-// de 10 min e do /api/news/stories de 60 dias). Usado pelo dashboard de
-// tendências de phishing e pela exportação em /phishing-analyzer.
+// de 10 min e do /api/news/stories de 60 dias).
 export const fetchNewsArchive = async (
     params: { category?: string; source?: string; from?: string; to?: string; limit?: number } = {},
 ): Promise<{ total: number; rows: NewsArchiveRow[] }> => {

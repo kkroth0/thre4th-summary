@@ -58,6 +58,7 @@ CVEs & PATCH TUESDAY
 DNS
 ====================================================================
   POST    /api/dns/lookup                      [rl]
+  POST    /api/enrichment/cidr/shodan          [rl] CIDR enrichment
 
 ====================================================================
 VENDOR / THREAT-INTEL LOOKUPS  (all POST, all [rl])
@@ -89,17 +90,6 @@ STATUS
   GET     /api/vendors/status
 
 ====================================================================
-EXPOSURE WATCHLIST
-====================================================================
-  GET     /api/exposure-watchlist/assets                 [auth] premium list assets
-  POST    /api/exposure-watchlist/assets                 [auth] premium create asset
-  PATCH   /api/exposure-watchlist/assets/:id             [auth] premium update asset
-  DELETE  /api/exposure-watchlist/assets/:id             [auth] premium delete asset
-  POST    /api/exposure-watchlist/assets/:id/run         [auth] [rl] premium run snapshot
-  GET     /api/exposure-watchlist/assets/:id/snapshots   [auth] premium snapshot history
-  GET     /api/exposure-watchlist/changes                [auth] premium changes feed
-
-====================================================================
 FRONTEND APP ROUTES (SPA, not HTTP endpoints)   * = premium/sign-in gated
 ====================================================================
   /                     Index
@@ -108,9 +98,6 @@ FRONTEND APP ROUTES (SPA, not HTTP endpoints)   * = premium/sign-in gated
   /patch-tuesday        Patch Tuesday
   /features             Features
   /vendors              Vendor Directory
-  /phishing-analyzer    Phishing Analyzer
-  /attack-surface       Attack Surface scan
-  /attack-surface?mode=monitor * Attack Surface monitoring (legacy /exposure-watchlist redirects here)
   /threat-brief     *   Threat Brief
   /newsletter       *   Advisory Feed
   /login                Login

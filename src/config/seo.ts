@@ -186,51 +186,9 @@ export const PUBLIC_SEO_ROUTES: SeoRoute[] = [
       },
     },
   },
-  {
-    path: "/attack-surface",
-    priority: "0.8",
-    changefreq: "weekly",
-    metadata: {
-      pt: {
-        title: "Attack Surface e Monitoramento Externo | ThreatSumm4ry",
-        description:
-          "Mapeie servicos expostos via Shodan, importe alvos em massa, exporte XLSX e monitore drift em ativos externos salvos.",
-      },
-      en: {
-        title: "Attack Surface and External Monitoring | ThreatSumm4ry",
-        description:
-          "Map exposed services with Shodan, bulk-import targets, export XLSX, and monitor drift across saved external assets.",
-      },
-    },
-  },
-  {
-    path: "/phishing-analyzer",
-    priority: "0.8",
-    changefreq: "weekly",
-    metadata: {
-      pt: {
-        title: "Analisador de Phishing, Headers e URLs | ThreatSumm4ry",
-        description:
-          "Analise emails suspeitos com verificacao de headers, SPF, DKIM, DMARC, URLs, anexos, IOCs e sinais de phishing.",
-      },
-      en: {
-        title: "Phishing Analyzer for Headers and URLs | ThreatSumm4ry",
-        description:
-          "Analyze suspicious emails with header checks, SPF, DKIM, DMARC, URLs, attachments, IOCs, and phishing indicators.",
-      },
-    },
-  },
 ];
 
 export const DEFAULT_SEO_ROUTE = PUBLIC_SEO_ROUTES[0];
-const HUNTING_SEO_ROUTE: SeoRoute = {
-  path: '/hunting', priority: '0.8', changefreq: 'daily',
-  metadata: {
-    pt: { title: 'O que caçar hoje | ThreatSumm4ry', description: 'Descubra o que caçar hoje, na semana e no mês. Hipóteses ligadas a notícias, CVEs e MITRE ATT&CK, com consultas KQL e feedback do analista.' },
-    en: { title: 'Threat Hunting | ThreatSumm4ry', description: 'Discover what to hunt today, this week and this month. Source-backed hypotheses linked to news, CVEs and MITRE ATT&CK, with KQL and analyst feedback.' },
-  },
-};
-
 export const getCanonicalUrl = (path: string) => {
   const normalizedPath = normalizePath(path);
   return normalizedPath === "/" ? `${SITE_URL}/` : `${SITE_URL}${normalizedPath}`;
@@ -238,7 +196,7 @@ export const getCanonicalUrl = (path: string) => {
 
 export const getSeoRoute = (path: string) => {
   const normalizedPath = normalizePath(path);
-  return normalizedPath === HUNTING_SEO_ROUTE.path ? HUNTING_SEO_ROUTE : PUBLIC_SEO_ROUTES.find((route) => route.path === normalizedPath) ?? DEFAULT_SEO_ROUTE;
+  return PUBLIC_SEO_ROUTES.find((route) => route.path === normalizedPath) ?? DEFAULT_SEO_ROUTE;
 };
 
 export const getSeoLanguage = (language: string): SeoLanguage => (language === "pt" ? "pt" : "en");

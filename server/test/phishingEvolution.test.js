@@ -4,7 +4,6 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { createIocIntelligence } from '../iocIntelligence.js';
-import { createPhishWatchStore } from '../phishingWatch.js';
 import { buildPhishingWeeks, summarizePhishingWeeks } from '../phishingEvolution.js';
 import { evaluateCtBacktest } from '../phishingCtBacktest.js';
 import { PHISHING_VERSION } from '../phishingIntel.js';
@@ -94,16 +93,6 @@ test('private candidate verdicts survive operational eviction, do not create mal
   assert.equal(db.phishing.metrics('one').precision, 0.5); assert.equal(db.phishing.metrics('one').byReason[0].precision, 0.5);
   db.phishing.dropProfile('two', 'p'); assert.equal(db.phishing.metrics('one').total, 2);
   db.phishing.dropProfile('one', 'p'); assert.equal(db.phishing.metrics('one').total, 0); db.close();
-});
-test('verdict validation, ownership, JSON write failure and legacy dismissal remain independent', () => {
-  let fail = false; const synced = [];
-  const store = createPhishWatchStore({ filePath: 'memory', readFileSync: () => '{"hits":[],"runs":{}}', writeJsonAtomic: () => { if (fail) throw Error('disk'); }, onChange: rows => synced.push(...rows) });
-  store.absorb('p', [{ id: 'a', profileId: 'p', ownerId: 'one', apexDomain: 'example.com', status: 'new', lastSeen: at.toISOString() }], at);
-  assert.throws(() => store.review('two', 'a', 'malicious', 'analyst-confirmed'), /encontrado/);
-  assert.throws(() => store.review('one', 'a', 'legitimate', 'duplicate'), /motivo/);
-  store.setStatus('one', 'a', 'dismissed'); assert.equal(store.list('one')[0].verdict, undefined);
-  fail = true; assert.throws(() => store.review('one', 'a', 'malicious', 'analyst-confirmed'), /disk/); assert.equal(store.list('one')[0].verdict, undefined);
-  fail = false; store.review('one', 'a', 'inconclusive', 'duplicate'); assert.equal(synced.at(-1).verdict, 'inconclusive');
 });
 test('CT backtest requires exact hostname and observed timestamp, excludes issued-date fallback and reports missing negative sample', () => {
   const sample = { hostname: 'bancoxpto-login.com', firstSeen: '2026-10-10T12:00:00Z', cohort: 'watch', label: 'malicious', certificates: [

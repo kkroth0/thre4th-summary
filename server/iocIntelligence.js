@@ -10,7 +10,6 @@ import { declaredRepositoryMalware } from './repositorySources.js';
 import { sanitizeStoredMalware } from './malwareMatch.js';
 import { createPhishingEvolution } from './phishingEvolution.js';
 import { createNewsPersistence } from './newsPersistence.js';
-import { createWatchSuggestions } from './watchSuggestions.js';
 import { canonicalJsonEvidence } from './jsonEvidence.js';
 import { actorNameKey } from './actorSources.js';
 import { buildActorIdentityIndex } from './actorIdentity.js';
@@ -176,7 +175,7 @@ export function createIocIntelligence({filePath=':memory:',now=()=>Date.now(),is
     });
     flight=work.catch(()=>{});return work;
   }
-  return {ingest,list,detail,publications,actorActivityRows,replayProviderPayloads,news,watchSuggestions:createWatchSuggestions(db),phishing:createPhishingEvolution(db,{now}),
+  return {ingest,list,detail,publications,actorActivityRows,replayProviderPayloads,news,phishing:createPhishingEvolution(db,{now}),
     deferWritesUntil: promise => { writeBarrier=Promise.resolve(promise); flight=flight.then(()=>writeBarrier); },
     exportRows:({owner='',from,to})=>{
       const scope=scopeSql(owner);

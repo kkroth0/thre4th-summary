@@ -2,6 +2,25 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { cidrTilePage, domainHosts, extractEnrichmentTargets, networkObservations, parsePublicCidr } from './networkInvestigation';
 import { formatVendorData, type AttackSurfaceFinding } from '@/services/threatApi';
+import { lookupCidrShodan } from '@/services/networkInvestigation';
+
+test('CIDR enrichment uses its own endpoint after retiring the attack surface page', async () => {
+  const originalFetch = globalThis.fetch;
+  const expected = { findings: [], summary: { totalAssets: 0 } };
+  globalThis.fetch = async (input, init) => {
+    assert.equal(input, '/api/enrichment/cidr/shodan');
+    assert.equal(init?.method, 'POST');
+    const body = JSON.parse(String(init?.body));
+    assert.equal(body.target, '8.8.8.0/24');
+    assert.equal(body.activeValidation, false);
+    return new Response(JSON.stringify(expected));
+  };
+  try {
+    assert.deepEqual(await lookupCidrShodan('8.8.8.0/24', new AbortController().signal), expected);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
 
 test('CIDR normalizes host bits and computes the entire address space including /31 and /32', () => {
   const block = parsePublicCidr('46.101.129.42/17')!;

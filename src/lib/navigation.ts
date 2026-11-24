@@ -1,7 +1,7 @@
 const WORKSPACE_ROUTES = [
-  '/dashboard', '/hunting', '/bulk', '/malware', '/newsletter', '/knowledge', '/relatorios', '/analyzer', '/atores', '/cves',
-  '/patch-tuesday', '/sap-patch', '/ot-patch-day', '/ai-patch-day', '/threat-map', '/vendors', '/attack-surface',
-  '/exposure-watchlist', '/phishing-analyzer', '/domain-monitoring', '/settings', '/profile', '/admin',
+  '/dashboard', '/bulk', '/malware', '/newsletter', '/knowledge', '/relatorios', '/analyzer', '/atores', '/cves',
+  '/patch-tuesday', '/sap-patch', '/ot-patch-day', '/ai-patch-day', '/threat-map', '/vendors',
+  '/settings', '/profile', '/admin',
 ];
 export const isRouteActive = (path: string, pathname: string) => {
   const clean = path.split(/[?#]/)[0] || '/';

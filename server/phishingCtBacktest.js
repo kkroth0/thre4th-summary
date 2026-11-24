@@ -1,5 +1,5 @@
 import { domainTarget } from './domainIntelligence.js';
-import { normalizeBrandTerm } from './phishingWatch.js';
+import { normalizeBrandTerm } from './brandTerms.js';
 import { similarDomainCandidates } from './similarDomains.js';
 
 export function candidateBrandMatch(hostname, brands) {

@@ -31,7 +31,7 @@ import {
 import { actorTargeting } from './actorProfile.js';
 import { buildSoftwareIndex, buildActorNameIndex } from './actorSoftware.js';
 import { filterExactIocs, acceptedThreatFoxResponse } from './threatfoxMatch.js';
-import { getShodanCreditStatus, runAttackSurfaceScan } from './attackSurface.js';
+import { runAttackSurfaceScan } from './attackSurface.js';
 import { shodanAxios } from './shodanGate.js';
 import { createMalwareCatalog } from './malwareCatalog.js';
 import { createPhishingSources } from './phishingSources.js';
@@ -68,7 +68,6 @@ import { findMentions, findDomainMentions } from './newsIocs.js';
 import { refsOfReport, relatedTo } from './attackIndex.js';
 import { isJobId, jobSummary, normalizeDeckRequestType, normalizeDeckSubtype, normalizeDeckTemplate, orphanDeckFiles, pruneJobsMap } from './feedJobs.js';
 import { addKnowledgeItem, normalizeKnowledgeInput } from './knowledge.js';
-import { createWatchlistStore, runDueExposureSnapshots, runExposureSnapshot } from './exposureWatchlist.js';
 import { detectQueryType, sanitizeQuery } from './iocValidation.js';
 import { isEarlyDoc, normalizeCvrf } from './patchTuesday.js';
 import { createSapPatchService } from './sapPatchService.js';
@@ -112,26 +111,12 @@ import { createStoryStore } from './newsStoryStore.js';
 import { createNewsArchiveStore } from './newsArchiveStore.js';
 import { durableArticleCache } from './newsPersistence.js';
 import { createSqliteNewsStores } from './sqliteNewsStores.js';
-import { proposeWatchTerms } from './watchSuggestions.js';
 import { newsExportQuery, newsExportRows, newsExportCsv } from './newsExport.js';
-import { buildPhishingDataset, phishingQuery } from './phishingDataset.js';
-import { buildPhishingWeeks } from './phishingEvolution.js';
+
 import { VENDOR_CATALOG } from './vendorCatalog.js';
 import { createNewsMonitoringStore, filterMonitoredNews, filterMonitoredStories } from './newsMonitoring.js';
-import {
-    PHISH_LIMITS, createPhishWatchStore, createOwnerUrlscanClient, runDuePhishWatch, runProfileWatch,
-    createDnsResolver, recheckHitsDns,
-} from './phishingWatch.js';
-import {
-    OPEN_STATUS, applyStatus, attachEvidence, buildDailyDigest, createTicketStore, markDns,
-    noteRecurrence, selectAutoOpen, takedownRequest, ticketFromHit,
-} from './phishTickets.js';
-import { createRdap, takedownTargets } from './rdap.js';
 import { createQuotaReader } from './vendorQuotas.js';
 import { createKnowledgeAssistant, createAssistantGenerator } from './assistantKnowledge.js';
-import { createHuntingLibrary } from './huntingLibrary.js';
-import { createHuntingService } from './huntingService.js';
-import { createHuntingGenerator } from './huntingAi.js';
 import { createTelegramIntegration } from './telegramIntegration.js';
 import { createAxurImport } from './axurIntelligence.js';
 import { createAxurLookup } from './axurLookup.js';
@@ -194,14 +179,6 @@ function writeJsonAtomic(file, data) {
     fs.renameSync(tmp, file);
 }
 
-const EXPOSURE_ASSETS_PATH = path.join(__dirname, '.exposure-watchlist.json');
-const EXPOSURE_SNAPSHOTS_PATH = path.join(__dirname, '.exposure-snapshots.json');
-const exposureStore = createWatchlistStore({
-    assetsPath: EXPOSURE_ASSETS_PATH,
-    snapshotsPath: EXPOSURE_SNAPSHOTS_PATH,
-    readFileSync: fs.readFileSync,
-    writeJsonAtomic,
-});
 const DAILY_SUMMARIES_PATH = path.join(__dirname, '.daily-summaries.json');
 const dailyEditionStore = createEditionStore({ filePath: DAILY_SUMMARIES_PATH, writeJsonAtomic });
 
@@ -284,96 +261,6 @@ const newsMonitoringStore = createNewsMonitoringStore({
     filePath: process.env.NEWS_MONITORING_PATH || path.join(__dirname, '.news-monitoring.json'),
     readFileSync: fs.readFileSync, writeJsonAtomic,
 });
-
-const PHISH_WATCH_PATH = process.env.PHISH_WATCH_PATH || path.join(__dirname, '.phish-watch.json');
-const phishWatchStore = createPhishWatchStore({ filePath: PHISH_WATCH_PATH, readFileSync: fs.readFileSync, writeJsonAtomic,
-    onChange: hits => iocIntelligence.phishing.syncCandidates(hits) });
-iocIntelligence.phishing.syncCandidates(phishWatchStore.all());
-// Só busca, nunca submete: submeter publicaria a URL do cliente no urlscan.
-const urlscanClientFor = createOwnerUrlscanClient({
-    getUserApiKey: (ownerId) => getUserApiKey(ownerId, 'urlscan'),
-    platformApiKey: process.env.URLSCAN_API_KEY,
-});
-// Resolução direta contra os nameservers, sem depender de o urlscan reescanear.
-const phishDnsResolver = createDnsResolver({
-    resolve4: dns.promises.resolve4,
-    resolve6: dns.promises.resolve6,
-    resolveMx: dns.promises.resolveMx,
-    resolveNs: dns.promises.resolveNs,
-});
-
-const PHISH_TICKETS_PATH = path.join(__dirname, '.phish-tickets.json');
-const phishTicketStore = createTicketStore({ filePath: PHISH_TICKETS_PATH, readFileSync: fs.readFileSync, writeJsonAtomic });
-const rdap = createRdap({});
-
-// A evidência é congelada na abertura porque domínio de phishing morre rápido e
-// o pedido de derrubada precisa da prova de quando estava no ar. RDAP é registro
-// de terceiro: se falhar, o ticket existe do mesmo jeito, sem os contatos.
-async function withEvidence(ticket, hit, at) {
-    try {
-        const [registration, hosting] = await Promise.all([
-            rdap.domain(ticket.apexDomain).catch(() => null),
-            hit.ip ? rdap.ip(hit.ip).catch(() => null) : Promise.resolve(null),
-        ]);
-        return attachEvidence(ticket, {
-            at, registration, hosting, ip: hit.ip, asn: hit.asn, country: hit.country,
-            targets: takedownTargets({ domain: ticket.apexDomain, hosting, registration }),
-        });
-    } catch (error) {
-        console.error('phish ticket evidence failed:', error.message || error);
-        return ticket;
-    }
-}
-
-/**
- * Achado → fila. Score alto abre sozinho; confirmado na mão abre também.
- *
- * O mesmo domínio voltando não abre tarefa nova: se o ticket já foi encerrado,
- * reabre com a data da volta, que é o que mostra golpista insistente.
- */
-async function syncTicketsFromHits(ownerId, profileId, { manualHitId = null } = {}) {
-    const at = new Date().toISOString();
-    const opened = [];
-    const hits = phishWatchStore.list(ownerId, { profileId });
-    const semTicket = hits.filter((hit) => !phishTicketStore.byId(hit.id));
-    const autoOpen = new Set(selectAutoOpen(semTicket).map((hit) => hit.id));
-
-    for (const hit of hits) {
-        const manual = manualHitId && hit.id === manualHitId;
-        const existing = phishTicketStore.byId(hit.id);
-
-        if (existing) {
-            if (!OPEN_STATUS.includes(existing.status) && String(hit.lastSeen) > String(existing.updatedAt)) {
-                phishTicketStore.upsert(noteRecurrence(existing, { at }));
-            }
-            continue;
-        }
-        if (!manual && !autoOpen.has(hit.id)) continue;
-
-        const ticket = ticketFromHit(hit, { at, openedBy: manual ? 'manual' : 'auto', by: manual ? 'analista' : 'sistema' });
-        phishTicketStore.upsert(await withEvidence(ticket, hit, at));
-        opened.push(ticket.id);
-    }
-    return opened;
-}
-
-// Domínio que parou de resolver é candidato a derrubado — o sistema anota o
-// fato e nunca fecha o ticket sozinho: pode ter sido o takedown, pode ter sido
-// o golpista trocando de casa.
-async function recheckTicketDns(now = new Date()) {
-    const cutoff = now.getTime() - PHISH_LIMITS.runIntervalMs;
-    for (const ticket of phishTicketStore.all()) {
-        if (!OPEN_STATUS.includes(ticket.status)) continue;
-        const checkedAt = ticket.dns?.checkedAt ? new Date(ticket.dns.checkedAt).getTime() : 0;
-        if (checkedAt > cutoff) continue;
-        let alive = false;
-        try {
-            const addresses = await dns.promises.resolve4(ticket.apexDomain);
-            alive = addresses.length > 0;
-        } catch { alive = false; }
-        phishTicketStore.upsert(markDns(ticket, alive, { at: new Date().toISOString() }));
-    }
-}
 
 const ORG_PROFILES_PATH = process.env.ORG_PROFILES_PATH || path.join(__dirname, '.org-profiles.json');
 const orgProfileStore = createProfileStore({ filePath: ORG_PROFILES_PATH, readFileSync: fs.readFileSync, writeJsonAtomic });
@@ -1585,10 +1472,7 @@ const refreshNewsletterFeed = singleFlightRefresh(async () => {
         syncNewsShadow();
         stage('inventory');
         await iocIntelligence.ingestNews(newsArchiveStore.all());
-        stage('phishing');
-        iocIntelligence.phishing.saveWeeks(buildPhishingWeeks(newsArchiveStore.all()));
         stage('cache');
-        const healthSources = new Set([...effectiveFeeds().map(feed => feed.url), ...sources.map(source => source.url)]);
         unifiedFeed = correlation.items;
 
         // Raw RSS and collected article text remain in the disk caches. The
@@ -1599,15 +1483,13 @@ const refreshNewsletterFeed = singleFlightRefresh(async () => {
         memoryCache.newsletter.expiresAt = Date.now() + memoryCache.newsletter.ttl;
         try { rssCollectionCache.prune({ maxEntries: Math.max(600, effectiveFeeds().length * 3 + 50) }); articleCollectionCache.prune({ maxEntries: 1500 }); } catch (error) { console.warn('feed cache pruning failed:', error.message); }
         stage('done');
-        iocIntelligence.phishing.recordCycle({ at: new Date().toISOString(), status: 'ready', elapsedMs: Date.now() - startedAt, stages, bodies: bodies.stats, extraction, sources: [...feedHealth].filter(([url]) => healthSources.has(url)) });
         console.log('[feed] cycle', JSON.stringify({ elapsedMs: Date.now() - startedAt, stages, sources: collected.health.size, failedSources: [...collected.health.values()].filter((health) => !health.ok).length, articles: unifiedFeed.length, bodies: bodies.stats, extraction, correlation: correlation.stats }));
     } catch (error) {
         stage('failed');
-        try { iocIntelligence.phishing.recordCycle({ status: 'failed', elapsedMs: Date.now() - startedAt, stages }); } catch { /* preserve the previous snapshot */ }
         console.error('Failed to background refresh newsletter feeds:', error.message);
     }
 });
-void newsQualityReady.then(() => { syncNewsShadow(); iocIntelligence.phishing.saveWeeks(buildPhishingWeeks(newsArchiveStore.all())); }).catch(error => console.warn('Phishing weekly snapshot unavailable:', error.message));
+void newsQualityReady.then(() => { syncNewsShadow(); }).catch(error => console.warn('News shadow unavailable:', error.message));
 
 // CTI News feed endpoint.
 app.get('/api/news/monitoring', requireAuth, (req, res) => {
@@ -1664,40 +1546,7 @@ app.get('/api/news/stories', requirePremium, async (req, res) => {
     }
 });
 
-// Arquivo permanente do feed (link, título, fonte, data, categorias) — nunca
-// podado, ao contrário de /api/news/stories (60 dias). Alimenta o dashboard
-// de tendências de phishing e a exportação em /phishing-analyzer, mas serve
-// qualquer categoria, não só Phishing.
-//   GET /api/news/archive?category=Phishing&from=2026-08-01&to=2026-10-08
-const phishingTechniqueCatalog = JSON.parse(fs.readFileSync(new URL('./data/attack.json', import.meta.url), 'utf8')).techniques;
-app.get('/api/phishing/evolution', requirePremium, (req, res) => {
-    res.set('Cache-Control', 'private, no-store');
-    res.json(iocIntelligence.phishing.overview());
-});
-app.get('/api/phishing/evolution/weeks/:week', requirePremium, (req, res) => {
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(req.params.week)) return res.status(400).json({ error: 'Semana inválida' });
-    res.set('Cache-Control', 'private, no-store');
-    const evidence = iocIntelligence.phishing.weekEvidence(req.params.week);
-    if (!evidence) return res.status(404).json({ error: 'Semana não encontrada' });
-    res.json(evidence);
-});
-app.get('/api/phishing/reports', requirePremium, (req, res) => {
-    try {
-        const options = phishingQuery(req.query);
-        if (options.filters.profileId) orgProfileStore.get(req.user.sub, options.filters.profileId);
-        const rows = newsArchiveStore.list({
-            from: options.range.from,
-            to: options.range.to ? `${options.range.to}T23:59:59.999Z` : undefined,
-        });
-        res.set('Cache-Control', 'private, no-store');
-        res.json(buildPhishingDataset(rows, { ...options, profiles: orgProfileStore.list(req.user.sub), techniqueCatalog: phishingTechniqueCatalog }));
-    } catch (error) {
-        if (error.status && error.publicMessage) return res.status(error.status).json({ error: error.publicMessage });
-        const { status, message } = sanitizeError(error);
-        res.status(status).json({ error: message });
-    }
-});
-
+// Arquivo permanente do feed, disponível para todas as categorias.
 app.get('/api/news/archive', requirePremium, (req, res) => {
     try {
         res.set('Cache-Control', 'private, max-age=300');
@@ -2049,7 +1898,6 @@ app.get('/api/admin/integrations', requireAdmin, (req, res) => {
         { name: 'abuse.ch (MalwareBazaar/ThreatFox/URLhaus)', env: 'ABUSE_CH_API_KEY', configured: !!abuseChKey(), required: true },
         { name: 'WHOIS', env: 'WHOIS_API_KEY', configured: set('WHOIS_API_KEY'), required: true },
         { name: 'PhishTank', env: 'PHISHTANK_API_KEY', configured: set('PHISHTANK_API_KEY'), required: false },
-        { name: 'urlscan.io', env: 'URLSCAN_API_KEY', configured: set('URLSCAN_API_KEY'), required: false, note: 'sem chave a vigilância de marca de phishing não roda' },
     ];
     // Provedores que não precisam de chave nenhuma.
     const keyless = ['PhishStats', 'OpenPhish', 'IP Geolocation', 'Ransomware.live'];
@@ -2527,7 +2375,7 @@ app.delete('/api/user/key-pools/:provider/:id', requireAuth, (req, res) => {
     res.json({ provider, count: keys.length });
 });
 
-function buildExposureScanDeps(ownerId) {
+function buildShodanScanDeps(ownerId) {
     return {
         axiosClient: shodanClient,
         shodanApiKey: getUserApiKey(ownerId, 'shodan') || process.env.SHODAN_API_KEY,
@@ -2565,43 +2413,6 @@ app.get('/api/malware/sample/:hash', requirePremium, scanLimiter, async (req, re
     try { res.json(await malwareCatalog.samples(req.user.sub, { hash: req.params.hash })); }
     catch { res.status(503).json({ error: 'MalwareBazaar indisponível.' }); }
 });
-
-async function runExposureForAsset(asset) {
-    return runExposureSnapshot({
-        store: exposureStore,
-        assetId: asset.id,
-        ownerId: asset.ownerId,
-        runAttackSurfaceScan,
-        scanDeps: buildExposureScanDeps(asset.ownerId),
-    });
-}
-
-async function runPhishWatchTick() {
-    if (process.env.NODE_ENV === 'test') return;
-    const profiles = orgProfileStore.allProfiles();
-    const clients = new Map(profiles.map((profile) => [profile.id, urlscanClientFor(profile.ownerId)]));
-    await runDuePhishWatch({
-        store: phishWatchStore,
-        profiles: profiles.filter((profile) => clients.get(profile.id).search),
-        now: new Date(),
-        quotaGroupFor: (profile) => clients.get(profile.id).quotaGroup,
-        runOne: async (profile) => {
-            await runProfileWatch({ store: phishWatchStore, profile, search: clients.get(profile.id).search });
-            await syncTicketsFromHits(profile.ownerId, profile.id);
-        },
-    });
-    // Depois da rodada: o que já está na fila ainda está no ar?
-    await recheckTicketDns();
-    // E o que ainda nem virou ticket — domínio novo que estava parqueado pode
-    // ter subido A/MX na última hora, e ninguém vai notar até o urlscan
-    // resolver reescanear por conta própria.
-    await recheckHitsDns({ store: phishWatchStore, resolveDns: phishDnsResolver });
-}
-
-async function runExposureSchedulerTick() {
-    if (process.env.EXPOSURE_WATCHLIST_DISABLE_DAILY === 'true' || process.env.NODE_ENV === 'test') return;
-    await runDueExposureSnapshots({ store: exposureStore, now: new Date(), runOne: runExposureForAsset });
-}
 
 // ─── Boletim · jobs de geração por URL (1 URL = 1 boletim) ─────────────────
 // O front escolhe UMA url e pede a geração (POST generate); um worker na VPS
@@ -3447,35 +3258,6 @@ app.post('/api/assistant/query', requirePremium, telegramSettingsGuard, assistan
     catch { res.status(503).json({ error: 'Consulta indisponível. Tente novamente.' }); }
 });
 
-const huntingLibrary = createHuntingLibrary({ cachePath: process.env.NODE_ENV === 'test' ? undefined : path.join(__dirname, '.feed-cache/hunting-library.json'), http: axios, token: process.env.GITHUB_API_TOKEN || process.env.GITHUB_TOKEN || '' });
-let huntingCveCache;
-function huntingCves() {
-    if (!huntingCveCache || huntingCveCache.until < Date.now()) {
-        huntingCveCache = { until: Date.now() + 5 * 60000, task: Promise.allSettled([queryVulnerabilities('list', { size: 100 }), queryVulnerabilities('list', { view: 'weaponized', size: 100 })]).then(results => [...new Map(results.flatMap(result => result.status === 'fulfilled' ? result.value.rows : []).map(row => [row.id, row])).values()]) };
-    }
-    return huntingCveCache.task;
-}
-const huntingService = createHuntingService({
-    library: huntingLibrary, filePath: process.env.HUNTING_DB_PATH || (process.env.NODE_ENV === 'test' ? ':memory:' : path.join(__dirname, '.hunting.sqlite')),
-    getNews: owner => filterMonitoredNews(newsArchiveStore.all(), newsMonitoringStore.get(owner)), getCves: huntingCves,
-    generate: process.env.NODE_ENV !== 'test' && process.env.OPENROUTER_API_KEY ? createHuntingGenerator({ http: axios, getKey: () => process.env.OPENROUTER_API_KEY, model: process.env.OPENROUTER_HUNTING_MODEL || OPENROUTER_MODEL }) : undefined,
-    onError: error => console.warn('Hunting AI unavailable:', error.response?.status || error.code || error.name),
-});
-const huntingLimiter = rateLimit({ windowMs: 60000, max: 45, keyGenerator: req => req.user.sub, standardHeaders: true, legacyHeaders: false, message: { error: 'Aguarde um minuto para atualizar as caças.' } });
-app.get('/api/hunting/overview', requirePremium, huntingLimiter, async (req, res) => {
-    res.set('Cache-Control', 'private, no-store');
-    try { res.json(await huntingService.overview(req.user.sub, req.query.period || 'day')); }
-    catch (error) { res.status(error.status || 503).json({ error: error.status === 400 ? error.message : 'Não foi possível preparar as caças. Tente novamente.' }); }
-});
-app.post('/api/hunting/feedback', requirePremium, telegramSettingsGuard, huntingLimiter, (req, res) => {
-    try { res.json(huntingService.feedback(req.user.sub, req.body?.queryId, req.body?.vote)); }
-    catch (error) { res.status(error.status || 503).json({ error: error.status ? error.message : 'Não foi possível salvar o retorno.' }); }
-});
-if (process.env.NODE_ENV !== 'test') {
-    setTimeout(() => { void huntingLibrary.sync().catch(() => {}); }, 120000).unref();
-    setInterval(() => { void huntingLibrary.sync().catch(() => {}); }, 24 * 3600000).unref();
-}
-
 const weeklySourceCache=new Map();
 const weeklyRansomware=createWeeklyRansomware({http:axios,apiKey:process.env.RANSOMWARE_LIVE_API_KEY,filePath:process.env.NODE_ENV==='test'?undefined:path.join(__dirname,'.feed-cache','weekly-ransomware.json')});
 async function weeklyInputs(range){
@@ -3857,12 +3639,7 @@ app.delete('/api/org/profiles/:id', requireAuth, (req, res) => {
     if (!orgProfileStore.remove(req.user.sub, String(req.params.id))) {
         return res.status(404).json({ error: 'perfil não encontrado' });
     }
-    // Os achados de phishing são do perfil: sem isto viram lixo órfão que
-    // ninguém vê e que a retenção nunca alcança.
-    phishWatchStore.dropProfile(String(req.params.id));
     iocIntelligence.phishing.dropProfile(req.user.sub, String(req.params.id));
-    iocIntelligence.watchSuggestions.dropProfile(req.user.sub, String(req.params.id));
-    phishTicketStore.dropProfile(String(req.params.id));
     res.json({ ok: true });
 });
 
@@ -3870,24 +3647,6 @@ app.get('/api/org/profiles/:id/threat-model', requireAuth, (req, res) => {
     try {
         res.json(cachedThreatModel(orgProfileStore.get(req.user.sub, String(req.params.id))));
     } catch (error) { orgError(res, error); }
-});
-
-// Os produtos detectados ficam em finding.product, dentro dos snapshots — um
-// por ativo. Varrer aqui evita um N+1 de requisições no navegador.
-app.get('/api/org/asset-suggestions', requirePremium, (req, res) => {
-    const byProduct = new Map();
-    for (const asset of exposureStore.listAssets(req.user.sub)) {
-        const snapshot = exposureStore.previousSuccessfulSnapshot(req.user.sub, asset.id);
-        for (const finding of snapshot?.findings || []) {
-            const product = String(finding.product || '').trim();
-            if (!product) continue;
-            const entry = byProduct.get(product.toLowerCase()) || { vendor: '', product, versions: [], seenOn: [] };
-            if (finding.version && !entry.versions.includes(finding.version)) entry.versions.push(finding.version);
-            if (!entry.seenOn.includes(asset.label)) entry.seenOn.push(asset.label);
-            byProduct.set(product.toLowerCase(), entry);
-        }
-    }
-    res.json({ suggestions: [...byProduct.values()].sort((a, b) => a.product.localeCompare(b.product)) });
 });
 
 // List (slim) + facets. The client fetches once and searches/filters in-memory.
@@ -4044,12 +3803,14 @@ app.post('/api/dns/lookup', scanLimiter, async (req, res) => {
     }
 });
 
-app.post('/api/attack-surface', scanLimiter, async (req, res) => {
+app.post('/api/enrichment/cidr/shodan', scanLimiter, async (req, res) => {
     try {
         // BYOK-first: chave do usuário no Settings, fallback pra chave compartilhada
         // do servidor (.env). Endpoint sem auth obrigatória: resolve a sessão se houver.
         const session = verifySession(getCookie(req, 'ts_session'));
-        const result = await runAttackSurfaceScan(req.body, buildExposureScanDeps(session?.sub));
+        const target = req.body?.target;
+        if (typeof target !== 'string' || !/^\d{1,3}(?:\.\d{1,3}){3}\/\d{1,2}$/.test(target)) return res.status(400).json({ error: 'Invalid CIDR target' });
+        const result = await runAttackSurfaceScan({ mode: 'guided', targetType: 'cidr', target, limit: 100, activeValidation: false }, buildShodanScanDeps(session?.sub));
         res.json(result);
     } catch (error) {
         if (error.status && error.publicMessage) {
@@ -4060,237 +3821,25 @@ app.post('/api/attack-surface', scanLimiter, async (req, res) => {
     }
 });
 
-app.get('/api/attack-surface/credits', scanLimiter, async (req, res) => {
-    try {
-        const session = verifySession(getCookie(req, 'ts_session'));
-        res.json(await getShodanCreditStatus(buildExposureScanDeps(session?.sub)));
-    } catch (error) {
-        if (error.status && error.publicMessage) return res.status(error.status).json({ error: error.publicMessage });
-        const { status, message } = sanitizeError(error);
-        res.status(status).json({ error: message });
-    }
-});
-
-app.get('/api/exposure-watchlist/assets', requirePremium, (req, res) => {
-    res.json({ assets: exposureStore.listAssets(req.user.sub) });
-});
-
-app.post('/api/exposure-watchlist/assets', requirePremium, (req, res) => {
-    try {
-        const asset = exposureStore.createAsset(req.user, req.body || {});
-        res.status(201).json({ asset });
-    } catch (error) {
-        if (error.status && error.publicMessage) return res.status(error.status).json({ error: error.publicMessage });
-        const { status, message } = sanitizeError(error);
-        res.status(status).json({ error: message });
-    }
-});
-
-app.patch('/api/exposure-watchlist/assets/:id', requirePremium, (req, res) => {
-    try {
-        const asset = exposureStore.updateAsset(req.user.sub, req.params.id, req.body || {});
-        res.json({ asset });
-    } catch (error) {
-        if (error.status && error.publicMessage) return res.status(error.status).json({ error: error.publicMessage });
-        const { status, message } = sanitizeError(error);
-        res.status(status).json({ error: message });
-    }
-});
-
-app.delete('/api/exposure-watchlist/assets/:id', requirePremium, (req, res) => {
-    const deleted = exposureStore.deleteAsset(req.user.sub, req.params.id);
-    if (!deleted) return res.status(404).json({ error: 'Asset not found' });
-    res.json({ ok: true });
-});
-
-app.post('/api/exposure-watchlist/assets/:id/run', requirePremium, scanLimiter, async (req, res) => {
-    try {
-        const snapshot = await runExposureSnapshot({
-            store: exposureStore, assetId: req.params.id, ownerId: req.user.sub,
-            runAttackSurfaceScan, scanDeps: buildExposureScanDeps(req.user.sub),
-        });
-        res.json({ snapshot, asset: exposureStore.getAsset(req.user.sub, req.params.id) });
-    } catch (error) {
-        if (error.status && error.publicMessage) return res.status(error.status).json({ error: error.publicMessage });
-        const { status, message } = sanitizeError(error);
-        res.status(status).json({ error: message });
-    }
-});
-
-app.get('/api/exposure-watchlist/assets/:id/snapshots', requirePremium, (req, res) => {
-    try {
-        res.json({ snapshots: exposureStore.listSnapshots(req.user.sub, req.params.id) });
-    } catch (error) {
-        if (error.status && error.publicMessage) return res.status(error.status).json({ error: error.publicMessage });
-        const { status, message } = sanitizeError(error);
-        res.status(status).json({ error: message });
-    }
-});
-
-app.get('/api/exposure-watchlist/changes', requirePremium, (req, res) => {
-    res.json({ changes: exposureStore.listChanges(req.user.sub, req.query.limit) });
-});
-
-// ─── Vigilância de marca · domínio recém-criado com a marca no nome ────────
-// Os termos vigiados são as marcas do perfil da organização: um lugar só
-// para o contexto do cliente, em vez de mais um cadastro paralelo.
-const phishError = (res, error) => {
-    if (error.status && error.publicMessage) return res.status(error.status).json({ error: error.publicMessage });
-    const { status, message } = sanitizeError(error);
-    res.status(status).json({ error: message });
-};
-
-app.get('/api/phishing-watch/hits', requirePremium, (req, res) => {
-    const profileId = req.query.profileId ? String(req.query.profileId) : undefined;
-    const status = req.query.status ? String(req.query.status) : undefined;
-    res.json({
-        configured: Boolean(urlscanClientFor(req.user.sub).search),
-        hits: phishWatchStore.list(req.user.sub, { profileId, status }),
-        run: profileId ? phishWatchStore.runOf(profileId) : null,
-        intervalMs: PHISH_LIMITS.runIntervalMs,
-    });
-});
-
-app.get('/api/phishing-watch/intelligence', requirePremium, (req, res) => {
-    const profile = String(req.query.profileId || '');
-    if (profile) { try { orgProfileStore.get(req.user.sub, profile); } catch { return res.status(404).json({ error: 'Perfil não encontrado' }); } }
-    res.set('Cache-Control', 'private, no-store');
-    res.json(iocIntelligence.phishing.metrics(req.user.sub, profile));
-});
-const watchProposalCache = new Map();
-function profileWatchProposals(profile) {
-    const generation = `${profile.updatedAt || ''}:${iocIntelligence.news.status().latest?.at || ''}`;
-    const key = `${profile.ownerId}:${profile.id}`;
-    let cached = watchProposalCache.get(key);
-    if (!cached || cached.generation !== generation || cached.expires < Date.now()) {
-        if (watchProposalCache.size >= 100) watchProposalCache.delete(watchProposalCache.keys().next().value);
-        cached = { generation, expires: Date.now() + 10 * 60000, proposals: proposeWatchTerms(newsArchiveStore.all(), profile) };
-        watchProposalCache.set(key, cached);
-    }
-    return cached.proposals;
-}
-app.get('/api/phishing-watch/suggestions', requirePremium, (req, res) => {
-    try {
-        const profile = orgProfileStore.get(req.user.sub, String(req.query.profileId || ''));
-        res.set('Cache-Control', 'private, no-store').json({ suggestions: iocIntelligence.watchSuggestions.list(profile, profileWatchProposals(profile)) });
-    } catch (error) { phishError(res, error); }
-});
-app.post('/api/phishing-watch/suggestions/:id/review', requirePremium, (req, res) => {
-    try {
-        const profile = orgProfileStore.get(req.user.sub, String(req.body?.profileId || ''));
-        iocIntelligence.watchSuggestions.list(profile, profileWatchProposals(profile));
-        const result = iocIntelligence.watchSuggestions.review(req.user.sub, profile, req.params.id, req.body?.decision, orgProfileStore);
-        watchProposalCache.delete(`${profile.ownerId}:${profile.id}`);
-        res.set('Cache-Control', 'private, no-store').json(result);
-    } catch (error) { phishError(res, error); }
-});
 app.get('/api/intelligence/storage', requirePremium, (req, res) => {
     res.set('Cache-Control', 'private, no-store').json({ ...iocIntelligence.news.status(), error: iocIntelligence.state('news-shadow-error') });
 });
 app.get('/api/intelligence/entities', requirePremium, (req, res) => {
     res.set('Cache-Control', 'private, no-store').json({ entities: iocIntelligence.news.entities({ owner: req.user.sub, kind: String(req.query.kind || ''), query: String(req.query.query || '') }) });
 });
-app.get('/api/phishing-watch/hits/:id/context', requirePremium, (req, res) => {
-    const hit = iocIntelligence.phishing.candidates(req.user.sub).find(row => row.id === req.params.id);
-    if (!hit) return res.status(404).json({ error: 'Achado não encontrado' });
-    const domains = [...new Set([hit.domain, hit.apexDomain].filter(Boolean))];
-    const publications = [...new Map(domains.flatMap(domain => findDomainMentions([{ id: '', sources: newsArchiveStore.all() }], domain)).map(row => [row.link, row])).values()].slice(0, 50);
-    const lookups = new Map(domains.map(value => [value, 'domain']));
-    for (const ip of [...(hit.dns?.a || []), ...(hit.dns?.aaaa || []), hit.ip].filter(Boolean).slice(0, 8)) lookups.set(ip, 'observed-ip');
-    for (const ns of (hit.dns?.ns || []).slice(0, 4)) lookups.set(ns, 'nameserver');
-    const observations = [...lookups].map(([value, basis]) => {
-        const evidence = iocIntelligence.detail(value, req.user.sub, { size: 20 }); return evidence ? { ...evidence, basis } : null;
-    }).filter(Boolean);
-    const related = iocIntelligence.phishing.candidates(req.user.sub).filter(row => row.id !== hit.id && (
-        row.apexDomain === hit.apexDomain || hit.asn && row.asn === hit.asn || (hit.dns?.ns || []).some(ns => row.dns?.ns?.includes(ns))
-    )).slice(0, 30).map(row => ({ id: row.id, domain: row.domain, basis: row.apexDomain === hit.apexDomain ? 'domain' : hit.asn && row.asn === hit.asn ? 'asn' : 'nameserver' }));
-    res.set('Cache-Control', 'private, no-store');
-    res.json({ candidate: hit, publications, observations, related, basis: 'context-only' });
-});
-app.post('/api/phishing-watch/hits/:id/verdict', requirePremium, async (req, res) => {
-    try {
-        const hit = phishWatchStore.review(req.user.sub, String(req.params.id), req.body?.verdict, req.body?.reason);
-        if (hit.verdict === 'malicious') await syncTicketsFromHits(req.user.sub, hit.profileId, { manualHitId: hit.id });
-        res.set('Cache-Control', 'private, no-store');
-        res.json({ hit });
-    } catch (error) { phishError(res, error); }
-});
-
-app.post('/api/phishing-watch/hits/:id/status', requirePremium, async (req, res) => {
-    try {
-        const status = String((req.body || {}).status || '');
-        const hit = phishWatchStore.setStatus(req.user.sub, String(req.params.id), status);
-        // Confirmar é dizer "isso é phishing mesmo": vira tarefa na hora, sem
-        // depender do score que o robô deu.
-        if (status === 'confirmed') await syncTicketsFromHits(req.user.sub, hit.profileId, { manualHitId: hit.id });
-        res.json({ hit, ticket: phishTicketStore.byId(hit.id) });
-    } catch (error) { phishError(res, error); }
-});
-
-app.get('/api/phishing-watch/tickets', requirePremium, (req, res) => {
-    const profileId = req.query.profileId ? String(req.query.profileId) : undefined;
-    const status = req.query.status ? String(req.query.status) : undefined;
-    const tickets = phishTicketStore.list(req.user.sub, { profileId, status });
-    res.json({ tickets, digest: buildDailyDigest(phishTicketStore.list(req.user.sub, { profileId })) });
-});
-
-app.get('/api/phishing-watch/tickets/:id', requirePremium, (req, res) => {
-    try {
-        const ticket = phishTicketStore.get(req.user.sub, String(req.params.id));
-        const profile = orgProfileStore.get(req.user.sub, ticket.profileId);
-        const brand = ticket.term || (profile.brands || [])[0] || '';
-        res.json({
-            ticket,
-            takedown: {
-                pt: takedownRequest(ticket, { language: 'pt', brand }),
-                en: takedownRequest(ticket, { language: 'en', brand }),
-            },
-        });
-    } catch (error) { phishError(res, error); }
-});
-
-app.post('/api/phishing-watch/tickets/:id/status', requirePremium, (req, res) => {
-    try {
-        const body = req.body || {};
-        const ticket = phishTicketStore.setStatus(req.user.sub, String(req.params.id), String(body.status || ''), {
-            at: new Date().toISOString(),
-            by: req.user.login || 'analista',
-            note: String(body.note || '').slice(0, 500),
-        });
-        res.json({ ticket });
-    } catch (error) { phishError(res, error); }
-});
-
-app.post('/api/phishing-watch/run', requirePremium, scanLimiter, async (req, res) => {
-    const { search } = urlscanClientFor(req.user.sub);
-    if (!search) return res.status(500).json({ error: 'Configure uma chave urlscan.io em Chaves de API' });
-    try {
-        // getProfile confere o dono: perfil de outro usuário responde 404.
-        const profile = orgProfileStore.get(req.user.sub, String((req.body || {}).profileId || ''));
-        const outcome = await runProfileWatch({ store: phishWatchStore, profile, search });
-        const opened = await syncTicketsFromHits(req.user.sub, profile.id);
-        res.json({
-            ...outcome,
-            openedTickets: opened.length,
-            hits: phishWatchStore.list(req.user.sub, { profileId: profile.id, status: 'new' }),
-            run: phishWatchStore.runOf(profile.id),
-        });
-    } catch (error) { phishError(res, error); }
-});
-
 // Vendors API Status
 // Cota restante por base, pra faixa abaixo da barra de busca. Exige login: o
 // número expõe o consumo das chaves do servidor, e é o mesmo público que ganha
 // isenção do rate limiter — quem não tem limite é quem enxerga o teto real.
 app.get('/api/vendors/quotas', requireAuth, async (req, res) => {
     try {
-        const personalProviders = { VIRUSTOTAL_API_KEY: 'virustotal', SHODAN_API_KEY: 'shodan', URLSCAN_API_KEY: 'urlscan', ABUSEIPDB_API_KEY: 'abuseipdb' };
+        const personalProviders = { VIRUSTOTAL_API_KEY: 'virustotal', SHODAN_API_KEY: 'shodan', ABUSEIPDB_API_KEY: 'abuseipdb' };
         const keysFor = env => {
             const personal = personalProviders[env] ? getUserApiKeys(req.user.sub, personalProviders[env]) : [];
             return personal.length ? personal : getKeys(env);
         };
         const quotas = await quotaReader.read({ keysFor, fresh: req.query.refresh === '1' });
-        const quotaEnv = { VirusTotal: 'VIRUSTOTAL_API_KEY', Shodan: 'SHODAN_API_KEY', 'urlscan.io': 'URLSCAN_API_KEY', AbuseIPDB: 'ABUSEIPDB_API_KEY', WHOIS: 'WHOIS_API_KEY' };
+        const quotaEnv = { VirusTotal: 'VIRUSTOTAL_API_KEY', Shodan: 'SHODAN_API_KEY', AbuseIPDB: 'ABUSEIPDB_API_KEY', WHOIS: 'WHOIS_API_KEY' };
         res.set('Cache-Control', 'private, no-store');
         res.json({ quotas: quotas.map(item => ({ ...item, ...(quotaEnv[item.name] ? {
             credential: personalProviders[quotaEnv[item.name]] && getUserApiKey(req.user.sub, personalProviders[quotaEnv[item.name]]) ? 'personal' : 'platform',
@@ -4422,13 +3971,5 @@ app.listen(PORT, () => {
     // (and mid-month revisions) is picked up automatically.
     refreshPatchTuesday();
     setInterval(refreshPatchTuesday, memoryCache.patchTuesdayMonths.ttl);
-    if (process.env.NODE_ENV !== 'test' && process.env.EXPOSURE_WATCHLIST_DISABLE_DAILY !== 'true') {
-        setTimeout(runExposureSchedulerTick, 30_000);
-        setInterval(runExposureSchedulerTick, 15 * 60 * 1000);
-        // Mesmo tick de 15 min do exposure; quem decide a hora é o
-        // selectDueProfiles, que só deixa passar perfil vencido há uma hora.
-        setTimeout(runPhishWatchTick, 60_000);
-        setInterval(runPhishWatchTick, 15 * 60 * 1000);
-    }
     scheduleDailyEdition();
 });

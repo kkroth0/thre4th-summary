@@ -19,7 +19,7 @@ export async function lookupDomain(domain: string, signal: AbortSignal): Promise
 }
 
 export async function lookupCidrShodan(cidr: string, signal: AbortSignal): Promise<AttackSurfaceResponse> {
-  const data = await request('/api/attack-surface', { mode: 'guided', targetType: 'cidr', target: cidr, limit: 100, activeValidation: false }, signal) as AttackSurfaceResponse;
+  const data = await request('/api/enrichment/cidr/shodan', { mode: 'guided', targetType: 'cidr', target: cidr, limit: 100, activeValidation: false }, signal) as AttackSurfaceResponse;
   if (!Array.isArray(data?.findings) || !data.summary) throw new Error('Invalid Shodan response');
   return data;
 }

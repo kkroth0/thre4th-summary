@@ -62,21 +62,9 @@ const CATALOG: Group[] = [
     ...[{ id: 'threatfox', label: 'ThreatFox' }, { id: 'urlhaus', label: 'URLhaus' }, { id: 'malwarebazaar', label: 'MalwareBazaar' }].map(provider => ({ ...provider, url: 'https://auth.abuse.ch/', description: { pt: 'Opcional: cadastre um conjunto dedicado. Sem ele, esta fonte usa as chaves compartilhadas de Abuse.ch acima.', en: 'Optional: configure a dedicated pool. Otherwise this source uses the shared Abuse.ch keys above.' } })),
   ] },
   {
-    title: { pt: "Superfície de Ataque", en: "Attack Surface" },
+    title: { pt: "Enriquecimento com Shodan", en: "Shodan enrichment" },
     items: [
       { id: "shodan", label: "Shodan", url: "https://account.shodan.io/" },
-    ],
-  },
-  {
-    title: { pt: "Vigilância de marcas", en: "Brand monitoring" },
-    items: [
-      {
-        id: "urlscan", label: "urlscan.io", url: "https://urlscan.io/user/profile/",
-        description: {
-          pt: "Usa sua cota nas buscas manuais e automáticas por domínios suspeitos relacionados às marcas dos seus perfis. Consulta páginas já escaneadas pelo urlscan.io.",
-          en: "Uses your quota for manual and automatic searches for suspicious domains related to your profiles' brands. Searches pages already scanned by urlscan.io.",
-        },
-      },
     ],
   },
 ];

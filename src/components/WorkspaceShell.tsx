@@ -21,13 +21,11 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
   const pt = language === 'pt';
   const mobile = useIsMobile();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [phishingOpen, setPhishingOpen] = useState(pathname === '/phishing-analyzer');
   const [actorsOpen, setActorsOpen] = useState(pathname === '/atores');
   const [vulnerabilitiesOpen, setVulnerabilitiesOpen] = useState(pathname === '/cves');
   const menuOpener = useRef<HTMLElement | null>(null);
   const [collapsed, setCollapsed] = useState(() => { try { return localStorage.getItem(STORAGE_KEY) === 'true'; } catch { return false; } });
   useEffect(() => { setMobileOpen(false); window.scrollTo({ top: 0, left: 0 }); }, [pathname]);
-  useEffect(() => { if (pathname === '/phishing-analyzer') setPhishingOpen(true); }, [pathname]);
   useEffect(() => { if (pathname === '/atores') setActorsOpen(true); }, [pathname]);
   useEffect(() => { if (pathname === '/cves') setVulnerabilitiesOpen(true); }, [pathname]);
   useEffect(() => { if (!mobile) setMobileOpen(false); }, [mobile]);
@@ -35,7 +33,7 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
   const catalog = [homeItem, ...navGroups.flatMap(group => group.items)];
   const sections = [
     { label: pt ? 'Plataforma' : 'Platform', paths: ['/dashboard', '/analyzer', '/bulk', '/knowledge', '/relatorios'] },
-    { label: pt ? 'Inteligência de ameaças' : 'Threat hunting', paths: ['/newsletter', '/hunting', '/atores', '/malware', '/cves', '/phishing-analyzer', '/domain-monitoring', '/attack-surface', '/threat-map'] },
+    { label: pt ? 'Inteligência de ameaças' : 'Threat intelligence', paths: ['/newsletter', '/atores', '/malware', '/cves', '/threat-map'] },
     { label: pt ? 'Correções' : 'Patches', paths: ['/patch-tuesday', '/sap-patch', '/ot-patch-day', '/ai-patch-day'] },
   ];
   const toggle = () => setCollapsed(value => {
@@ -55,19 +53,16 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
           if (!item) return null;
           const Icon = item.icon;
           const active = isRouteActive(path, pathname);
-          const expanded = path === '/atores' ? actorsOpen : path === '/cves' ? vulnerabilitiesOpen : phishingOpen;
+          const expanded = path === '/atores' ? actorsOpen : vulnerabilitiesOpen;
           const linkClass = cn('flex min-h-9 items-center gap-2 rounded-md px-2 py-1.5 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring', rail && 'justify-center px-0', active ? 'bg-primary font-medium text-primary-foreground' : 'text-muted-foreground hover:bg-sidebar-accent hover:text-foreground');
           return <div key={path}>
-            {['/phishing-analyzer', '/atores', '/cves'].includes(path) && !rail ? <button type="button" className={cn(linkClass, 'w-full')} onClick={() => path === '/atores' ? setActorsOpen(value => !value) : path === '/cves' ? setVulnerabilitiesOpen(value => !value) : setPhishingOpen(value => !value)} aria-expanded={expanded} aria-controls={path === '/atores' ? 'sidebar-actor-views' : path === '/cves' ? 'sidebar-vulnerability-views' : 'sidebar-phishing-views'}><Icon className="h-4 w-4 shrink-0" /><span>{path === '/phishing-analyzer' ? 'Phishing' : item.label}</span><ChevronDown className={cn('ml-auto h-3.5 w-3.5 transition-transform', expanded && 'rotate-180')} /></button> : <Link to={path === '/phishing-analyzer' ? '/phishing-analyzer?view=dashboard' : path} onClick={() => setMobileOpen(false)} aria-current={active ? 'page' : undefined} aria-label={item.label} title={rail ? item.label : undefined} className={linkClass}><Icon className="h-4 w-4 shrink-0" />{!rail && <span className="min-w-0 truncate">{item.label}</span>}</Link>}
+            {['/atores', '/cves'].includes(path) && !rail ? <button type="button" className={cn(linkClass, 'w-full')} onClick={() => path === '/atores' ? setActorsOpen(value => !value) : setVulnerabilitiesOpen(value => !value)} aria-expanded={expanded} aria-controls={path === '/atores' ? 'sidebar-actor-views' : 'sidebar-vulnerability-views'}><Icon className="h-4 w-4 shrink-0" /><span>{item.label}</span><ChevronDown className={cn('ml-auto h-3.5 w-3.5 transition-transform', expanded && 'rotate-180')} /></button> : <Link to={path} onClick={() => setMobileOpen(false)} aria-current={active ? 'page' : undefined} aria-label={item.label} title={rail ? item.label : undefined} className={linkClass}><Icon className="h-4 w-4 shrink-0" />{!rail && <span className="min-w-0 truncate">{item.label}</span>}</Link>}
             {path === '/atores' && !rail && actorsOpen && <div id="sidebar-actor-views" className="ml-4 mt-0.5 space-y-0.5 border-l border-sidebar-border pl-2">{[
               ['overview', pt ? 'Visão geral' : 'Overview'], ['catalog', pt ? 'Lista' : 'Listing'], ['global', 'Global'], ['model', pt ? 'Modelagem de ameaças' : 'Threat modelling'],
             ].map(([view, label]) => { const selected = active && !new URLSearchParams(search).has('actor') && (new URLSearchParams(search).get('view') || 'overview') === view; return <Link key={view} to={`/atores?view=${view}`} onClick={() => setMobileOpen(false)} aria-current={selected ? 'page' : undefined} className={cn('block rounded-md px-2 py-1.5 text-xs hover:bg-sidebar-accent focus-visible:ring-2 focus-visible:ring-ring', selected ? 'bg-primary font-medium text-primary-foreground' : 'text-muted-foreground')}>{label}</Link>; })}</div>}
             {path === '/cves' && !rail && vulnerabilitiesOpen && <div id="sidebar-vulnerability-views" className="ml-4 mt-0.5 space-y-0.5 border-l border-sidebar-border pl-2">{[
               ['overview', pt ? 'Visão geral' : 'Overview'], ['top', 'Top Threats'], ['weaponized', 'Weaponized'], ['listing', pt ? 'Listagem' : 'Listing'],
             ].map(([view, label]) => { const selected = active && !new URLSearchParams(search).has('cve') && (new URLSearchParams(search).get('view') || 'overview') === view; return <Link key={view} to={`/cves?view=${view}`} onClick={() => setMobileOpen(false)} aria-current={selected ? 'page' : undefined} className={cn('block rounded-md px-2 py-1.5 text-xs hover:bg-sidebar-accent focus-visible:ring-2 focus-visible:ring-ring', selected ? 'bg-primary font-medium text-primary-foreground' : 'text-muted-foreground')}>{label}</Link>; })}</div>}
-            {path === '/phishing-analyzer' && !rail && phishingOpen && <div id="sidebar-phishing-views" className="ml-4 mt-0.5 space-y-0.5 border-l border-sidebar-border pl-2">{[
-              ['dashboard', 'Dashboard'], ['campaigns', pt ? 'Campanhas' : 'Campaigns'], ['email', pt ? 'Analisar e-mail' : 'Analyze email'],
-            ].map(([view, label]) => { const selected = active && (new URLSearchParams(search).get('view') || 'dashboard') === view; return <Link key={view} to={`/phishing-analyzer?view=${view}`} onClick={() => setMobileOpen(false)} aria-current={selected ? 'page' : undefined} className={cn('block rounded-md px-2 py-1.5 text-xs hover:bg-sidebar-accent focus-visible:ring-2 focus-visible:ring-ring', selected ? 'font-medium text-foreground' : 'text-muted-foreground')}>{label}</Link>; })}</div>}
           </div>;
         })}</div>
       </div>)}

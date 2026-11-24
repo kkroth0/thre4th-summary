@@ -101,10 +101,6 @@ export const QUOTA_SOURCES = [
         name: 'Shodan', env: 'SHODAN_API_KEY', parse: parseShodan,
         request: (key) => [`https://api.shodan.io/api-info?key=${encodeURIComponent(key)}`, {}],
     },
-    {
-        name: 'urlscan.io', env: 'URLSCAN_API_KEY', parse: parseUrlscan,
-        request: (key) => ['https://urlscan.io/user/quotas/', { 'API-Key': key }],
-    },
 ];
 
 export const HEADER_QUOTA_VENDORS = ['AbuseIPDB', 'WHOIS'];
