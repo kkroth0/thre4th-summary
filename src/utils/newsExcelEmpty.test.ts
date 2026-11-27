@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import Excel from 'exceljs';
+import { createRequire } from 'node:module';
 import { buildNewsExcelWorkbook } from './iocExcelWorkbook';
+const Excel = createRequire(`${process.cwd()}/package.json`)('exceljs') as typeof import('exceljs');
 const range = { from: '2026-11-20T03:00:00.000Z', to: '2026-11-28T02:59:59.999Z' };
 test('empty news and IOC exports never produce a header-only Excel', () => {
   assert.throws(() => buildNewsExcelWorkbook({ dataset: 'news', range, rows: [] }, Excel), /Nenhuma notícia encontrada/);
