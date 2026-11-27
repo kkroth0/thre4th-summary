@@ -440,7 +440,9 @@ function* mergeStorySteps(stories, items, now) {
         for (const key of indexedKeys.get(story) || []) { const rows = candidates.get(key); rows?.delete(story); if (!rows?.size) candidates.delete(key); }
     };
     for (const story of result) indexStory(story);
-    const signalCache = new WeakMap();
+    // Source objects remain reachable throughout correlation. A WeakMap keeps
+    // every derived set alive too, so cap memoization for a large retained corpus.
+    const signalCache = new Map();
     const sourceSignals = (story, source) => {
         if (signalCache.has(source)) return signalCache.get(source);
         const value = signals({
@@ -448,6 +450,7 @@ function* mergeStorySteps(stories, items, now) {
             actors: source.actors || [], malware: source.malware || [],
             campaigns: (story.campaigns || []).filter((campaign) => (source.campaigns || []).includes(campaign.id)),
         });
+        if (signalCache.size >= 256) signalCache.delete(signalCache.keys().next().value);
         signalCache.set(source, value);
         return value;
     };
