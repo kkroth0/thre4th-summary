@@ -20,7 +20,11 @@ print('stack',re.findall(r'v8::internal::[a-zA-Z0-9_:]+',log)[-45:])
 print('memory options',re.findall(r'--max[-_]old[-_]space[-_]size[= ]\d+',run('systemctl','cat',unit)))
 try:
     with sqlite3.connect('file:'+str(root/'.ioc-intelligence.sqlite')+'?mode=ro',uri=True) as db:
-        print('news',db.execute('select kind,count(*),sum(length(payload)),max(length(payload)) from news_documents group by kind').fetchall())
+        import json
+        row=db.execute("select value from intelligence_state where id='news-current-cycle'").fetchone()
+        if row:
+            cycle=json.loads(row[0])
+            print('cycle', {key:cycle.get(key) for key in ('startedAt','updatedAt','phase','stages','memory')})
 except sqlite3.Error: pass
 patterns = {'oom': r'out of memory|oom-kill|heap limit|killed process', 'restart': r'Scheduled restart job',
             'fatal': r'FATAL ERROR|uncaughtException', 'listening': r'Server running on port',
