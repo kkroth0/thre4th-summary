@@ -30,6 +30,7 @@ export function newsExportRows(publications, dataset) {
             actors: names(publication.actors), malware: names(publication.malware),
         };
         if (dataset === 'news') {
+            if (publication.analysisStatus) common.analysisStatus = publication.analysisStatus;
             rows.push({ ...common, ips: publication.iocs?.ips || [], domains: publication.iocs?.domains || [], hashes: publication.iocs?.hashes || [], urls: publication.iocs?.urls || [] });
         } else {
             for (const [field, type] of [['ips', 'ip'], ['domains', 'domain'], ['hashes', 'hash'], ['urls', 'url']]) {
@@ -44,6 +45,7 @@ export function newsExportRows(publications, dataset) {
 export function newsExportCsv(rows, dataset) {
     const common = ['title', 'source', 'url', 'date', 'dateBasis', 'storyId', 'categories', 'cves', 'actors', 'malware'];
     const columns = dataset === 'news' ? [...common, 'ips', 'domains', 'hashes', 'urls'] : ['type', 'indicator', ...common];
+    if (dataset === 'news' && rows.some(row => row.analysisStatus)) columns.push('analysisStatus');
     const cell = value => {
         const text = Array.isArray(value) ? value.join(' | ') : String(value ?? '');
         const safe = /^[\s\u0000-\u001f]*[=+@-]/.test(text) || /^[\t\r\n]/.test(text) ? "'" + text : text;

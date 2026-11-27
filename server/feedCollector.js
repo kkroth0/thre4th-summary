@@ -22,6 +22,17 @@ export function createFeedCache({ directory, fs, writeJsonAtomic }) {
         get(key) {
             try { return JSON.parse(fs.readFileSync(file(key), 'utf8')); } catch { return null; }
         },
+        async getAsync(key) {
+            try { return JSON.parse(await fs.promises.readFile(file(key), 'utf8')); }
+            catch (error) {
+                if (error.code === 'ENOENT') return null;
+                if (error instanceof SyntaxError) {
+                    console.warn('Unreadable source cache skipped during news export');
+                    return null;
+                }
+                throw error;
+            }
+        },
         set(key, value) { writeJsonAtomic(file(key), value); },
         prune({ maxEntries = 1500 } = {}) {
             const files = fs.readdirSync(directory).filter((name) => /^[a-f0-9]{64}\.json$/.test(name))

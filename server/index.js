@@ -107,6 +107,7 @@ import { durableArticleCache } from './newsPersistence.js';
 import { createSqliteNewsStores } from './sqliteNewsStores.js';
 import { newsExportQuery, newsExportRows, newsExportCsv } from './newsExport.js';
 import { selectNewsExportPublications } from './newsExportSelection.js';
+import { createNewsExportSourceCache } from './newsExportSourceCache.js';
 
 import { VENDOR_CATALOG } from './vendorCatalog.js';
 import { createNewsMonitoringStore, filterMonitoredNews, filterMonitoredStories } from './newsMonitoring.js';
@@ -1159,6 +1160,7 @@ function effectiveFeeds() {
 
 // Background newsletter feed refresher
 const rssCollectionCache = createFeedCache({ directory: path.join(__dirname, '.feed-cache', 'rss'), fs, writeJsonAtomic });
+const readNewsExportSources = createNewsExportSourceCache(rssCollectionCache);
 const feedExtractionCache = process.env.NODE_ENV === 'test' ? createFeedExtractionCache() : createPersistentFeedExtractionCache({
     directory: __dirname, file: path.join(__dirname, '.feed-cache', 'extraction.bin'),
     onError: () => console.warn('Extraction cache unavailable; unchanged evidence will be recomputed.'),
@@ -1444,12 +1446,15 @@ app.get('/api/news/archive', requirePremium, (req, res) => {
     }
 });
 
-app.get('/api/news/export', requirePremium, (req, res) => {
+app.get('/api/news/export', requirePremium, async (req, res) => {
     try {
         const options = newsExportQuery(req.query);
+        const sourceCache = options.dataset === 'news' ? await readNewsExportSources([
+            ...effectiveFeeds(), ...SCRAPE_SOURCES.filter(source => !feedOverrides.disabled.includes(source.url)),
+        ]) : [];
         // Use the same available publications as the feed, without UI pagination.
         const { publications } = selectNewsExportPublications({
-            current: memoryCache.newsletter.data || [], archive: newsArchiveStore.all(), stories: newsStoryStore.all(),
+            current: memoryCache.newsletter.data || [], archive: newsArchiveStore.all(), stories: newsStoryStore.all(), sourceCache,
             preferences: newsMonitoringStore.get(req.user.sub), from: options.from, to: options.to,
         });
         const rows = newsExportRows(publications, options.dataset);
