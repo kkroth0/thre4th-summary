@@ -19,7 +19,7 @@ jobs:
       SSH_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
     steps:
       - uses: actions/checkout@v7
-      - name: Read worker and queue status
+      - name: Restore API availability and verify the memory setting
         shell: bash
         run: |
           set -euo pipefail
@@ -28,4 +28,4 @@ jobs:
           printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
           install -m 600 /dev/null ~/.ssh/known_hosts
           printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
-          ssh -p "$VPS_PORT" "$VPS_USER@$VPS_HOST" 'python3 -' < server/apiAvailabilityDiagnostics.py
+          ssh -p "$VPS_PORT" "$VPS_USER@$VPS_HOST" 'bash -s' < server/recoverApiMemory.sh
