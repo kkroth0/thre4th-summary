@@ -9,6 +9,19 @@ def run(*args):
 unit = 'bdppt-site.service'
 print(run('systemctl', 'show', unit, '-p', 'NRestarts,MemoryCurrent,MemoryPeak,ExecMainStartTimestamp,ActiveState'))
 print(run('free', '-m'))
+from pathlib import Path
+import sqlite3
+root=Path.home()/'thre4th-summary'/'server'
+print('stores MiB', {p.name:round(p.stat().st_size/1048576,1) for p in root.glob('.*') if p.is_file() and p.stat().st_size>1048576})
+print('largest processes',run('ps','-eo','comm,rss','--sort=-rss').splitlines()[:10])
+log = run('journalctl','-u',unit,'--since','2 hours ago','-o','cat','--no-pager')
+print('GC samples',re.findall(r'(?:Scavenge|Mark-Compact|Mark-sweep)[^\n]{0,115}',log)[-12:])
+print('stack',re.findall(r'v8::internal::[a-zA-Z0-9_:]+',log)[-45:])
+print('memory options',re.findall(r'--max[-_]old[-_]space[-_]size[= ]\d+',run('systemctl','cat',unit)))
+try:
+    with sqlite3.connect('file:'+str(root/'.ioc-intelligence.sqlite')+'?mode=ro',uri=True) as db:
+        print('news',db.execute('select kind,count(*),sum(length(payload)),max(length(payload)) from news_documents group by kind').fetchall())
+except sqlite3.Error: pass
 patterns = {'oom': r'out of memory|oom-kill|heap limit|killed process', 'restart': r'Scheduled restart job',
             'fatal': r'FATAL ERROR|uncaughtException', 'listening': r'Server running on port',
             'exit': r'Main process exited', 'tunnel': r'Unable to reach the origin service|context deadline exceeded',
