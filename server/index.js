@@ -107,7 +107,7 @@ import { durableArticleCache } from './newsPersistence.js';
 import { createSqliteNewsStores } from './sqliteNewsStores.js';
 import { newsExportQuery, newsExportRows, newsExportCsv } from './newsExport.js';
 import { selectNewsExportPublications } from './newsExportSelection.js';
-import { createNewsExportSourceCache } from './newsExportSourceCache.js';
+import { createNewsExportSourceReader } from './newsExportSourceReader.js';
 
 import { VENDOR_CATALOG } from './vendorCatalog.js';
 import { createNewsMonitoringStore, filterMonitoredNews, filterMonitoredStories } from './newsMonitoring.js';
@@ -1160,7 +1160,7 @@ function effectiveFeeds() {
 
 // Background newsletter feed refresher
 const rssCollectionCache = createFeedCache({ directory: path.join(__dirname, '.feed-cache', 'rss'), fs, writeJsonAtomic });
-const readNewsExportSources = createNewsExportSourceCache(rssCollectionCache);
+const readNewsExportSources = createNewsExportSourceReader(path.join(__dirname, '.feed-cache', 'rss'));
 const feedExtractionCache = process.env.NODE_ENV === 'test' ? createFeedExtractionCache() : createPersistentFeedExtractionCache({
     directory: __dirname, file: path.join(__dirname, '.feed-cache', 'extraction.bin'),
     onError: () => console.warn('Extraction cache unavailable; unchanged evidence will be recomputed.'),
@@ -1464,7 +1464,8 @@ app.get('/api/news/export', requirePremium, async (req, res) => {
         if (options.format === 'csv') return res.type('text/csv; charset=utf-8').send(newsExportCsv(rows, options.dataset));
         res.json({ generatedAt: new Date().toISOString(), range: { from: options.from, to: options.to }, dataset: options.dataset, publications: publications.length, count: rows.length, rows });
     } catch (error) {
-        res.status(error.status || 500).json({ error: error.status === 400 ? error.message : 'Não foi possível exportar o histórico.' });
+        console.warn('News export failed', { name: error.name, code: error.code });
+        res.status(error.status || 500).json({ error: [400, 503].includes(error.status) ? error.message : 'Não foi possível exportar o histórico.' });
     }
 });
 
