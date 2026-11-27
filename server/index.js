@@ -106,6 +106,7 @@ import { createNewsArchiveStore } from './newsArchiveStore.js';
 import { durableArticleCache } from './newsPersistence.js';
 import { createSqliteNewsStores } from './sqliteNewsStores.js';
 import { newsExportQuery, newsExportRows, newsExportCsv } from './newsExport.js';
+import { selectNewsExportPublications } from './newsExportSelection.js';
 
 import { VENDOR_CATALOG } from './vendorCatalog.js';
 import { createNewsMonitoringStore, filterMonitoredNews, filterMonitoredStories } from './newsMonitoring.js';
@@ -1446,8 +1447,11 @@ app.get('/api/news/archive', requirePremium, (req, res) => {
 app.get('/api/news/export', requirePremium, (req, res) => {
     try {
         const options = newsExportQuery(req.query);
-        // Export the permanent archive, without the live feed's retention or UI pagination.
-        const publications = filterMonitoredNews(completeNewsFeed([],newsArchiveStore.list(options)), newsMonitoringStore.get(req.user.sub), newsStoryStore.all());
+        // Use the same available publications as the feed, without UI pagination.
+        const { publications } = selectNewsExportPublications({
+            current: memoryCache.newsletter.data || [], archive: newsArchiveStore.all(), stories: newsStoryStore.all(),
+            preferences: newsMonitoringStore.get(req.user.sub), from: options.from, to: options.to,
+        });
         const rows = newsExportRows(publications, options.dataset);
         const filename = `threatsumm4ry-${options.dataset}-${options.from.slice(0, 10)}-${options.to.slice(0, 10)}.${options.format}`;
         res.set('Cache-Control', 'private, no-store');
