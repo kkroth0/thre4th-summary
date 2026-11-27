@@ -64,3 +64,8 @@ test('OT Patch Day Excel retains versions, fixes, matches, source status and per
   for (const value of ['BMXNOE0110', 'Upgrade to 6.80', 'model', 'schneider', 'CVE-2025-6625']) assert.ok(text.includes(value));
   assert.ok(JSON.stringify(restored.getWorksheet('Fontes e critérios')!.getSheetValues()).includes('2026-08-31'));
 });
+
+test('zero-row news and IOC responses are reported instead of downloading a header-only Excel', () => {
+  assert.throws(() => buildNewsExcelWorkbook({ ...payload(), dataset: 'news', rows: [] }, Excel), /Nenhuma notícia encontrada/);
+  assert.throws(() => buildNewsExcelWorkbook({ ...payload(), dataset: 'iocs', rows: [] }, Excel), /Nenhum IOC encontrado/);
+});

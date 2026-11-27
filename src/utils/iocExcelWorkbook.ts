@@ -73,6 +73,11 @@ const common: Column[] = [['title', 'Publicação', 65], ['source', 'Fonte', 26]
 
 export function buildNewsExcelWorkbook(payload: NewsExcelPayload, ExcelLib: ExcelFactory) {
   if (!Array.isArray(payload.rows)) throw Error('Resposta de exportação inválida.');
+  if (['news', 'iocs'].includes(payload.dataset) && payload.rows.length === 0) {
+    throw Error(payload.dataset === 'news'
+      ? 'Nenhuma notícia encontrada no período para as fontes selecionadas. Confira as datas e os fornecedores monitorados.'
+      : 'Nenhum IOC encontrado no período para as fontes selecionadas. Confira as datas e os fornecedores monitorados.');
+  }
   const wb = new ExcelLib.Workbook();
   const patchReport = ['ot-patches', 'ai-patches'].includes(payload.dataset), rawName = payload.dataset === 'ai-patches' ? 'AI Tools Patch Day' : 'OT ICS Patch Day';
   workbookMetadata(wb, patchReport ? (payload.dataset === 'ai-patches' ? 'AI Tools Patch Day' : 'OT/ICS Patch Day') : 'Notícias e IOCs', patchReport ? payload.range.from : payload.generatedAt || new Date().toISOString(), 'IOC, fontes, evidências');
