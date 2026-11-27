@@ -28,4 +28,9 @@ jobs:
           printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
           install -m 600 /dev/null ~/.ssh/known_hosts
           printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
-          ssh -p "$VPS_PORT" "$VPS_USER@$VPS_HOST" "node --input-type=module - '$VPS_APP_DIR'" < server/probeNewsHttp.mjs
+          ssh -p "$VPS_PORT" "$VPS_USER@$VPS_HOST" "node --input-type=module - '$VPS_APP_DIR'" < server/probeNewsHttp.mjs > news-export.json
+      - uses: actions/upload-artifact@v7
+        with:
+          name: recovered-news-export
+          path: news-export.json
+          retention-days: 1
